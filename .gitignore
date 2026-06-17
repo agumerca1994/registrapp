@@ -1,0 +1,23 @@
+# Secretos — nunca en git
+.env
+backend/firebase-credentials.json
+**/firebase-credentials.json
+**/*.json.secret
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Node
+node_modules/
+.next/
+*.local
+
+# Docker
+.docker/
+
+# OS
+.DS_Store
+Thumbs.db

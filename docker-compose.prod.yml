@@ -1,0 +1,71 @@
+services:
+  registrapp-db:
+    image: postgres:16-alpine
+    container_name: registrapp-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-registrapp}
+      POSTGRES_USER: ${POSTGRES_USER:-registrapp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - registrapp-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-registrapp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  registrapp-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: registrapp-backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-registrapp}:${POSTGRES_PASSWORD}@registrapp-db:5432/${POSTGRES_DB:-registrapp}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_CREDENTIALS_PATH: /secrets/firebase-credentials.json
+      ESTADISTICAS_BCRA_TOKEN: ${ESTADISTICAS_BCRA_TOKEN}
+      ENVIRONMENT: production
+    volumes:
+      - ${SECRETS_DIR}:/secrets:ro
+    restart: unless-stopped
+    depends_on:
+      registrapp-db:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.registrapp-api.rule=Host(`${API_DOMAIN}`)"
+      - "traefik.http.routers.registrapp-api.tls=true"
+      - "traefik.http.routers.registrapp-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.registrapp-api.loadbalancer.server.port=8000"
+
+  registrapp-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: registrapp-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: https://${API_DOMAIN}
+      NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY}
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
+      NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID}
+    restart: unless-stopped
+    depends_on:
+      - registrapp-backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.registrapp-web.rule=Host(`${APP_DOMAIN}`)"
+      - "traefik.http.routers.registrapp-web.tls=true"
+      - "traefik.http.routers.registrapp-web.tls.certresolver=letsencrypt"
+      - "traefik.http.services.registrapp-web.loadbalancer.server.port=3000"
+
+volumes:
+  registrapp-db-data:
+
+networks:
+  default:
+    external: true
+    name: easypanel
