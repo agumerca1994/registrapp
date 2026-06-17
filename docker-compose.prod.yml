@@ -23,11 +23,9 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-registrapp}:${POSTGRES_PASSWORD}@registrapp-db:5432/${POSTGRES_DB:-registrapp}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
-      FIREBASE_CREDENTIALS_PATH: /secrets/firebase-credentials.json
+      FIREBASE_CREDENTIALS_B64: ${FIREBASE_CREDENTIALS_B64}
       ESTADISTICAS_BCRA_TOKEN: ${ESTADISTICAS_BCRA_TOKEN}
       ENVIRONMENT: production
-    volumes:
-      - ${SECRETS_DIR}:/secrets:ro
     restart: unless-stopped
     depends_on:
       registrapp-db:
