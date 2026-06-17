@@ -9,7 +9,9 @@ export default function LoginPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && firebaseUser && appUser) router.replace("/dashboard");
+    if (loading) return;
+    if (firebaseUser && appUser) router.replace("/dashboard");
+    else if (firebaseUser && !appUser) router.replace("/onboarding");
   }, [firebaseUser, appUser, loading, router]);
 
   return (
