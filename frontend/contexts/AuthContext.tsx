@@ -11,6 +11,7 @@ interface AuthContextType {
   loading: boolean;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 interface AppUser {
@@ -51,13 +52,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signInWithPopup(auth, googleProvider);
   };
 
+  const refreshUser = async () => {
+    try {
+      const { data } = await api.get("/auth/me");
+      setAppUser(data);
+    } catch {
+      setAppUser(null);
+    }
+  };
+
   const logout = async () => {
     await signOut(auth);
     setAppUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ firebaseUser, appUser, loading, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ firebaseUser, appUser, loading, loginWithGoogle, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

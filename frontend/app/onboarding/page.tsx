@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { refreshUser } = useAuth();
   const [mode, setMode] = useState<"create" | "join">("create");
   const [tenantName, setTenantName] = useState("");
   const [tenantId, setTenantId] = useState("");
@@ -23,6 +25,7 @@ export default function OnboardingPage() {
       } else {
         await api.post("/auth/join", { tenant_id: parseInt(tenantId), display_name: displayName });
       }
+      await refreshUser();
       router.replace("/dashboard");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
