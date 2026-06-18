@@ -9,7 +9,7 @@ from app.models.user import User
 from app.models.expense import ExpenseCategory, ExpenseEntry
 from app.schemas.expense import (
     ExpenseCategoryCreate, ExpenseCategoryOut,
-    ExpenseEntryCreate, ExpenseEntryOut,
+    ExpenseEntryCreate, ExpenseEntryUpdate, ExpenseEntryOut,
 )
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
@@ -81,6 +81,26 @@ async def create_entry(
         select(ExpenseEntry)
         .where(ExpenseEntry.id == entry.id)
         .options(selectinload(ExpenseEntry.category))
+    )
+    return result
+
+
+@router.patch("/entries/{entry_id}", response_model=ExpenseEntryOut)
+async def update_entry(
+    entry_id: int,
+    body: ExpenseEntryUpdate,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await _get_db_user(firebase_user, db)
+    entry = await db.get(ExpenseEntry, entry_id)
+    if not entry or entry.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(entry, field, value)
+    await db.commit()
+    result = await db.scalar(
+        select(ExpenseEntry).where(ExpenseEntry.id == entry_id).options(selectinload(ExpenseEntry.category))
     )
     return result
 

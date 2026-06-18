@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { formatARS } from "@/lib/utils";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Pencil } from "lucide-react";
 
 interface IncomeSource { id: number; name: string; income_type: string; }
 interface IncomeEntry {
@@ -17,11 +17,14 @@ const INCOME_TYPE_LABELS: Record<string, string> = {
   investment: "Inversión", other: "Otro",
 };
 
+const EMPTY_FORM = { source_id: "", amount: "", period_date: "", notes: "" };
+
 export default function IncomePage() {
   const [entries, setEntries] = useState<IncomeEntry[]>([]);
   const [sources, setSources] = useState<IncomeSource[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ source_id: "", amount: "", period_date: "", notes: "" });
+  const [editId, setEditId] = useState<number | null>(null);
+  const [form, setForm] = useState(EMPTY_FORM);
   const [newSource, setNewSource] = useState({ name: "", income_type: "salary" });
   const [showSourceForm, setShowSourceForm] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -34,12 +37,24 @@ export default function IncomePage() {
 
   useEffect(() => { load(); }, []);
 
-  const handleAddEntry = async (e: React.FormEvent) => {
+  const openEdit = (entry: IncomeEntry) => {
+    setEditId(entry.id);
+    setForm({ source_id: String(entry.source_id), amount: String(entry.amount), period_date: entry.period_date, notes: entry.notes || "" });
+    setShowForm(true);
+  };
+
+  const closeForm = () => { setShowForm(false); setEditId(null); setForm(EMPTY_FORM); };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    await api.post("/income/entries", { ...form, source_id: parseInt(form.source_id), amount: parseFloat(form.amount) });
-    setForm({ source_id: "", amount: "", period_date: "", notes: "" });
-    setShowForm(false);
+    const payload = { ...form, source_id: parseInt(form.source_id), amount: parseFloat(form.amount) };
+    if (editId) {
+      await api.patch(`/income/entries/${editId}`, payload);
+    } else {
+      await api.post("/income/entries", payload);
+    }
+    closeForm();
     await load();
     setLoading(false);
   };
@@ -67,7 +82,7 @@ export default function IncomePage() {
             className="text-sm border px-3 py-1.5 rounded-lg hover:bg-gray-50">
             + Fuente
           </button>
-          <button onClick={() => setShowForm(true)}
+          <button onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true); }}
             className="flex items-center gap-2 bg-primary text-white text-sm px-4 py-1.5 rounded-lg hover:opacity-90">
             <Plus className="w-4 h-4" /> Registrar ingreso
           </button>
@@ -88,7 +103,10 @@ export default function IncomePage() {
       )}
 
       {showForm && (
-        <form onSubmit={handleAddEntry} className="bg-white rounded-xl border p-5 grid grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-5 grid grid-cols-2 gap-4">
+          <div className="col-span-2 text-sm font-medium text-gray-700">
+            {editId ? "Editar ingreso" : "Nuevo ingreso"}
+          </div>
           <div className="col-span-2 grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-medium text-gray-600">Fuente</label>
@@ -115,7 +133,7 @@ export default function IncomePage() {
               value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
           </div>
           <div className="col-span-2 flex justify-end gap-2">
-            <button type="button" onClick={() => setShowForm(false)} className="border px-4 py-2 rounded-lg text-sm">Cancelar</button>
+            <button type="button" onClick={closeForm} className="border px-4 py-2 rounded-lg text-sm">Cancelar</button>
             <button type="submit" disabled={loading} className="bg-primary text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50">
               {loading ? "Guardando..." : "Guardar"}
             </button>
@@ -134,8 +152,11 @@ export default function IncomePage() {
                 {entry.period_date} · {INCOME_TYPE_LABELS[entry.source.income_type]}
               </p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <span className="text-sm font-semibold text-green-600">{formatARS(entry.amount)}</span>
+              <button onClick={() => openEdit(entry)} className="text-gray-400 hover:text-primary">
+                <Pencil className="w-4 h-4" />
+              </button>
               <button onClick={() => handleDelete(entry.id)} className="text-gray-400 hover:text-destructive">
                 <Trash2 className="w-4 h-4" />
               </button>

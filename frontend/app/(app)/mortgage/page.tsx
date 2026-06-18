@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { formatARS } from "@/lib/utils";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 
 interface MortgageRecord {
   id: number;
@@ -25,6 +25,12 @@ export default function MortgagePage() {
   const load = async () => {
     const { data } = await api.get("/mortgage");
     setRecords(data);
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("¿Eliminar esta cuota?")) return;
+    await api.delete(`/mortgage/${id}`);
+    await load();
   };
 
   useEffect(() => { load(); }, []);
@@ -111,7 +117,12 @@ export default function MortgagePage() {
                 {r.interest != null ? ` · Interés ${formatARS(r.interest)}` : ""}
               </p>
             </div>
-            <span className="text-sm font-semibold text-primary">{formatARS(r.payment_amount)}</span>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold text-primary">{formatARS(r.payment_amount)}</span>
+              <button onClick={() => handleDelete(r.id)} className="text-gray-400 hover:text-destructive">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         ))}
       </div>

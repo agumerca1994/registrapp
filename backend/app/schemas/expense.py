@@ -26,6 +26,14 @@ class ExpenseEntryCreate(BaseModel):
     notes: str | None = None
 
 
+class ExpenseEntryUpdate(BaseModel):
+    category_id: int | None = None
+    amount: Decimal | None = None
+    description: str | None = None
+    expense_date: date | None = None
+    notes: str | None = None
+
+
 class ExpenseEntryOut(BaseModel):
     model_config = {"from_attributes": True}
 

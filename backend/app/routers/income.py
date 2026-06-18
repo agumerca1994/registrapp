@@ -9,7 +9,7 @@ from app.models.user import User
 from app.models.income import IncomeSource, IncomeEntry
 from app.schemas.income import (
     IncomeSourceCreate, IncomeSourceOut,
-    IncomeEntryCreate, IncomeEntryOut,
+    IncomeEntryCreate, IncomeEntryUpdate, IncomeEntryOut,
 )
 
 router = APIRouter(prefix="/income", tags=["income"])
@@ -84,6 +84,26 @@ async def create_entry(
         select(IncomeEntry)
         .where(IncomeEntry.id == entry.id)
         .options(selectinload(IncomeEntry.source))
+    )
+    return result
+
+
+@router.patch("/entries/{entry_id}", response_model=IncomeEntryOut)
+async def update_entry(
+    entry_id: int,
+    body: IncomeEntryUpdate,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await _get_db_user(firebase_user, db)
+    entry = await db.get(IncomeEntry, entry_id)
+    if not entry or entry.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(entry, field, value)
+    await db.commit()
+    result = await db.scalar(
+        select(IncomeEntry).where(IncomeEntry.id == entry_id).options(selectinload(IncomeEntry.source))
     )
     return result
 

@@ -34,6 +34,20 @@ async def list_macro(
     return result.all()
 
 
+@router.delete("/{record_id}", status_code=204)
+async def delete_macro(
+    record_id: int,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await _get_db_user(firebase_user, db)
+    record = await db.get(MacroVariable, record_id)
+    if not record or record.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    await db.delete(record)
+    await db.commit()
+
+
 @router.put("", response_model=MacroVariableOut)
 async def upsert_macro(
     body: MacroVariableUpsert,

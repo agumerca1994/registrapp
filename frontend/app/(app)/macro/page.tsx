@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { formatARS, formatPct } from "@/lib/utils";
+import { Trash2 } from "lucide-react";
 
 interface MacroVar {
   id: number; period_date: string;
@@ -22,6 +23,12 @@ export default function MacroPage() {
   const [syncMsg, setSyncMsg] = useState("");
 
   const load = () => api.get("/macro").then(r => setRecords(r.data));
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("¿Eliminar este registro?")) return;
+    await api.delete(`/macro/${id}`);
+    load();
+  };
   useEffect(() => { load(); }, []);
 
   const handleSync = async () => {
@@ -100,7 +107,7 @@ export default function MacroPage() {
         {records.length === 0 ? (
           <p className="p-6 text-muted-foreground text-sm">No hay variables macro cargadas.</p>
         ) : records.map(r => (
-          <div key={r.id} className="px-5 py-4 grid grid-cols-4 gap-4">
+          <div key={r.id} className="px-5 py-4 grid grid-cols-5 gap-4 items-center">
             <div>
               <p className="text-xs text-muted-foreground">Período</p>
               <p className="text-sm font-semibold">{r.period_date}</p>
@@ -119,6 +126,11 @@ export default function MacroPage() {
               <p className="text-sm font-medium">
                 {r.usd_official ? formatARS(r.usd_official) : "—"} / {r.usd_mep ? formatARS(r.usd_mep) : "—"}
               </p>
+            </div>
+            <div className="flex justify-end">
+              <button onClick={() => handleDelete(r.id)} className="text-gray-400 hover:text-destructive">
+                <Trash2 className="w-4 h-4" />
+              </button>
             </div>
           </div>
         ))}

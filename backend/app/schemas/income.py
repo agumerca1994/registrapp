@@ -27,6 +27,13 @@ class IncomeEntryCreate(BaseModel):
     notes: str | None = None
 
 
+class IncomeEntryUpdate(BaseModel):
+    source_id: int | None = None
+    amount: Decimal | None = None
+    period_date: date | None = None
+    notes: str | None = None
+
+
 class IncomeEntryOut(BaseModel):
     model_config = {"from_attributes": True}
 
