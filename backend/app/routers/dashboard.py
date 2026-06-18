@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from decimal import Decimal
 from datetime import date
 
@@ -116,16 +116,6 @@ async def history(
     firebase_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    try:
-        return await _history_impl(firebase_user, db)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        import traceback
-        raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}")
-
-
-async def _history_impl(firebase_user: dict, db: AsyncSession) -> list[HistoryPoint]:
     user = await _get_db_user(firebase_user, db)
     tid = user.tenant_id
 
@@ -147,7 +137,7 @@ async def _history_impl(firebase_user: dict, db: AsyncSession) -> list[HistoryPo
             func.sum(IncomeEntry.amount).label("total"),
         )
         .where(IncomeEntry.tenant_id == tid)
-        .group_by(func.date_trunc("month", IncomeEntry.period_date))
+        .group_by(text("1"))
     )
     for r in rows:
         k = str(r.p)[:7]
@@ -160,7 +150,7 @@ async def _history_impl(firebase_user: dict, db: AsyncSession) -> list[HistoryPo
             func.sum(ExpenseEntry.amount).label("total"),
         )
         .where(ExpenseEntry.tenant_id == tid)
-        .group_by(func.date_trunc("month", ExpenseEntry.expense_date))
+        .group_by(text("1"))
     )
     for r in rows:
         k = str(r.p)[:7]
@@ -173,7 +163,7 @@ async def _history_impl(firebase_user: dict, db: AsyncSession) -> list[HistoryPo
             func.sum(MortgageRecord.payment_amount).label("total"),
         )
         .where(MortgageRecord.tenant_id == tid)
-        .group_by(func.date_trunc("month", MortgageRecord.period_date))
+        .group_by(text("1"))
     )
     for r in rows:
         k = str(r.p)[:7]
@@ -187,7 +177,7 @@ async def _history_impl(firebase_user: dict, db: AsyncSession) -> list[HistoryPo
             func.max(MacroVariable.inflation_monthly_pct).label("inflation"),
         )
         .where(MacroVariable.tenant_id == tid)
-        .group_by(func.date_trunc("month", MacroVariable.period_date))
+        .group_by(text("1"))
     )
     for r in rows:
         k = str(r.p)[:7]
