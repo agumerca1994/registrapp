@@ -197,7 +197,7 @@ async def list_macro(
 ):
     q = select(MacroVariable).order_by(MacroVariable.period_date.desc())
     if from_date:
-        q = q.where(MacroVariable.period_date >= from_date)
+        q = q.where(MacroVariable.period_date >= date.fromisoformat(from_date))
     result = await db.scalars(q)
     return result.all()
 
