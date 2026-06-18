@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import {
-  LineChart, Line, BarChart, Bar,
+  LineChart, Line, BarChart, Bar, ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 import api from "@/lib/api";
@@ -80,19 +80,22 @@ function ChartPill({ label, active, onClick }: { label: string; active: boolean;
   );
 }
 
-function ChartTooltip({ active, payload, label, isPct }: {
-  active?: boolean; payload?: { name: string; value: number; color: string }[];
-  label?: string; isPct?: boolean;
+function ChartTooltip({ active, payload, label, isPct, pctKeys }: {
+  active?: boolean; payload?: { name: string; value: number; color: string; dataKey?: string }[];
+  label?: string; isPct?: boolean; pctKeys?: string[];
 }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-white border rounded-lg shadow-lg p-3 text-xs">
       <p className="font-medium text-gray-700 mb-1.5">{label ? fmtPeriod(label) : ""}</p>
-      {payload.map(p => (
-        <p key={p.name} style={{ color: p.color }}>
-          {p.name}: <strong>{isPct ? formatPct(p.value) : formatARS(p.value)}</strong>
-        </p>
-      ))}
+      {payload.map(p => {
+        const usePct = isPct || (pctKeys && pctKeys.includes(p.dataKey ?? p.name));
+        return (
+          <p key={p.name} style={{ color: p.color }}>
+            {p.name}: <strong>{usePct ? `${Number(p.value).toFixed(1)}%` : formatARS(p.value)}</strong>
+          </p>
+        );
+      })}
     </div>
   );
 }
@@ -157,6 +160,25 @@ function IncomeVsExpensesChart({ data }: { data: HistoryPoint[] }) {
   );
 }
 
+function IncomeVsInflationChart({ data }: { data: HistoryPoint[] }) {
+  const d = data.filter(p => Number(p.total_income) > 0 || p.inflation_pct !== null);
+  if (!d.length) return <p className="text-sm text-muted-foreground py-8 text-center">Sin datos de ingresos/inflación</p>;
+  return (
+    <ResponsiveContainer width="100%" height={280}>
+      <ComposedChart data={d} margin={{ top: 5, right: 40, left: 0, bottom: 5 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+        <XAxis dataKey="period" tickFormatter={fmtPeriod} interval={xInterval(d.length)} tick={{ fontSize: 11 }} />
+        <YAxis yAxisId="left" tickFormatter={abbrevARS} tick={{ fontSize: 11 }} width={60} />
+        <YAxis yAxisId="right" orientation="right" tickFormatter={v => `${v}%`} tick={{ fontSize: 11 }} width={42} />
+        <Tooltip content={<ChartTooltip pctKeys={["inflation_pct"]} />} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Bar yAxisId="left" dataKey="total_income" name="Sueldo neto" fill="#22c55e" radius={[2, 2, 0, 0]} maxBarSize={20} />
+        <Line yAxisId="right" type="monotone" dataKey="inflation_pct" name="Inflación mensual" stroke="#ef4444" strokeWidth={2} dot={false} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
+
 function UvaChart({ data }: { data: HistoryPoint[] }) {
   const d = data.filter(p => p.uva_value !== null);
   if (!d.length) return <p className="text-sm text-muted-foreground py-8 text-center">Sin datos de UVA</p>;
@@ -177,10 +199,11 @@ function UvaChart({ data }: { data: HistoryPoint[] }) {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 const CHART_OPTIONS = [
-  { key: "incomeVsMortgage", label: "Sueldo vs Cuota" },
-  { key: "mortgagePct",      label: "% Cuota/Sueldo" },
-  { key: "incomeVsExpenses", label: "Ingresos vs Egresos" },
-  { key: "uva",              label: "Evolución UVA" },
+  { key: "incomeVsMortgage",   label: "Sueldo vs Cuota" },
+  { key: "mortgagePct",        label: "% Cuota/Sueldo" },
+  { key: "incomeVsExpenses",   label: "Ingresos vs Egresos" },
+  { key: "incomeVsInflation",  label: "Sueldo vs Inflación" },
+  { key: "uva",                label: "Evolución UVA" },
 ] as const;
 
 type ChartKey = typeof CHART_OPTIONS[number]["key"];
@@ -199,6 +222,7 @@ export default function DashboardPage() {
     incomeVsMortgage: true,
     mortgagePct: true,
     incomeVsExpenses: true,
+    incomeVsInflation: true,
     uva: true,
   });
 
@@ -346,6 +370,12 @@ export default function DashboardPage() {
               <div className="bg-white rounded-xl border p-4 md:p-5">
                 <h4 className="text-sm font-semibold text-gray-700 mb-4">Ingresos vs Egresos por mes</h4>
                 <IncomeVsExpensesChart data={historyData} />
+              </div>
+            )}
+            {visible.incomeVsInflation && (
+              <div className="bg-white rounded-xl border p-4 md:p-5">
+                <h4 className="text-sm font-semibold text-gray-700 mb-4">Sueldo neto vs Inflación mensual</h4>
+                <IncomeVsInflationChart data={historyData} />
               </div>
             )}
             {visible.uva && (
