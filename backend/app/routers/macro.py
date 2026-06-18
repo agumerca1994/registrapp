@@ -53,6 +53,8 @@ async def _fetch_all_apis(timeout: int = 60):
             client.get(f"{ARGENTINADATOS}/cotizaciones/dolares/oficial"),
             client.get(f"{ARGENTINADATOS}/cotizaciones/dolares/blue"),
             client.get(f"{ARGENTINADATOS}/cotizaciones/dolares/mayorista"),
+            client.get(f"{ARGENTINADATOS}/cotizaciones/dolares/bolsa"),
+            client.get(f"{ARGENTINADATOS}/cotizaciones/dolares/contadoconliqui"),
             client.get(f"{INDEC_SERIES}/?ids=158.1_REPTE_0_0_5&format=json&sort=asc"),
             client.get(f"{INDEC_SERIES}/?ids=57.1_SMVMM_0_M_34&format=json&sort=asc"),
             client.get(f"{INDEC_SERIES}/?ids=444.1_CANASTA_BATAL_0_0_20_94&format=json&sort=asc"),
@@ -79,7 +81,7 @@ def _dec(v) -> Decimal | None:
 async def sync_macro_for_date(target: str) -> MacroVariable | None:
     """Fetch all macro variables for `target` (YYYY-MM-DD) and upsert into DB."""
     results = await _fetch_all_apis(timeout=20)
-    uva_r, inf_m_r, inf_ia_r, usd_off_r, usd_blue_r, usd_may_r, ripte_r, smvm_r, canasta_r = results
+    uva_r, inf_m_r, inf_ia_r, usd_off_r, usd_blue_r, usd_may_r, usd_mep_r, usd_ccl_r, ripte_r, smvm_r, canasta_r = results
 
     def ad(resp, key): return _pick_ad(_safe_list(resp), "fecha", key, target)
 
@@ -92,6 +94,8 @@ async def sync_macro_for_date(target: str) -> MacroVariable | None:
         usd_official=_dec(ad(usd_off_r, "venta")),
         usd_blue=_dec(ad(usd_blue_r, "venta")),
         usd_mayorista=_dec(ad(usd_may_r, "venta")),
+        usd_mep=_dec(ad(usd_mep_r, "venta")),
+        usd_ccl=_dec(ad(usd_ccl_r, "venta")),
         ripte=_dec(_pick_indec(_safe_indec(ripte_r), target)),
         smvm=_dec(_pick_indec(_safe_indec(smvm_r), target)),
         canasta_basica_total=_dec(_pick_indec(_safe_indec(canasta_r), target)),
@@ -137,7 +141,7 @@ async def backfill_macro_history(from_year: int = 2020, from_month: int = 1) -> 
 
     logger.info(f"Backfill: fetching APIs for {len(missing)} missing days (have {len(existing)}/{len(all_days)})")
     results = await _fetch_all_apis(timeout=60)
-    uva_r, inf_m_r, inf_ia_r, usd_off_r, usd_blue_r, usd_may_r, ripte_r, smvm_r, canasta_r = results
+    uva_r, inf_m_r, inf_ia_r, usd_off_r, usd_blue_r, usd_may_r, usd_mep_r, usd_ccl_r, ripte_r, smvm_r, canasta_r = results
 
     uva_data = _safe_list(uva_r)
     inf_m_data = _safe_list(inf_m_r)
@@ -145,6 +149,8 @@ async def backfill_macro_history(from_year: int = 2020, from_month: int = 1) -> 
     usd_off_data = _safe_list(usd_off_r)
     usd_blue_data = _safe_list(usd_blue_r)
     usd_may_data = _safe_list(usd_may_r)
+    usd_mep_data = _safe_list(usd_mep_r)
+    usd_ccl_data = _safe_list(usd_ccl_r)
     ripte_data = _safe_indec(ripte_r)
     smvm_data = _safe_indec(smvm_r)
     canasta_data = _safe_indec(canasta_r)
@@ -161,6 +167,8 @@ async def backfill_macro_history(from_year: int = 2020, from_month: int = 1) -> 
             usd_official=_dec(_pick_ad(usd_off_data, "fecha", "venta", t)),
             usd_blue=_dec(_pick_ad(usd_blue_data, "fecha", "venta", t)),
             usd_mayorista=_dec(_pick_ad(usd_may_data, "fecha", "venta", t)),
+            usd_mep=_dec(_pick_ad(usd_mep_data, "fecha", "venta", t)),
+            usd_ccl=_dec(_pick_ad(usd_ccl_data, "fecha", "venta", t)),
             ripte=_dec(_pick_indec(ripte_data, t)),
             smvm=_dec(_pick_indec(smvm_data, t)),
             canasta_basica_total=_dec(_pick_indec(canasta_data, t)),

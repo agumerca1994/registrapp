@@ -14,6 +14,8 @@ class MacroVariableOut(BaseModel):
     usd_official: Decimal | None
     usd_blue: Decimal | None
     usd_mayorista: Decimal | None
+    usd_mep: Decimal | None
+    usd_ccl: Decimal | None
     ripte: Decimal | None
     smvm: Decimal | None
     canasta_basica_total: Decimal | None

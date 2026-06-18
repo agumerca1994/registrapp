@@ -19,6 +19,8 @@ class MacroVariable(Base):
     usd_official: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     usd_blue: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     usd_mayorista: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    usd_mep: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    usd_ccl: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
 
     # INDEC
     ripte: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
