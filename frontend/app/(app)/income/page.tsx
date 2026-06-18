@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import { formatARS } from "@/lib/utils";
-import { Plus, Trash2, Pencil } from "lucide-react";
+import { Plus, Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle } from "lucide-react";
 
 interface IncomeSource { id: number; name: string; income_type: string; }
 interface IncomeEntry {
@@ -19,6 +19,302 @@ const INCOME_TYPE_LABELS: Record<string, string> = {
 
 const EMPTY_FORM = { source_id: "", amount: "", period_date: "", notes: "" };
 
+// ── Import modal ───────────────────────────────────────────────────────────────
+
+interface PreviewData { columns: string[]; sample: string[][]; row_count: number; }
+interface ImportResult { imported: number; skipped: number; errors: string[]; }
+
+function ImportModal({
+  sources,
+  onClose,
+}: {
+  sources: IncomeSource[];
+  onClose: () => void;
+}) {
+  type Step = "upload" | "map" | "importing" | "done";
+  const [step, setStep] = useState<Step>("upload");
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<PreviewData | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [mapping, setMapping] = useState({
+    date_col: "", amount_col: "", notes_col: "",
+    source_id: "", new_source_name: "", new_source_type: "salary",
+  });
+  const [result, setResult] = useState<ImportResult | null>(null);
+  const [error, setError] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = async (f: File) => {
+    setFile(f);
+    setLoadingPreview(true);
+    setError("");
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      const { data } = await api.post<PreviewData>("/income/import/preview", fd);
+      setPreview(data);
+      // Auto-select first and last column as date and amount
+      const cols = data.columns;
+      setMapping(m => ({
+        ...m,
+        date_col: cols[0] ?? "",
+        amount_col: cols[cols.length - 1] ?? "",
+      }));
+      setStep("map");
+    } catch {
+      setError("No se pudo leer el archivo. Verificá que sea .xlsx o .csv");
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!file || !preview) return;
+    if (!mapping.date_col || !mapping.amount_col) {
+      setError("Seleccioná las columnas de fecha y monto");
+      return;
+    }
+    if (!mapping.source_id && !mapping.new_source_name.trim()) {
+      setError("Seleccioná o creá una fuente de ingreso");
+      return;
+    }
+    setError("");
+    setStep("importing");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("date_col", mapping.date_col);
+      fd.append("amount_col", mapping.amount_col);
+      if (mapping.notes_col) fd.append("notes_col", mapping.notes_col);
+      if (mapping.source_id) {
+        fd.append("source_id", mapping.source_id);
+      } else {
+        fd.append("new_source_name", mapping.new_source_name.trim());
+        fd.append("new_source_type", mapping.new_source_type);
+      }
+      const { data } = await api.post<ImportResult>("/income/import/run", fd);
+      setResult(data);
+      setStep("done");
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setError(msg || "Error al importar");
+      setStep("map");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h3 className="font-semibold text-gray-900">Importar ingresos desde archivo</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+
+          {/* Step indicators */}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+            {(["upload", "map", "importing", "done"] as Step[]).map((s, i) => (
+              <span key={s} className="flex items-center gap-1">
+                {i > 0 && <span className="text-gray-300">›</span>}
+                <span className={step === s ? "text-primary font-medium" : ""}>
+                  {["Archivo", "Mapeo", "Procesando", "Resultado"][i]}
+                </span>
+              </span>
+            ))}
+          </div>
+
+          {error && (
+            <div className="flex items-center gap-2 bg-red-50 text-red-600 text-sm rounded-lg px-4 py-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0" /> {error}
+            </div>
+          )}
+
+          {/* Step: upload */}
+          {step === "upload" && (
+            <div
+              className="border-2 border-dashed rounded-xl p-10 flex flex-col items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors"
+              onClick={() => fileRef.current?.click()}
+            >
+              <Upload className="w-10 h-10 text-gray-300" />
+              <p className="text-sm font-medium text-gray-700">Seleccioná un archivo</p>
+              <p className="text-xs text-muted-foreground">Excel (.xlsx) o CSV (.csv)</p>
+              {loadingPreview && <p className="text-xs text-primary mt-2">Leyendo archivo...</p>}
+              <input
+                ref={fileRef} type="file" accept=".xlsx,.csv" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+              />
+            </div>
+          )}
+
+          {/* Step: map */}
+          {step === "map" && preview && (
+            <div className="space-y-5">
+              {/* Preview table */}
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-2">
+                  Vista previa · {preview.row_count} filas detectadas
+                </p>
+                <div className="overflow-x-auto rounded-lg border text-xs">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        {preview.columns.map(c => (
+                          <th key={c} className="px-3 py-2 text-left font-medium text-gray-600">{c}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {preview.sample.map((row, i) => (
+                        <tr key={i}>
+                          {row.map((cell, j) => (
+                            <td key={j} className="px-3 py-1.5 text-gray-700 max-w-[120px] truncate">{cell}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Column mapping */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Columna de fecha *</label>
+                  <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                    value={mapping.date_col} onChange={e => setMapping(m => ({ ...m, date_col: e.target.value }))}>
+                    <option value="">— elegir —</option>
+                    {preview.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <p className="text-xs text-muted-foreground mt-0.5">Formatos: MM-AAAA, AAAA-MM-DD, DD/MM/AAAA</p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Columna de monto *</label>
+                  <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                    value={mapping.amount_col} onChange={e => setMapping(m => ({ ...m, amount_col: e.target.value }))}>
+                    <option value="">— elegir —</option>
+                    {preview.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <p className="text-xs text-muted-foreground mt-0.5">Se importa como el ingreso neto</p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Columna de notas (opcional)</label>
+                  <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                    value={mapping.notes_col} onChange={e => setMapping(m => ({ ...m, notes_col: e.target.value }))}>
+                    <option value="">Sin notas</option>
+                    {preview.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Fuente de ingreso *</label>
+                  <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                    value={mapping.source_id} onChange={e => setMapping(m => ({ ...m, source_id: e.target.value }))}>
+                    <option value="">+ Crear nueva fuente</option>
+                    {sources.map(s => <option key={s.id} value={s.id}>{s.name} ({INCOME_TYPE_LABELS[s.income_type]})</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* New source form — shown only if no existing source selected */}
+              {!mapping.source_id && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 rounded-xl p-4">
+                  <div>
+                    <label className="text-xs font-medium text-gray-600">Nombre de la nueva fuente *</label>
+                    <input className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white"
+                      placeholder="Ej: Sueldo Empresa"
+                      value={mapping.new_source_name}
+                      onChange={e => setMapping(m => ({ ...m, new_source_name: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600">Tipo</label>
+                    <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white"
+                      value={mapping.new_source_type}
+                      onChange={e => setMapping(m => ({ ...m, new_source_type: e.target.value }))}>
+                      {Object.entries(INCOME_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step: importing */}
+          {step === "importing" && (
+            <div className="flex flex-col items-center gap-4 py-10">
+              <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm text-gray-600">Importando registros...</p>
+            </div>
+          )}
+
+          {/* Step: done */}
+          {step === "done" && result && (
+            <div className="space-y-4 py-4">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="w-8 h-8 text-green-500 shrink-0" />
+                <div>
+                  <p className="font-semibold text-gray-900">Importación completada</p>
+                  <p className="text-sm text-muted-foreground">Procesados {(result.imported + result.skipped)} registros</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-green-50 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-green-600">{result.imported}</p>
+                  <p className="text-xs text-green-700 mt-0.5">Importados</p>
+                </div>
+                <div className="bg-amber-50 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-amber-600">{result.skipped}</p>
+                  <p className="text-xs text-amber-700 mt-0.5">Duplicados omitidos</p>
+                </div>
+                <div className="bg-red-50 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-red-600">{result.errors.length}</p>
+                  <p className="text-xs text-red-700 mt-0.5">Errores</p>
+                </div>
+              </div>
+              {result.errors.length > 0 && (
+                <div className="bg-red-50 rounded-lg p-3 space-y-1">
+                  {result.errors.map((e, i) => (
+                    <p key={i} className="text-xs text-red-600">{e}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        <div className="px-6 py-4 border-t flex justify-between items-center">
+          {step === "upload" && (
+            <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">Cancelar</button>
+          )}
+          {step === "map" && (
+            <>
+              <button onClick={() => { setStep("upload"); setPreview(null); setFile(null); }}
+                className="text-sm border px-4 py-2 rounded-lg hover:bg-gray-50">← Atrás</button>
+              <button onClick={handleImport}
+                className="bg-primary text-white text-sm px-5 py-2 rounded-lg hover:opacity-90 font-medium">
+                Importar {preview?.row_count} filas →
+              </button>
+            </>
+          )}
+          {step === "done" && (
+            <button onClick={onClose}
+              className="ml-auto bg-primary text-white text-sm px-5 py-2 rounded-lg hover:opacity-90">
+              Cerrar
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ── Main page ──────────────────────────────────────────────────────────────────
+
 export default function IncomePage() {
   const [entries, setEntries] = useState<IncomeEntry[]>([]);
   const [sources, setSources] = useState<IncomeSource[]>([]);
@@ -27,6 +323,7 @@ export default function IncomePage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [newSource, setNewSource] = useState({ name: "", income_type: "salary" });
   const [showSourceForm, setShowSourceForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const load = async () => {
@@ -81,6 +378,11 @@ export default function IncomePage() {
           <button onClick={() => setShowSourceForm(true)}
             className="text-sm border px-2 md:px-3 py-1.5 rounded-lg hover:bg-gray-50">
             + Fuente
+          </button>
+          <button onClick={() => setShowImport(true)}
+            className="flex items-center gap-1 text-sm border px-2 md:px-3 py-1.5 rounded-lg hover:bg-gray-50">
+            <Upload className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">Importar</span>
           </button>
           <button onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true); }}
             className="flex items-center gap-1 bg-primary text-white text-sm px-3 py-1.5 rounded-lg hover:opacity-90">
@@ -165,6 +467,13 @@ export default function IncomePage() {
           </div>
         ))}
       </div>
+
+      {showImport && (
+        <ImportModal
+          sources={sources}
+          onClose={() => { setShowImport(false); load(); }}
+        />
+      )}
     </div>
   );
 }
