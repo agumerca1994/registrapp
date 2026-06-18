@@ -126,9 +126,9 @@ async def sync_macro_for_date(target: str) -> MacroVariable | None:
         return existing
 
 
-async def backfill_macro_history(from_year: int = 2020) -> int:
+async def backfill_macro_history(from_year: int = 2020, from_month: int = 1) -> int:
     """Fetch all historical data in 9 API calls and upsert monthly records."""
-    logger.info(f"Starting macro backfill from {from_year}")
+    logger.info(f"Starting macro backfill from {from_year}-{from_month:02d}")
     results = await _fetch_all_apis(timeout=60)
     uva_r, inf_m_r, inf_ia_r, usd_off_r, usd_blue_r, usd_may_r, ripte_r, smvm_r, canasta_r = results
 
@@ -144,7 +144,7 @@ async def backfill_macro_history(from_year: int = 2020) -> int:
 
     today = date.today()
     months = []
-    y, m = from_year, 1
+    y, m = from_year, from_month
     while (y, m) <= (today.year, today.month):
         months.append((y, m))
         m += 1
@@ -202,14 +202,15 @@ async def list_macro(
     return result.all()
 
 
-@router.post("/backfill", status_code=202)
+@router.post("/backfill")
 async def trigger_backfill(
     from_year: int = Query(default=2020, ge=2010, le=2030),
+    from_month: int = Query(default=1, ge=1, le=12),
     firebase_user: dict = Depends(get_current_user),
 ):
-    """Trigger historical backfill (runs in background)."""
-    asyncio.create_task(backfill_macro_history(from_year))
-    return {"status": "backfill iniciado", "from_year": from_year}
+    """Run historical backfill synchronously and return count."""
+    count = await backfill_macro_history(from_year, from_month)
+    return {"status": "ok", "records": count}
 
 
 @router.delete("/{record_id}", status_code=204)
