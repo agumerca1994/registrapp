@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+import asyncio
 import httpx
 
 from app.core.database import get_db
@@ -103,19 +104,27 @@ async def sync_from_bcra(
         return before[-1][val_key] if before else None
 
     async with httpx.AsyncClient() as client:
-        uva_resp = await client.get("https://api.argentinadatos.com/v1/finanzas/indices/uva")
-        inf_resp = await client.get("https://api.argentinadatos.com/v1/finanzas/indices/inflacion")
-        usd_resp = await client.get("https://api.argentinadatos.com/v1/cotizaciones/dolares/oficial")
+        uva_resp, inf_resp, inf_ia_resp, usd_off_resp, usd_blue_resp = await asyncio.gather(
+            client.get("https://api.argentinadatos.com/v1/finanzas/indices/uva"),
+            client.get("https://api.argentinadatos.com/v1/finanzas/indices/inflacion"),
+            client.get("https://api.argentinadatos.com/v1/finanzas/indices/inflacionInteranual"),
+            client.get("https://api.argentinadatos.com/v1/cotizaciones/dolares/oficial"),
+            client.get("https://api.argentinadatos.com/v1/cotizaciones/dolares/blue"),
+        )
 
     uva_val = pick(uva_resp.json(), "fecha", "valor") if uva_resp.status_code == 200 else None
     inf_val = pick(inf_resp.json(), "fecha", "valor") if inf_resp.status_code == 200 else None
-    usd_val = pick(usd_resp.json(), "fecha", "venta") if usd_resp.status_code == 200 else None
+    inf_ia_val = pick(inf_ia_resp.json(), "fecha", "valor") if inf_ia_resp.status_code == 200 else None
+    usd_off_val = pick(usd_off_resp.json(), "fecha", "venta") if usd_off_resp.status_code == 200 else None
+    usd_blue_val = pick(usd_blue_resp.json(), "fecha", "venta") if usd_blue_resp.status_code == 200 else None
 
     body = MacroVariableUpsert(
         period_date=period_date,
         uva_value=uva_val,
         inflation_monthly_pct=inf_val,
-        usd_official=usd_val,
+        inflation_interanual_pct=inf_ia_val,
+        usd_official=usd_off_val,
+        usd_blue=usd_blue_val,
         source="bcra_api",
     )
     return await upsert_macro(body, firebase_user, db)

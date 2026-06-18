@@ -8,8 +8,9 @@ import { Trash2, X, Settings2, ChevronRight } from "lucide-react";
 const MACRO_VAR_DEFS = [
   { key: "uva_value", label: "UVA" },
   { key: "inflation_monthly_pct", label: "Inflación mensual" },
+  { key: "inflation_interanual_pct", label: "Inflación interanual" },
   { key: "usd_official", label: "USD Oficial" },
-  { key: "usd_mep", label: "USD MEP" },
+  { key: "usd_blue", label: "USD Blue" },
 ] as const;
 
 type MacroVarKey = typeof MACRO_VAR_DEFS[number]["key"];
@@ -17,7 +18,8 @@ type MacroVarKey = typeof MACRO_VAR_DEFS[number]["key"];
 interface MacroVar {
   id: number; period_date: string;
   uva_value?: number; inflation_monthly_pct?: number;
-  usd_official?: number; usd_mep?: number; source?: string;
+  inflation_interanual_pct?: number;
+  usd_official?: number; usd_blue?: number; source?: string;
 }
 
 function sourceLabel(source?: string) {
@@ -80,7 +82,8 @@ function MacroDetailModal({
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 const DEFAULT_VISIBLE: Record<string, boolean> = {
-  uva_value: true, inflation_monthly_pct: true, usd_official: true, usd_mep: false,
+  uva_value: true, inflation_monthly_pct: true, inflation_interanual_pct: true,
+  usd_official: true, usd_blue: true,
 };
 
 export default function MacroPage() {
