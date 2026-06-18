@@ -93,7 +93,6 @@ async def monthly_summary(
 
     macro = await db.scalar(
         select(MacroVariable).where(
-            MacroVariable.tenant_id == tid,
             MacroVariable.period_date >= start,
             MacroVariable.period_date < end,
         )
@@ -176,7 +175,6 @@ async def history(
             func.max(MacroVariable.uva_value).label("uva"),
             func.max(MacroVariable.inflation_monthly_pct).label("inflation"),
         )
-        .where(MacroVariable.tenant_id == tid)
         .group_by(text("1"))
     )
     for r in rows:
