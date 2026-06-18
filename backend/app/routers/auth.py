@@ -82,3 +82,17 @@ async def me(
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado. Registrate primero.")
     return user
+
+
+@router.get("/members", response_model=list[UserOut])
+async def list_members(
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await db.scalar(select(User).where(User.firebase_uid == firebase_user["uid"]))
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    result = await db.scalars(
+        select(User).where(User.tenant_id == user.tenant_id).order_by(User.created_at)
+    )
+    return result.all()

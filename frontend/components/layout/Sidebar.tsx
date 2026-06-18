@@ -15,6 +15,7 @@ const nav = [
   { href: "/expenses", label: "Egresos", icon: TrendingDown },
   { href: "/macro", label: "Variables macro", icon: BarChart3 },
   { href: "/mortgage", label: "Hipoteca", icon: Home },
+  { href: "/settings", label: "Configuración", icon: Settings },
 ];
 
 export default function Sidebar() {
