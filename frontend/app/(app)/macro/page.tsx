@@ -32,45 +32,31 @@ function fmt(key: MacroVarKey, value?: number): string {
   return PCT_KEYS.has(key) ? formatPct(value) : formatARS(value);
 }
 
-// Current year dynamic
 const THIS_YEAR = new Date().getFullYear();
-const YEARS = Array.from({ length: THIS_YEAR - 2019 }, (_, i) => THIS_YEAR - i); // [2026, 2025, ..., 2020]
+const TODAY_MONTH = `${THIS_YEAR}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
 
 const RANGE_OPTIONS = [
+  { label: "7 días",  value: "7d" },
+  { label: "1 mes",   value: "1m" },
   { label: "3 meses", value: "3m" },
   { label: "6 meses", value: "6m" },
-  ...YEARS.map(y => ({ label: String(y), value: String(y) })),
-  { label: "Todo", value: "all" },
+  { label: "1 año",   value: "1y" },
+  { label: "Todo",    value: "all" },
 ];
 
 function rangeToFromDate(range: string): string | null {
   const today = new Date();
-  if (range === "3m") {
-    const d = new Date(today); d.setMonth(d.getMonth() - 3);
+  const shift = (months: number) => {
+    const d = new Date(today); d.setMonth(d.getMonth() - months);
     return d.toISOString().slice(0, 10);
-  }
-  if (range === "6m") {
-    const d = new Date(today); d.setMonth(d.getMonth() - 6);
-    return d.toISOString().slice(0, 10);
-  }
-  if (range === "all") return "2020-01-01";
-  if (/^\d{4}$/.test(range)) return `${range}-01-01`;
+  };
+  if (range === "7d") { const d = new Date(today); d.setDate(d.getDate() - 7); return d.toISOString().slice(0, 10); }
+  if (range === "1m")  return shift(1);
+  if (range === "3m")  return shift(3);
+  if (range === "6m")  return shift(6);
+  if (range === "1y")  return shift(12);
+  if (range === "all") return null;
   return null;
-}
-
-function rangeToBackfillParams(range: string): { from_year: number; from_month: number } {
-  const today = new Date();
-  if (range === "3m") {
-    const d = new Date(today); d.setMonth(d.getMonth() - 3);
-    return { from_year: d.getFullYear(), from_month: d.getMonth() + 1 };
-  }
-  if (range === "6m") {
-    const d = new Date(today); d.setMonth(d.getMonth() - 6);
-    return { from_year: d.getFullYear(), from_month: d.getMonth() + 1 };
-  }
-  if (range === "all") return { from_year: 2020, from_month: 1 };
-  if (/^\d{4}$/.test(range)) return { from_year: parseInt(range), from_month: 1 };
-  return { from_year: today.getFullYear(), from_month: 1 };
 }
 
 // ── Detail modal ───────────────────────────────────────────────────────────────
@@ -88,7 +74,9 @@ function MacroDetailModal({ record, visibleVars, onClose }: {
               Automático
             </span>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1">
+            <X className="w-5 h-5" />
+          </button>
         </div>
         <div className="divide-y text-sm">
           {MACRO_VAR_DEFS.filter(v => visibleVars[v.key] !== false).map(({ key, label }) => (
@@ -114,11 +102,12 @@ const DEFAULT_VISIBLE: Record<string, boolean> = {
 export default function MacroPage() {
   const [records, setRecords] = useState<MacroVar[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
   const [detailRecord, setDetailRecord] = useState<MacroVar | null>(null);
   const [showConfig, setShowConfig] = useState(false);
   const [visibleVars, setVisibleVars] = useState<Record<string, boolean>>(DEFAULT_VISIBLE);
-  const [range, setRange] = useState(String(THIS_YEAR));
+  const [range, setRange] = useState("1m");
+  const [backfillFrom, setBackfillFrom] = useState("2025-01");
 
   const loadDisplay = async (r: string) => {
     const from = rangeToFromDate(r);
@@ -132,16 +121,13 @@ export default function MacroPage() {
       const saved = localStorage.getItem("macro_visible_vars");
       if (saved) setVisibleVars(JSON.parse(saved));
       const savedRange = localStorage.getItem("macro_range");
-      if (savedRange) { setRange(savedRange); }
+      if (savedRange) setRange(savedRange);
     } catch {}
   }, []);
 
-  // Load data on mount (no backfill on initial load)
   useEffect(() => {
     setLoading(true);
-    const r = (() => {
-      try { return localStorage.getItem("macro_range") || String(THIS_YEAR); } catch { return String(THIS_YEAR); }
-    })();
+    const r = (() => { try { return localStorage.getItem("macro_range") || "1m"; } catch { return "1m"; } })();
     loadDisplay(r).finally(() => setLoading(false));
   }, []);
 
@@ -153,21 +139,24 @@ export default function MacroPage() {
     });
   };
 
-  // Chip click: backfill then display
-  const selectRange = async (r: string) => {
+  const changeRange = (r: string) => {
     setRange(r);
     localStorage.setItem("macro_range", r);
-    setSyncing(true);
     setLoading(true);
+    loadDisplay(r).finally(() => setLoading(false));
+  };
+
+  const runBackfill = async () => {
+    if (!backfillFrom) return;
+    const [year, month] = backfillFrom.split("-").map(Number);
+    setBackfilling(true);
     try {
-      const { from_year, from_month } = rangeToBackfillParams(r);
-      await api.post(`/macro/backfill?from_year=${from_year}&from_month=${from_month}`, {}, { timeout: 90000 });
-    } catch { /* ignore backfill errors */ }
-    try {
-      await loadDisplay(r);
+      await api.post(`/macro/backfill?from_year=${year}&from_month=${month}`, {}, { timeout: 120000 });
+      await loadDisplay(range);
+    } catch (e) {
+      console.error("Backfill failed", e);
     } finally {
-      setSyncing(false);
-      setLoading(false);
+      setBackfilling(false);
     }
   };
 
@@ -176,13 +165,7 @@ export default function MacroPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-gray-900">Variables macro</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {syncing ? (
-              <span className="flex items-center gap-1 text-blue-600">
-                <Loader2 className="w-3 h-3 animate-spin" /> Actualizando datos...
-              </span>
-            ) : "Actualización automática diaria"}
-          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">Actualización automática diaria</p>
         </div>
         <button
           onClick={() => setShowConfig(v => !v)}
@@ -194,55 +177,82 @@ export default function MacroPage() {
       </div>
 
       {showConfig && (
-        <div className="bg-gray-50 border rounded-xl p-4">
-          <p className="text-xs font-medium text-gray-500 mb-3">Variables a mostrar</p>
-          <div className="grid grid-cols-2 gap-2">
-            {MACRO_VAR_DEFS.map(({ key, label }) => (
-              <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={visibleVars[key] !== false}
-                  onChange={() => toggleVar(key)}
-                  className="w-4 h-4 rounded accent-primary"
-                />
-                <span className="text-sm text-gray-700">{label}</span>
-              </label>
-            ))}
+        <div className="bg-gray-50 border rounded-xl p-4 space-y-4">
+          {/* Variable visibility */}
+          <div>
+            <p className="text-xs font-medium text-gray-500 mb-3">Variables a mostrar</p>
+            <div className="grid grid-cols-2 gap-2">
+              {MACRO_VAR_DEFS.map(({ key, label }) => (
+                <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={visibleVars[key] !== false}
+                    onChange={() => toggleVar(key)}
+                    className="w-4 h-4 rounded accent-primary"
+                  />
+                  <span className="text-sm text-gray-700">{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Backfill by date */}
+          <div className="border-t pt-3 space-y-2">
+            <p className="text-xs font-medium text-gray-500">Cargar datos históricos</p>
+            <p className="text-xs text-gray-400">
+              Carga un registro por día desde la fecha elegida hasta hoy (acumulativo).
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="month"
+                value={backfillFrom}
+                min="2016-01"
+                max={TODAY_MONTH}
+                onChange={e => setBackfillFrom(e.target.value)}
+                disabled={backfilling}
+                className="text-sm border rounded-lg px-2.5 py-1.5 bg-white flex-1 disabled:opacity-50"
+              />
+              <button
+                onClick={runBackfill}
+                disabled={backfilling || !backfillFrom}
+                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+              >
+                {backfilling ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando...</> : "Cargar"}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Range chips — click = backfill + display */}
-      <div className="space-y-1">
-        <div className="flex gap-1.5 flex-wrap">
-          {RANGE_OPTIONS.map(opt => (
-            <button
-              key={opt.value}
-              onClick={() => selectRange(opt.value)}
-              disabled={syncing}
-              className={`text-xs px-3 py-1 rounded-full border transition-colors disabled:opacity-50 ${
-                range === opt.value
-                  ? "bg-gray-900 text-white border-gray-900"
-                  : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-gray-400">Tocá un período para cargar o actualizar esos datos</p>
+      {/* Display range chips */}
+      <div className="flex gap-1.5 flex-wrap">
+        {RANGE_OPTIONS.map(opt => (
+          <button
+            key={opt.value}
+            onClick={() => changeRange(opt.value)}
+            className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+              range === opt.value
+                ? "bg-gray-900 text-white border-gray-900"
+                : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
 
       <div className="bg-white rounded-xl border divide-y">
-        {loading ? (
+        {backfilling ? (
           <div className="p-6 flex items-center gap-2 text-muted-foreground text-sm">
-            {syncing && <Loader2 className="w-4 h-4 animate-spin" />}
-            {syncing ? "Cargando datos históricos..." : "Cargando..."}
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Cargando datos históricos día a día...
           </div>
+        ) : loading ? (
+          <p className="p-6 text-muted-foreground text-sm">Cargando...</p>
         ) : records.length === 0 ? (
           <div className="p-6 text-sm text-muted-foreground space-y-1">
             <p>Sin datos para el período seleccionado.</p>
-            <p className="text-xs">Tocá el chip del período para cargarlos.</p>
+            <p className="text-xs">Usá el panel ⚙️ para cargar el historial.</p>
           </div>
         ) : records.map(r => (
           <button

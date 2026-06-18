@@ -1,10 +1,12 @@
 import asyncio
 import logging
-from datetime import date
+from datetime import date, timedelta
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 import httpx
 
 from app.core.database import get_db, AsyncSessionLocal
@@ -20,7 +22,7 @@ INDEC_SERIES = "https://apis.datos.gob.ar/series/api/series"
 
 
 def _pick_ad(data: list, date_key: str, val_key: str, target: str) -> float | None:
-    """Pick the best value from argentinadatos.com list for a target date."""
+    """Pick best value for target date: exact → same month (on or before) → last before."""
     if not data:
         return None
     month = target[:7]
@@ -34,17 +36,6 @@ def _pick_ad(data: list, date_key: str, val_key: str, target: str) -> float | No
     return before[-1] if before else None
 
 
-def _pick_ad_month(data: list, date_key: str, val_key: str, year: int, month: int) -> float | None:
-    """Pick the last available value for a given year-month (any day in the month)."""
-    prefix = f"{year}-{month:02d}"
-    in_month = [e[val_key] for e in data if e[date_key].startswith(prefix)]
-    if in_month:
-        return in_month[-1]
-    # Fallback: last value before this month
-    before = [e[val_key] for e in data if e[date_key] < prefix]
-    return before[-1] if before else None
-
-
 def _pick_indec(rows: list, target: str) -> float | None:
     """Pick the most recent value up to target date from INDEC series [[date, val], ...]."""
     if not rows:
@@ -53,18 +44,7 @@ def _pick_indec(rows: list, target: str) -> float | None:
     return candidates[-1][1] if candidates else None
 
 
-def _pick_indec_month(rows: list, year: int, month: int) -> float | None:
-    """Pick any value in the given year-month, with fallback to last available before it."""
-    prefix = f"{year}-{month:02d}"
-    in_month = [r[1] for r in rows if isinstance(r, list) and r[0].startswith(prefix)]
-    if in_month:
-        return in_month[-1]
-    before = [r[1] for r in rows if isinstance(r, list) and r[0] < prefix]
-    return before[-1] if before else None
-
-
 async def _fetch_all_apis(timeout: int = 60):
-    """Fetch all 9 APIs in parallel and return raw responses."""
     async with httpx.AsyncClient(timeout=timeout) as client:
         return await asyncio.gather(
             client.get(f"{ARGENTINADATOS}/finanzas/indices/uva"),
@@ -92,6 +72,10 @@ def _safe_indec(resp) -> list:
     return resp.json().get("data", []) or []
 
 
+def _dec(v) -> Decimal | None:
+    return Decimal(str(v)) if v is not None else None
+
+
 async def sync_macro_for_date(target: str) -> MacroVariable | None:
     """Fetch all macro variables for `target` (YYYY-MM-DD) and upsert into DB."""
     results = await _fetch_all_apis(timeout=20)
@@ -99,36 +83,36 @@ async def sync_macro_for_date(target: str) -> MacroVariable | None:
 
     def ad(resp, key): return _pick_ad(_safe_list(resp), "fecha", key, target)
 
-    values = dict(
-        uva_value=ad(uva_r, "valor"),
-        inflation_monthly_pct=ad(inf_m_r, "valor"),
-        inflation_interanual_pct=ad(inf_ia_r, "valor"),
-        usd_official=ad(usd_off_r, "venta"),
-        usd_blue=ad(usd_blue_r, "venta"),
-        usd_mayorista=ad(usd_may_r, "venta"),
-        ripte=_pick_indec(_safe_indec(ripte_r), target),
-        smvm=_pick_indec(_safe_indec(smvm_r), target),
-        canasta_basica_total=_pick_indec(_safe_indec(canasta_r), target),
+    row = dict(
+        period_date=date.fromisoformat(target),
+        source="auto",
+        uva_value=_dec(ad(uva_r, "valor")),
+        inflation_monthly_pct=_dec(ad(inf_m_r, "valor")),
+        inflation_interanual_pct=_dec(ad(inf_ia_r, "valor")),
+        usd_official=_dec(ad(usd_off_r, "venta")),
+        usd_blue=_dec(ad(usd_blue_r, "venta")),
+        usd_mayorista=_dec(ad(usd_may_r, "venta")),
+        ripte=_dec(_pick_indec(_safe_indec(ripte_r), target)),
+        smvm=_dec(_pick_indec(_safe_indec(smvm_r), target)),
+        canasta_basica_total=_dec(_pick_indec(_safe_indec(canasta_r), target)),
     )
 
     async with AsyncSessionLocal() as db:
-        existing = await db.scalar(select(MacroVariable).where(MacroVariable.period_date == target))
-        if existing:
-            for field, value in values.items():
-                if value is not None:
-                    setattr(existing, field, value)
-            existing.source = "auto"
-        else:
-            existing = MacroVariable(period_date=target, source="auto", **values)
-            db.add(existing)
+        stmt = pg_insert(MacroVariable).values([row])
+        stmt = stmt.on_conflict_do_update(
+            constraint="uq_macro_period_date",
+            set_={k: stmt.excluded[k] for k in row if k != "period_date"},
+        )
+        await db.execute(stmt)
         await db.commit()
-        await db.refresh(existing)
-        return existing
+
+    async with AsyncSessionLocal() as db:
+        return await db.scalar(select(MacroVariable).where(MacroVariable.period_date == target))
 
 
 async def backfill_macro_history(from_year: int = 2020, from_month: int = 1) -> int:
-    """Fetch all historical data in 9 API calls and upsert monthly records."""
-    logger.info(f"Starting macro backfill from {from_year}-{from_month:02d}")
+    """Fetch all API history in 9 calls and bulk-upsert a record for every calendar day."""
+    logger.info(f"Backfill started: from {from_year}-{from_month:02d}")
     results = await _fetch_all_apis(timeout=60)
     uva_r, inf_m_r, inf_ia_r, usd_off_r, usd_blue_r, usd_may_r, ripte_r, smvm_r, canasta_r = results
 
@@ -142,49 +126,40 @@ async def backfill_macro_history(from_year: int = 2020, from_month: int = 1) -> 
     smvm_data = _safe_indec(smvm_r)
     canasta_data = _safe_indec(canasta_r)
 
+    rows = []
+    current = date(from_year, from_month, 1)
     today = date.today()
-    months = []
-    y, m = from_year, from_month
-    while (y, m) <= (today.year, today.month):
-        months.append((y, m))
-        m += 1
-        if m > 12:
-            m, y = 1, y + 1
+    while current <= today:
+        t = current.isoformat()
+        rows.append(dict(
+            period_date=current,
+            source="auto",
+            uva_value=_dec(_pick_ad(uva_data, "fecha", "valor", t)),
+            inflation_monthly_pct=_dec(_pick_ad(inf_m_data, "fecha", "valor", t)),
+            inflation_interanual_pct=_dec(_pick_ad(inf_ia_data, "fecha", "valor", t)),
+            usd_official=_dec(_pick_ad(usd_off_data, "fecha", "venta", t)),
+            usd_blue=_dec(_pick_ad(usd_blue_data, "fecha", "venta", t)),
+            usd_mayorista=_dec(_pick_ad(usd_may_data, "fecha", "venta", t)),
+            ripte=_dec(_pick_indec(ripte_data, t)),
+            smvm=_dec(_pick_indec(smvm_data, t)),
+            canasta_basica_total=_dec(_pick_indec(canasta_data, t)),
+        ))
+        current += timedelta(days=1)
 
-    count = 0
+    update_cols = [c for c in rows[0] if c != "period_date"]
+
     async with AsyncSessionLocal() as db:
-        for y, m in months:
-            target = f"{y}-{m:02d}-01"
-
-            def adm(data, key): return _pick_ad_month(data, "fecha", key, y, m)
-
-            values = dict(
-                uva_value=adm(uva_data, "valor"),
-                inflation_monthly_pct=adm(inf_m_data, "valor"),
-                inflation_interanual_pct=adm(inf_ia_data, "valor"),
-                usd_official=adm(usd_off_data, "venta"),
-                usd_blue=adm(usd_blue_data, "venta"),
-                usd_mayorista=adm(usd_may_data, "venta"),
-                ripte=_pick_indec_month(ripte_data, y, m),
-                smvm=_pick_indec_month(smvm_data, y, m),
-                canasta_basica_total=_pick_indec_month(canasta_data, y, m),
-            )
-
-            existing = await db.scalar(select(MacroVariable).where(MacroVariable.period_date == target))
-            if existing:
-                for field, value in values.items():
-                    if value is not None:
-                        setattr(existing, field, value)
-                existing.source = "auto"
-            else:
-                existing = MacroVariable(period_date=target, source="auto", **values)
-                db.add(existing)
-            count += 1
-
+        # Bulk upsert in a single SQL statement
+        stmt = pg_insert(MacroVariable).values(rows)
+        stmt = stmt.on_conflict_do_update(
+            constraint="uq_macro_period_date",
+            set_={k: stmt.excluded[k] for k in update_cols},
+        )
+        await db.execute(stmt)
         await db.commit()
 
-    logger.info(f"Backfill complete: {count} months processed")
-    return count
+    logger.info(f"Backfill complete: {len(rows)} days")
+    return len(rows)
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -208,7 +183,7 @@ async def trigger_backfill(
     from_month: int = Query(default=1, ge=1, le=12),
     firebase_user: dict = Depends(get_current_user),
 ):
-    """Run historical backfill synchronously and return count."""
+    """Bulk-upsert daily records from from_year/from_month to today."""
     count = await backfill_macro_history(from_year, from_month)
     return {"status": "ok", "records": count}
 
