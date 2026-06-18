@@ -116,6 +116,16 @@ async def history(
     firebase_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    try:
+        return await _history_impl(firebase_user, db)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}")
+
+
+async def _history_impl(firebase_user: dict, db: AsyncSession) -> list[HistoryPoint]:
     user = await _get_db_user(firebase_user, db)
     tid = user.tenant_id
 
@@ -186,3 +196,4 @@ async def history(
         data[k]["inflation_pct"] = r.inflation
 
     return [HistoryPoint(period=k, **data[k]) for k in sorted(data.keys())]
+
