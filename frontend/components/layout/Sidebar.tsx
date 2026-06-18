@@ -1,12 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, TrendingUp, TrendingDown, BarChart3,
-  Home, LogOut, Settings
+  Home, LogOut, Settings, Menu, X,
 } from "lucide-react";
 
 const nav = [
@@ -18,12 +19,12 @@ const nav = [
   { href: "/settings", label: "Configuración", icon: Settings },
 ];
 
-export default function Sidebar() {
+function NavContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { appUser, logout } = useAuth();
 
   return (
-    <aside className="w-60 h-screen bg-white border-r flex flex-col sticky top-0">
+    <>
       <div className="p-6 border-b">
         <h1 className="text-xl font-bold text-primary">RegistrApp</h1>
         <p className="text-xs text-muted-foreground mt-1 truncate">
@@ -31,11 +32,12 @@ export default function Sidebar() {
         </p>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {nav.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
             href={href}
+            onClick={onNavigate}
             className={cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
               pathname === href
@@ -49,7 +51,7 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      <div className="p-4 border-t space-y-1">
+      <div className="p-4 border-t">
         <button
           onClick={logout}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 w-full transition-colors"
@@ -58,6 +60,51 @@ export default function Sidebar() {
           Cerrar sesión
         </button>
       </div>
-    </aside>
+    </>
+  );
+}
+
+export default function Sidebar() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex w-60 h-screen bg-white border-r flex-col sticky top-0 shrink-0">
+        <NavContent />
+      </aside>
+
+      {/* Mobile top bar */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b flex items-center px-4 h-14">
+        <button onClick={() => setOpen(true)} className="p-2 -ml-2 text-gray-600">
+          <Menu className="w-5 h-5" />
+        </button>
+        <span className="ml-2 text-lg font-bold text-primary">RegistrApp</span>
+      </div>
+
+      {/* Mobile drawer overlay */}
+      {open && (
+        <div
+          className="md:hidden fixed inset-0 z-50 bg-black/40"
+          onClick={() => setOpen(false)}
+        />
+      )}
+
+      {/* Mobile drawer */}
+      <aside className={cn(
+        "md:hidden fixed top-0 left-0 h-full w-72 bg-white z-50 flex flex-col transition-transform duration-300",
+        open ? "translate-x-0" : "-translate-x-full"
+      )}>
+        <div className="flex items-center justify-between px-4 h-14 border-b">
+          <span className="text-lg font-bold text-primary">RegistrApp</span>
+          <button onClick={() => setOpen(false)} className="p-2 text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <NavContent onNavigate={() => setOpen(false)} />
+        </div>
+      </aside>
+    </>
   );
 }
