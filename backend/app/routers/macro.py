@@ -80,12 +80,20 @@ async def sync_from_bcra(
         inf_resp = await client.get("https://api.estadisticasbcra.com/inflacion_mensual_oficial", headers=headers)
         usd_resp = await client.get("https://api.estadisticasbcra.com/usd_of_minorista", headers=headers)
 
-    def last_value(data: list) -> float | None:
-        return data[-1]["v"] if data else None
+    month_prefix = period_date[:7]  # "YYYY-MM"
 
-    uva_val = last_value(uva_resp.json()) if uva_resp.status_code == 200 else None
-    inf_val = last_value(inf_resp.json()) if inf_resp.status_code == 200 else None
-    usd_val = last_value(usd_resp.json()) if usd_resp.status_code == 200 else None
+    def value_for_month(data: list) -> float | None:
+        if not data:
+            return None
+        in_month = [e for e in data if e["d"].startswith(month_prefix)]
+        if in_month:
+            return in_month[-1]["v"]
+        before = [e for e in data if e["d"] < period_date]
+        return before[-1]["v"] if before else data[-1]["v"]
+
+    uva_val = value_for_month(uva_resp.json()) if uva_resp.status_code == 200 else None
+    inf_val = value_for_month(inf_resp.json()) if inf_resp.status_code == 200 else None
+    usd_val = value_for_month(usd_resp.json()) if usd_resp.status_code == 200 else None
 
     body = MacroVariableUpsert(
         period_date=period_date,
