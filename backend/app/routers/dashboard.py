@@ -33,6 +33,15 @@ class MonthSummary(BaseModel):
     expenses_by_category: list[CategorySummary]
 
 
+class HistoryPoint(BaseModel):
+    period: str
+    total_income: Decimal
+    total_expenses: Decimal
+    mortgage_payment: Decimal | None
+    uva_value: Decimal | None
+    inflation_pct: Decimal | None
+
+
 async def _get_db_user(firebase_user: dict, db: AsyncSession) -> User:
     user = await db.scalar(select(User).where(User.firebase_uid == firebase_user["uid"]))
     if not user:
@@ -100,3 +109,80 @@ async def monthly_summary(
         inflation_pct=macro.inflation_monthly_pct if macro else None,
         expenses_by_category=by_category,
     )
+
+
+@router.get("/history", response_model=list[HistoryPoint])
+async def history(
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await _get_db_user(firebase_user, db)
+    tid = user.tenant_id
+
+    data: dict[str, dict] = {}
+
+    def ensure(p: str) -> None:
+        if p not in data:
+            data[p] = dict(
+                total_income=Decimal(0),
+                total_expenses=Decimal(0),
+                mortgage_payment=None,
+                uva_value=None,
+                inflation_pct=None,
+            )
+
+    rows = await db.execute(
+        select(
+            func.date_trunc("month", IncomeEntry.period_date).label("p"),
+            func.sum(IncomeEntry.amount).label("total"),
+        )
+        .where(IncomeEntry.tenant_id == tid)
+        .group_by(func.date_trunc("month", IncomeEntry.period_date))
+    )
+    for r in rows:
+        k = r.p.strftime("%Y-%m")
+        ensure(k)
+        data[k]["total_income"] = r.total
+
+    rows = await db.execute(
+        select(
+            func.date_trunc("month", ExpenseEntry.expense_date).label("p"),
+            func.sum(ExpenseEntry.amount).label("total"),
+        )
+        .where(ExpenseEntry.tenant_id == tid)
+        .group_by(func.date_trunc("month", ExpenseEntry.expense_date))
+    )
+    for r in rows:
+        k = r.p.strftime("%Y-%m")
+        ensure(k)
+        data[k]["total_expenses"] = r.total
+
+    rows = await db.execute(
+        select(
+            func.date_trunc("month", MortgageRecord.period_date).label("p"),
+            func.sum(MortgageRecord.payment_amount).label("total"),
+        )
+        .where(MortgageRecord.tenant_id == tid)
+        .group_by(func.date_trunc("month", MortgageRecord.period_date))
+    )
+    for r in rows:
+        k = r.p.strftime("%Y-%m")
+        ensure(k)
+        data[k]["mortgage_payment"] = r.total
+
+    rows = await db.execute(
+        select(
+            func.date_trunc("month", MacroVariable.period_date).label("p"),
+            func.max(MacroVariable.uva_value).label("uva"),
+            func.max(MacroVariable.inflation_monthly_pct).label("inflation"),
+        )
+        .where(MacroVariable.tenant_id == tid)
+        .group_by(func.date_trunc("month", MacroVariable.period_date))
+    )
+    for r in rows:
+        k = r.p.strftime("%Y-%m")
+        ensure(k)
+        data[k]["uva_value"] = r.uva
+        data[k]["inflation_pct"] = r.inflation
+
+    return [HistoryPoint(period=k, **data[k]) for k in sorted(data.keys())]
