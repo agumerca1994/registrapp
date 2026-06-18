@@ -36,6 +36,8 @@ class IncomeEntry(Base):
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     source_id: Mapped[int] = mapped_column(ForeignKey("income_sources.id"))
+    bruto: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    deducciones: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
     period_date: Mapped[date] = mapped_column(Date, index=True)
     notes: Mapped[str | None] = mapped_column(String(500))

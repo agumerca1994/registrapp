@@ -215,6 +215,8 @@ async def import_run(
     file: UploadFile = File(...),
     date_col: str = Form(...),
     amount_col: str = Form(...),
+    bruto_col: str = Form(None),
+    deducciones_col: str = Form(None),
     notes_col: str = Form(None),
     source_id: int = Form(None),
     new_source_name: str = Form(None),
@@ -252,6 +254,8 @@ async def import_run(
             row_dict = dict(zip(columns, row))
             period = _parse_date(row_dict.get(date_col))
             amount = _parse_number(row_dict.get(amount_col))
+            bruto_v = _parse_number(row_dict.get(bruto_col)) if bruto_col else None
+            deducc_v = _parse_number(row_dict.get(deducciones_col)) if deducciones_col else None
 
             if period is None:
                 errors.append(f"Fila {i}: fecha inválida ({row_dict.get(date_col)!r})")
@@ -285,6 +289,8 @@ async def import_run(
                 tenant_id=user.tenant_id,
                 user_id=user.id,
                 source_id=source.id,
+                bruto=Decimal(str(round(bruto_v, 2))) if bruto_v is not None else None,
+                deducciones=Decimal(str(round(deducc_v, 2))) if deducc_v is not None else None,
                 amount=amount_dec,
                 period_date=period,
                 notes=notes,

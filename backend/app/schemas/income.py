@@ -22,6 +22,8 @@ class IncomeSourceOut(BaseModel):
 
 class IncomeEntryCreate(BaseModel):
     source_id: int
+    bruto: Decimal | None = None
+    deducciones: Decimal | None = None
     amount: Decimal
     period_date: date
     notes: str | None = None
@@ -29,6 +31,8 @@ class IncomeEntryCreate(BaseModel):
 
 class IncomeEntryUpdate(BaseModel):
     source_id: int | None = None
+    bruto: Decimal | None = None
+    deducciones: Decimal | None = None
     amount: Decimal | None = None
     period_date: date | None = None
     notes: str | None = None
@@ -39,6 +43,8 @@ class IncomeEntryOut(BaseModel):
 
     id: int
     source_id: int
+    bruto: Decimal | None
+    deducciones: Decimal | None
     amount: Decimal
     period_date: date
     notes: str | None
