@@ -4,8 +4,13 @@ import { AuthProvider } from "@/contexts/AuthContext";
 
 export const metadata: Metadata = {
   title: "RegistrApp",
-  description: "Finanzas personales",
+  description: "Finanzas personales inteligentes",
   manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "RegistrApp",
+  },
 };
 
 export const viewport: Viewport = {

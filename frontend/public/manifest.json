@@ -2,9 +2,13 @@
   "name": "RegistrApp",
   "short_name": "RegistrApp",
   "description": "Finanzas personales inteligentes",
-  "start_url": "/",
+  "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#3b82f6",
-  "icons": []
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icon", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/apple-icon", "sizes": "180x180", "type": "image/png" }
+  ]
 }
