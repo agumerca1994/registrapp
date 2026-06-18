@@ -1,13 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { refreshUser } = useAuth();
+  const { firebaseUser, appUser, loading: authLoading, refreshUser } = useAuth();
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!firebaseUser) router.replace("/login");
+    else if (appUser) router.replace("/dashboard");
+  }, [firebaseUser, appUser, authLoading, router]);
   const [mode, setMode] = useState<"create" | "join">("create");
   const [tenantName, setTenantName] = useState("");
   const [tenantId, setTenantId] = useState("");
