@@ -140,7 +140,7 @@ async def history(
         .group_by(func.date_trunc("month", IncomeEntry.period_date))
     )
     for r in rows:
-        k = r.p.strftime("%Y-%m")
+        k = str(r.p)[:7]
         ensure(k)
         data[k]["total_income"] = r.total
 
@@ -153,7 +153,7 @@ async def history(
         .group_by(func.date_trunc("month", ExpenseEntry.expense_date))
     )
     for r in rows:
-        k = r.p.strftime("%Y-%m")
+        k = str(r.p)[:7]
         ensure(k)
         data[k]["total_expenses"] = r.total
 
@@ -166,7 +166,7 @@ async def history(
         .group_by(func.date_trunc("month", MortgageRecord.period_date))
     )
     for r in rows:
-        k = r.p.strftime("%Y-%m")
+        k = str(r.p)[:7]
         ensure(k)
         data[k]["mortgage_payment"] = r.total
 
@@ -180,7 +180,7 @@ async def history(
         .group_by(func.date_trunc("month", MacroVariable.period_date))
     )
     for r in rows:
-        k = r.p.strftime("%Y-%m")
+        k = str(r.p)[:7]
         ensure(k)
         data[k]["uva_value"] = r.uva
         data[k]["inflation_pct"] = r.inflation

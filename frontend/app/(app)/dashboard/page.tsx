@@ -193,6 +193,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [historyData, setHistoryData] = useState<HistoryPoint[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState<Record<ChartKey, boolean>>({
     incomeVsMortgage: true,
@@ -214,8 +215,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setHistoryLoading(true);
+    setHistoryError(null);
     api.get("/dashboard/history")
       .then(r => setHistoryData(r.data))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .catch((e: any) => setHistoryError(e?.response?.data?.detail || e?.message || "Error desconocido"))
       .finally(() => setHistoryLoading(false));
   }, []);
 
@@ -311,6 +315,10 @@ export default function DashboardPage() {
         {!mounted || historyLoading ? (
           <div className="bg-white rounded-xl border p-8 text-center text-sm text-muted-foreground">
             Cargando gráficos...
+          </div>
+        ) : historyError ? (
+          <div className="bg-white rounded-xl border p-8 text-center text-sm text-red-500">
+            Error al cargar gráficos: {historyError}
           </div>
         ) : historyData.length === 0 ? (
           <div className="bg-white rounded-xl border p-10 text-center text-sm text-muted-foreground">
