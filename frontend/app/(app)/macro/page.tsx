@@ -17,9 +17,27 @@ export default function MacroPage() {
     period_date: "", uva_value: "", inflation_monthly_pct: "",
     usd_official: "", usd_mep: "",
   });
+  const [syncDate, setSyncDate] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState("");
 
   const load = () => api.get("/macro").then(r => setRecords(r.data));
   useEffect(() => { load(); }, []);
+
+  const handleSync = async () => {
+    if (!syncDate) return;
+    setSyncing(true);
+    setSyncMsg("");
+    try {
+      await api.post(`/macro/sync-bcra?period_date=${syncDate}`);
+      setSyncMsg("Sincronizado correctamente");
+      await load();
+    } catch {
+      setSyncMsg("Error al sincronizar");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,11 +54,20 @@ export default function MacroPage() {
     <div className="max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Variables macro</h2>
-        <button onClick={() => setShowForm(true)}
-          className="bg-primary text-white text-sm px-4 py-1.5 rounded-lg hover:opacity-90">
-          + Cargar mes
-        </button>
+        <div className="flex items-center gap-2">
+          <input type="date" className="border rounded-lg px-3 py-1.5 text-sm"
+            value={syncDate} onChange={e => setSyncDate(e.target.value)} />
+          <button onClick={handleSync} disabled={syncing || !syncDate}
+            className="border text-sm px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+            {syncing ? "Sincronizando..." : "Sync BCRA"}
+          </button>
+          <button onClick={() => setShowForm(true)}
+            className="bg-primary text-white text-sm px-4 py-1.5 rounded-lg hover:opacity-90">
+            + Cargar mes
+          </button>
+        </div>
       </div>
+      {syncMsg && <p className="text-sm text-muted-foreground">{syncMsg}</p>}
 
       {showForm && (
         <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-5 grid grid-cols-2 gap-4">
