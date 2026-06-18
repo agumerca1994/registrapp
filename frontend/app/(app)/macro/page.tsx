@@ -23,13 +23,13 @@ export default function MacroPage() {
   const [syncMsg, setSyncMsg] = useState("");
 
   const load = () => api.get("/macro").then(r => setRecords(r.data));
+  useEffect(() => { load(); }, []);
 
   const handleDelete = async (id: number) => {
     if (!confirm("¿Eliminar este registro?")) return;
     await api.delete(`/macro/${id}`);
     load();
   };
-  useEffect(() => { load(); }, []);
 
   const handleSync = async () => {
     if (!syncDate) return;
@@ -58,27 +58,30 @@ export default function MacroPage() {
   };
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900">Variables macro</h2>
-        <div className="flex items-center gap-2">
-          <input type="date" className="border rounded-lg px-3 py-1.5 text-sm"
-            value={syncDate} onChange={e => setSyncDate(e.target.value)} />
-          <button onClick={handleSync} disabled={syncing || !syncDate}
-            className="border text-sm px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50">
-            {syncing ? "Sincronizando..." : "Sync BCRA"}
-          </button>
+    <div className="max-w-3xl space-y-4 md:space-y-6">
+      {/* Header — stacks on mobile */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900">Variables macro</h2>
           <button onClick={() => setShowForm(true)}
-            className="bg-primary text-white text-sm px-4 py-1.5 rounded-lg hover:opacity-90">
-            + Cargar mes
+            className="bg-primary text-white text-sm px-3 py-1.5 rounded-lg hover:opacity-90">
+            + Cargar
           </button>
         </div>
+        <div className="flex gap-2">
+          <input type="date" className="flex-1 border rounded-lg px-3 py-1.5 text-sm"
+            value={syncDate} onChange={e => setSyncDate(e.target.value)} />
+          <button onClick={handleSync} disabled={syncing || !syncDate}
+            className="border text-sm px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50 shrink-0">
+            {syncing ? "Sincronizando..." : "Sync BCRA"}
+          </button>
+        </div>
+        {syncMsg && <p className="text-xs text-muted-foreground">{syncMsg}</p>}
       </div>
-      {syncMsg && <p className="text-sm text-muted-foreground">{syncMsg}</p>}
 
       {showForm && (
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-5 grid grid-cols-2 gap-4">
-          <div className="col-span-2">
+        <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-4 md:p-5 grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+          <div className="sm:col-span-2">
             <label className="text-xs font-medium text-gray-600">Período</label>
             <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
               value={form.period_date} onChange={e => setForm(p => ({ ...p, period_date: e.target.value }))} required />
@@ -96,7 +99,7 @@ export default function MacroPage() {
                 onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))} />
             </div>
           ))}
-          <div className="col-span-2 flex justify-end gap-2">
+          <div className="sm:col-span-2 flex justify-end gap-2">
             <button type="button" onClick={() => setShowForm(false)} className="border px-4 py-2 rounded-lg text-sm">Cancelar</button>
             <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg text-sm">Guardar</button>
           </div>
@@ -107,30 +110,35 @@ export default function MacroPage() {
         {records.length === 0 ? (
           <p className="p-6 text-muted-foreground text-sm">No hay variables macro cargadas.</p>
         ) : records.map(r => (
-          <div key={r.id} className="px-5 py-4 grid grid-cols-5 gap-4 items-center">
-            <div>
-              <p className="text-xs text-muted-foreground">Período</p>
-              <p className="text-sm font-semibold">{r.period_date}</p>
-              {r.source && <span className="text-xs text-muted-foreground">{r.source}</span>}
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">UVA</p>
-              <p className="text-sm font-medium">{r.uva_value ? formatARS(r.uva_value) : "—"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Inflación</p>
-              <p className="text-sm font-medium">{r.inflation_monthly_pct ? formatPct(r.inflation_monthly_pct) : "—"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">USD Oficial / MEP</p>
-              <p className="text-sm font-medium">
-                {r.usd_official ? formatARS(r.usd_official) : "—"} / {r.usd_mep ? formatARS(r.usd_mep) : "—"}
-              </p>
-            </div>
-            <div className="flex justify-end">
-              <button onClick={() => handleDelete(r.id)} className="text-gray-400 hover:text-destructive">
+          <div key={r.id} className="px-4 py-3 md:px-5 md:py-4">
+            <div className="flex items-start justify-between mb-2">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{r.period_date}</p>
+                {r.source && <span className="text-xs text-muted-foreground">{r.source}</span>}
+              </div>
+              <button onClick={() => handleDelete(r.id)} className="text-gray-400 hover:text-destructive ml-2 shrink-0">
                 <Trash2 className="w-4 h-4" />
               </button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1">
+              <div>
+                <p className="text-xs text-muted-foreground">UVA</p>
+                <p className="text-sm font-medium">{r.uva_value ? formatARS(r.uva_value) : "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Inflación</p>
+                <p className="text-sm font-medium">{r.inflation_monthly_pct ? formatPct(r.inflation_monthly_pct) : "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">USD Oficial</p>
+                <p className="text-sm font-medium">{r.usd_official ? formatARS(r.usd_official) : "—"}</p>
+              </div>
+              {r.usd_mep && (
+                <div>
+                  <p className="text-xs text-muted-foreground">USD MEP</p>
+                  <p className="text-sm font-medium">{formatARS(r.usd_mep)}</p>
+                </div>
+              )}
             </div>
           </div>
         ))}

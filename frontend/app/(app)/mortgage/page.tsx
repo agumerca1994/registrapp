@@ -55,45 +55,49 @@ export default function MortgagePage() {
     setForm(p => ({ ...p, [v]: e.target.value }));
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900">Hipoteca UVA</h2>
+    <div className="max-w-3xl space-y-4 md:space-y-6">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-xl md:text-2xl font-bold text-gray-900">Hipoteca UVA</h2>
         <button
           onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 bg-primary text-white text-sm px-4 py-1.5 rounded-lg hover:opacity-90"
+          className="flex items-center gap-1 bg-primary text-white text-sm px-3 py-1.5 rounded-lg hover:opacity-90"
         >
-          <Plus className="w-4 h-4" /> Registrar cuota
+          <Plus className="w-4 h-4 shrink-0" />
+          <span className="hidden sm:inline">Registrar cuota</span>
         </button>
       </div>
 
       {showForm && (
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-5 grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs font-medium text-gray-600">Período</label>
-            <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
-              value={form.period_date} onChange={f("period_date")} required />
+        <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-4 md:p-5 space-y-3">
+          <p className="text-sm font-medium text-gray-700">Nueva cuota</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-600">Período</label>
+              <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                value={form.period_date} onChange={f("period_date")} required />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Monto cuota ($)</label>
+              <input type="number" step="0.01" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                value={form.payment_amount} onChange={f("payment_amount")} required />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Capital (opcional)</label>
+              <input type="number" step="0.01" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                value={form.capital} onChange={f("capital")} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Interés (opcional)</label>
+              <input type="number" step="0.01" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                value={form.interest} onChange={f("interest")} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Unidades UVA (opcional)</label>
+              <input type="number" step="0.000001" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                value={form.uva_units} onChange={f("uva_units")} />
+            </div>
           </div>
-          <div>
-            <label className="text-xs font-medium text-gray-600">Monto cuota ($)</label>
-            <input type="number" step="0.01" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
-              value={form.payment_amount} onChange={f("payment_amount")} required />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-600">Capital (opcional)</label>
-            <input type="number" step="0.01" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
-              value={form.capital} onChange={f("capital")} />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-600">Interés (opcional)</label>
-            <input type="number" step="0.01" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
-              value={form.interest} onChange={f("interest")} />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-600">Unidades UVA (opcional)</label>
-            <input type="number" step="0.000001" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
-              value={form.uva_units} onChange={f("uva_units")} />
-          </div>
-          <div className="col-span-2 flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={() => setShowForm(false)}
               className="border px-4 py-2 rounded-lg text-sm">Cancelar</button>
             <button type="submit" disabled={loading}
@@ -108,18 +112,18 @@ export default function MortgagePage() {
         {records.length === 0 ? (
           <p className="p-6 text-muted-foreground text-sm">No hay cuotas registradas aún.</p>
         ) : records.map(r => (
-          <div key={r.id} className="flex items-center justify-between px-5 py-4">
-            <div>
+          <div key={r.id} className="flex items-center justify-between px-3 md:px-5 py-3 md:py-4 gap-2">
+            <div className="min-w-0">
               <p className="text-sm font-medium text-gray-900">{r.period_date}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground truncate">
                 {r.uva_units != null ? `${Number(r.uva_units).toFixed(4)} UVAs` : ""}
                 {r.capital != null ? ` · Capital ${formatARS(r.capital)}` : ""}
                 {r.interest != null ? ` · Interés ${formatARS(r.interest)}` : ""}
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 shrink-0">
               <span className="text-sm font-semibold text-primary">{formatARS(r.payment_amount)}</span>
-              <button onClick={() => handleDelete(r.id)} className="text-gray-400 hover:text-destructive">
+              <button onClick={() => handleDelete(r.id)} className="text-gray-400 hover:text-destructive p-1">
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
