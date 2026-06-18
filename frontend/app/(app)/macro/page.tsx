@@ -7,6 +7,8 @@ import { X, Settings2, ChevronRight, Loader2 } from "lucide-react";
 
 const MACRO_VAR_DEFS = [
   { key: "uva_value",                label: "UVA" },
+  { key: "uvi",                      label: "UVI" },
+  { key: "icl",                      label: "ICL (Alquileres)" },
   { key: "inflation_monthly_pct",    label: "Inflación mensual" },
   { key: "inflation_interanual_pct", label: "Inflación interanual" },
   { key: "usd_official",             label: "USD Oficial" },
@@ -24,7 +26,8 @@ const PCT_KEYS = new Set<MacroVarKey>(["inflation_monthly_pct", "inflation_inter
 
 interface MacroVar {
   id: number; period_date: string; source?: string;
-  uva_value?: number; inflation_monthly_pct?: number; inflation_interanual_pct?: number;
+  uva_value?: number; uvi?: number; icl?: number;
+  inflation_monthly_pct?: number; inflation_interanual_pct?: number;
   usd_official?: number; usd_blue?: number; usd_mayorista?: number; usd_mep?: number; usd_ccl?: number;
   ripte?: number; smvm?: number; canasta_basica_total?: number;
 }
@@ -96,7 +99,8 @@ function MacroDetailModal({ record, visibleVars, onClose }: {
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 const DEFAULT_VISIBLE: Record<string, boolean> = {
-  uva_value: true, inflation_monthly_pct: true, inflation_interanual_pct: true,
+  uva_value: true, uvi: true, icl: false,
+  inflation_monthly_pct: true, inflation_interanual_pct: true,
   usd_official: true, usd_blue: true, usd_mayorista: false, usd_mep: true, usd_ccl: true,
   ripte: true, smvm: false, canasta_basica_total: false,
 };

@@ -22,6 +22,10 @@ class MacroVariable(Base):
     usd_mep: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     usd_ccl: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
 
+    # BCRA (no historical API available — populated by daily cron only)
+    uvi: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    icl: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+
     # INDEC
     ripte: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     smvm: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))

@@ -19,6 +19,7 @@ router = APIRouter(prefix="/macro", tags=["macro"])
 
 ARGENTINADATOS = "https://api.argentinadatos.com/v1"
 INDEC_SERIES = "https://apis.datos.gob.ar/series/api/series"
+BCRA_ULTIMAS = "https://www.bcra.gob.ar/api/endpoints/principales-variables-ultimas.php"
 
 
 def _pick_ad(data: list, date_key: str, val_key: str, target: str) -> float | None:
@@ -58,6 +59,7 @@ async def _fetch_all_apis(timeout: int = 60):
             client.get(f"{INDEC_SERIES}/?ids=158.1_REPTE_0_0_5&format=json&sort=asc"),
             client.get(f"{INDEC_SERIES}/?ids=57.1_SMVMM_0_M_34&format=json&sort=asc"),
             client.get(f"{INDEC_SERIES}/?ids=444.1_CANASTA_BATAL_0_0_20_94&format=json&sort=asc"),
+            client.get(BCRA_ULTIMAS),
             return_exceptions=True,
         )
 
@@ -78,10 +80,27 @@ def _dec(v) -> Decimal | None:
     return Decimal(str(v)) if v is not None else None
 
 
+def _pick_bcra_ultimas(resp, serie_id: str, target: str) -> float | None:
+    """Extract today's value for a BCRA serie from principales-variables-ultimas.php.
+    Only returns a value when the response date matches target (today's sync).
+    Historical backfill gets None since the endpoint has no date parameter."""
+    if isinstance(resp, Exception) or resp.status_code != 200:
+        return None
+    try:
+        data = resp.json()
+        series = data.get("series", {})
+        entry = series.get(serie_id)
+        if entry and entry.get("fecha") == target:
+            return entry.get("valor")
+    except Exception:
+        pass
+    return None
+
+
 async def sync_macro_for_date(target: str) -> MacroVariable | None:
     """Fetch all macro variables for `target` (YYYY-MM-DD) and upsert into DB."""
     results = await _fetch_all_apis(timeout=20)
-    uva_r, inf_m_r, inf_ia_r, usd_off_r, usd_blue_r, usd_may_r, usd_mep_r, usd_ccl_r, ripte_r, smvm_r, canasta_r = results
+    uva_r, inf_m_r, inf_ia_r, usd_off_r, usd_blue_r, usd_may_r, usd_mep_r, usd_ccl_r, ripte_r, smvm_r, canasta_r, bcra_r = results
 
     def ad(resp, key): return _pick_ad(_safe_list(resp), "fecha", key, target)
 
@@ -96,6 +115,8 @@ async def sync_macro_for_date(target: str) -> MacroVariable | None:
         usd_mayorista=_dec(ad(usd_may_r, "venta")),
         usd_mep=_dec(ad(usd_mep_r, "venta")),
         usd_ccl=_dec(ad(usd_ccl_r, "venta")),
+        uvi=_dec(_pick_bcra_ultimas(bcra_r, "7914", target)),
+        icl=_dec(_pick_bcra_ultimas(bcra_r, "7988", target)),
         ripte=_dec(_pick_indec(_safe_indec(ripte_r), target)),
         smvm=_dec(_pick_indec(_safe_indec(smvm_r), target)),
         canasta_basica_total=_dec(_pick_indec(_safe_indec(canasta_r), target)),
@@ -141,7 +162,7 @@ async def backfill_macro_history(from_year: int = 2020, from_month: int = 1) -> 
 
     logger.info(f"Backfill: fetching APIs for {len(missing)} missing days (have {len(existing)}/{len(all_days)})")
     results = await _fetch_all_apis(timeout=60)
-    uva_r, inf_m_r, inf_ia_r, usd_off_r, usd_blue_r, usd_may_r, usd_mep_r, usd_ccl_r, ripte_r, smvm_r, canasta_r = results
+    uva_r, inf_m_r, inf_ia_r, usd_off_r, usd_blue_r, usd_may_r, usd_mep_r, usd_ccl_r, ripte_r, smvm_r, canasta_r, bcra_r = results
 
     uva_data = _safe_list(uva_r)
     inf_m_data = _safe_list(inf_m_r)
@@ -154,6 +175,8 @@ async def backfill_macro_history(from_year: int = 2020, from_month: int = 1) -> 
     ripte_data = _safe_indec(ripte_r)
     smvm_data = _safe_indec(smvm_r)
     canasta_data = _safe_indec(canasta_r)
+
+    today_str = date.today().isoformat()
 
     rows = []
     for d in missing:
@@ -169,6 +192,9 @@ async def backfill_macro_history(from_year: int = 2020, from_month: int = 1) -> 
             usd_mayorista=_dec(_pick_ad(usd_may_data, "fecha", "venta", t)),
             usd_mep=_dec(_pick_ad(usd_mep_data, "fecha", "venta", t)),
             usd_ccl=_dec(_pick_ad(usd_ccl_data, "fecha", "venta", t)),
+            # UVI and ICL: only available for today from BCRA (no historical API)
+            uvi=_dec(_pick_bcra_ultimas(bcra_r, "7914", t)) if t == today_str else None,
+            icl=_dec(_pick_bcra_ultimas(bcra_r, "7988", t)) if t == today_str else None,
             ripte=_dec(_pick_indec(ripte_data, t)),
             smvm=_dec(_pick_indec(smvm_data, t)),
             canasta_basica_total=_dec(_pick_indec(canasta_data, t)),
