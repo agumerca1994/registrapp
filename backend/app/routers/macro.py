@@ -90,10 +90,16 @@ async def sync_from_bcra(
     def pick(data: list, date_key: str, val_key: str) -> float | None:
         if not data:
             return None
-        in_month = [e for e in data if e[date_key].startswith(month_prefix)]
-        if in_month:
-            return in_month[-1][val_key]
-        before = [e for e in data if e[date_key] <= period_date]
+        # Exact date match
+        exact = [e for e in data if e[date_key] == period_date]
+        if exact:
+            return exact[-1][val_key]
+        # Last entry in the same month that doesn't exceed the requested date
+        up_to_date = [e for e in data if e[date_key].startswith(month_prefix) and e[date_key] <= period_date]
+        if up_to_date:
+            return up_to_date[-1][val_key]
+        # Fallback: last entry before the requested date
+        before = [e for e in data if e[date_key] < period_date]
         return before[-1][val_key] if before else None
 
     async with httpx.AsyncClient() as client:
