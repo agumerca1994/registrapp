@@ -71,29 +71,25 @@ async def sync_from_bcra(
     """Llama a estadisticasbcra.com y actualiza las variables del mes indicado."""
     user = await _get_db_user(firebase_user, db)
 
-    if not settings.ESTADISTICAS_BCRA_TOKEN:
-        raise HTTPException(status_code=503, detail="Token BCRA no configurado")
-
-    headers = {"Authorization": f"BEARER {settings.ESTADISTICAS_BCRA_TOKEN}"}
-    async with httpx.AsyncClient() as client:
-        uva_resp = await client.get("https://api.estadisticasbcra.com/uva", headers=headers)
-        inf_resp = await client.get("https://api.estadisticasbcra.com/inflacion_mensual_oficial", headers=headers)
-        usd_resp = await client.get("https://api.estadisticasbcra.com/usd_of_minorista", headers=headers)
-
     month_prefix = period_date[:7]  # "YYYY-MM"
 
-    def value_for_month(data: list) -> float | None:
+    def pick(data: list, date_key: str, val_key: str) -> float | None:
         if not data:
             return None
-        in_month = [e for e in data if e["d"].startswith(month_prefix)]
+        in_month = [e for e in data if e[date_key].startswith(month_prefix)]
         if in_month:
-            return in_month[-1]["v"]
-        before = [e for e in data if e["d"] < period_date]
-        return before[-1]["v"] if before else data[-1]["v"]
+            return in_month[-1][val_key]
+        before = [e for e in data if e[date_key] <= period_date]
+        return before[-1][val_key] if before else None
 
-    uva_val = value_for_month(uva_resp.json()) if uva_resp.status_code == 200 else None
-    inf_val = value_for_month(inf_resp.json()) if inf_resp.status_code == 200 else None
-    usd_val = value_for_month(usd_resp.json()) if usd_resp.status_code == 200 else None
+    async with httpx.AsyncClient() as client:
+        uva_resp = await client.get("https://api.argentinadatos.com/v1/finanzas/indices/uva")
+        inf_resp = await client.get("https://api.argentinadatos.com/v1/finanzas/indices/inflacion")
+        usd_resp = await client.get("https://api.argentinadatos.com/v1/cotizaciones/dolares/oficial")
+
+    uva_val = pick(uva_resp.json(), "fecha", "valor") if uva_resp.status_code == 200 else None
+    inf_val = pick(inf_resp.json(), "fecha", "valor") if inf_resp.status_code == 200 else None
+    usd_val = pick(usd_resp.json(), "fecha", "venta") if usd_resp.status_code == 200 else None
 
     body = MacroVariableUpsert(
         period_date=period_date,
