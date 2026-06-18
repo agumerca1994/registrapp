@@ -111,8 +111,34 @@ async def sync_macro_for_date(target: str) -> MacroVariable | None:
 
 
 async def backfill_macro_history(from_year: int = 2020, from_month: int = 1) -> int:
-    """Fetch all API history in 9 calls and bulk-upsert a record for every calendar day."""
-    logger.info(f"Backfill started: from {from_year}-{from_month:02d}")
+    """Lazy backfill: only fetch APIs and insert dates that are missing from the DB."""
+    start = date(from_year, from_month, 1)
+    today = date.today()
+
+    # Build the full set of calendar days requested
+    all_days: list[date] = []
+    current = start
+    while current <= today:
+        all_days.append(current)
+        current += timedelta(days=1)
+
+    # Find which days we already have — no API calls if nothing is missing
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(MacroVariable.period_date).where(
+                MacroVariable.period_date >= start,
+                MacroVariable.period_date <= today,
+            )
+        )
+        existing = {row[0] for row in result.all()}
+
+    missing = [d for d in all_days if d not in existing]
+
+    if not missing:
+        logger.info(f"Backfill: all {len(all_days)} days already present, nothing to do")
+        return 0
+
+    logger.info(f"Backfill: fetching APIs for {len(missing)} missing days (have {len(existing)}/{len(all_days)})")
     results = await _fetch_all_apis(timeout=60)
     uva_r, inf_m_r, inf_ia_r, usd_off_r, usd_blue_r, usd_may_r, ripte_r, smvm_r, canasta_r = results
 
@@ -127,12 +153,10 @@ async def backfill_macro_history(from_year: int = 2020, from_month: int = 1) -> 
     canasta_data = _safe_indec(canasta_r)
 
     rows = []
-    current = date(from_year, from_month, 1)
-    today = date.today()
-    while current <= today:
-        t = current.isoformat()
+    for d in missing:
+        t = d.isoformat()
         rows.append(dict(
-            period_date=current,
+            period_date=d,
             source="auto",
             uva_value=_dec(_pick_ad(uva_data, "fecha", "valor", t)),
             inflation_monthly_pct=_dec(_pick_ad(inf_m_data, "fecha", "valor", t)),
@@ -144,21 +168,17 @@ async def backfill_macro_history(from_year: int = 2020, from_month: int = 1) -> 
             smvm=_dec(_pick_indec(smvm_data, t)),
             canasta_basica_total=_dec(_pick_indec(canasta_data, t)),
         ))
-        current += timedelta(days=1)
-
-    update_cols = [c for c in rows[0] if c != "period_date"]
 
     async with AsyncSessionLocal() as db:
-        # Bulk upsert in a single SQL statement
         stmt = pg_insert(MacroVariable).values(rows)
         stmt = stmt.on_conflict_do_update(
             constraint="uq_macro_period_date",
-            set_={k: stmt.excluded[k] for k in update_cols},
+            set_={k: stmt.excluded[k] for k in rows[0] if k != "period_date"},
         )
         await db.execute(stmt)
         await db.commit()
 
-    logger.info(f"Backfill complete: {len(rows)} days")
+    logger.info(f"Backfill complete: inserted {len(rows)} new days")
     return len(rows)
 
 
