@@ -3,16 +3,6 @@ from decimal import Decimal
 from pydantic import BaseModel
 
 
-class MacroVariableUpsert(BaseModel):
-    period_date: date
-    uva_value: Decimal | None = None
-    inflation_monthly_pct: Decimal | None = None
-    inflation_interanual_pct: Decimal | None = None
-    usd_official: Decimal | None = None
-    usd_blue: Decimal | None = None
-    source: str | None = "manual"
-
-
 class MacroVariableOut(BaseModel):
     model_config = {"from_attributes": True}
 
@@ -23,5 +13,9 @@ class MacroVariableOut(BaseModel):
     inflation_interanual_pct: Decimal | None
     usd_official: Decimal | None
     usd_blue: Decimal | None
+    usd_mayorista: Decimal | None
+    ripte: Decimal | None
+    smvm: Decimal | None
+    canasta_basica_total: Decimal | None
     source: str | None
     updated_at: datetime

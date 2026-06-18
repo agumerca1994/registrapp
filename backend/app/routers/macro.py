@@ -1,36 +1,113 @@
+import asyncio
+import logging
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-import asyncio
 import httpx
 
-from app.core.database import get_db
+from app.core.database import get_db, AsyncSessionLocal
 from app.core.firebase import get_current_user
-from app.core.config import settings
-from app.models.user import User
 from app.models.macro_variable import MacroVariable
-from app.schemas.macro_variable import MacroVariableUpsert, MacroVariableOut
+from app.schemas.macro_variable import MacroVariableOut
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/macro", tags=["macro"])
 
+ARGENTINADATOS = "https://api.argentinadatos.com/v1"
+INDEC_SERIES = "https://apis.datos.gob.ar/series/api/series"
 
-async def _get_db_user(firebase_user: dict, db: AsyncSession) -> User:
-    user = await db.scalar(select(User).where(User.firebase_uid == firebase_user["uid"]))
-    if not user:
-        raise HTTPException(status_code=401, detail="Usuario no registrado")
-    return user
 
+def _pick_ad(data: list, date_key: str, val_key: str, target: str) -> float | None:
+    """Pick the best value from argentinadatos.com list for a target date."""
+    if not data:
+        return None
+    month = target[:7]
+    exact = [e[val_key] for e in data if e[date_key] == target]
+    if exact:
+        return exact[-1]
+    same_month = [e[val_key] for e in data if e[date_key].startswith(month) and e[date_key] <= target]
+    if same_month:
+        return same_month[-1]
+    before = [e[val_key] for e in data if e[date_key] < target]
+    return before[-1] if before else None
+
+
+def _pick_indec(rows: list, target: str) -> float | None:
+    """Pick the most recent value up to target date from INDEC series [[date, val], ...]."""
+    if not rows:
+        return None
+    candidates = [(r[0], r[1]) for r in rows if isinstance(r, list) and len(r) == 2 and r[0] <= target]
+    return candidates[-1][1] if candidates else None
+
+
+async def sync_macro_for_date(target: str) -> MacroVariable | None:
+    """Fetch all macro variables for `target` (YYYY-MM-DD) and upsert into DB."""
+    async with httpx.AsyncClient(timeout=20) as client:
+        results = await asyncio.gather(
+            client.get(f"{ARGENTINADATOS}/finanzas/indices/uva"),
+            client.get(f"{ARGENTINADATOS}/finanzas/indices/inflacion"),
+            client.get(f"{ARGENTINADATOS}/finanzas/indices/inflacionInteranual"),
+            client.get(f"{ARGENTINADATOS}/cotizaciones/dolares/oficial"),
+            client.get(f"{ARGENTINADATOS}/cotizaciones/dolares/blue"),
+            client.get(f"{ARGENTINADATOS}/cotizaciones/dolares/mayorista"),
+            client.get(f"{INDEC_SERIES}/?ids=158.1_REPTE_0_0_5&format=json&sort=asc"),
+            client.get(f"{INDEC_SERIES}/?ids=57.1_SMVMM_0_M_34&format=json&sort=asc"),
+            client.get(f"{INDEC_SERIES}/?ids=444.1_CANASTA_BATAL_0_0_20_94&format=json&sort=asc"),
+            return_exceptions=True,
+        )
+
+    def ad_val(resp, val_key: str) -> float | None:
+        if isinstance(resp, Exception) or resp.status_code != 200:
+            return None
+        return _pick_ad(resp.json(), "fecha", val_key, target)
+
+    def indec_val(resp) -> float | None:
+        if isinstance(resp, Exception) or resp.status_code != 200:
+            return None
+        return _pick_indec(resp.json().get("data", []), target)
+
+    uva_r, inf_m_r, inf_ia_r, usd_off_r, usd_blue_r, usd_may_r, ripte_r, smvm_r, canasta_r = results
+
+    values = dict(
+        uva_value=ad_val(uva_r, "valor"),
+        inflation_monthly_pct=ad_val(inf_m_r, "valor"),
+        inflation_interanual_pct=ad_val(inf_ia_r, "valor"),
+        usd_official=ad_val(usd_off_r, "venta"),
+        usd_blue=ad_val(usd_blue_r, "venta"),
+        usd_mayorista=ad_val(usd_may_r, "venta"),
+        ripte=indec_val(ripte_r),
+        smvm=indec_val(smvm_r),
+        canasta_basica_total=indec_val(canasta_r),
+    )
+
+    async with AsyncSessionLocal() as db:
+        existing = await db.scalar(
+            select(MacroVariable).where(MacroVariable.period_date == target)
+        )
+        if existing:
+            for field, value in values.items():
+                if value is not None:
+                    setattr(existing, field, value)
+            existing.source = "auto"
+        else:
+            existing = MacroVariable(period_date=target, source="auto", **values)
+            db.add(existing)
+        await db.commit()
+        await db.refresh(existing)
+        return existing
+
+
+# ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=list[MacroVariableOut])
 async def list_macro(
     firebase_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    user = await _get_db_user(firebase_user, db)
     result = await db.scalars(
-        select(MacroVariable)
-        .where(MacroVariable.tenant_id == user.tenant_id)
-        .order_by(MacroVariable.period_date.desc())
+        select(MacroVariable).order_by(MacroVariable.period_date.desc())
     )
     return result.all()
 
@@ -41,90 +118,8 @@ async def delete_macro(
     firebase_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    user = await _get_db_user(firebase_user, db)
     record = await db.get(MacroVariable, record_id)
-    if not record or record.tenant_id != user.tenant_id:
+    if not record:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
     await db.delete(record)
     await db.commit()
-
-
-@router.put("", response_model=MacroVariableOut)
-async def upsert_macro(
-    body: MacroVariableUpsert,
-    firebase_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    user = await _get_db_user(firebase_user, db)
-    existing = await db.scalar(
-        select(MacroVariable).where(
-            MacroVariable.tenant_id == user.tenant_id,
-            MacroVariable.period_date == body.period_date,
-        )
-    )
-    if existing:
-        for field, value in body.model_dump(exclude={"period_date"}).items():
-            if value is not None:
-                setattr(existing, field, value)
-        await db.commit()
-        await db.refresh(existing)
-        return existing
-
-    macro = MacroVariable(**body.model_dump(), tenant_id=user.tenant_id)
-    db.add(macro)
-    await db.commit()
-    await db.refresh(macro)
-    return macro
-
-
-@router.post("/sync-bcra", response_model=MacroVariableOut)
-async def sync_from_bcra(
-    period_date: str,
-    firebase_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Llama a estadisticasbcra.com y actualiza las variables del mes indicado."""
-    user = await _get_db_user(firebase_user, db)
-
-    month_prefix = period_date[:7]  # "YYYY-MM"
-
-    def pick(data: list, date_key: str, val_key: str) -> float | None:
-        if not data:
-            return None
-        # Exact date match
-        exact = [e for e in data if e[date_key] == period_date]
-        if exact:
-            return exact[-1][val_key]
-        # Last entry in the same month that doesn't exceed the requested date
-        up_to_date = [e for e in data if e[date_key].startswith(month_prefix) and e[date_key] <= period_date]
-        if up_to_date:
-            return up_to_date[-1][val_key]
-        # Fallback: last entry before the requested date
-        before = [e for e in data if e[date_key] < period_date]
-        return before[-1][val_key] if before else None
-
-    async with httpx.AsyncClient() as client:
-        uva_resp, inf_resp, inf_ia_resp, usd_off_resp, usd_blue_resp = await asyncio.gather(
-            client.get("https://api.argentinadatos.com/v1/finanzas/indices/uva"),
-            client.get("https://api.argentinadatos.com/v1/finanzas/indices/inflacion"),
-            client.get("https://api.argentinadatos.com/v1/finanzas/indices/inflacionInteranual"),
-            client.get("https://api.argentinadatos.com/v1/cotizaciones/dolares/oficial"),
-            client.get("https://api.argentinadatos.com/v1/cotizaciones/dolares/blue"),
-        )
-
-    uva_val = pick(uva_resp.json(), "fecha", "valor") if uva_resp.status_code == 200 else None
-    inf_val = pick(inf_resp.json(), "fecha", "valor") if inf_resp.status_code == 200 else None
-    inf_ia_val = pick(inf_ia_resp.json(), "fecha", "valor") if inf_ia_resp.status_code == 200 else None
-    usd_off_val = pick(usd_off_resp.json(), "fecha", "venta") if usd_off_resp.status_code == 200 else None
-    usd_blue_val = pick(usd_blue_resp.json(), "fecha", "venta") if usd_blue_resp.status_code == 200 else None
-
-    body = MacroVariableUpsert(
-        period_date=period_date,
-        uva_value=uva_val,
-        inflation_monthly_pct=inf_val,
-        inflation_interanual_pct=inf_ia_val,
-        usd_official=usd_off_val,
-        usd_blue=usd_blue_val,
-        source="bcra_api",
-    )
-    return await upsert_macro(body, firebase_user, db)

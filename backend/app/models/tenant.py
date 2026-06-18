@@ -14,5 +14,4 @@ class Tenant(Base):
     users: Mapped[list["User"]] = relationship(back_populates="tenant")
     income_sources: Mapped[list["IncomeSource"]] = relationship(back_populates="tenant")
     expense_categories: Mapped[list["ExpenseCategory"]] = relationship(back_populates="tenant")
-    macro_variables: Mapped[list["MacroVariable"]] = relationship(back_populates="tenant")
     mortgage_records: Mapped[list["MortgageRecord"]] = relationship(back_populates="tenant")
