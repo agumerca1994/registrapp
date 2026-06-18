@@ -7,4 +7,7 @@ if [ -n "$FIREBASE_CREDENTIALS_B64" ]; then
   export FIREBASE_CREDENTIALS_PATH=/tmp/firebase-credentials.json
 fi
 
+# Apply pending DB migrations before starting the server
+alembic upgrade head
+
 exec "$@"
