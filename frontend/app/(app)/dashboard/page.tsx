@@ -192,12 +192,18 @@ export default function DashboardPage() {
   const [data, setData] = useState<MonthSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [historyData, setHistoryData] = useState<HistoryPoint[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState<Record<ChartKey, boolean>>({
     incomeVsMortgage: true,
     mortgagePct: true,
     incomeVsExpenses: true,
     uva: true,
   });
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -207,7 +213,10 @@ export default function DashboardPage() {
   }, [year, month]);
 
   useEffect(() => {
-    api.get("/dashboard/history").then(r => setHistoryData(r.data));
+    setHistoryLoading(true);
+    api.get("/dashboard/history")
+      .then(r => setHistoryData(r.data))
+      .finally(() => setHistoryLoading(false));
   }, []);
 
   const prev = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
@@ -299,7 +308,11 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {historyData.length === 0 ? (
+        {!mounted || historyLoading ? (
+          <div className="bg-white rounded-xl border p-8 text-center text-sm text-muted-foreground">
+            Cargando gráficos...
+          </div>
+        ) : historyData.length === 0 ? (
           <div className="bg-white rounded-xl border p-10 text-center text-sm text-muted-foreground">
             No hay datos históricos aún.
           </div>
