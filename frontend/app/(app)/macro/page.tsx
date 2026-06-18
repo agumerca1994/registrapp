@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
-import { formatARS, formatPct } from "@/lib/utils";
+import { formatARS, formatPct, formatDate } from "@/lib/utils";
 import { Trash2 } from "lucide-react";
 
 interface MacroVar {
@@ -113,7 +113,7 @@ export default function MacroPage() {
           <div key={r.id} className="px-4 py-3 md:px-5 md:py-4">
             <div className="flex items-start justify-between mb-2">
               <div>
-                <p className="text-sm font-semibold text-gray-900">{r.period_date}</p>
+                <p className="text-sm font-semibold text-gray-900">{formatDate(r.period_date)}</p>
                 {r.source && <span className="text-xs text-muted-foreground">{r.source}</span>}
               </div>
               <button onClick={() => handleDelete(r.id)} className="text-gray-400 hover:text-destructive ml-2 shrink-0">

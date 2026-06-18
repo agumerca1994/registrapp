@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
-import { formatARS } from "@/lib/utils";
+import { formatARS, formatDate } from "@/lib/utils";
 import { Plus, Trash2 } from "lucide-react";
 
 interface MortgageRecord {
@@ -114,7 +114,7 @@ export default function MortgagePage() {
         ) : records.map(r => (
           <div key={r.id} className="flex items-center justify-between px-3 md:px-5 py-3 md:py-4 gap-2">
             <div className="min-w-0">
-              <p className="text-sm font-medium text-gray-900">{r.period_date}</p>
+              <p className="text-sm font-medium text-gray-900">{formatDate(r.period_date)}</p>
               <p className="text-xs text-muted-foreground truncate">
                 {r.uva_units != null ? `${Number(r.uva_units).toFixed(4)} UVAs` : ""}
                 {r.capital != null ? ` · Capital ${formatARS(r.capital)}` : ""}

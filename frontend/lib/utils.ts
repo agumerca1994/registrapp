@@ -16,3 +16,8 @@ export function formatARS(amount: number | string): string {
 export function formatPct(value: number | string): string {
   return `${Number(value).toFixed(2)}%`;
 }
+
+export function formatDate(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-");
+  return `${d}/${m}/${y}`;
+}

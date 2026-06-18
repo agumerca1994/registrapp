@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
-import { formatARS } from "@/lib/utils";
+import { formatARS, formatDate } from "@/lib/utils";
 import { Plus, Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle } from "lucide-react";
 
 interface IncomeSource { id: number; name: string; income_type: string; }
@@ -524,7 +524,7 @@ export default function IncomePage() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 truncate">{entry.source.name}</p>
               <p className="text-xs text-muted-foreground">
-                {entry.period_date} · {INCOME_TYPE_LABELS[entry.source.income_type]}
+                {formatDate(entry.period_date)} · {INCOME_TYPE_LABELS[entry.source.income_type]}
                 {entry.bruto != null && (
                   <> · Bruto {formatARS(entry.bruto)}{entry.deducciones != null ? ` − Ded. ${formatARS(entry.deducciones)}` : ""}</>
                 )}

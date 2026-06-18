@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
-import { formatARS } from "@/lib/utils";
+import { formatARS, formatDate } from "@/lib/utils";
 import { Plus, Trash2, Pencil } from "lucide-react";
 
 interface Category { id: number; name: string; color?: string; is_fixed: boolean; }
@@ -164,7 +164,7 @@ export default function ExpensesPage() {
                 <p className="text-sm font-medium text-gray-900 truncate">
                   {entry.description || entry.category.name}
                 </p>
-                <p className="text-xs text-muted-foreground">{entry.expense_date} · {entry.category.name}</p>
+                <p className="text-xs text-muted-foreground">{formatDate(entry.expense_date)} · {entry.category.name}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">

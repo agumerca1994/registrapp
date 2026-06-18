@@ -18,12 +18,17 @@ uvicorn app.main:app --reload --port 8000
 # Frontend only (from /frontend)
 npm run dev
 
+# Lint frontend (from /frontend)
+npm run lint
+
 # Create a new Alembic migration
 cd backend && alembic revision --autogenerate -m "describe_change"
 
 # Apply migrations manually (runs automatically on container start in prod)
 cd backend && alembic upgrade head
 ```
+
+There are no automated tests (no pytest, no jest setup).
 
 ## Deployment
 
@@ -51,6 +56,10 @@ backend/app/
 
 All routers follow the pattern: `Depends(get_current_user)` + `Depends(get_db)` → `_get_db_user()` → query with `tenant_id`. Dashboard schemas (`MonthSummary`, `HistoryPoint`) are defined inline in `routers/dashboard.py`.
 
+**Macro sync**: `POST /macro/sync-bcra` fetches UVA, inflation, and USD official rates from `api.argentinadatos.com` using `ESTADISTICAS_BCRA_TOKEN` from env, then upserts into `MacroVariable`. Fallback strategy: exact date match → last record of same month → last record before target date.
+
+**Bulk income import**: `POST /income/import` accepts CSV or Excel. Flexible date parsing handles MM-YYYY, DD/MM/YYYY, YYYY-MM-DD, and others. Duplicate rows (same tenant + source + date + amount) are silently skipped. Response: `{"imported": N, "skipped": N, "errors": []}` with per-row error messages.
+
 ### Frontend structure
 ```
 frontend/app/
@@ -69,7 +78,7 @@ frontend/
   lib/utils.ts               # formatARS, formatPct, cn()
 ```
 
-`AuthContext` exposes `firebaseUser`, `appUser`, and `loading`. The `(app)` layout redirects to `/login` if not authenticated, or `/onboarding` if authenticated but no `appUser` (tenant not created yet).
+`AuthContext` exposes `firebaseUser`, `appUser`, `loading`, and `refreshUser()`. `refreshUser()` re-fetches `GET /auth/me` to sync the appUser after tenant creation or profile changes. The `(app)` layout redirects to `/login` if not authenticated, or `/onboarding` if authenticated but no `appUser` (tenant not created yet).
 
 ## Known quirks
 
