@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import { formatARS, formatDate } from "@/lib/utils";
-import { Plus, Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle } from "lucide-react";
+import { Plus, Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle, ChevronRight } from "lucide-react";
 
 interface IncomeSource { id: number; name: string; income_type: string; }
 interface IncomeEntry {
@@ -22,6 +22,69 @@ const EMPTY_FORM = {
   source_id: "", bruto: "", deducciones: "", amount: "",
   period_date: "", notes: "",
 };
+
+// ── Entry detail modal ─────────────────────────────────────────────────────────
+
+function EntryDetailModal({
+  entry, onEdit, onDelete, onClose,
+}: {
+  entry: IncomeEntry; onEdit: () => void; onDelete: () => void; onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">{entry.source.name}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="divide-y text-sm">
+          <div className="flex justify-between py-2">
+            <span className="text-muted-foreground">Fecha</span>
+            <span className="font-medium">{formatDate(entry.period_date)}</span>
+          </div>
+          <div className="flex justify-between py-2">
+            <span className="text-muted-foreground">Tipo</span>
+            <span className="font-medium">{INCOME_TYPE_LABELS[entry.source.income_type]}</span>
+          </div>
+          {entry.bruto != null && (
+            <div className="flex justify-between py-2">
+              <span className="text-muted-foreground">Bruto</span>
+              <span className="font-medium">{formatARS(entry.bruto)}</span>
+            </div>
+          )}
+          {entry.deducciones != null && (
+            <div className="flex justify-between py-2">
+              <span className="text-muted-foreground">Deducciones</span>
+              <span className="font-medium text-red-500">− {formatARS(entry.deducciones)}</span>
+            </div>
+          )}
+          <div className="flex justify-between py-2">
+            <span className="font-medium text-gray-700">Neto</span>
+            <span className="font-bold text-green-600 text-base">{formatARS(entry.amount)}</span>
+          </div>
+          {entry.notes && (
+            <div className="flex justify-between py-2 gap-4">
+              <span className="text-muted-foreground shrink-0">Notas</span>
+              <span className="font-medium text-right">{entry.notes}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button onClick={onDelete}
+            className="flex-1 flex items-center justify-center gap-1.5 border border-red-200 text-red-500 hover:bg-red-50 py-2.5 rounded-xl text-sm font-medium">
+            <Trash2 className="w-4 h-4" /> Eliminar
+          </button>
+          <button onClick={onEdit}
+            className="flex-1 flex items-center justify-center gap-1.5 bg-primary text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90">
+            <Pencil className="w-4 h-4" /> Editar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Import modal ───────────────────────────────────────────────────────────────
 
@@ -280,6 +343,7 @@ export default function IncomePage() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [detailEntry, setDetailEntry] = useState<IncomeEntry | null>(null);
   const netoManual = useRef(false);
 
   const load = async () => {
@@ -290,7 +354,6 @@ export default function IncomePage() {
 
   useEffect(() => { load(); }, []);
 
-  // Auto-calc neto from bruto - deducciones unless user edited neto manually
   const updateBrutoOrDed = (key: "bruto" | "deducciones", value: string) => {
     setForm(prev => {
       const next = { ...prev, [key]: value };
@@ -304,7 +367,7 @@ export default function IncomePage() {
   };
 
   const openEdit = (entry: IncomeEntry) => {
-    netoManual.current = true; // editing existing: neto is already known
+    netoManual.current = true;
     setEditId(entry.id);
     setForm({
       source_id: String(entry.source_id),
@@ -354,6 +417,7 @@ export default function IncomePage() {
     if (!confirm("¿Eliminar este ingreso?")) return;
     await api.delete(`/income/entries/${id}`);
     setSelected(s => { const n = new Set(s); n.delete(id); return n; });
+    setDetailEntry(null);
     await load();
   };
 
@@ -434,24 +498,16 @@ export default function IncomePage() {
               <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
                 value={form.period_date} onChange={e => setForm(p => ({ ...p, period_date: e.target.value }))} required />
             </div>
-
-            {/* Bruto */}
             <div>
               <label className="text-xs font-medium text-gray-600">Sueldo bruto ($)</label>
               <input type="number" step="0.01" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
-                value={form.bruto}
-                onChange={e => updateBrutoOrDed("bruto", e.target.value)} />
+                value={form.bruto} onChange={e => updateBrutoOrDed("bruto", e.target.value)} />
             </div>
-
-            {/* Deducciones */}
             <div>
               <label className="text-xs font-medium text-gray-600">Deducciones ($)</label>
               <input type="number" step="0.01" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
-                value={form.deducciones}
-                onChange={e => updateBrutoOrDed("deducciones", e.target.value)} />
+                value={form.deducciones} onChange={e => updateBrutoOrDed("deducciones", e.target.value)} />
             </div>
-
-            {/* Neto — auto-calc, editable */}
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-gray-600">
                 Sueldo neto ($)
@@ -465,7 +521,6 @@ export default function IncomePage() {
                 onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}
                 required />
             </div>
-
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-gray-600">Notas (opcional)</label>
               <input className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
@@ -483,7 +538,6 @@ export default function IncomePage() {
 
       {/* List */}
       <div className="bg-white rounded-xl border divide-y">
-        {/* Select-all / bulk action header */}
         {entries.length > 0 && (
           <div className="flex items-center gap-3 px-3 md:px-5 py-2 bg-gray-50 rounded-t-xl">
             <input
@@ -514,34 +568,34 @@ export default function IncomePage() {
         {entries.length === 0 ? (
           <p className="p-6 text-muted-foreground text-sm">No hay ingresos registrados aún.</p>
         ) : entries.map(entry => (
-          <div key={entry.id} className="flex items-center gap-2 px-3 md:px-5 py-3 md:py-4">
+          <div key={entry.id} className="flex items-center gap-2 px-3 md:px-4 py-3">
             <input
               type="checkbox"
               checked={selected.has(entry.id)}
               onChange={() => toggleSelect(entry.id)}
               className="w-4 h-4 rounded cursor-pointer shrink-0"
             />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">{entry.source.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {formatDate(entry.period_date)} · {INCOME_TYPE_LABELS[entry.source.income_type]}
-                {entry.bruto != null && (
-                  <> · Bruto {formatARS(entry.bruto)}{entry.deducciones != null ? ` − Ded. ${formatARS(entry.deducciones)}` : ""}</>
-                )}
-              </p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-sm font-semibold text-green-600">{formatARS(entry.amount)}</span>
-              <button onClick={() => openEdit(entry)} className="text-gray-400 hover:text-primary p-1">
-                <Pencil className="w-4 h-4" />
-              </button>
-              <button onClick={() => handleDelete(entry.id)} className="text-gray-400 hover:text-destructive p-1">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
+            <button
+              className="flex-1 flex items-center gap-2 min-w-0 text-left hover:opacity-80 active:opacity-60"
+              onClick={() => setDetailEntry(entry)}
+            >
+              <span className="flex-1 text-sm font-medium text-gray-900 truncate">{entry.source.name}</span>
+              <span className="text-xs text-muted-foreground shrink-0">{formatDate(entry.period_date)}</span>
+              <span className="text-sm font-semibold text-green-600 shrink-0">{formatARS(entry.amount)}</span>
+              <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
+            </button>
           </div>
         ))}
       </div>
+
+      {detailEntry && (
+        <EntryDetailModal
+          entry={detailEntry}
+          onEdit={() => { setDetailEntry(null); openEdit(detailEntry); }}
+          onDelete={() => handleDelete(detailEntry.id)}
+          onClose={() => setDetailEntry(null)}
+        />
+      )}
 
       {showImport && (
         <ImportModal sources={sources} onClose={() => { setShowImport(false); load(); }} />
