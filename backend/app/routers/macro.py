@@ -106,9 +106,6 @@ async def sync_macro_for_date(target: str) -> MacroVariable | None:
         await db.execute(stmt)
         await db.commit()
 
-    async with AsyncSessionLocal() as db:
-        return await db.scalar(select(MacroVariable).where(MacroVariable.period_date == target))
-
 
 async def backfill_macro_history(from_year: int = 2020, from_month: int = 1) -> int:
     """Lazy backfill: only fetch APIs and insert dates that are missing from the DB."""
