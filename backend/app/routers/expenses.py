@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.core.firebase import get_current_user
 from app.models.user import User
 from app.models.expense import ExpenseCategory, ExpenseEntry
+from app.models.mortgage import MortgageRecord
 from app.schemas.expense import (
     ExpenseCategoryCreate, ExpenseCategoryOut,
     ExpenseEntryCreate, ExpenseEntryUpdate, ExpenseEntryOut,
@@ -115,5 +116,12 @@ async def delete_entry(
     entry = await db.get(ExpenseEntry, entry_id)
     if not entry or entry.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
+    # If a mortgage_record references this expense, delete it first to avoid FK violation
+    mortgage_rec = await db.scalar(
+        select(MortgageRecord).where(MortgageRecord.expense_entry_id == entry_id)
+    )
+    if mortgage_rec:
+        await db.delete(mortgage_rec)
+        await db.flush()
     await db.delete(entry)
     await db.commit()

@@ -13,6 +13,7 @@ class MortgageLoanCreate(BaseModel):
     loan_number: str | None = None
     total_cuotas: int
     first_payment_date: date
+    payment_day: int | None = None  # None = primer día hábil, 1-28 = día fijo
     cuota_uva: Decimal | None = None
     cuota_pesos: Decimal | None = None
     tna: Decimal | None = None
@@ -32,6 +33,7 @@ class MortgageLoanCreate(BaseModel):
 class MortgageLoanUpdate(BaseModel):
     description: str | None = None
     loan_number: str | None = None
+    payment_day: int | None = None
     cuota_uva: Decimal | None = None
     cuota_pesos: Decimal | None = None
     tna: Decimal | None = None
@@ -47,6 +49,7 @@ class MortgageLoanOut(BaseModel):
     loan_number: str | None
     total_cuotas: int
     first_payment_date: date
+    payment_day: int | None
     cuota_uva: Decimal | None
     cuota_pesos: Decimal | None
     tna: Decimal | None

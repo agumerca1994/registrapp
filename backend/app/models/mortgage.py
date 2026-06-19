@@ -24,6 +24,9 @@ class MortgageLoan(Base):
     tna: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))              # optional breakdown
     original_capital_uva: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))  # for amortization
 
+    # None = primer día hábil del mes, 1-28 = día fijo
+    payment_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import date
 from decimal import Decimal
+import calendar
 
 from app.core.database import get_db
 from app.core.firebase import get_current_user
@@ -48,6 +49,18 @@ async def _get_or_create_hipoteca_category(tenant_id: int, user_id: int, db: Asy
     return cat
 
 
+def _compute_payment_date(year: int, month: int, payment_day: int | None) -> date:
+    """Return the payment date for a given month based on loan configuration."""
+    if payment_day is not None:
+        max_day = calendar.monthrange(year, month)[1]
+        return date(year, month, min(payment_day, max_day))
+    # Primer día hábil: skip Saturday (5) and Sunday (6)
+    d = date(year, month, 1)
+    while d.weekday() >= 5:
+        d = date(year, month, d.day + 1)
+    return d
+
+
 def _compute_cuota_numero(first_payment_date: date) -> int:
     today = date.today()
     months = (today.year - first_payment_date.year) * 12 + (today.month - first_payment_date.month)
@@ -71,6 +84,99 @@ def _compute_breakdown(loan: MortgageLoan, cuota_numero: int) -> tuple[Decimal |
     interes_n = saldo * i
     capital_n = loan.cuota_uva - interes_n
     return capital_n, interes_n
+
+
+async def _backfill_past_cuotas(loan: MortgageLoan, user_id: int, db: AsyncSession) -> int:
+    """Register all past cuotas from first_payment_date up to (but not including) the current month."""
+    if loan.loan_type == "tasa_variable":
+        return 0  # Can't backfill without historical amounts
+
+    today = date.today()
+    current_month_start = date(today.year, today.month, 1)
+    cat = await _get_or_create_hipoteca_category(loan.tenant_id, user_id, db)
+    registered = 0
+
+    cur_year = loan.first_payment_date.year
+    cur_month = loan.first_payment_date.month
+
+    while True:
+        month_start = date(cur_year, cur_month, 1)
+        if month_start >= current_month_start:
+            break
+
+        existing = await db.scalar(
+            select(MortgageRecord).where(
+                MortgageRecord.mortgage_loan_id == loan.id,
+                MortgageRecord.period_date == month_start,
+            )
+        )
+        if not existing:
+            payment_date = _compute_payment_date(cur_year, cur_month, loan.payment_day)
+
+            # Look up UVA value closest to (but not after) payment_date
+            uva_value: Decimal | None = None
+            if loan.loan_type in UVA_LOAN_TYPES and loan.cuota_uva:
+                macro = await db.scalar(
+                    select(MacroVariable)
+                    .where(
+                        MacroVariable.uva_value.is_not(None),
+                        MacroVariable.period_date <= payment_date,
+                    )
+                    .order_by(MacroVariable.period_date.desc())
+                    .limit(1)
+                )
+                uva_value = macro.uva_value if macro else None
+
+            payment_amount: Decimal | None = None
+            uva_units: Decimal | None = None
+            capital: Decimal | None = None
+            interest: Decimal | None = None
+
+            if loan.loan_type in UVA_LOAN_TYPES and loan.cuota_uva:
+                uva_units = loan.cuota_uva
+                if uva_value:
+                    payment_amount = loan.cuota_uva * uva_value
+                    cuota_numero_hist = (cur_year - loan.first_payment_date.year) * 12 + (cur_month - loan.first_payment_date.month) + 1
+                    cap_uva, int_uva = _compute_breakdown(loan, cuota_numero_hist)
+                    if cap_uva is not None:
+                        capital = cap_uva * uva_value
+                        interest = int_uva * uva_value
+            elif loan.loan_type == "tasa_fija" and loan.cuota_pesos:
+                payment_amount = loan.cuota_pesos
+
+            if payment_amount:
+                expense = ExpenseEntry(
+                    tenant_id=loan.tenant_id,
+                    user_id=user_id,
+                    category_id=cat.id,
+                    amount=payment_amount,
+                    description=f"Cuota hipotecaria{' ' + loan.description if loan.description else ''}",
+                    expense_date=payment_date,
+                    notes=f"{uva_units} UVAs" if uva_units else None,
+                )
+                db.add(expense)
+                await db.flush()
+
+                db.add(MortgageRecord(
+                    tenant_id=loan.tenant_id,
+                    mortgage_loan_id=loan.id,
+                    expense_entry_id=expense.id,
+                    period_date=month_start,
+                    payment_amount=payment_amount,
+                    capital=capital,
+                    interest=interest,
+                    uva_units=uva_units,
+                ))
+                registered += 1
+
+        # Advance to next month
+        if cur_month == 12:
+            cur_year += 1
+            cur_month = 1
+        else:
+            cur_month += 1
+
+    return registered
 
 
 # ── Loan CRUD ──────────────────────────────────────────────────────────────────
@@ -98,8 +204,8 @@ async def create_loan(
     user = await _get_db_user(firebase_user, db)
     loan = MortgageLoan(**body.model_dump(), tenant_id=user.tenant_id)
     db.add(loan)
-    # Auto-create "Hipoteca" expense category if it doesn't exist
-    await _get_or_create_hipoteca_category(user.tenant_id, user.id, db)
+    await db.flush()
+    await _backfill_past_cuotas(loan, user.id, db)
     await db.commit()
     await db.refresh(loan)
     return loan
@@ -266,13 +372,14 @@ async def pay_cuota(
 
     # Create expense entry
     cat = await _get_or_create_hipoteca_category(user.tenant_id, user.id, db)
+    payment_date = _compute_payment_date(today.year, today.month, loan.payment_day)
     expense = ExpenseEntry(
         tenant_id=user.tenant_id,
         user_id=user.id,
         category_id=cat.id,
         amount=payment_amount,
         description=f"Cuota hipotecaria{' ' + loan.description if loan.description else ''}",
-        expense_date=month_start,
+        expense_date=payment_date,
         notes=f"{uva_units} UVAs" if uva_units else None,
     )
     db.add(expense)

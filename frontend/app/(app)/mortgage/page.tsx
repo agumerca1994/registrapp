@@ -14,6 +14,7 @@ interface MortgageLoan {
   loan_number: string | null;
   total_cuotas: number;
   first_payment_date: string;
+  payment_day: number | null;
   cuota_uva: number | null;
   cuota_pesos: number | null;
   tna: number | null;
@@ -64,6 +65,8 @@ const EMPTY_FORM = {
   loan_number: "",
   total_cuotas: "240",
   first_payment_date: "",
+  payment_day_mode: "biz" as "biz" | "fixed", // "biz" = primer día hábil, "fixed" = día específico
+  payment_day: "",
   cuota_uva: "",
   cuota_pesos: "",
   tna: "",
@@ -85,6 +88,8 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
     loan_number: editLoan?.loan_number ?? "",
     total_cuotas: String(editLoan?.total_cuotas ?? 240),
     first_payment_date: editLoan?.first_payment_date ?? "",
+    payment_day_mode: (editLoan?.payment_day != null ? "fixed" : "biz") as "biz" | "fixed",
+    payment_day: editLoan?.payment_day != null ? String(editLoan.payment_day) : "",
     cuota_uva: editLoan?.cuota_uva != null ? String(editLoan.cuota_uva) : "",
     cuota_pesos: editLoan?.cuota_pesos != null ? String(editLoan.cuota_pesos) : "",
     tna: editLoan?.tna != null ? String(editLoan.tna) : "",
@@ -102,10 +107,13 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
     setError("");
     setSaving(true);
     try {
+      const paymentDay = form.payment_day_mode === "fixed" && form.payment_day ? parseInt(form.payment_day) : null;
+
       if (editLoan) {
         await api.patch(`/mortgage/loans/${editLoan.id}`, {
           description: form.description || null,
           loan_number: form.loan_number || null,
+          payment_day: paymentDay,
           cuota_uva: isUva && form.cuota_uva ? parseFloat(form.cuota_uva) : null,
           cuota_pesos: form.loan_type === "tasa_fija" && form.cuota_pesos ? parseFloat(form.cuota_pesos) : null,
           tna: form.tna ? parseFloat(form.tna) : null,
@@ -118,6 +126,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
           loan_number: form.loan_number || null,
           total_cuotas: parseInt(form.total_cuotas),
           first_payment_date: form.first_payment_date,
+          payment_day: paymentDay,
           cuota_uva: isUva && form.cuota_uva ? parseFloat(form.cuota_uva) : null,
           cuota_pesos: form.loan_type === "tasa_fija" && form.cuota_pesos ? parseFloat(form.cuota_pesos) : null,
           tna: form.tna ? parseFloat(form.tna) : null,
@@ -197,6 +206,40 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                   </div>
                 </>
               )}
+
+              {/* Payment day — always shown */}
+              <div className="sm:col-span-2">
+                <label className="text-xs font-medium text-gray-600">Fecha de pago de la cuota</label>
+                <div className="mt-1 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setForm(p => ({ ...p, payment_day_mode: "biz", payment_day: "" }))}
+                    className={`flex-1 py-2 rounded-lg text-xs border transition-colors ${form.payment_day_mode === "biz" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-700 hover:bg-gray-50"}`}
+                  >
+                    Primer día hábil
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm(p => ({ ...p, payment_day_mode: "fixed" }))}
+                    className={`flex-1 py-2 rounded-lg text-xs border transition-colors ${form.payment_day_mode === "fixed" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-700 hover:bg-gray-50"}`}
+                  >
+                    Día específico
+                  </button>
+                </div>
+                {form.payment_day_mode === "fixed" && (
+                  <input
+                    type="number" min={1} max={28}
+                    placeholder="ej: 10"
+                    value={form.payment_day} onChange={f("payment_day")}
+                    className="mt-2 w-full border rounded-lg px-3 py-2 text-sm"
+                  />
+                )}
+                {form.payment_day_mode === "biz" && (
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    Si el 1° cae sábado o domingo, se usa el lunes siguiente.
+                  </p>
+                )}
+              </div>
 
               {isUva && (
                 <div>
@@ -481,6 +524,9 @@ export default function MortgagePage() {
                 TNA {Number(summary.loan.tna).toFixed(2)}%
               </span>
             )}
+            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
+              Pago: {summary.loan.payment_day != null ? `día ${summary.loan.payment_day}` : "1er día hábil"}
+            </span>
           </div>
 
           {/* Pay button */}
