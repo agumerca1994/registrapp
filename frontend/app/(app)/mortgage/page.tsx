@@ -81,6 +81,19 @@ function fmtDate(iso: string) {
   catch { return iso; }
 }
 
+function fmtDecimal(v: number | null | undefined): string {
+  if (v == null) return "";
+  return new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+}
+
+function parseDecimalInput(v: string): number | null {
+  if (!v.trim()) return null;
+  const n = v.includes(",")
+    ? parseFloat(v.replace(/\./g, "").replace(",", "."))
+    : parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
 // ── Config Modal ───────────────────────────────────────────────────────────────
 
 function LoanConfigModal({ editLoan, onClose, onSaved }: {
@@ -95,12 +108,13 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
     description: editLoan?.description ?? "",
     loan_number: editLoan?.loan_number ?? "",
     total_cuotas: String(editLoan?.total_cuotas ?? 240),
-    first_payment_date: editLoan?.first_payment_date ?? "",
+    // type="month" needs YYYY-MM, strip the day part if coming from API
+    first_payment_date: editLoan?.first_payment_date?.substring(0, 7) ?? "",
     payment_day_mode: (editLoan?.payment_day != null ? "fixed" : "biz") as "biz" | "fixed",
     payment_day: editLoan?.payment_day != null ? String(editLoan.payment_day) : "",
-    cuota_uva: editLoan?.cuota_uva != null ? String(editLoan.cuota_uva) : "",
-    cuota_pesos: editLoan?.cuota_pesos != null ? String(editLoan.cuota_pesos) : "",
-    tna: editLoan?.tna != null ? String(editLoan.tna) : "",
+    cuota_uva: fmtDecimal(editLoan?.cuota_uva ?? null),
+    cuota_pesos: fmtDecimal(editLoan?.cuota_pesos ?? null),
+    tna: fmtDecimal(editLoan?.tna ?? null),
     original_capital_uva: "",
   });
   const [saving, setSaving] = useState(false);
@@ -116,15 +130,20 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
     setError("");
     setSaving(true);
     try {
+      const cuotaUva = isUva ? parseDecimalInput(form.cuota_uva) : null;
+      const cuotaPesos = form.loan_type === "tasa_fija" ? parseDecimalInput(form.cuota_pesos) : null;
+      const tna = parseDecimalInput(form.tna);
+      const origCapital = parseDecimalInput(form.original_capital_uva);
+
       if (editLoan) {
         await api.patch(`/mortgage/loans/${editLoan.id}`, {
           description: form.description || null,
           loan_number: form.loan_number || null,
           payment_day: paymentDay,
-          cuota_uva: isUva && form.cuota_uva ? parseFloat(form.cuota_uva) : null,
-          cuota_pesos: form.loan_type === "tasa_fija" && form.cuota_pesos ? parseFloat(form.cuota_pesos) : null,
-          tna: form.tna ? parseFloat(form.tna) : null,
-          original_capital_uva: form.original_capital_uva ? parseFloat(form.original_capital_uva) : null,
+          cuota_uva: cuotaUva,
+          cuota_pesos: cuotaPesos,
+          tna,
+          original_capital_uva: origCapital,
         });
       } else {
         await api.post("/mortgage/loans", {
@@ -132,12 +151,12 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
           description: form.description || null,
           loan_number: form.loan_number || null,
           total_cuotas: parseInt(form.total_cuotas),
-          first_payment_date: form.first_payment_date,
+          first_payment_date: form.first_payment_date + "-01",  // YYYY-MM → YYYY-MM-01
           payment_day: paymentDay,
-          cuota_uva: isUva && form.cuota_uva ? parseFloat(form.cuota_uva) : null,
-          cuota_pesos: form.loan_type === "tasa_fija" && form.cuota_pesos ? parseFloat(form.cuota_pesos) : null,
-          tna: form.tna ? parseFloat(form.tna) : null,
-          original_capital_uva: form.original_capital_uva ? parseFloat(form.original_capital_uva) : null,
+          cuota_uva: cuotaUva,
+          cuota_pesos: cuotaPesos,
+          tna,
+          original_capital_uva: origCapital,
         });
       }
       onSaved();
@@ -198,9 +217,9 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                   <div className="sm:col-span-2">
                     <label className="text-xs font-medium text-gray-600">Primera cuota *</label>
                     <input
-                      type="date" required
+                      type="month" required
                       value={form.first_payment_date} onChange={f("first_payment_date")}
-                      className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                      className="mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
                     />
                   </div>
                   <div>
@@ -208,7 +227,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                     <input
                       type="number" min={1} required
                       value={form.total_cuotas} onChange={f("total_cuotas")}
-                      className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                      className="mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
                     />
                   </div>
                 </>
@@ -238,7 +257,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                     type="number" min={1} max={28}
                     placeholder="ej: 10"
                     value={form.payment_day} onChange={f("payment_day")}
-                    className="mt-2 w-full border rounded-lg px-3 py-2 text-sm"
+                    className="mt-2 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
                   />
                 ) : (
                   <p className="text-xs text-muted-foreground mt-1.5">
@@ -251,10 +270,10 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                 <div>
                   <label className="text-xs font-medium text-gray-600">Cuota en UVAs *</label>
                   <input
-                    type="number" step="0.000001" required
-                    placeholder="ej: 750.740000"
+                    type="text" inputMode="decimal" required
+                    placeholder="ej: 750,74"
                     value={form.cuota_uva} onChange={f("cuota_uva")}
-                    className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                    className="mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
                   />
                 </div>
               )}
@@ -263,9 +282,10 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                 <div>
                   <label className="text-xs font-medium text-gray-600">Cuota mensual ($) *</label>
                   <input
-                    type="number" step="0.01" required
+                    type="text" inputMode="decimal" required
+                    placeholder="ej: 150.000,00"
                     value={form.cuota_pesos} onChange={f("cuota_pesos")}
-                    className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                    className="mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
                   />
                 </div>
               )}
@@ -275,31 +295,31 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                   <div>
                     <label className="text-xs font-medium text-gray-600">TNA % (opcional)</label>
                     <input
-                      type="number" step="0.01"
-                      placeholder="ej: 8.50"
+                      type="text" inputMode="decimal"
+                      placeholder="ej: 8,50"
                       value={form.tna} onChange={f("tna")}
-                      className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                      className="mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
                     />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-gray-600">Capital original en UVAs (opcional)</label>
                     <input
-                      type="number" step="0.000001"
+                      type="text" inputMode="decimal"
                       placeholder="para desglose capital/interés"
                       value={form.original_capital_uva} onChange={f("original_capital_uva")}
-                      className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                      className="mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
                     />
                   </div>
                 </>
               )}
 
               <div className={isUva ? "sm:col-span-2" : ""}>
-                <label className="text-xs font-medium text-gray-600">Descripción (opcional)</label>
+                <label className="text-xs font-medium text-gray-600">Banco (opcional)</label>
                 <input
                   type="text"
-                  placeholder="ej: Hipoteca Banco Nación"
+                  placeholder="ej: Banco Nación"
                   value={form.description} onChange={f("description")}
-                  className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                  className="mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
                 />
               </div>
 
@@ -308,7 +328,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                 <input
                   type="text"
                   value={form.loan_number} onChange={f("loan_number")}
-                  className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                  className="mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
                 />
               </div>
             </div>
