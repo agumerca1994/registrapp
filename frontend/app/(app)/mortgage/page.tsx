@@ -67,7 +67,8 @@ const EMPTY_FORM = {
   description: "",
   loan_number: "",
   total_cuotas: "",
-  first_payment_date: "",
+  fp_month: "",
+  fp_year: "",
   payment_day_mode: "biz" as "biz" | "fixed",
   payment_day: "",
   cuota_uva: "",
@@ -108,8 +109,8 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
     description: editLoan?.description ?? "",
     loan_number: editLoan?.loan_number ?? "",
     total_cuotas: editLoan?.total_cuotas != null ? String(editLoan.total_cuotas) : "",
-    // type="month" needs YYYY-MM, strip the day part if coming from API
-    first_payment_date: editLoan?.first_payment_date?.substring(0, 7) ?? "",
+    fp_month: editLoan?.first_payment_date?.substring(5, 7) ?? "",
+    fp_year: editLoan?.first_payment_date?.substring(0, 4) ?? "",
     payment_day_mode: (editLoan?.payment_day != null ? "fixed" : "biz") as "biz" | "fixed",
     payment_day: editLoan?.payment_day != null ? String(editLoan.payment_day) : "",
     cuota_uva: fmtDecimal(editLoan?.cuota_uva ?? null),
@@ -123,11 +124,8 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
   const f = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(p => ({ ...p, [k]: e.target.value }));
 
-  const [fpYear, fpMonth] = form.first_payment_date ? form.first_payment_date.split("-") : ["", ""];
-  const setFpMonth = (m: string) =>
-    setForm(p => ({ ...p, first_payment_date: fpYear && m ? `${fpYear}-${m}` : "" }));
-  const setFpYear = (y: string) =>
-    setForm(p => ({ ...p, first_payment_date: y && fpMonth ? `${y}-${fpMonth}` : "" }));
+  const fs = (k: string) => (e: React.ChangeEvent<HTMLSelectElement>) =>
+    setForm(p => ({ ...p, [k]: e.target.value }));
 
   const isUva = form.loan_type === "uva_frances" || form.loan_type === "uva_aleman";
   const paymentDay = form.payment_day_mode === "fixed" && form.payment_day ? parseInt(form.payment_day) : null;
@@ -157,7 +155,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
           description: form.description || null,
           loan_number: form.loan_number || null,
           total_cuotas: parseInt(form.total_cuotas),
-          first_payment_date: form.first_payment_date + "-01",  // YYYY-MM → YYYY-MM-01
+          first_payment_date: `${form.fp_year}-${form.fp_month}-01`,
           payment_day: paymentDay,
           cuota_uva: cuotaUva,
           cuota_pesos: cuotaPesos,
@@ -230,8 +228,8 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                       <label className="text-xs font-medium text-gray-600">Primera cuota *</label>
                       <div className="mt-1 grid grid-cols-2 gap-2">
                         <select
-                          value={fpMonth}
-                          onChange={e => setFpMonth(e.target.value)}
+                          value={form.fp_month}
+                          onChange={fs("fp_month")}
                           required
                           className="w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm bg-white"
                         >
@@ -241,8 +239,8 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                           ))}
                         </select>
                         <select
-                          value={fpYear}
-                          onChange={e => setFpYear(e.target.value)}
+                          value={form.fp_year}
+                          onChange={fs("fp_year")}
                           required
                           className="w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm bg-white"
                         >
