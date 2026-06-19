@@ -5,7 +5,7 @@ import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "@/lib/api";
 import { formatARS, formatDate } from "@/lib/utils";
-import { Settings2, X, Loader2, Home, Trash2, CalendarDays } from "lucide-react";
+import { Settings2, X, Loader2, Home, Trash2 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -123,6 +123,12 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
   const f = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(p => ({ ...p, [k]: e.target.value }));
 
+  const [fpYear, fpMonth] = form.first_payment_date ? form.first_payment_date.split("-") : ["", ""];
+  const setFpMonth = (m: string) =>
+    setForm(p => ({ ...p, first_payment_date: fpYear && m ? `${fpYear}-${m}` : "" }));
+  const setFpYear = (y: string) =>
+    setForm(p => ({ ...p, first_payment_date: y && fpMonth ? `${y}-${fpMonth}` : "" }));
+
   const isUva = form.loan_type === "uva_frances" || form.loan_type === "uva_aleman";
   const paymentDay = form.payment_day_mode === "fixed" && form.payment_day ? parseInt(form.payment_day) : null;
 
@@ -220,15 +226,31 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {!editLoan && (
                   <>
-                    <div>
+                    <div className="sm:col-span-2">
                       <label className="text-xs font-medium text-gray-600">Primera cuota *</label>
-                      <div className="relative mt-1">
-                        <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                        <input
-                          type="month" required
-                          value={form.first_payment_date} onChange={f("first_payment_date")}
-                          className="w-full border rounded-lg pl-9 pr-3 py-2 text-[16px] sm:text-sm bg-white text-gray-900"
-                        />
+                      <div className="mt-1 flex gap-2">
+                        <select
+                          value={fpMonth}
+                          onChange={e => setFpMonth(e.target.value)}
+                          required
+                          className={inputCls + " flex-1"}
+                        >
+                          <option value="">Mes</option>
+                          {["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"].map((m, i) => (
+                            <option key={i} value={String(i + 1).padStart(2, "0")}>{m}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={fpYear}
+                          onChange={e => setFpYear(e.target.value)}
+                          required
+                          className={inputCls + " w-28"}
+                        >
+                          <option value="">Año</option>
+                          {Array.from({ length: 16 }, (_, i) => 2016 + i).map(y => (
+                            <option key={y} value={String(y)}>{y}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
                     <div>
