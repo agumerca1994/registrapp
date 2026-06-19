@@ -402,6 +402,23 @@ async def pay_cuota(
     return record
 
 
+# ── Backfill on demand ────────────────────────────────────────────────────────
+
+@router.post("/loans/{loan_id}/backfill")
+async def backfill_loan(
+    loan_id: int,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await _get_db_user(firebase_user, db)
+    loan = await db.get(MortgageLoan, loan_id)
+    if not loan or loan.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404, detail="Préstamo no encontrado")
+    registered = await _backfill_past_cuotas(loan, user.id, db)
+    await db.commit()
+    return {"registered": registered}
+
+
 # ── Legacy endpoints (manual entry, kept for backward compatibility) ───────────
 
 @router.get("", response_model=list[MortgageRecordOut])

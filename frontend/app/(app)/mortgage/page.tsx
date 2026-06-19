@@ -81,6 +81,8 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
   onSaved: () => void;
 }) {
   const [step, setStep] = useState<1 | 2>(editLoan ? 2 : 1);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillMsg, setBackfillMsg] = useState("");
   const [form, setForm] = useState({
     ...EMPTY_FORM,
     loan_type: editLoan?.loan_type ?? "",
@@ -308,12 +310,37 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
             </div>
 
             {error && <p className="text-xs text-red-600">{error}</p>}
+            {backfillMsg && <p className="text-xs text-green-700">{backfillMsg}</p>}
 
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={onClose}
                 className="border px-4 py-2 rounded-lg text-sm">
                 Cancelar
               </button>
+              {editLoan && (
+                <button
+                  type="button"
+                  disabled={backfilling}
+                  onClick={async () => {
+                    setBackfillMsg("");
+                    setBackfilling(true);
+                    try {
+                      const r = await api.post(`/mortgage/loans/${editLoan.id}/backfill`);
+                      const n = r.data.registered;
+                      setBackfillMsg(n > 0 ? `${n} cuotas históricas generadas.` : "No había cuotas pendientes.");
+                      onSaved();
+                    } catch {
+                      setBackfillMsg("Error al generar cuotas históricas.");
+                    } finally {
+                      setBackfilling(false);
+                    }
+                  }}
+                  className="border px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {backfilling && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Generar cuotas históricas
+                </button>
+              )}
               <button
                 onClick={handleSave}
                 disabled={saving}
