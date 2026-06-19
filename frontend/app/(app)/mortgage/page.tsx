@@ -256,7 +256,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                     <div>
                       <label className="text-xs font-medium text-gray-600">Cantidad de cuotas *</label>
                       <input
-                        type="number" min={1} required
+                        type="number" min={1} step={1} inputMode="numeric" pattern="[0-9]*" required
                         value={form.total_cuotas} onChange={f("total_cuotas")}
                         className={inputCls}
                       />
@@ -283,11 +283,18 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                     </button>
                   </div>
                   {form.payment_day_mode === "fixed" ? (
-                    <input
-                      type="number" min={1} max={28}
-                      value={form.payment_day} onChange={f("payment_day")}
-                      className={inputCls + " mt-2"}
-                    />
+                    <div className="mt-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number" min={1} max={28} inputMode="numeric" pattern="[0-9]*"
+                          value={form.payment_day} onChange={f("payment_day")}
+                          className={inputCls + " w-20 mt-0"}
+                        />
+                        <span className="text-sm text-gray-600">
+                          {form.payment_day ? `Todos los ${form.payment_day} de cada mes` : "de cada mes"}
+                        </span>
+                      </div>
+                    </div>
                   ) : (
                     <p className="text-xs text-muted-foreground mt-1.5">
                       Si el 1° cae sábado o domingo, se usa el lunes siguiente.
