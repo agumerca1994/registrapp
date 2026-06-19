@@ -168,13 +168,17 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
     }
   };
 
+  const inputCls = "mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm";
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
+      {/* Modal: flex-col with fixed header + scrollable body + fixed footer */}
       <div
-        className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 space-y-5 max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md flex flex-col max-h-[90dvh] overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between">
+        {/* Header — fijo */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b shrink-0">
           <h3 className="font-semibold text-gray-900">
             {editLoan ? "Editar hipoteca" : step === 1 ? "Tipo de hipoteca" : "Configurar hipoteca"}
           </h3>
@@ -183,171 +187,176 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
           </button>
         </div>
 
-        {step === 1 && (
-          <div className="space-y-2">
-            {Object.entries(LOAN_TYPE_LABELS).map(([type, label]) => (
-              <button
-                key={type}
-                onClick={() => { setForm(p => ({ ...p, loan_type: type })); setStep(2); }}
-                className="w-full text-left border rounded-xl p-3.5 hover:border-gray-400 hover:bg-gray-50 transition-colors"
-              >
-                <p className="text-sm font-medium text-gray-900">{label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{LOAN_TYPE_DESC[type]}</p>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="space-y-4">
-            {!editLoan && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">
-                  {LOAN_TYPE_LABELS[form.loan_type]}
-                </span>
-                <button onClick={() => setStep(1)} className="text-xs text-blue-600 hover:underline">
-                  Cambiar
+        {/* Body — scrolleable, sin overflow horizontal */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-5 py-4">
+          {step === 1 && (
+            <div className="space-y-2">
+              {Object.entries(LOAN_TYPE_LABELS).map(([type, label]) => (
+                <button
+                  key={type}
+                  onClick={() => { setForm(p => ({ ...p, loan_type: type })); setStep(2); }}
+                  className="w-full text-left border rounded-xl p-3.5 hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                >
+                  <p className="text-sm font-medium text-gray-900">{label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{LOAN_TYPE_DESC[type]}</p>
                 </button>
-              </div>
-            )}
+              ))}
+            </div>
+          )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {step === 2 && (
+            <div className="space-y-4">
               {!editLoan && (
-                <>
-                  <div className="sm:col-span-2">
-                    <label className="text-xs font-medium text-gray-600">Primera cuota *</label>
-                    <input
-                      type="month" required
-                      value={form.first_payment_date} onChange={f("first_payment_date")}
-                      className="mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600">Cantidad de cuotas *</label>
-                    <input
-                      type="number" min={1} required
-                      value={form.total_cuotas} onChange={f("total_cuotas")}
-                      className="mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
-                    />
-                  </div>
-                </>
-              )}
-
-              {/* Payment day */}
-              <div className="sm:col-span-2">
-                <label className="text-xs font-medium text-gray-600">Fecha de pago de la cuota</label>
-                <div className="mt-1 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setForm(p => ({ ...p, payment_day_mode: "biz", payment_day: "" }))}
-                    className={`flex-1 py-2 rounded-lg text-xs border transition-colors ${form.payment_day_mode === "biz" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-700 hover:bg-gray-50"}`}
-                  >
-                    Primer día hábil
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setForm(p => ({ ...p, payment_day_mode: "fixed" }))}
-                    className={`flex-1 py-2 rounded-lg text-xs border transition-colors ${form.payment_day_mode === "fixed" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-700 hover:bg-gray-50"}`}
-                  >
-                    Día específico
+                <div className="flex items-center gap-2">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">
+                    {LOAN_TYPE_LABELS[form.loan_type]}
+                  </span>
+                  <button onClick={() => setStep(1)} className="text-xs text-blue-600 hover:underline">
+                    Cambiar
                   </button>
                 </div>
-                {form.payment_day_mode === "fixed" ? (
-                  <input
-                    type="number" min={1} max={28}
-                    placeholder="ej: 10"
-                    value={form.payment_day} onChange={f("payment_day")}
-                    className="mt-2 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
-                  />
-                ) : (
-                  <p className="text-xs text-muted-foreground mt-1.5">
-                    Si el 1° cae sábado o domingo, se usa el lunes siguiente.
-                  </p>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {!editLoan && (
+                  <>
+                    <div className="sm:col-span-2">
+                      <label className="text-xs font-medium text-gray-600">Primera cuota *</label>
+                      <input
+                        type="month" required
+                        value={form.first_payment_date} onChange={f("first_payment_date")}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-600">Cantidad de cuotas *</label>
+                      <input
+                        type="number" min={1} required
+                        value={form.total_cuotas} onChange={f("total_cuotas")}
+                        className={inputCls}
+                      />
+                    </div>
+                  </>
                 )}
-              </div>
 
-              {isUva && (
-                <div>
-                  <label className="text-xs font-medium text-gray-600">Cuota en UVAs *</label>
-                  <input
-                    type="text" inputMode="decimal" required
-                    placeholder="ej: 750,74"
-                    value={form.cuota_uva} onChange={f("cuota_uva")}
-                    className="mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
-                  />
-                </div>
-              )}
-
-              {form.loan_type === "tasa_fija" && (
-                <div>
-                  <label className="text-xs font-medium text-gray-600">Cuota mensual ($) *</label>
-                  <input
-                    type="text" inputMode="decimal" required
-                    placeholder="ej: 150.000,00"
-                    value={form.cuota_pesos} onChange={f("cuota_pesos")}
-                    className="mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
-                  />
-                </div>
-              )}
-
-              {isUva && (
-                <>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600">TNA % (opcional)</label>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-medium text-gray-600">Fecha de pago de la cuota</label>
+                  <div className="mt-1 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setForm(p => ({ ...p, payment_day_mode: "biz", payment_day: "" }))}
+                      className={`flex-1 py-2 rounded-lg text-xs border transition-colors ${form.payment_day_mode === "biz" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-700 hover:bg-gray-50"}`}
+                    >
+                      Primer día hábil
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm(p => ({ ...p, payment_day_mode: "fixed" }))}
+                      className={`flex-1 py-2 rounded-lg text-xs border transition-colors ${form.payment_day_mode === "fixed" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-700 hover:bg-gray-50"}`}
+                    >
+                      Día específico
+                    </button>
+                  </div>
+                  {form.payment_day_mode === "fixed" ? (
                     <input
-                      type="text" inputMode="decimal"
-                      placeholder="ej: 8,50"
-                      value={form.tna} onChange={f("tna")}
-                      className="mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
+                      type="number" min={1} max={28}
+                      placeholder="ej: 10"
+                      value={form.payment_day} onChange={f("payment_day")}
+                      className={inputCls + " mt-2"}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      Si el 1° cae sábado o domingo, se usa el lunes siguiente.
+                    </p>
+                  )}
+                </div>
+
+                {isUva && (
+                  <div>
+                    <label className="text-xs font-medium text-gray-600">Cuota en UVAs *</label>
+                    <input
+                      type="text" inputMode="decimal" required
+                      placeholder="ej: 750,74"
+                      value={form.cuota_uva} onChange={f("cuota_uva")}
+                      className={inputCls}
                     />
                   </div>
+                )}
+
+                {form.loan_type === "tasa_fija" && (
                   <div>
-                    <label className="text-xs font-medium text-gray-600">Capital original en UVAs (opcional)</label>
+                    <label className="text-xs font-medium text-gray-600">Cuota mensual ($) *</label>
                     <input
-                      type="text" inputMode="decimal"
-                      placeholder="para desglose capital/interés"
-                      value={form.original_capital_uva} onChange={f("original_capital_uva")}
-                      className="mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
+                      type="text" inputMode="decimal" required
+                      placeholder="ej: 150.000,00"
+                      value={form.cuota_pesos} onChange={f("cuota_pesos")}
+                      className={inputCls}
                     />
                   </div>
-                </>
-              )}
+                )}
 
-              <div className={isUva ? "sm:col-span-2" : ""}>
-                <label className="text-xs font-medium text-gray-600">Banco (opcional)</label>
-                <input
-                  type="text"
-                  placeholder="ej: Banco Nación"
-                  value={form.description} onChange={f("description")}
-                  className="mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
-                />
+                {isUva && (
+                  <>
+                    <div>
+                      <label className="text-xs font-medium text-gray-600">TNA % (opcional)</label>
+                      <input
+                        type="text" inputMode="decimal"
+                        placeholder="ej: 8,50"
+                        value={form.tna} onChange={f("tna")}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-600">Capital original en UVAs (opcional)</label>
+                      <input
+                        type="text" inputMode="decimal"
+                        placeholder="para desglose capital/interés"
+                        value={form.original_capital_uva} onChange={f("original_capital_uva")}
+                        className={inputCls}
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div className={isUva ? "sm:col-span-2" : ""}>
+                  <label className="text-xs font-medium text-gray-600">Banco (opcional)</label>
+                  <input
+                    type="text"
+                    placeholder="ej: Banco Nación"
+                    value={form.description} onChange={f("description")}
+                    className={inputCls}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-gray-600">N° de préstamo (opcional)</label>
+                  <input
+                    type="text"
+                    value={form.loan_number} onChange={f("loan_number")}
+                    className={inputCls}
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="text-xs font-medium text-gray-600">N° de préstamo (opcional)</label>
-                <input
-                  type="text"
-                  value={form.loan_number} onChange={f("loan_number")}
-                  className="mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm"
-                />
-              </div>
+              {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
             </div>
+          )}
+        </div>
 
-            {error && <p className="text-xs text-red-600">{error}</p>}
-
-            <div className="flex justify-end gap-2 pt-1">
-              <button type="button" onClick={onClose} className="border px-4 py-2 rounded-lg text-sm">
-                Cancelar
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1.5"
-              >
-                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {editLoan ? "Guardar cambios" : "Activar hipoteca"}
-              </button>
-            </div>
+        {/* Footer — fijo, solo visible en step 2 */}
+        {step === 2 && (
+          <div className="flex justify-end gap-2 px-5 py-4 border-t bg-white shrink-0">
+            <button type="button" onClick={onClose} className="border px-4 py-2 rounded-lg text-sm">
+              Cancelar
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {editLoan ? "Guardar cambios" : "Activar hipoteca"}
+            </button>
           </div>
         )}
       </div>
