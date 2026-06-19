@@ -116,19 +116,23 @@ async def link_whatsapp(
     user.whatsapp_verify_expires = datetime.utcnow() + timedelta(minutes=10)
     await db.commit()
 
-    if settings.EVOLUTION_API_URL and settings.EVOLUTION_INSTANCE:
-        url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE}"
-        headers = {"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"}
-        payload = {"number": body.phone, "text": f"Tu código RegistrApp: *{code}*\n_(válido 10 minutos)_"}
-        try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.post(url, json=payload, headers=headers)
-                if resp.status_code >= 400:
-                    logger.error(f"Evolution API error {resp.status_code}: {resp.text}")
-                    raise HTTPException(status_code=502, detail="Error al enviar el código por WhatsApp")
-        except httpx.RequestError as e:
-            logger.error(f"Evolution API connection error: {e}")
-            raise HTTPException(status_code=502, detail="No se pudo conectar con WhatsApp")
+    if not settings.EVOLUTION_API_URL or not settings.EVOLUTION_INSTANCE:
+        logger.error("Evolution API not configured (EVOLUTION_API_URL or EVOLUTION_INSTANCE missing)")
+        raise HTTPException(status_code=503, detail="WhatsApp no está configurado en el servidor")
+
+    url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE}"
+    headers = {"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"}
+    payload = {"number": body.phone, "text": f"Tu código RegistrApp: *{code}*\n_(válido 10 minutos)_"}
+    logger.info(f"Sending WA code to {body.phone} via {settings.EVOLUTION_API_URL}/instance/{settings.EVOLUTION_INSTANCE}")
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            logger.info(f"Evolution API response: {resp.status_code} — {resp.text[:300]}")
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=502, detail=f"Error al enviar el código por WhatsApp ({resp.status_code})")
+    except httpx.RequestError as e:
+        logger.error(f"Evolution API connection error: {e}")
+        raise HTTPException(status_code=502, detail="No se pudo conectar con WhatsApp")
 
     return {"message": "Código enviado"}
 
