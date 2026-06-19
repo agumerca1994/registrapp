@@ -278,16 +278,20 @@ async def delete_loan(
         )
         await db.flush()
     else:
-        # Delete all linked records and their expense entries
+        # Delete all linked records and their expense entries.
+        # Order matters: delete MortgageRecords first to release the FK on expense_entries,
+        # then delete the ExpenseEntries.
         records = (await db.scalars(
             select(MortgageRecord).where(MortgageRecord.mortgage_loan_id == loan_id)
         )).all()
+        expense_ids = [rec.expense_entry_id for rec in records if rec.expense_entry_id]
         for rec in records:
-            if rec.expense_entry_id:
-                expense = await db.get(ExpenseEntry, rec.expense_entry_id)
-                if expense:
-                    await db.delete(expense)
             await db.delete(rec)
+        await db.flush()
+        for eid in expense_ids:
+            expense = await db.get(ExpenseEntry, eid)
+            if expense:
+                await db.delete(expense)
         await db.flush()
 
     await db.delete(loan)
