@@ -154,7 +154,7 @@ export default function ExpensesPage() {
         <div className="flex gap-1 md:gap-2 shrink-0">
           <button onClick={() => setShowCatForm(true)}
             className="text-sm border px-2 md:px-3 py-1.5 rounded-lg hover:bg-gray-50">
-            + Cat.
+            + Categoria
           </button>
           <button onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true); }}
             className="flex items-center gap-1 bg-primary text-white text-sm px-3 py-1.5 rounded-lg hover:opacity-90">
