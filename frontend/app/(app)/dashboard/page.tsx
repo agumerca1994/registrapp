@@ -17,6 +17,7 @@ interface MonthSummary {
   total_expenses: number;
   balance: number;
   mortgage_payment: number | null;
+  mortgage_is_projected: boolean;
   uva_value: number | null;
   inflation_pct: number | null;
   expenses_by_category: { category_name: string; total: number; color?: string }[];
@@ -280,7 +281,12 @@ export default function DashboardPage() {
           {data.mortgage_payment && (
             <div className="bg-white rounded-xl border p-4 md:p-5 flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-medium text-gray-700">Cuota hipotecaria</p>
+                <p className="text-sm font-medium text-gray-700">
+                  Cuota hipotecaria
+                  {data.mortgage_is_projected && (
+                    <span className="ml-1.5 text-xs font-normal text-muted-foreground">(estimado)</span>
+                  )}
+                </p>
                 {data.total_income > 0 && (
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {formatPct((data.mortgage_payment / data.total_income) * 100)} del ingreso

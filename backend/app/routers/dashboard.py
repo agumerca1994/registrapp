@@ -10,7 +10,7 @@ from app.models.user import User
 from app.models.income import IncomeEntry
 from app.models.expense import ExpenseEntry, ExpenseCategory
 from app.models.macro_variable import MacroVariable
-from app.models.mortgage import MortgageRecord
+from app.models.mortgage import MortgageRecord, MortgageLoan
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -28,6 +28,7 @@ class MonthSummary(BaseModel):
     total_expenses: Decimal
     balance: Decimal
     mortgage_payment: Decimal | None
+    mortgage_is_projected: bool
     uva_value: Decimal | None
     inflation_pct: Decimal | None
     expenses_by_category: list[CategorySummary]
@@ -98,12 +99,40 @@ async def monthly_summary(
         )
     )
 
+    # Determine mortgage payment (recorded or projected from active loan)
+    mortgage_payment: Decimal | None = None
+    mortgage_is_projected = False
+    if mortgage:
+        mortgage_payment = mortgage.payment_amount
+    else:
+        active_loan = await db.scalar(
+            select(MortgageLoan).where(
+                MortgageLoan.tenant_id == tid,
+                MortgageLoan.is_active == True,
+            ).limit(1)
+        )
+        if active_loan:
+            if active_loan.loan_type in ("uva_frances", "uva_aleman") and active_loan.cuota_uva:
+                latest_macro = await db.scalar(
+                    select(MacroVariable)
+                    .where(MacroVariable.uva_value.is_not(None), MacroVariable.period_date <= end)
+                    .order_by(MacroVariable.period_date.desc())
+                    .limit(1)
+                )
+                if latest_macro and latest_macro.uva_value:
+                    mortgage_payment = active_loan.cuota_uva * latest_macro.uva_value
+                    mortgage_is_projected = True
+            elif active_loan.loan_type == "tasa_fija" and active_loan.cuota_pesos:
+                mortgage_payment = active_loan.cuota_pesos
+                mortgage_is_projected = True
+
     return MonthSummary(
         period=f"{year}-{month:02d}",
         total_income=total_income,
         total_expenses=total_expenses,
         balance=total_income - total_expenses,
-        mortgage_payment=mortgage.payment_amount if mortgage else None,
+        mortgage_payment=mortgage_payment,
+        mortgage_is_projected=mortgage_is_projected,
         uva_value=macro.uva_value if macro else None,
         inflation_pct=macro.inflation_monthly_pct if macro else None,
         expenses_by_category=by_category,
