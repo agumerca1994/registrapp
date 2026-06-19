@@ -66,7 +66,7 @@ const EMPTY_FORM = {
   loan_type: "",
   description: "",
   loan_number: "",
-  total_cuotas: "240",
+  total_cuotas: "",
   first_payment_date: "",
   payment_day_mode: "biz" as "biz" | "fixed",
   payment_day: "",
@@ -107,7 +107,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
     loan_type: editLoan?.loan_type ?? "",
     description: editLoan?.description ?? "",
     loan_number: editLoan?.loan_number ?? "",
-    total_cuotas: String(editLoan?.total_cuotas ?? 240),
+    total_cuotas: editLoan?.total_cuotas != null ? String(editLoan.total_cuotas) : "",
     // type="month" needs YYYY-MM, strip the day part if coming from API
     first_payment_date: editLoan?.first_payment_date?.substring(0, 7) ?? "",
     payment_day_mode: (editLoan?.payment_day != null ? "fixed" : "biz") as "biz" | "fixed",
@@ -219,7 +219,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {!editLoan && (
-                  <>
+                  <div className="sm:col-span-2 grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs font-medium text-gray-600">Primera cuota *</label>
                       <div className="relative mt-1">
@@ -227,19 +227,19 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                         <input
                           type="month" required
                           value={form.first_payment_date} onChange={f("first_payment_date")}
-                          className="w-full border rounded-lg pl-9 pr-3 py-2 text-[16px] sm:text-sm bg-white text-gray-900"
+                          className="w-full min-w-0 border rounded-lg pl-9 pr-2 py-2 text-[16px] sm:text-sm bg-white text-gray-900"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-gray-600">Cantidad de cuotas *</label>
+                      <label className="text-xs font-medium text-gray-600">Cant. cuotas *</label>
                       <input
                         type="number" min={1} required
                         value={form.total_cuotas} onChange={f("total_cuotas")}
                         className={inputCls}
                       />
                     </div>
-                  </>
+                  </div>
                 )}
 
                 <div className="sm:col-span-2">
@@ -263,7 +263,6 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                   {form.payment_day_mode === "fixed" ? (
                     <input
                       type="number" min={1} max={28}
-                      placeholder="ej: 10"
                       value={form.payment_day} onChange={f("payment_day")}
                       className={inputCls + " mt-2"}
                     />
@@ -279,7 +278,6 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                     <label className="text-xs font-medium text-gray-600">Cuota en UVAs *</label>
                     <input
                       type="text" inputMode="decimal" required
-                      placeholder="ej: 750,74"
                       value={form.cuota_uva} onChange={f("cuota_uva")}
                       className={inputCls}
                     />
@@ -291,7 +289,6 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                     <label className="text-xs font-medium text-gray-600">Cuota mensual ($) *</label>
                     <input
                       type="text" inputMode="decimal" required
-                      placeholder="ej: 150.000,00"
                       value={form.cuota_pesos} onChange={f("cuota_pesos")}
                       className={inputCls}
                     />
@@ -304,7 +301,6 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                       <label className="text-xs font-medium text-gray-600">TNA % (opcional)</label>
                       <input
                         type="text" inputMode="decimal"
-                        placeholder="ej: 8,50"
                         value={form.tna} onChange={f("tna")}
                         className={inputCls}
                       />
@@ -313,7 +309,6 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                       <label className="text-xs font-medium text-gray-600">Capital original en UVAs (opcional)</label>
                       <input
                         type="text" inputMode="decimal"
-                        placeholder="para desglose capital/interés"
                         value={form.original_capital_uva} onChange={f("original_capital_uva")}
                         className={inputCls}
                       />
@@ -325,7 +320,6 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                   <label className="text-xs font-medium text-gray-600">Banco (opcional)</label>
                   <input
                     type="text"
-                    placeholder="ej: Banco Nación"
                     value={form.description} onChange={f("description")}
                     className={inputCls}
                   />
