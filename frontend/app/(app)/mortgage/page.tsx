@@ -580,7 +580,9 @@ export default function MortgagePage() {
             {records.map(r => (
               <div key={r.id} className="flex items-center justify-between px-4 py-3">
                 <div>
-                  <p className="text-sm font-medium text-gray-900">{fmtDate(r.period_date)}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {format(parseISO(r.period_date), "MMMM yyyy", { locale: es })}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {r.uva_units ? `${Number(r.uva_units).toFixed(2)} UVAs` : ""}
                     {r.capital ? ` · Capital ${formatARS(r.capital)}` : ""}
