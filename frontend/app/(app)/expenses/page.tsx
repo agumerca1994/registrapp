@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { formatARS, formatDate } from "@/lib/utils";
-import { Plus, Trash2, Pencil } from "lucide-react";
+import { Plus, Trash2, Pencil, X, ChevronRight } from "lucide-react";
 
 interface Category { id: number; name: string; color?: string; is_fixed: boolean; }
 interface ExpenseEntry {
@@ -14,6 +14,62 @@ interface ExpenseEntry {
 
 const EMPTY_FORM = { category_id: "", amount: "", description: "", expense_date: "", notes: "" };
 
+function EntryDetailModal({
+  entry, onEdit, onDelete, onClose,
+}: {
+  entry: ExpenseEntry; onEdit: () => void; onDelete: () => void; onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: entry.category.color || "#6366f1" }} />
+            <h3 className="font-semibold text-gray-900">{entry.description || entry.category.name}</h3>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="divide-y text-sm">
+          <div className="flex justify-between py-2">
+            <span className="text-muted-foreground">Fecha</span>
+            <span className="font-medium">{formatDate(entry.expense_date)}</span>
+          </div>
+          <div className="flex justify-between py-2">
+            <span className="text-muted-foreground">Categoria</span>
+            <span className="font-medium">{entry.category.name}</span>
+          </div>
+          {entry.description && entry.description !== entry.category.name && (
+            <div className="flex justify-between py-2 gap-4">
+              <span className="text-muted-foreground shrink-0">Descripcion</span>
+              <span className="font-medium text-right">{entry.description}</span>
+            </div>
+          )}
+          <div className="flex justify-between py-2">
+            <span className="font-medium text-gray-700">Monto</span>
+            <span className="font-bold text-red-500 text-base">{formatARS(entry.amount)}</span>
+          </div>
+          {entry.notes && (
+            <div className="flex justify-between py-2 gap-4">
+              <span className="text-muted-foreground shrink-0">Notas</span>
+              <span className="font-medium text-right">{entry.notes}</span>
+            </div>
+          )}
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button onClick={onDelete}
+            className="flex-1 flex items-center justify-center gap-1.5 border border-red-200 text-red-500 hover:bg-red-50 py-2.5 rounded-xl text-sm font-medium">
+            <Trash2 className="w-4 h-4" /> Eliminar
+          </button>
+          <button onClick={onEdit}
+            className="flex-1 flex items-center justify-center gap-1.5 bg-primary text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90">
+            <Pencil className="w-4 h-4" /> Editar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ExpensesPage() {
   const [entries, setEntries] = useState<ExpenseEntry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -23,6 +79,9 @@ export default function ExpensesPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [catForm, setCatForm] = useState({ name: "", color: "#6366f1", is_fixed: false });
   const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [detailEntry, setDetailEntry] = useState<ExpenseEntry | null>(null);
 
   const load = async () => {
     const [e, c] = await Promise.all([api.get("/expenses/entries"), api.get("/expenses/categories")]);
@@ -47,11 +106,8 @@ export default function ExpensesPage() {
     e.preventDefault();
     setLoading(true);
     const payload = { ...form, category_id: parseInt(form.category_id), amount: parseFloat(form.amount) };
-    if (editId) {
-      await api.patch(`/expenses/entries/${editId}`, payload);
-    } else {
-      await api.post("/expenses/entries", payload);
-    }
+    if (editId) await api.patch(`/expenses/entries/${editId}`, payload);
+    else await api.post("/expenses/entries", payload);
     closeForm();
     await load();
     setLoading(false);
@@ -66,10 +122,30 @@ export default function ExpensesPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("¿Eliminar este egreso?")) return;
+    if (!confirm("Eliminar este egreso?")) return;
     await api.delete(`/expenses/entries/${id}`);
+    setSelected(s => { const n = new Set(s); n.delete(id); return n; });
+    setDetailEntry(null);
     await load();
   };
+
+  const toggleSelect = (id: number) =>
+    setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const toggleAll = () =>
+    setSelected(s => s.size === entries.length ? new Set() : new Set(entries.map(e => e.id)));
+
+  const handleBulkDelete = async () => {
+    if (!confirm(`Eliminar ${selected.size} egreso${selected.size !== 1 ? "s" : ""}?`)) return;
+    setBulkDeleting(true);
+    await Promise.all([...selected].map(id => api.delete(`/expenses/entries/${id}`)));
+    setSelected(new Set());
+    await load();
+    setBulkDeleting(false);
+  };
+
+  const allSelected = entries.length > 0 && selected.size === entries.length;
+  const someSelected = selected.size > 0 && !allSelected;
 
   return (
     <div className="max-w-3xl space-y-4 md:space-y-6">
@@ -121,10 +197,10 @@ export default function ExpensesPage() {
           <p className="text-sm font-medium text-gray-700">{editId ? "Editar egreso" : "Nuevo egreso"}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-gray-600">Categoría</label>
+              <label className="text-xs font-medium text-gray-600">Categoria</label>
               <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
                 value={form.category_id} onChange={e => setForm(p => ({ ...p, category_id: e.target.value }))} required>
-                <option value="">Seleccioná una categoría</option>
+                <option value="">Selecciona una categoria</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
@@ -139,7 +215,7 @@ export default function ExpensesPage() {
                 value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} required />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600">Descripción</label>
+              <label className="text-xs font-medium text-gray-600">Descripcion</label>
               <input className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
                 value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
             </div>
@@ -154,31 +230,67 @@ export default function ExpensesPage() {
       )}
 
       <div className="bg-white rounded-xl border divide-y">
-        {entries.length === 0 ? (
-          <p className="p-6 text-muted-foreground text-sm">No hay egresos registrados aún.</p>
-        ) : entries.map(entry => (
-          <div key={entry.id} className="flex items-center justify-between px-3 md:px-5 py-3 md:py-4 gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.category.color || "#6366f1" }} />
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {entry.description || entry.category.name}
-                </p>
-                <p className="text-xs text-muted-foreground">{formatDate(entry.expense_date)} · {entry.category.name}</p>
+        {entries.length > 0 && (
+          <div className="flex items-center gap-3 px-3 md:px-5 py-2 bg-gray-50 rounded-t-xl">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={el => { if (el) el.indeterminate = someSelected; }}
+              onChange={toggleAll}
+              className="w-4 h-4 rounded cursor-pointer"
+            />
+            {selected.size > 0 ? (
+              <div className="flex items-center gap-3 flex-1">
+                <span className="text-sm text-gray-600">{selected.size} seleccionado{selected.size !== 1 ? "s" : ""}</span>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleting}
+                  className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700 disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {bulkDeleting ? "Eliminando..." : "Eliminar seleccionados"}
+                </button>
               </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-sm font-semibold text-red-500">{formatARS(entry.amount)}</span>
-              <button onClick={() => openEdit(entry)} className="text-gray-400 hover:text-primary p-1">
-                <Pencil className="w-4 h-4" />
-              </button>
-              <button onClick={() => handleDelete(entry.id)} className="text-gray-400 hover:text-destructive p-1">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
+            ) : (
+              <span className="text-xs text-muted-foreground">Seleccionar todos</span>
+            )}
+          </div>
+        )}
+
+        {entries.length === 0 ? (
+          <p className="p-6 text-muted-foreground text-sm">No hay egresos registrados.</p>
+        ) : entries.map(entry => (
+          <div key={entry.id} className="flex items-center gap-2 px-3 md:px-4 py-3">
+            <input
+              type="checkbox"
+              checked={selected.has(entry.id)}
+              onChange={() => toggleSelect(entry.id)}
+              className="w-4 h-4 rounded cursor-pointer shrink-0"
+            />
+            <button
+              className="flex-1 flex items-center gap-2 min-w-0 text-left hover:opacity-80 active:opacity-60"
+              onClick={() => setDetailEntry(entry)}
+            >
+              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.category.color || "#6366f1" }} />
+              <span className="flex-1 text-sm font-medium text-gray-900 truncate">
+                {entry.description || entry.category.name}
+              </span>
+              <span className="text-xs text-muted-foreground shrink-0">{formatDate(entry.expense_date)}</span>
+              <span className="text-sm font-semibold text-red-500 shrink-0">{formatARS(entry.amount)}</span>
+              <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
+            </button>
           </div>
         ))}
       </div>
+
+      {detailEntry && (
+        <EntryDetailModal
+          entry={detailEntry}
+          onEdit={() => { setDetailEntry(null); openEdit(detailEntry); }}
+          onDelete={() => handleDelete(detailEntry.id)}
+          onClose={() => setDetailEntry(null)}
+        />
+      )}
     </div>
   );
 }
