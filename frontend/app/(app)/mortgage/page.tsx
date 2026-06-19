@@ -228,15 +228,15 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                   <>
                     <div className="sm:col-span-2">
                       <label className="text-xs font-medium text-gray-600">Primera cuota *</label>
-                      <div className="mt-1 flex gap-2">
+                      <div className="mt-1 grid grid-cols-2 gap-2">
                         <select
                           value={fpMonth}
                           onChange={e => setFpMonth(e.target.value)}
                           required
-                          className={inputCls + " flex-1"}
+                          className="w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm bg-white"
                         >
                           <option value="">Mes</option>
-                          {["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"].map((m, i) => (
+                          {["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"].map((m, i) => (
                             <option key={i} value={String(i + 1).padStart(2, "0")}>{m}</option>
                           ))}
                         </select>
@@ -244,7 +244,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                           value={fpYear}
                           onChange={e => setFpYear(e.target.value)}
                           required
-                          className={inputCls + " w-28"}
+                          className="w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm bg-white"
                         >
                           <option value="">Año</option>
                           {Array.from({ length: 16 }, (_, i) => 2016 + i).map(y => (
