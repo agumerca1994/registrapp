@@ -23,6 +23,7 @@ const MACRO_VAR_DEFS = [
 
 type MacroVarKey = typeof MACRO_VAR_DEFS[number]["key"];
 const PCT_KEYS = new Set<MacroVarKey>(["inflation_monthly_pct", "inflation_interanual_pct"]);
+const IDX_KEYS = new Set<MacroVarKey>(["icl"]);
 
 interface MacroVar {
   id: number; period_date: string; source?: string;
@@ -34,7 +35,9 @@ interface MacroVar {
 
 function fmt(key: MacroVarKey, value?: number): string {
   if (value == null) return "—";
-  return PCT_KEYS.has(key) ? formatPct(value) : formatARS(value);
+  if (PCT_KEYS.has(key)) return formatPct(value);
+  if (IDX_KEYS.has(key)) return new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+  return formatARS(value);
 }
 
 const THIS_YEAR = new Date().getFullYear();
