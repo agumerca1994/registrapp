@@ -14,7 +14,7 @@ interface IncomeEntry {
   source: IncomeSource;
 }
 
-interface MacroPoint { period_date: string; inflation_monthly_pct: number | null; }
+interface MacroPoint { period_date: string; inflation_monthly_pct: number | null; usd_official: number | null; }
 
 const INCOME_TYPE_LABELS: Record<string, string> = {
   salary: "Sueldo", bonus: "Bono", aguinaldo: "Aguinaldo",
@@ -486,17 +486,23 @@ export default function IncomePage() {
           const curr = byMonth[m];
           const incomeChg = prev > 0 ? ((curr - prev) / prev) * 100 : 0;
           const macroRow = macro.find(r => r.period_date.startsWith(m));
+          const prevMacroRow = macro.find(r => r.period_date.startsWith(months[i]));
+          const usdCurr = macroRow?.usd_official != null ? Number(macroRow.usd_official) : null;
+          const usdPrev = prevMacroRow?.usd_official != null ? Number(prevMacroRow.usd_official) : null;
+          const usdChg = usdCurr != null && usdPrev != null && usdPrev > 0
+            ? ((usdCurr - usdPrev) / usdPrev) * 100 : null;
           const [y, mo] = m.split("-");
           const label = `${mo}/${y.slice(2)}`;
           return {
             label,
             Ingreso: parseFloat(incomeChg.toFixed(1)),
             Inflacion: macroRow?.inflation_monthly_pct != null ? parseFloat(Number(macroRow.inflation_monthly_pct).toFixed(1)) : null,
+            Dolar: usdChg != null ? parseFloat(usdChg.toFixed(1)) : null,
           };
         });
         return (
           <div className="bg-white rounded-xl border p-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Variacion mensual: ingreso vs inflacion (%)</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Variacion mensual: ingreso, inflacion y dolar oficial (%)</h3>
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -506,6 +512,7 @@ export default function IncomePage() {
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Line type="monotone" dataKey="Ingreso" stroke="#22c55e" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
                 <Line type="monotone" dataKey="Inflacion" stroke="#ef4444" strokeWidth={2} dot={false} activeDot={{ r: 4 }} strokeDasharray="4 2" />
+                <Line type="monotone" dataKey="Dolar" stroke="#f59e0b" strokeWidth={2} dot={false} activeDot={{ r: 4 }} strokeDasharray="2 2" />
               </LineChart>
             </ResponsiveContainer>
           </div>
