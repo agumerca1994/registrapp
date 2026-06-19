@@ -15,21 +15,32 @@ interface Member {
 
 const ROLE_LABELS: Record<string, string> = { admin: "Admin", member: "Miembro" };
 
+const COUNTRIES = [
+  { flag: "🇦🇷", prefix: "54", placeholder: "9 351 234 5678" },
+  { flag: "🇺🇾", prefix: "598", placeholder: "9 234 5678" },
+  { flag: "🇨🇱", prefix: "56", placeholder: "9 1234 5678" },
+  { flag: "🇧🇷", prefix: "55", placeholder: "11 98765 4321" },
+  { flag: "🇵🇾", prefix: "595", placeholder: "981 234 567" },
+];
+
 function WhatsAppSection() {
   const { appUser, refreshUser } = useAuth();
   const [phase, setPhase] = useState<"idle" | "pending">("idle");
-  const [phone, setPhone] = useState("");
+  const [prefix, setPrefix] = useState("54");
+  const [localPhone, setLocalPhone] = useState("");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const isLinked = !!appUser?.whatsapp_phone;
+  const fullPhone = prefix + localPhone.replace(/\D/g, "");
+  const country = COUNTRIES.find(c => c.prefix === prefix) ?? COUNTRIES[0];
 
   const sendCode = async () => {
-    if (!phone.trim()) return;
+    if (!localPhone.trim()) return;
     setLoading(true); setError("");
     try {
-      await api.post("/auth/me/link-whatsapp", { phone: phone.trim() });
+      await api.post("/auth/me/link-whatsapp", { phone: fullPhone });
       setPhase("pending");
     } catch (e: any) {
       setError(e.response?.data?.detail ?? "Error al enviar el código");
@@ -42,9 +53,9 @@ function WhatsAppSection() {
     if (!code.trim()) return;
     setLoading(true); setError("");
     try {
-      await api.post("/auth/me/verify-whatsapp", { phone: phone.trim(), code: code.trim() });
+      await api.post("/auth/me/verify-whatsapp", { phone: fullPhone, code: code.trim() });
       await refreshUser();
-      setPhase("idle"); setPhone(""); setCode("");
+      setPhase("idle"); setLocalPhone(""); setCode("");
     } catch (e: any) {
       setError(e.response?.data?.detail ?? "Código incorrecto o expirado");
     } finally {
@@ -95,28 +106,42 @@ function WhatsAppSection() {
             Vinculá tu número para registrar egresos enviando un mensaje de WhatsApp al bot.
           </p>
           <div className="flex gap-2">
+            <select
+              value={prefix}
+              onChange={e => { setPrefix(e.target.value); setLocalPhone(""); }}
+              className="border rounded-lg px-2 py-2 text-sm bg-white shrink-0"
+            >
+              {COUNTRIES.map(c => (
+                <option key={c.prefix} value={c.prefix}>
+                  {c.flag} +{c.prefix}
+                </option>
+              ))}
+            </select>
             <input
               type="tel"
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              placeholder="5491112345678"
-              className="flex-1 border rounded-lg px-3 py-2 text-sm"
+              value={localPhone}
+              onChange={e => setLocalPhone(e.target.value.replace(/[^\d\s]/g, ""))}
+              placeholder={country.placeholder}
+              inputMode="numeric"
+              className="flex-1 border rounded-lg px-3 py-2 text-sm min-w-0"
             />
             <button
               onClick={sendCode}
-              disabled={loading || !phone.trim()}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50"
+              disabled={loading || !localPhone.trim()}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50 shrink-0"
             >
               {loading ? "Enviando..." : "Enviar código"}
             </button>
           </div>
-          <p className="text-xs text-muted-foreground">Formato internacional sin +. Ej: 5491112345678</p>
+          <p className="text-xs text-muted-foreground">
+            Número sin el código de país. Para Argentina ingresá el 9 antes del área: <span className="font-mono">9 351 2345678</span>
+          </p>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
       ) : (
         <div className="space-y-3">
           <p className="text-sm text-gray-700">
-            Te enviamos un código de 6 dígitos al <span className="font-medium">+{phone}</span> por WhatsApp.
+            Te enviamos un código de 6 dígitos al <span className="font-medium">+{fullPhone}</span> por WhatsApp.
           </p>
           <div className="flex gap-2">
             <input
