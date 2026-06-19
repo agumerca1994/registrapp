@@ -275,8 +275,8 @@ export default function ExpensesPage() {
               <span className="flex-1 text-sm font-medium text-gray-900 truncate">
                 {entry.description || entry.category.name}
               </span>
-              <span className="text-xs text-muted-foreground shrink-0">{formatDate(entry.expense_date)}</span>
-              <span className="text-sm font-semibold text-red-500 shrink-0">{formatARS(entry.amount)}</span>
+              <span className="w-24 text-xs text-muted-foreground shrink-0 text-right truncate">{formatDate(entry.expense_date)}</span>
+              <span className="w-28 text-sm font-semibold text-red-500 shrink-0 text-right">{formatARS(entry.amount)}</span>
               <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
             </button>
           </div>
