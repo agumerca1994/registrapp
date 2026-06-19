@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update as sa_update
 from datetime import date
 from decimal import Decimal
 import calendar
 
-from app.core.database import get_db
+from app.core.database import get_db, AsyncSessionLocal
 from app.core.firebase import get_current_user
 from app.models.user import User
 from app.models.mortgage import MortgageLoan, MortgageRecord
@@ -13,10 +14,11 @@ from app.models.expense import ExpenseCategory, ExpenseEntry
 from app.models.macro_variable import MacroVariable
 from app.schemas.mortgage import (
     MortgageLoanCreate, MortgageLoanUpdate, MortgageLoanOut,
-    MortgageSummary, MortgageRecordCreate, MortgageRecordOut,
+    MortgageSummary, MortgageRecordOut,
 )
 
 router = APIRouter(prefix="/mortgage", tags=["mortgage"])
+logger = logging.getLogger(__name__)
 
 HIPOTECA_CATEGORY_NAME = "Hipoteca"
 HIPOTECA_CATEGORY_COLOR = "#6366f1"
@@ -68,7 +70,7 @@ def _compute_cuota_numero(first_payment_date: date) -> int:
 
 
 def _compute_breakdown(loan: MortgageLoan, cuota_numero: int) -> tuple[Decimal | None, Decimal | None]:
-    """Compute capital/interest UVA split for Sistema Francés if TNA and original capital available."""
+    """Compute capital/interest UVA split for Sistema Francés."""
     if loan.loan_type != "uva_frances" or not loan.tna or not loan.original_capital_uva or not loan.cuota_uva:
         return None, None
     i = loan.tna / 12 / 100
@@ -86,13 +88,16 @@ def _compute_breakdown(loan: MortgageLoan, cuota_numero: int) -> tuple[Decimal |
     return capital_n, interes_n
 
 
-async def _backfill_past_cuotas(loan: MortgageLoan, user_id: int, db: AsyncSession) -> int:
-    """Register all past cuotas from first_payment_date up to (but not including) the current month."""
+async def _sync_loan_cuotas(loan: MortgageLoan, user_id: int, db: AsyncSession) -> int:
+    """Register all cuotas whose payment_date <= today and haven't been recorded yet.
+
+    Includes the current month if the payment date has already passed.
+    This is idempotent — existing records are skipped.
+    """
     if loan.loan_type == "tasa_variable":
-        return 0  # Can't backfill without historical amounts
+        return 0  # Can't auto-calculate historical amounts
 
     today = date.today()
-    current_month_start = date(today.year, today.month, 1)
     cat = await _get_or_create_hipoteca_category(loan.tenant_id, user_id, db)
     registered = 0
 
@@ -100,9 +105,13 @@ async def _backfill_past_cuotas(loan: MortgageLoan, user_id: int, db: AsyncSessi
     cur_month = loan.first_payment_date.month
 
     while True:
-        month_start = date(cur_year, cur_month, 1)
-        if month_start >= current_month_start:
+        payment_date = _compute_payment_date(cur_year, cur_month, loan.payment_day)
+
+        # Stop when we reach a month whose payment date is in the future
+        if payment_date > today:
             break
+
+        month_start = date(cur_year, cur_month, 1)
 
         existing = await db.scalar(
             select(MortgageRecord).where(
@@ -111,9 +120,6 @@ async def _backfill_past_cuotas(loan: MortgageLoan, user_id: int, db: AsyncSessi
             )
         )
         if not existing:
-            payment_date = _compute_payment_date(cur_year, cur_month, loan.payment_day)
-
-            # Look up UVA value closest to (but not after) payment_date
             uva_value: Decimal | None = None
             if loan.loan_type in UVA_LOAN_TYPES and loan.cuota_uva:
                 macro = await db.scalar(
@@ -136,8 +142,8 @@ async def _backfill_past_cuotas(loan: MortgageLoan, user_id: int, db: AsyncSessi
                 uva_units = loan.cuota_uva
                 if uva_value:
                     payment_amount = loan.cuota_uva * uva_value
-                    cuota_numero_hist = (cur_year - loan.first_payment_date.year) * 12 + (cur_month - loan.first_payment_date.month) + 1
-                    cap_uva, int_uva = _compute_breakdown(loan, cuota_numero_hist)
+                    cuota_n = (cur_year - loan.first_payment_date.year) * 12 + (cur_month - loan.first_payment_date.month) + 1
+                    cap_uva, int_uva = _compute_breakdown(loan, cuota_n)
                     if cap_uva is not None:
                         capital = cap_uva * uva_value
                         interest = int_uva * uva_value
@@ -179,6 +185,28 @@ async def _backfill_past_cuotas(loan: MortgageLoan, user_id: int, db: AsyncSessi
     return registered
 
 
+async def sync_all_active_loans():
+    """Cron entry point: auto-register due cuotas for all active loans."""
+    async with AsyncSessionLocal() as db:
+        try:
+            loans = (await db.scalars(
+                select(MortgageLoan).where(MortgageLoan.is_active == True)
+            )).all()
+            total = 0
+            for loan in loans:
+                user = await db.scalar(
+                    select(User).where(User.tenant_id == loan.tenant_id).limit(1)
+                )
+                if user:
+                    total += await _sync_loan_cuotas(loan, user.id, db)
+            await db.commit()
+            if total:
+                logger.info(f"Mortgage auto-sync: registered {total} cuotas")
+        except Exception as e:
+            logger.error(f"Mortgage auto-sync failed: {e}")
+            await db.rollback()
+
+
 # ── Loan CRUD ──────────────────────────────────────────────────────────────────
 
 @router.get("/loans", response_model=list[MortgageLoanOut])
@@ -205,7 +233,7 @@ async def create_loan(
     loan = MortgageLoan(**body.model_dump(), tenant_id=user.tenant_id)
     db.add(loan)
     await db.flush()
-    await _backfill_past_cuotas(loan, user.id, db)
+    await _sync_loan_cuotas(loan, user.id, db)
     await db.commit()
     await db.refresh(loan)
     return loan
@@ -232,6 +260,7 @@ async def update_loan(
 @router.delete("/loans/{loan_id}", status_code=204)
 async def delete_loan(
     loan_id: int,
+    keep_history: bool = Query(default=True),
     firebase_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -239,7 +268,29 @@ async def delete_loan(
     loan = await db.get(MortgageLoan, loan_id)
     if not loan or loan.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Préstamo no encontrado")
-    loan.is_active = False
+
+    if keep_history:
+        # Orphan the records (keep expenses and records, but detach from this loan)
+        await db.execute(
+            sa_update(MortgageRecord)
+            .where(MortgageRecord.mortgage_loan_id == loan_id)
+            .values(mortgage_loan_id=None)
+        )
+        await db.flush()
+    else:
+        # Delete all linked records and their expense entries
+        records = (await db.scalars(
+            select(MortgageRecord).where(MortgageRecord.mortgage_loan_id == loan_id)
+        )).all()
+        for rec in records:
+            if rec.expense_entry_id:
+                expense = await db.get(ExpenseEntry, rec.expense_entry_id)
+                if expense:
+                    await db.delete(expense)
+            await db.delete(rec)
+        await db.flush()
+
+    await db.delete(loan)
     await db.commit()
 
 
@@ -261,7 +312,6 @@ async def loan_summary(
     cuotas_restantes = max(0, loan.total_cuotas - cuota_numero + 1)
     pct_completado = round((cuota_numero - 1) / loan.total_cuotas * 100, 1)
 
-    # Latest UVA value
     macro = await db.scalar(
         select(MacroVariable)
         .where(MacroVariable.uva_value.is_not(None))
@@ -275,7 +325,6 @@ async def loan_summary(
     elif loan.loan_type == "tasa_fija":
         cuota_pesos_calculado = loan.cuota_pesos
 
-    # Check if current month already paid
     month_start = date(today.year, today.month, 1)
     month_end = date(today.year, today.month + 1, 1) if today.month < 12 else date(today.year + 1, 1, 1)
     paid_record = await db.scalar(
@@ -285,6 +334,14 @@ async def loan_summary(
             MortgageRecord.period_date < month_end,
         )
     )
+
+    # Next payment date: next month if current month is already paid
+    if paid_record:
+        nm = today.month + 1 if today.month < 12 else 1
+        ny = today.year if today.month < 12 else today.year + 1
+        next_payment_date = _compute_payment_date(ny, nm, loan.payment_day)
+    else:
+        next_payment_date = _compute_payment_date(today.year, today.month, loan.payment_day)
 
     return MortgageSummary(
         loan=MortgageLoanOut.model_validate(loan),
@@ -297,129 +354,11 @@ async def loan_summary(
         cuota_pesos_calculado=cuota_pesos_calculado,
         paid_this_month=paid_record is not None,
         mortgage_record_id=paid_record.id if paid_record else None,
+        next_payment_date=next_payment_date,
     )
 
 
-# ── Pay (register this month's cuota as expense) ──────────────────────────────
-
-@router.post("/loans/{loan_id}/pay", response_model=MortgageRecordOut, status_code=201)
-async def pay_cuota(
-    loan_id: int,
-    amount_pesos: Decimal | None = None,  # required for tasa_variable
-    firebase_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    user = await _get_db_user(firebase_user, db)
-    loan = await db.get(MortgageLoan, loan_id)
-    if not loan or loan.tenant_id != user.tenant_id:
-        raise HTTPException(status_code=404, detail="Préstamo no encontrado")
-
-    today = date.today()
-    month_start = date(today.year, today.month, 1)
-    month_end = date(today.year, today.month + 1, 1) if today.month < 12 else date(today.year + 1, 1, 1)
-
-    # Prevent double-registration
-    existing = await db.scalar(
-        select(MortgageRecord).where(
-            MortgageRecord.mortgage_loan_id == loan_id,
-            MortgageRecord.period_date >= month_start,
-            MortgageRecord.period_date < month_end,
-        )
-    )
-    if existing:
-        raise HTTPException(status_code=409, detail="Ya existe un pago registrado para este mes")
-
-    # Calculate amount
-    macro = await db.scalar(
-        select(MacroVariable)
-        .where(MacroVariable.uva_value.is_not(None))
-        .order_by(MacroVariable.period_date.desc())
-        .limit(1)
-    )
-
-    payment_amount: Decimal
-    uva_units: Decimal | None = None
-    capital: Decimal | None = None
-    interest: Decimal | None = None
-
-    if loan.loan_type in UVA_LOAN_TYPES:
-        if not loan.cuota_uva:
-            raise HTTPException(status_code=422, detail="Préstamo sin cuota UVA configurada")
-        if not macro or not macro.uva_value:
-            raise HTTPException(status_code=422, detail="No hay valor UVA disponible para calcular la cuota")
-        uva_units = loan.cuota_uva
-        payment_amount = loan.cuota_uva * macro.uva_value
-
-        # Capital/interest breakdown if TNA and original capital available
-        cuota_numero = _compute_cuota_numero(loan.first_payment_date)
-        cap_uva, int_uva = _compute_breakdown(loan, cuota_numero)
-        if cap_uva is not None and macro.uva_value:
-            capital = cap_uva * macro.uva_value
-            interest = int_uva * macro.uva_value
-
-    elif loan.loan_type == "tasa_fija":
-        if not loan.cuota_pesos:
-            raise HTTPException(status_code=422, detail="Préstamo sin cuota en pesos configurada")
-        payment_amount = loan.cuota_pesos
-
-    elif loan.loan_type == "tasa_variable":
-        if amount_pesos is None:
-            raise HTTPException(status_code=422, detail="Debe indicar el monto de la cuota (tasa variable)")
-        payment_amount = amount_pesos
-
-    else:
-        raise HTTPException(status_code=422, detail="Tipo de préstamo desconocido")
-
-    # Create expense entry
-    cat = await _get_or_create_hipoteca_category(user.tenant_id, user.id, db)
-    payment_date = _compute_payment_date(today.year, today.month, loan.payment_day)
-    expense = ExpenseEntry(
-        tenant_id=user.tenant_id,
-        user_id=user.id,
-        category_id=cat.id,
-        amount=payment_amount,
-        description=f"Cuota hipotecaria{' ' + loan.description if loan.description else ''}",
-        expense_date=payment_date,
-        notes=f"{uva_units} UVAs" if uva_units else None,
-    )
-    db.add(expense)
-    await db.flush()
-
-    # Create mortgage record (detailed breakdown)
-    record = MortgageRecord(
-        tenant_id=user.tenant_id,
-        mortgage_loan_id=loan_id,
-        expense_entry_id=expense.id,
-        period_date=month_start,
-        payment_amount=payment_amount,
-        capital=capital,
-        interest=interest,
-        uva_units=uva_units,
-    )
-    db.add(record)
-    await db.commit()
-    await db.refresh(record)
-    return record
-
-
-# ── Backfill on demand ────────────────────────────────────────────────────────
-
-@router.post("/loans/{loan_id}/backfill")
-async def backfill_loan(
-    loan_id: int,
-    firebase_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    user = await _get_db_user(firebase_user, db)
-    loan = await db.get(MortgageLoan, loan_id)
-    if not loan or loan.tenant_id != user.tenant_id:
-        raise HTTPException(status_code=404, detail="Préstamo no encontrado")
-    registered = await _backfill_past_cuotas(loan, user.id, db)
-    await db.commit()
-    return {"registered": registered}
-
-
-# ── Legacy endpoints (manual entry, kept for backward compatibility) ───────────
+# ── Records (history display + manual delete) ──────────────────────────────────
 
 @router.get("", response_model=list[MortgageRecordOut])
 async def list_records(
@@ -435,33 +374,6 @@ async def list_records(
     return result.all()
 
 
-@router.put("", response_model=MortgageRecordOut)
-async def upsert_record(
-    body: MortgageRecordCreate,
-    firebase_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    user = await _get_db_user(firebase_user, db)
-    existing = await db.scalar(
-        select(MortgageRecord).where(
-            MortgageRecord.tenant_id == user.tenant_id,
-            MortgageRecord.period_date == body.period_date,
-        )
-    )
-    if existing:
-        for field, value in body.model_dump(exclude={"period_date"}).items():
-            if value is not None:
-                setattr(existing, field, value)
-        await db.commit()
-        await db.refresh(existing)
-        return existing
-    record = MortgageRecord(**body.model_dump(), tenant_id=user.tenant_id)
-    db.add(record)
-    await db.commit()
-    await db.refresh(record)
-    return record
-
-
 @router.delete("/{record_id}", status_code=204)
 async def delete_record(
     record_id: int,
@@ -472,7 +384,6 @@ async def delete_record(
     record = await db.get(MortgageRecord, record_id)
     if not record or record.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
-    # Also delete linked expense entry if auto-generated
     if record.expense_entry_id:
         expense = await db.get(ExpenseEntry, record.expense_entry_id)
         if expense:

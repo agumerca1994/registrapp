@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { format, parseISO } from "date-fns";
+import { es } from "date-fns/locale";
 import api from "@/lib/api";
 import { formatARS, formatDate } from "@/lib/utils";
-import { Settings2, X, Loader2, ChevronRight, CheckCircle2, Home } from "lucide-react";
+import { Settings2, X, Loader2, Home, Trash2 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -32,6 +34,7 @@ interface MortgageSummary {
   cuota_pesos_calculado: number | null;
   paid_this_month: boolean;
   mortgage_record_id: number | null;
+  next_payment_date: string;
 }
 
 interface MortgageRecord {
@@ -56,7 +59,7 @@ const LOAN_TYPE_DESC: Record<string, string> = {
   uva_frances:   "Cuota fija en UVAs, el monto en pesos varía con el índice UVA",
   uva_aleman:    "Capital fijo en UVAs por cuota, interés decrece cada mes",
   tasa_fija:     "Cuota fija en pesos, sin ajuste por inflación",
-  tasa_variable: "Registrás el monto de la cuota manualmente cada mes",
+  tasa_variable: "Sin auto-registro (tipo sin monto predecible)",
 };
 
 const EMPTY_FORM = {
@@ -65,13 +68,18 @@ const EMPTY_FORM = {
   loan_number: "",
   total_cuotas: "240",
   first_payment_date: "",
-  payment_day_mode: "biz" as "biz" | "fixed", // "biz" = primer día hábil, "fixed" = día específico
+  payment_day_mode: "biz" as "biz" | "fixed",
   payment_day: "",
   cuota_uva: "",
   cuota_pesos: "",
   tna: "",
   original_capital_uva: "",
 };
+
+function fmtDate(iso: string) {
+  try { return format(parseISO(iso), "d MMM yyyy", { locale: es }); }
+  catch { return iso; }
+}
 
 // ── Config Modal ───────────────────────────────────────────────────────────────
 
@@ -81,8 +89,6 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
   onSaved: () => void;
 }) {
   const [step, setStep] = useState<1 | 2>(editLoan ? 2 : 1);
-  const [backfilling, setBackfilling] = useState(false);
-  const [backfillMsg, setBackfillMsg] = useState("");
   const [form, setForm] = useState({
     ...EMPTY_FORM,
     loan_type: editLoan?.loan_type ?? "",
@@ -104,13 +110,12 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
     setForm(p => ({ ...p, [k]: e.target.value }));
 
   const isUva = form.loan_type === "uva_frances" || form.loan_type === "uva_aleman";
+  const paymentDay = form.payment_day_mode === "fixed" && form.payment_day ? parseInt(form.payment_day) : null;
 
   const handleSave = async () => {
     setError("");
     setSaving(true);
     try {
-      const paymentDay = form.payment_day_mode === "fixed" && form.payment_day ? parseInt(form.payment_day) : null;
-
       if (editLoan) {
         await api.patch(`/mortgage/loans/${editLoan.id}`, {
           description: form.description || null,
@@ -209,7 +214,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                 </>
               )}
 
-              {/* Payment day — always shown */}
+              {/* Payment day */}
               <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-gray-600">Fecha de pago de la cuota</label>
                 <div className="mt-1 flex gap-2">
@@ -228,15 +233,14 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                     Día específico
                   </button>
                 </div>
-                {form.payment_day_mode === "fixed" && (
+                {form.payment_day_mode === "fixed" ? (
                   <input
                     type="number" min={1} max={28}
                     placeholder="ej: 10"
                     value={form.payment_day} onChange={f("payment_day")}
                     className="mt-2 w-full border rounded-lg px-3 py-2 text-sm"
                   />
-                )}
-                {form.payment_day_mode === "biz" && (
+                ) : (
                   <p className="text-xs text-muted-foreground mt-1.5">
                     Si el 1° cae sábado o domingo, se usa el lunes siguiente.
                   </p>
@@ -310,37 +314,11 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
             </div>
 
             {error && <p className="text-xs text-red-600">{error}</p>}
-            {backfillMsg && <p className="text-xs text-green-700">{backfillMsg}</p>}
 
             <div className="flex justify-end gap-2 pt-1">
-              <button type="button" onClick={onClose}
-                className="border px-4 py-2 rounded-lg text-sm">
+              <button type="button" onClick={onClose} className="border px-4 py-2 rounded-lg text-sm">
                 Cancelar
               </button>
-              {editLoan && (
-                <button
-                  type="button"
-                  disabled={backfilling}
-                  onClick={async () => {
-                    setBackfillMsg("");
-                    setBackfilling(true);
-                    try {
-                      const r = await api.post(`/mortgage/loans/${editLoan.id}/backfill`);
-                      const n = r.data.registered;
-                      setBackfillMsg(n > 0 ? `${n} cuotas históricas generadas.` : "No había cuotas pendientes.");
-                      onSaved();
-                    } catch {
-                      setBackfillMsg("Error al generar cuotas históricas.");
-                    } finally {
-                      setBackfilling(false);
-                    }
-                  }}
-                  className="border px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  {backfilling && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  Generar cuotas históricas
-                </button>
-              )}
               <button
                 onClick={handleSave}
                 disabled={saving}
@@ -357,33 +335,64 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
   );
 }
 
-// ── Variable amount modal ──────────────────────────────────────────────────────
+// ── Delete confirmation modal ──────────────────────────────────────────────────
 
-function PayVariableModal({ onConfirm, onClose }: {
-  onConfirm: (amount: number) => void;
+function DeleteLoanModal({ loanId, onClose, onDeleted }: {
+  loanId: number;
   onClose: () => void;
+  onDeleted: () => void;
 }) {
-  const [amount, setAmount] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async (keepHistory: boolean) => {
+    setDeleting(true);
+    try {
+      await api.delete(`/mortgage/loans/${loanId}?keep_history=${keepHistory}`);
+      onDeleted();
+      onClose();
+    } catch {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-xs p-5 space-y-4" onClick={e => e.stopPropagation()}>
-        <h3 className="font-semibold text-gray-900">Monto de la cuota</h3>
-        <input
-          type="number" step="0.01" autoFocus
-          placeholder="$0,00"
-          value={amount} onChange={e => setAmount(e.target.value)}
-          className="w-full border rounded-lg px-3 py-2 text-sm"
-        />
-        <div className="flex gap-2 justify-end">
-          <button onClick={onClose} className="border px-4 py-2 rounded-lg text-sm">Cancelar</button>
-          <button
-            onClick={() => amount && onConfirm(parseFloat(amount))}
-            disabled={!amount}
-            className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50"
-          >
-            Registrar
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">Eliminar hipoteca</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1">
+            <X className="w-5 h-5" />
           </button>
         </div>
+        <p className="text-sm text-gray-600">¿Qué querés hacer con el historial de cuotas pagadas?</p>
+        <div className="space-y-2">
+          <button
+            disabled={deleting}
+            onClick={() => handleDelete(true)}
+            className="w-full text-left border rounded-xl p-3.5 hover:border-gray-400 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          >
+            <p className="text-sm font-medium text-gray-900">Mantener el historial</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Se eliminan los datos de la hipoteca pero se conservan los egresos y el historial de pagos.
+            </p>
+          </button>
+          <button
+            disabled={deleting}
+            onClick={() => handleDelete(false)}
+            className="w-full text-left border border-red-200 rounded-xl p-3.5 hover:border-red-400 hover:bg-red-50 disabled:opacity-50 transition-colors"
+          >
+            <p className="text-sm font-medium text-red-700">Eliminar todo</p>
+            <p className="text-xs text-red-500 mt-0.5">
+              Se eliminan la hipoteca, todos los registros de cuotas y los egresos generados automáticamente.
+            </p>
+          </button>
+        </div>
+        {deleting && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Eliminando...
+          </div>
+        )}
       </div>
     </div>
   );
@@ -398,8 +407,7 @@ export default function MortgagePage() {
   const [loading, setLoading] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
   const [editLoan, setEditLoan] = useState<MortgageLoan | null>(null);
-  const [paying, setPaying] = useState(false);
-  const [showVariableModal, setShowVariableModal] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
 
   const activeLoan = loans.find(l => l.is_active) ?? null;
 
@@ -424,28 +432,11 @@ export default function MortgagePage() {
     load().finally(() => setLoading(false));
   }, []);
 
-  const handlePay = async (amountPesos?: number) => {
-    if (!activeLoan) return;
-    setPaying(true);
-    try {
-      const params = amountPesos != null ? `?amount_pesos=${amountPesos}` : "";
-      await api.post(`/mortgage/loans/${activeLoan.id}/pay${params}`);
-      await load();
-    } catch (e: any) {
-      alert(e.response?.data?.detail ?? "Error al registrar la cuota");
-    } finally {
-      setPaying(false);
-    }
-  };
-
   const handleDeleteRecord = async (id: number) => {
     if (!confirm("¿Eliminar este registro? También se eliminará el egreso generado.")) return;
     await api.delete(`/mortgage/${id}`);
     await load();
   };
-
-  const today = new Date();
-  const monthName = today.toLocaleString("es-AR", { month: "long", year: "numeric" });
 
   if (loading) {
     return <div className="max-w-3xl p-6 text-muted-foreground text-sm">Cargando...</div>;
@@ -462,13 +453,22 @@ export default function MortgagePage() {
           )}
         </div>
         {activeLoan && (
-          <button
-            onClick={() => { setEditLoan(activeLoan); setShowConfig(true); }}
-            className="border p-1.5 rounded-lg hover:bg-gray-50 transition-colors"
-            title="Editar configuración"
-          >
-            <Settings2 className="w-4 h-4 text-gray-600" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowDelete(true)}
+              className="border p-1.5 rounded-lg hover:bg-red-50 hover:border-red-200 transition-colors"
+              title="Eliminar hipoteca"
+            >
+              <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-500" />
+            </button>
+            <button
+              onClick={() => { setEditLoan(activeLoan); setShowConfig(true); }}
+              className="border p-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+              title="Editar configuración"
+            >
+              <Settings2 className="w-4 h-4 text-gray-600" />
+            </button>
+          </div>
         )}
       </div>
 
@@ -481,7 +481,7 @@ export default function MortgagePage() {
           <div>
             <p className="text-sm font-medium text-gray-900">No tenés ninguna hipoteca configurada</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Configurá tu hipoteca para que el sistema calcule y registre la cuota mensual automáticamente.
+              Configurá tu hipoteca y el sistema registrará las cuotas automáticamente cada mes.
             </p>
           </div>
           <button
@@ -526,7 +526,7 @@ export default function MortgagePage() {
                 = {formatARS(summary.cuota_pesos_calculado)}
                 {summary.latest_uva_value && summary.latest_uva_date && (
                   <span className="text-xs text-muted-foreground ml-1.5">
-                    (UVA {formatARS(summary.latest_uva_value)} · {formatDate(summary.latest_uva_date)})
+                    (UVA {formatARS(summary.latest_uva_value)} · {fmtDate(summary.latest_uva_date)})
                   </span>
                 )}
               </p>
@@ -544,7 +544,7 @@ export default function MortgagePage() {
               {summary.loan.total_cuotas} cuotas
             </span>
             <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
-              desde {formatDate(summary.loan.first_payment_date)}
+              desde {fmtDate(summary.loan.first_payment_date)}
             </span>
             {summary.loan.tna != null && (
               <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
@@ -556,55 +556,43 @@ export default function MortgagePage() {
             </span>
           </div>
 
-          {/* Pay button */}
-          {summary.paid_this_month ? (
-            <div className="flex items-center gap-2 text-green-700 text-sm font-medium">
-              <CheckCircle2 className="w-4 h-4" />
-              Cuota de {monthName} registrada
-            </div>
-          ) : (
-            <button
-              onClick={() => {
-                if (activeLoan?.loan_type === "tasa_variable") {
-                  setShowVariableModal(true);
-                } else {
-                  handlePay();
-                }
-              }}
-              disabled={paying}
-              className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white text-sm py-2.5 rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
-            >
-              {paying && <Loader2 className="w-4 h-4 animate-spin" />}
-              Registrar cuota de {monthName}
-            </button>
-          )}
+          {/* Next payment status */}
+          <div className={`rounded-lg p-3 text-sm ${summary.paid_this_month ? "bg-green-50 text-green-700" : "bg-blue-50 text-blue-700"}`}>
+            {summary.paid_this_month ? (
+              <p className="font-medium">✓ Cuota de {format(new Date(), "MMMM yyyy", { locale: es })} registrada</p>
+            ) : (
+              <p>Próxima cuota: <strong>{fmtDate(summary.next_payment_date)}</strong> — se registrará automáticamente</p>
+            )}
+            {summary.paid_this_month && (
+              <p className="text-xs mt-0.5 text-green-600">
+                Próxima: {fmtDate(summary.next_payment_date)}
+              </p>
+            )}
+          </div>
         </div>
       )}
 
       {/* Payment history */}
       {records.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Historial de pagos</p>
+          <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Historial de cuotas</p>
           <div className="bg-white rounded-xl border divide-y">
             {records.map(r => (
-              <div
-                key={r.id}
-                className="flex items-center justify-between px-4 py-3"
-              >
+              <div key={r.id} className="flex items-center justify-between px-4 py-3">
                 <div>
-                  <p className="text-sm font-medium text-gray-900">{formatDate(r.period_date)}</p>
+                  <p className="text-sm font-medium text-gray-900">{fmtDate(r.period_date)}</p>
                   <p className="text-xs text-muted-foreground">
                     {r.uva_units ? `${Number(r.uva_units).toFixed(2)} UVAs` : ""}
                     {r.capital ? ` · Capital ${formatARS(r.capital)}` : ""}
                     {r.interest ? ` · Interés ${formatARS(r.interest)}` : ""}
-                    {r.expense_entry_id ? " · egreso registrado" : ""}
+                    {!r.mortgage_loan_id && " · manual"}
                   </p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-sm font-semibold text-gray-900">{formatARS(r.payment_amount)}</span>
                   <button
                     onClick={() => handleDeleteRecord(r.id)}
-                    className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                    className="text-xs text-gray-300 hover:text-red-500 transition-colors"
                   >
                     ✕
                   </button>
@@ -624,10 +612,11 @@ export default function MortgagePage() {
         />
       )}
 
-      {showVariableModal && (
-        <PayVariableModal
-          onConfirm={(amount) => { setShowVariableModal(false); handlePay(amount); }}
-          onClose={() => setShowVariableModal(false)}
+      {showDelete && activeLoan && (
+        <DeleteLoanModal
+          loanId={activeLoan.id}
+          onClose={() => setShowDelete(false)}
+          onDeleted={() => { setLoading(true); load().finally(() => setLoading(false)); }}
         />
       )}
     </div>

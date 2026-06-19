@@ -69,6 +69,7 @@ class MortgageSummary(BaseModel):
     cuota_pesos_calculado: Decimal | None
     paid_this_month: bool
     mortgage_record_id: int | None
+    next_payment_date: date
 
 
 class MortgageRecordCreate(BaseModel):

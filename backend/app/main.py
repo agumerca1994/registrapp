@@ -21,14 +21,24 @@ async def _daily_sync():
         logger.error(f"Daily macro sync failed: {e}")
 
 
+async def _daily_mortgage_sync():
+    from app.routers.mortgage import sync_all_active_loans
+    try:
+        await sync_all_active_loans()
+    except Exception as e:
+        logger.error(f"Daily mortgage sync failed: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Sync today's macro on startup (non-blocking)
+    # Run syncs on startup (non-blocking)
     asyncio.create_task(_daily_sync())
+    asyncio.create_task(_daily_mortgage_sync())
 
-    # Schedule daily sync at 06:00 Argentina time (UTC-3 → 09:00 UTC)
+    # Schedule daily jobs at 06:00 Argentina time (UTC-3 → 09:00 UTC)
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(_daily_sync, "cron", hour=9, minute=0)
+    scheduler.add_job(_daily_mortgage_sync, "cron", hour=9, minute=1)
     scheduler.start()
 
     yield
