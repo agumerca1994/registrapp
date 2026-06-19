@@ -5,7 +5,7 @@ import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "@/lib/api";
 import { formatARS, formatDate } from "@/lib/utils";
-import { Settings2, X, Loader2, Home, Trash2 } from "lucide-react";
+import { Settings2, X, Loader2, Home, Trash2, CalendarDays } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -220,13 +220,16 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {!editLoan && (
                   <>
-                    <div className="sm:col-span-2">
+                    <div>
                       <label className="text-xs font-medium text-gray-600">Primera cuota *</label>
-                      <input
-                        type="month" required
-                        value={form.first_payment_date} onChange={f("first_payment_date")}
-                        className={inputCls}
-                      />
+                      <div className="relative mt-1">
+                        <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                        <input
+                          type="month" required
+                          value={form.first_payment_date} onChange={f("first_payment_date")}
+                          className="w-full border rounded-lg pl-9 pr-3 py-2 text-[16px] sm:text-sm bg-white text-gray-900"
+                        />
+                      </div>
                     </div>
                     <div>
                       <label className="text-xs font-medium text-gray-600">Cantidad de cuotas *</label>
@@ -339,26 +342,18 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
               </div>
 
               {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="w-full mt-2 bg-gray-900 text-white px-4 py-3 rounded-xl text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {editLoan ? "Guardar cambios" : "Activar hipoteca"}
+              </button>
             </div>
           )}
         </div>
-
-        {/* Footer — fijo, solo visible en step 2 */}
-        {step === 2 && (
-          <div className="flex justify-end gap-2 px-5 py-4 border-t bg-white shrink-0">
-            <button type="button" onClick={onClose} className="border px-4 py-2 rounded-lg text-sm">
-              Cancelar
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-1.5"
-            >
-              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {editLoan ? "Guardar cambios" : "Activar hipoteca"}
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
