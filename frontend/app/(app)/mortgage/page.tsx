@@ -219,7 +219,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {!editLoan && (
-                  <div className="sm:col-span-2 grid grid-cols-2 gap-3">
+                  <>
                     <div>
                       <label className="text-xs font-medium text-gray-600">Primera cuota *</label>
                       <div className="relative mt-1">
@@ -227,19 +227,19 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                         <input
                           type="month" required
                           value={form.first_payment_date} onChange={f("first_payment_date")}
-                          className="w-full min-w-0 border rounded-lg pl-9 pr-2 py-2 text-[16px] sm:text-sm bg-white text-gray-900"
+                          className="w-full border rounded-lg pl-9 pr-3 py-2 text-[16px] sm:text-sm bg-white text-gray-900"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-gray-600">Cant. cuotas *</label>
+                      <label className="text-xs font-medium text-gray-600">Cantidad de cuotas *</label>
                       <input
                         type="number" min={1} required
                         value={form.total_cuotas} onChange={f("total_cuotas")}
                         className={inputCls}
                       />
                     </div>
-                  </div>
+                  </>
                 )}
 
                 <div className="sm:col-span-2">
