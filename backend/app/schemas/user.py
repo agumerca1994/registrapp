@@ -24,5 +24,6 @@ class UserOut(BaseModel):
     email: str
     display_name: str | None
     phone_number: str | None
+    whatsapp_phone: str | None
     role: UserRole
     created_at: datetime

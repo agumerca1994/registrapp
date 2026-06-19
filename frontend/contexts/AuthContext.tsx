@@ -20,6 +20,7 @@ interface AppUser {
   tenant_id: number;
   email: string;
   display_name: string | null;
+  whatsapp_phone: string | null;
   role: string;
 }
 

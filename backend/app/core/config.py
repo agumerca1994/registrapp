@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_PATH: str = "/app/firebase-credentials.json"
     ESTADISTICAS_BCRA_TOKEN: str = ""
     ENVIRONMENT: str = "development"
+    EVOLUTION_API_URL: str = ""
+    EVOLUTION_API_KEY: str = ""
+    EVOLUTION_INSTANCE: str = ""
+    WHATSAPP_WEBHOOK_SECRET: str = ""
 
 
 settings = Settings()

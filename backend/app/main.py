@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from app.routers import auth, income, expenses, macro, dashboard, mortgage
+from app.routers import auth, income, expenses, macro, dashboard, mortgage, whatsapp
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +73,7 @@ app.include_router(expenses.router)
 app.include_router(macro.router)
 app.include_router(dashboard.router)
 app.include_router(mortgage.router)
+app.include_router(whatsapp.router)
 
 
 @app.get("/health")

@@ -5,6 +5,7 @@ import enum
 from app.core.database import Base
 
 
+
 class UserRole(str, enum.Enum):
     admin = "admin"
     member = "member"
@@ -21,6 +22,9 @@ class User(Base):
     phone_number: Mapped[str | None] = mapped_column(String(30))
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.member)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    whatsapp_phone: Mapped[str | None] = mapped_column(String(20), nullable=True, unique=True, index=True)
+    whatsapp_verify_code: Mapped[str | None] = mapped_column(String(6), nullable=True)
+    whatsapp_verify_expires: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     tenant: Mapped["Tenant"] = relationship(back_populates="users")
     income_entries: Mapped[list["IncomeEntry"]] = relationship(back_populates="user")

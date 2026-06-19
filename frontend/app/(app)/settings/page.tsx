@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, MessageCircle, CheckCircle2, Unlink } from "lucide-react";
 
 interface Member {
   id: number;
@@ -14,6 +14,136 @@ interface Member {
 }
 
 const ROLE_LABELS: Record<string, string> = { admin: "Admin", member: "Miembro" };
+
+function WhatsAppSection() {
+  const { appUser, refreshUser } = useAuth();
+  const [phase, setPhase] = useState<"idle" | "pending">("idle");
+  const [phone, setPhone] = useState("");
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const isLinked = !!appUser?.whatsapp_phone;
+
+  const sendCode = async () => {
+    if (!phone.trim()) return;
+    setLoading(true); setError("");
+    try {
+      await api.post("/auth/me/link-whatsapp", { phone: phone.trim() });
+      setPhase("pending");
+    } catch (e: any) {
+      setError(e.response?.data?.detail ?? "Error al enviar el código");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyCode = async () => {
+    if (!code.trim()) return;
+    setLoading(true); setError("");
+    try {
+      await api.post("/auth/me/verify-whatsapp", { phone: phone.trim(), code: code.trim() });
+      await refreshUser();
+      setPhase("idle"); setPhone(""); setCode("");
+    } catch (e: any) {
+      setError(e.response?.data?.detail ?? "Código incorrecto o expirado");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const unlink = async () => {
+    setLoading(true); setError("");
+    try {
+      await api.delete("/auth/me/whatsapp");
+      await refreshUser();
+    } catch (e: any) {
+      setError(e.response?.data?.detail ?? "Error al desvincular");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl border p-6 space-y-4">
+      <div className="flex items-center gap-2">
+        <MessageCircle className="w-5 h-5 text-green-600" />
+        <h3 className="font-semibold text-gray-900">WhatsApp</h3>
+      </div>
+
+      {isLinked ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-green-600" />
+            <span className="text-sm text-gray-700">Vinculado: <span className="font-medium">+{appUser.whatsapp_phone}</span></span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Enviá mensajes al bot con el formato <span className="font-mono bg-gray-100 px-1 rounded">monto descripción</span> para registrar egresos. Ej: <span className="font-mono bg-gray-100 px-1 rounded">15000 supermercado</span>
+          </p>
+          <button
+            onClick={unlink}
+            disabled={loading}
+            className="flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 disabled:opacity-50"
+          >
+            <Unlink className="w-3.5 h-3.5" />
+            Desvincular
+          </button>
+        </div>
+      ) : phase === "idle" ? (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Vinculá tu número para registrar egresos enviando un mensaje de WhatsApp al bot.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="tel"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              placeholder="5491112345678"
+              className="flex-1 border rounded-lg px-3 py-2 text-sm"
+            />
+            <button
+              onClick={sendCode}
+              disabled={loading || !phone.trim()}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50"
+            >
+              {loading ? "Enviando..." : "Enviar código"}
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">Formato internacional sin +. Ej: 5491112345678</p>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-sm text-gray-700">
+            Te enviamos un código de 6 dígitos al <span className="font-medium">+{phone}</span> por WhatsApp.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={code}
+              onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="123456"
+              maxLength={6}
+              className="w-32 border rounded-lg px-3 py-2 text-sm text-center tracking-widest font-mono"
+            />
+            <button
+              onClick={verifyCode}
+              disabled={loading || code.length < 6}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50"
+            >
+              {loading ? "Verificando..." : "Verificar"}
+            </button>
+          </div>
+          <button onClick={() => { setPhase("idle"); setCode(""); setError(""); }} className="text-xs text-muted-foreground hover:underline">
+            ← Cambiar número
+          </button>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const { appUser } = useAuth();
@@ -78,6 +208,8 @@ export default function SettingsPage() {
           ))}
         </div>
       </div>
+
+      <WhatsAppSection />
 
       <div className="bg-white rounded-xl border p-6 space-y-2">
         <h3 className="font-semibold text-gray-900">Tu cuenta</h3>
