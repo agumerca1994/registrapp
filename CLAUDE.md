@@ -56,6 +56,10 @@ backend/app/
 
 All routers follow the pattern: `Depends(get_current_user)` + `Depends(get_db)` → `_get_db_user()` → query with `tenant_id`. Dashboard schemas (`MonthSummary`, `HistoryPoint`) are defined inline in `routers/dashboard.py`.
 
+**Household (tenant) code**: `Tenant` has a `code: str | None` field (8-char alphanumeric, unique). `POST /auth/register` creates a new tenant with a generated code; `POST /auth/join` accepts `{ tenant_code }` and looks up the tenant by code. `UserOut` includes `tenant_code` via a `@property` on `User` that reads `user.tenant.code` — requires `selectinload(User.tenant)` wherever the user is reloaded after a write.
+
+**Entry filtering by month**: `GET /income/entries` and `GET /expenses/entries` accept optional `?year=&month=` query params, filtering with SQLAlchemy `extract()`. The dashboard fetches entries pre-filtered to the current calendar month for pie charts.
+
 **Macro sync**: `POST /macro/sync-bcra` fetches UVA, inflation, and USD official rates from `api.argentinadatos.com` using `ESTADISTICAS_BCRA_TOKEN` from env, then upserts into `MacroVariable`. Fallback strategy: exact date match → last record of same month → last record before target date.
 
 **Bulk income import**: `POST /income/import` accepts CSV or Excel. Flexible date parsing handles MM-YYYY, DD/MM/YYYY, YYYY-MM-DD, and others. Duplicate rows (same tenant + source + date + amount) are silently skipped. Response: `{"imported": N, "skipped": N, "errors": []}` with per-row error messages.
@@ -66,7 +70,7 @@ frontend/app/
   (auth)/login/     # Google sign-in page
   onboarding/       # First-time tenant creation
   (app)/            # Protected layout (sidebar + auth guard)
-    dashboard/      # Monthly summary cards + historical Recharts charts
+    dashboard/      # Monthly summary cards + line chart (income/inflation/USD trend) + two pie charts (expenses by category, income by source) — both pies always show current calendar month
     income/         # Income entries with bruto/deducciones/neto + bulk import from Excel/CSV
     expenses/       # Expense entries by category
     mortgage/       # UVA mortgage payment records
@@ -102,3 +106,4 @@ useEffect(() => { setMounted(true); }, []);
 - `down_revision` must point to the current HEAD (check `alembic/versions/` for the latest file)
 - The model import in `alembic/env.py` (`import app.models`) auto-discovers all tables via `Base.metadata`
 - New nullable columns can go live before the migration runs (asyncpg won't error on missing optional columns), but non-nullable columns will break the backend until migrated
+- Use `IF NOT EXISTS` for idempotency — if a deploy fails mid-migration, Alembic won't mark it complete and will retry on next deploy. Use `op.execute(sa.text("ALTER TABLE ... ADD COLUMN IF NOT EXISTS ..."))` and `CREATE UNIQUE INDEX IF NOT EXISTS` to make migrations safe to re-run

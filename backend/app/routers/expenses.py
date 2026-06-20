@@ -8,6 +8,7 @@ from app.core.firebase import get_current_user
 from app.models.user import User
 from app.models.expense import ExpenseCategory, ExpenseEntry
 from app.models.mortgage import MortgageRecord
+from app.models.shared_expense import SharedExpenseSplit
 from app.schemas.expense import (
     ExpenseCategoryCreate, ExpenseCategoryOut,
     ExpenseEntryCreate, ExpenseEntryUpdate, ExpenseEntryOut,
@@ -130,5 +131,14 @@ async def delete_entry(
     if mortgage_rec:
         await db.delete(mortgage_rec)
         await db.flush()
+    # Soft link: if a shared expense split references this entry, reset it to pending
+    split = await db.scalar(
+        select(SharedExpenseSplit).where(SharedExpenseSplit.expense_entry_id == entry_id)
+    )
+    if split:
+        split.expense_entry_id = None
+        split.status = "pending"
+        await db.flush()
+
     await db.delete(entry)
     await db.commit()
