@@ -264,7 +264,7 @@ export default function ExpensesPage() {
             ) : (
             <div>
               <label className="text-xs font-medium text-gray-600">Categoria</label>
-              <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+              <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
                 value={form.category_id} onChange={e => setForm(p => ({ ...p, category_id: e.target.value }))} required={form.currency === "ARS"}>
                 <option value="">Selecciona una categoria</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -273,12 +273,12 @@ export default function ExpensesPage() {
             )}
             <div>
               <label className="text-xs font-medium text-gray-600">Fecha</label>
-              <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+              <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
                 value={form.expense_date} onChange={e => setForm(p => ({ ...p, expense_date: e.target.value }))} required />
             </div>
             <div>
               <label className="text-xs font-medium text-gray-600">Monto ($)</label>
-              <input type="number" step="0.01" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
                 value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} required />
             </div>
             <div>

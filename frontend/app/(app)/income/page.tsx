@@ -472,7 +472,7 @@ export default function IncomePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input className="border rounded-lg px-3 py-2 text-sm" placeholder="Nombre de la fuente"
               value={newSource.name} onChange={e => setNewSource(p => ({ ...p, name: e.target.value }))} required />
-            <select className="border rounded-lg px-3 py-2 text-sm"
+            <select className="w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
               value={newSource.income_type} onChange={e => setNewSource(p => ({ ...p, income_type: e.target.value }))}>
               {Object.entries(INCOME_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
@@ -491,7 +491,7 @@ export default function IncomePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-gray-600">Fuente</label>
-              <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+              <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
                 value={form.source_id} onChange={e => setForm(p => ({ ...p, source_id: e.target.value }))} required>
                 <option value="">Seleccioná una fuente</option>
                 {sources.map(s => <option key={s.id} value={s.id}>{s.name} ({INCOME_TYPE_LABELS[s.income_type]})</option>)}
@@ -499,17 +499,17 @@ export default function IncomePage() {
             </div>
             <div>
               <label className="text-xs font-medium text-gray-600">Período</label>
-              <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+              <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
                 value={form.period_date} onChange={e => setForm(p => ({ ...p, period_date: e.target.value }))} required />
             </div>
             <div>
               <label className="text-xs font-medium text-gray-600">Sueldo bruto ($)</label>
-              <input type="number" step="0.01" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
                 value={form.bruto} onChange={e => updateBrutoOrDed("bruto", e.target.value)} />
             </div>
             <div>
               <label className="text-xs font-medium text-gray-600">Deducciones ($)</label>
-              <input type="number" step="0.01" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
                 value={form.deducciones} onChange={e => updateBrutoOrDed("deducciones", e.target.value)} />
             </div>
             <div className="sm:col-span-2">
@@ -519,7 +519,7 @@ export default function IncomePage() {
                   <span className="text-muted-foreground font-normal ml-1">— calculado automáticamente</span>
                 )}
               </label>
-              <input type="number" step="0.01" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
                 value={form.amount}
                 onFocus={() => { netoManual.current = true; }}
                 onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}

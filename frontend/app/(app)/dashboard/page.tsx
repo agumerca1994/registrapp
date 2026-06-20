@@ -268,7 +268,7 @@ export default function DashboardPage() {
 
       {mounted && !chartsLoading && (
         <div className="space-y-4">
-          {incomeTrendData.length > 0 && (
+          {false && incomeTrendData.length > 0 && (
             <div className="bg-white rounded-xl border p-4 md:p-5">
               <h3 className="font-semibold text-gray-900 mb-4 text-sm md:text-base">
                 {"Variación mensual: Ingreso / Inflación / Dólar"}
