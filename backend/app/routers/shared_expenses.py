@@ -97,10 +97,7 @@ async def _send_whatsapp_invite(phone: str, creator_name: str, title: str, amoun
     link = f"{settings.FRONTEND_URL}/invite/{token}"
     msg = (
         f"Hola! {creator_name} te invito a compartir un gasto: '{title}' "
-        f"por ${amount}.
-
-Entra al link para verlo y aceptarlo:
-{link}"
+        f"por ${amount}.\n\nEntra al link para verlo y aceptarlo:\n{link}"
     )
     await _send_wa_msg(phone, msg)
 
@@ -109,13 +106,10 @@ async def _send_whatsapp_member_notify(phone: str, creator_name: str, title: str
     app_url = f"{settings.FRONTEND_URL}/shared"
     msg = (
         f"Hola! {creator_name} te compartio el gasto '{title}' "
-        f"por ${total_amount}.
-Tu parte: ${split_amount}.
-"
+        f"por ${total_amount}.\nTu parte: ${split_amount}.\n"
         f"Ingresa a la app para aceptarlo: {app_url}"
     )
     await _send_wa_msg(phone, msg)
-
 
 @router.get("", response_model=list[SharedExpenseOut])
 async def list_shared_expenses(
