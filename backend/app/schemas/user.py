@@ -10,7 +10,7 @@ class UserRegister(BaseModel):
 
 
 class UserJoinTenant(BaseModel):
-    tenant_id: int
+    tenant_code: str
     display_name: str | None = None
     phone_number: str | None = None
 
@@ -21,6 +21,7 @@ class UserOut(BaseModel):
     id: int
     firebase_uid: str
     tenant_id: int
+    tenant_code: str | None = None
     email: str
     display_name: str | None
     phone_number: str | None

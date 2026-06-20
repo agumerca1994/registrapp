@@ -18,6 +18,7 @@ interface AppUser {
   id: number;
   firebase_uid: string;
   tenant_id: number;
+  tenant_code: string | null;
   email: string;
   display_name: string | null;
   whatsapp_phone: string | null;

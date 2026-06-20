@@ -181,7 +181,7 @@ export default function SettingsPage() {
   }, []);
 
   const copyId = () => {
-    navigator.clipboard.writeText(String(appUser?.tenant_id));
+    navigator.clipboard.writeText(appUser?.tenant_code ?? String(appUser?.tenant_id));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -199,13 +199,12 @@ export default function SettingsPage() {
       <div className="bg-white rounded-xl border p-6 space-y-4">
         <h3 className="font-semibold text-gray-900">Tu hogar</h3>
         <p className="text-sm text-muted-foreground">
-          Compartí este ID con las personas que querés que se unan a tu hogar.
-          Ellas deben iniciar sesión con Google y elegir "Unirme a un hogar" en el onboarding.
+          {"Compartí este código con quien quieras que se una a tu hogar. Deben iniciar sesión con Google y elegir \"Unirme a un hogar\" en el onboarding."}
         </p>
         <div className="flex items-center gap-3">
           <div className="flex-1 bg-gray-50 border rounded-lg px-4 py-3">
-            <p className="text-xs text-muted-foreground mb-1">ID del hogar</p>
-            <p className="text-2xl font-bold text-primary">{appUser?.tenant_id}</p>
+            <p className="text-xs text-muted-foreground mb-1">{"Código del hogar"}</p>
+            <p className="text-2xl font-bold text-primary tracking-widest">{appUser?.tenant_code ?? appUser?.tenant_id}</p>
           </div>
           <button
             onClick={copyId}

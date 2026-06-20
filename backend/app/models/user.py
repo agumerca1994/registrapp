@@ -27,5 +27,9 @@ class User(Base):
     whatsapp_verify_expires: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     tenant: Mapped["Tenant"] = relationship(back_populates="users")
+
+    @property
+    def tenant_code(self) -> str | None:
+        return self.tenant.code if self.tenant else None
     income_entries: Mapped[list["IncomeEntry"]] = relationship(back_populates="user")
     expense_entries: Mapped[list["ExpenseEntry"]] = relationship(back_populates="user")

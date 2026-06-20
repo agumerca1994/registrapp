@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -17,6 +18,11 @@ from app.schemas.user import UserRegister, UserJoinTenant, UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
+
+
+def _generate_tenant_code() -> str:
+    chars = string.ascii_uppercase + string.digits
+    return "".join(random.choices(chars, k=8))
 
 
 class WhatsAppLinkRequest(BaseModel):
@@ -40,7 +46,7 @@ async def register(
     if existing:
         raise HTTPException(status_code=400, detail="Usuario ya registrado")
 
-    tenant = Tenant(name=body.tenant_name)
+    tenant = Tenant(name=body.tenant_name, code=_generate_tenant_code())
     db.add(tenant)
     await db.flush()
 
@@ -55,6 +61,11 @@ async def register(
     db.add(user)
     await db.commit()
     await db.refresh(user)
+    await db.refresh(tenant)
+    # reload with tenant for tenant_code property
+    user = await db.scalar(
+        select(User).options(selectinload(User.tenant)).where(User.id == user.id)
+    )
     return user
 
 
@@ -70,13 +81,13 @@ async def join_tenant(
     if existing:
         raise HTTPException(status_code=400, detail="Usuario ya registrado")
 
-    tenant = await db.get(Tenant, body.tenant_id)
+    tenant = await db.scalar(select(Tenant).where(Tenant.code == body.tenant_code.strip().upper()))
     if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant no encontrado")
+        raise HTTPException(status_code=404, detail="Código de hogar incorrecto")
 
     user = User(
         firebase_uid=firebase_user["uid"],
-        tenant_id=body.tenant_id,
+        tenant_id=tenant.id,
         email=firebase_user.get("email", ""),
         display_name=body.display_name or firebase_user.get("name"),
         phone_number=body.phone_number,
@@ -84,7 +95,9 @@ async def join_tenant(
     )
     db.add(user)
     await db.commit()
-    await db.refresh(user)
+    user = await db.scalar(
+        select(User).options(selectinload(User.tenant)).where(User.id == user.id)
+    )
     return user
 
 
@@ -94,7 +107,7 @@ async def me(
     db: AsyncSession = Depends(get_db),
 ):
     user = await db.scalar(
-        select(User).where(User.firebase_uid == firebase_user["uid"])
+        select(User).options(selectinload(User.tenant)).where(User.firebase_uid == firebase_user["uid"])
     )
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado. Registrate primero.")
@@ -168,7 +181,9 @@ async def verify_whatsapp(
     user.whatsapp_verify_code = None
     user.whatsapp_verify_expires = None
     await db.commit()
-    await db.refresh(user)
+    user = await db.scalar(
+        select(User).options(selectinload(User.tenant)).where(User.id == user.id)
+    )
 
     # Send welcome message
     if settings.EVOLUTION_API_URL and settings.EVOLUTION_INSTANCE:

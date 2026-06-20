@@ -16,7 +16,7 @@ export default function OnboardingPage() {
   }, [firebaseUser, appUser, authLoading, router]);
   const [mode, setMode] = useState<"create" | "join">("create");
   const [tenantName, setTenantName] = useState("");
-  const [tenantId, setTenantId] = useState("");
+  const [tenantCode, setTenantCode] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -29,7 +29,7 @@ export default function OnboardingPage() {
       if (mode === "create") {
         await api.post("/auth/register", { tenant_name: tenantName, display_name: displayName });
       } else {
-        await api.post("/auth/join", { tenant_id: parseInt(tenantId), display_name: displayName });
+        await api.post("/auth/join", { tenant_code: tenantCode.trim().toUpperCase(), display_name: displayName });
       }
       await refreshUser();
       router.replace("/dashboard");
@@ -86,15 +86,16 @@ export default function OnboardingPage() {
             </div>
           ) : (
             <div>
-              <label className="text-sm font-medium text-gray-700">ID del hogar</label>
+              <label className="text-sm font-medium text-gray-700">{"Código del hogar"}</label>
               <input
-                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                value={tenantId}
-                onChange={(e) => setTenantId(e.target.value)}
-                placeholder="El admin del hogar te lo comparte"
+                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary uppercase tracking-widest"
+                value={tenantCode}
+                onChange={(e) => setTenantCode(e.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase())}
+                placeholder="XXXXXXXX"
+                maxLength={8}
                 required
-                type="number"
               />
+              <p className="text-xs text-muted-foreground mt-1">El admin del hogar te comparte este código</p>
             </div>
           )}
 
