@@ -6,8 +6,6 @@ Create Date: 2026-06-19
 """
 from alembic import op
 import sqlalchemy as sa
-import random
-import string
 
 
 revision = 'h8i9j0k1l2m3'
@@ -16,25 +14,15 @@ branch_labels = None
 depends_on = None
 
 
-def _random_code() -> str:
-    chars = string.ascii_uppercase + string.digits
-    return "".join(random.choices(chars, k=8))
-
-
 def upgrade() -> None:
     op.add_column("tenants", sa.Column("code", sa.String(8), nullable=True))
 
-    conn = op.get_bind()
-    tenants = conn.execute(sa.text("SELECT id FROM tenants ORDER BY id")).fetchall()
-    for (tid,) in tenants:
-        while True:
-            code = _random_code()
-            existing = conn.execute(
-                sa.text("SELECT id FROM tenants WHERE code = :c"), {"c": code}
-            ).fetchone()
-            if not existing:
-                break
-        conn.execute(sa.text("UPDATE tenants SET code = :c WHERE id = :i"), {"c": code, "i": tid})
+    # Assign random 8-char alphanumeric codes using PostgreSQL native functions
+    # substring(md5(...)) gives hex chars 0-9a-f, upper() makes them uppercase
+    op.execute(sa.text(
+        "UPDATE tenants SET code = upper(substring(md5(random()::text || id::text) from 1 for 8)) "
+        "WHERE code IS NULL"
+    ))
 
     op.create_index("ix_tenants_code", "tenants", ["code"], unique=True)
 
