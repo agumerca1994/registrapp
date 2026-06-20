@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
-import { Copy, Check, MessageCircle, CheckCircle2, Unlink, Mail, UserPlus } from "lucide-react";
+import { Copy, Check, MessageCircle, CheckCircle2, Unlink, Mail, UserPlus, Trash2 } from "lucide-react";
 
 interface Member {
   id: number;
