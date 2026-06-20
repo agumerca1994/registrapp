@@ -3,10 +3,24 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link } from "lucide-react";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle } from "lucide-react";
+
 import api from "@/lib/api";
 import { formatARS } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+
+const COUNTRIES = [
+  { flag: "🇦🇷", prefix: "54", placeholder: "351 234 5678" },
+  { flag: "🇺🇾", prefix: "598", placeholder: "9 234 5678" },
+  { flag: "🇨🇱", prefix: "56", placeholder: "9 1234 5678" },
+  { flag: "🇧🇷", prefix: "55", placeholder: "11 98765 4321" },
+  { flag: "🇵🇾", prefix: "595", placeholder: "981 234 567" },
+];
+
+function buildPhone(prefix: string, local: string): string {
+  const digits = local.replace(/\D/g, "");
+  return prefix === "54" ? prefix + "9" + digits : prefix + digits;
+}
 
 interface Split {
   id: number;
@@ -50,7 +64,10 @@ interface ParticipantRow {
   member_name: string;
   amount: string;
   manual: boolean;
-  invite_contact: string;
+  invite_method: "none" | "email" | "whatsapp";
+  invite_email: string;
+  invite_phone_prefix: string;
+  invite_phone_local: string;
 }
 
 function parseAmt(s: string): number {
@@ -113,7 +130,7 @@ export default function SharedExpensesPage() {
   const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [splitType, setSplitType] = useState<"equal" | "custom">("equal");
   const [participants, setParticipants] = useState<ParticipantRow[]>([
-    { type: "member", user_id: null, member_name: "", amount: "", manual: false, invite_contact: "" },
+    { type: "member", user_id: null, member_name: "", amount: "", manual: false, invite_method: "none", invite_email: "", invite_phone_prefix: "54", invite_phone_local: "" },
   ]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -190,7 +207,7 @@ export default function SharedExpensesPage() {
   function addParticipant() {
     setParticipants(prev => {
       const newRow: ParticipantRow = {
-        type: "member", user_id: null, member_name: "", amount: "", manual: false, invite_contact: "",
+        type: "member", user_id: null, member_name: "", amount: "", manual: false, invite_method: "none", invite_email: "", invite_phone_prefix: "54", invite_phone_local: "",
       };
       const updated = [...prev, newRow];
       return splitType === "custom" ? redistAuto(updated, total) : updated;
@@ -224,7 +241,10 @@ export default function SharedExpensesPage() {
       member_name: appUser?.display_name || appUser?.email || "",
       amount: "",
       manual: false,
-      invite_contact: "",
+      invite_method: "none",
+      invite_email: "",
+      invite_phone_prefix: "54",
+      invite_phone_local: "",
     }]);
     setFormError("");
   }
@@ -250,7 +270,11 @@ export default function SharedExpensesPage() {
       user_id: p.type === "member" ? p.user_id : null,
       member_name: p.member_name,
       amount: splitType === "equal" ? parseFloat(equalShare) : parseAmt(p.amount),
-      invite_contact: p.type === "external" && p.invite_contact.trim() ? p.invite_contact.trim() : undefined,
+      invite_contact: p.type === "external"
+        ? (p.invite_method === "email" && p.invite_email.trim() ? p.invite_email.trim()
+          : p.invite_method === "whatsapp" && p.invite_phone_local.trim() ? buildPhone(p.invite_phone_prefix, p.invite_phone_local)
+          : undefined)
+        : undefined,
     }));
     const sumAmts = splits.reduce((s, x) => s + x.amount, 0);
     if (Math.abs(sumAmts - total) > 0.02) {
@@ -447,25 +471,62 @@ export default function SharedExpensesPage() {
                         ))}
                       </select>
                     ) : (
-                      <div className="space-y-1.5">
+                      <div className="space-y-2">
                         <input required type="text" placeholder="Nombre del externo"
                           value={p.member_name} onChange={e => updateParticipant(idx, { member_name: e.target.value })}
                           className="w-full border rounded-lg px-3 py-2 text-sm" />
-                        <input
-                          type="text"
-                          inputMode="email"
-                          placeholder="Email o numero de WhatsApp (opcional)"
-                          value={p.invite_contact}
-                          onChange={e => updateParticipant(idx, { invite_contact: e.target.value })}
-                          className="w-full border rounded-lg px-3 py-2 text-sm text-gray-600"
-                        />
-                        {p.invite_contact && (
-                          <p className="text-xs text-violet-600">
-                            {p.invite_contact.includes("@")
-                              ? "Se generara un link de invitacion para copiar y compartir"
-                              : "Se enviara una invitacion por WhatsApp con el link"
-                            }
-                          </p>
+
+                        <div>
+                          <p className="text-xs font-medium text-gray-500 mb-1.5">Enviar invitacion</p>
+                          <div className="flex gap-1.5 flex-wrap">
+                            <button type="button"
+                              onClick={() => updateParticipant(idx, { invite_method: "none" })}
+                              className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${p.invite_method === "none" ? "bg-gray-100 border-gray-300 text-gray-700 font-medium" : "bg-white border-gray-200 text-gray-400 hover:border-gray-300"}`}>
+                              Sin invitacion
+                            </button>
+                            <button type="button"
+                              onClick={() => updateParticipant(idx, { invite_method: "email" })}
+                              className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${p.invite_method === "email" ? "bg-violet-100 border-violet-400 text-violet-700 font-medium" : "bg-white border-gray-200 text-gray-400 hover:border-gray-300"}`}>
+                              Email
+                            </button>
+                            <button type="button"
+                              onClick={() => updateParticipant(idx, { invite_method: "whatsapp" })}
+                              className={`px-2.5 py-1 text-xs rounded-lg border transition-colors flex items-center gap-1 ${p.invite_method === "whatsapp" ? "bg-green-100 border-green-500 text-green-700 font-medium" : "bg-white border-gray-200 text-gray-400 hover:border-gray-300"}`}>
+                              <MessageCircle className="w-3 h-3" /> WhatsApp
+                            </button>
+                          </div>
+                        </div>
+
+                        {p.invite_method === "email" && (
+                          <div className="space-y-1">
+                            <input type="email" placeholder="email@ejemplo.com"
+                              value={p.invite_email}
+                              onChange={e => updateParticipant(idx, { invite_email: e.target.value })}
+                              className="w-full border rounded-lg px-3 py-2 text-sm" />
+                            <p className="text-xs text-violet-600">Se generara un link para copiar y compartir manualmente</p>
+                          </div>
+                        )}
+
+                        {p.invite_method === "whatsapp" && (
+                          <div className="space-y-1">
+                            <div className="flex gap-2">
+                              <select
+                                value={p.invite_phone_prefix}
+                                onChange={e => updateParticipant(idx, { invite_phone_prefix: e.target.value, invite_phone_local: "" })}
+                                className="border rounded-lg px-2 py-2 text-xs bg-white shrink-0">
+                                {COUNTRIES.map(c => (
+                                  <option key={c.prefix} value={c.prefix}>{c.flag} +{c.prefix}</option>
+                                ))}
+                              </select>
+                              <input type="tel"
+                                value={p.invite_phone_local}
+                                onChange={e => updateParticipant(idx, { invite_phone_local: e.target.value.replace(/[^\d\s]/g, "") })}
+                                placeholder={COUNTRIES.find(c => c.prefix === p.invite_phone_prefix)?.placeholder ?? ""}
+                                inputMode="numeric"
+                                className="flex-1 border rounded-lg px-3 py-2 text-sm min-w-0" />
+                            </div>
+                            <p className="text-xs text-green-700">Se enviara una invitacion automaticamente por WhatsApp al crear el gasto</p>
+                          </div>
                         )}
                       </div>
                     )}

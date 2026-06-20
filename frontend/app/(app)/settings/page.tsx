@@ -16,7 +16,7 @@ interface Member {
 const ROLE_LABELS: Record<string, string> = { admin: "Admin", member: "Miembro" };
 
 const COUNTRIES = [
-  { flag: "🇦🇷", prefix: "54", placeholder: "9 351 234 5678" },
+  { flag: "🇦🇷", prefix: "54", placeholder: "351 234 5678" },
   { flag: "🇺🇾", prefix: "598", placeholder: "9 234 5678" },
   { flag: "🇨🇱", prefix: "56", placeholder: "9 1234 5678" },
   { flag: "🇧🇷", prefix: "55", placeholder: "11 98765 4321" },
@@ -33,7 +33,8 @@ function WhatsAppSection() {
   const [error, setError] = useState("");
 
   const isLinked = !!appUser?.whatsapp_phone;
-  const fullPhone = prefix + localPhone.replace(/\D/g, "");
+  const digits = localPhone.replace(/\D/g, "");
+  const fullPhone = prefix === "54" ? prefix + "9" + digits : prefix + digits;
   const country = COUNTRIES.find(c => c.prefix === prefix) ?? COUNTRIES[0];
 
   const sendCode = async () => {
@@ -134,7 +135,7 @@ function WhatsAppSection() {
             </button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Número sin el código de país. Para Argentina ingresá el 9 antes del área: <span className="font-mono">9 351 2345678</span>
+            Ingresá el número sin el código de país. Para Argentina sin el 0 inicial y sin el 15: <span className="font-mono">351 2345678</span>
           </p>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
