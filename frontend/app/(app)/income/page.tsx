@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import { formatARS, formatDate } from "@/lib/utils";
 import { Plus, Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle, ChevronRight } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 interface IncomeSource { id: number; name: string; income_type: string; }
 interface IncomeEntry {
@@ -13,8 +12,6 @@ interface IncomeEntry {
   period_date: string; notes?: string;
   source: IncomeSource;
 }
-
-interface MacroPoint { period_date: string; inflation_monthly_pct: number | null; usd_official: number | null; }
 
 const INCOME_TYPE_LABELS: Record<string, string> = {
   salary: "Sueldo", bonus: "Bono", aguinaldo: "Aguinaldo",
@@ -347,24 +344,18 @@ export default function IncomePage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [detailEntry, setDetailEntry] = useState<IncomeEntry | null>(null);
-  const [macro, setMacro] = useState<MacroPoint[]>([]);
-  const [mounted, setMounted] = useState(false);
   const netoManual = useRef(false);
 
   const load = async () => {
-    const [e, s, m] = await Promise.all([
+    const [e, s] = await Promise.all([
       api.get("/income/entries"),
       api.get("/income/sources"),
-      api.get("/macro"),
     ]);
     setEntries(e.data);
     setSources(s.data);
-    setMacro(m.data);
   };
 
   useEffect(() => { load(); }, []);
-  useEffect(() => { setMounted(true); }, []);
-
   const updateBrutoOrDed = (key: "bruto" | "deducciones", value: string) => {
     setForm(prev => {
       const next = { ...prev, [key]: value };
@@ -474,52 +465,7 @@ export default function IncomePage() {
       </div>
 
       {/* Income vs inflation chart */}
-      {mounted && entries.length >= 2 && (() => {
-        const byMonth: Record<string, number> = {};
-        entries.forEach(e => {
-          const m = e.period_date.slice(0, 7);
-          byMonth[m] = (byMonth[m] || 0) + Number(e.amount);
-        });
-        const months = Object.keys(byMonth).sort();
-        const chartData = months.slice(1).map((m, i) => {
-          const prev = byMonth[months[i]];
-          const curr = byMonth[m];
-          const incomeChg = prev > 0 ? ((curr - prev) / prev) * 100 : 0;
-          const macroRow = macro.find(r => r.period_date.startsWith(m));
-          const prevMacroRow = macro.find(r => r.period_date.startsWith(months[i]));
-          const usdCurr = macroRow?.usd_official != null ? Number(macroRow.usd_official) : null;
-          const usdPrev = prevMacroRow?.usd_official != null ? Number(prevMacroRow.usd_official) : null;
-          const usdChg = usdCurr != null && usdPrev != null && usdPrev > 0
-            ? ((usdCurr - usdPrev) / usdPrev) * 100 : null;
-          const [y, mo] = m.split("-");
-          const label = `${mo}/${y.slice(2)}`;
-          return {
-            label,
-            Ingreso: parseFloat(incomeChg.toFixed(1)),
-            Inflacion: macroRow?.inflation_monthly_pct != null ? parseFloat(Number(macroRow.inflation_monthly_pct).toFixed(1)) : null,
-            Dolar: usdChg != null ? parseFloat(usdChg.toFixed(1)) : null,
-          };
-        });
-        if (chartData.length === 0) return null;
-        return (
-          <div className="bg-white rounded-xl border p-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Variacion mensual: ingreso, inflacion y dolar oficial (%)</h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${v}%`} />
-                <Tooltip formatter={(v: number) => `${v}%`} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="Ingreso" stroke="#22c55e" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="Inflacion" stroke="#ef4444" strokeWidth={2} dot={false} activeDot={{ r: 4 }} strokeDasharray="4 2" />
-                <Line type="monotone" dataKey="Dolar" stroke="#f59e0b" strokeWidth={2} dot={false} activeDot={{ r: 4 }} strokeDasharray="2 2" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        );
-      })()}
-
+      
       {/* Source form */}
       {showSourceForm && (
         <form onSubmit={handleAddSource} className="bg-white rounded-xl border p-4">

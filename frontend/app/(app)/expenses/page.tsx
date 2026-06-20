@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { formatARS, formatDate } from "@/lib/utils";
 import { Plus, Trash2, Pencil, X, ChevronRight } from "lucide-react";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 interface Category { id: number; name: string; color?: string; is_fixed: boolean; }
 interface ExpenseEntry {
@@ -83,7 +82,6 @@ export default function ExpensesPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [detailEntry, setDetailEntry] = useState<ExpenseEntry | null>(null);
-  const [mounted, setMounted] = useState(false);
 
   const load = async () => {
     const [e, c] = await Promise.all([api.get("/expenses/entries"), api.get("/expenses/categories")]);
@@ -92,8 +90,6 @@ export default function ExpensesPage() {
   };
 
   useEffect(() => { load(); }, []);
-  useEffect(() => { setMounted(true); }, []);
-
   const openEdit = (entry: ExpenseEntry) => {
     setEditId(entry.id);
     setForm({
@@ -167,60 +163,7 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {mounted && entries.length > 0 && (() => {
-        const pieData = categories
-          .map(cat => ({
-            name: cat.name,
-            value: entries.filter(e => e.category_id === cat.id).reduce((s, e) => s + Number(e.amount), 0),
-            color: cat.color || "#6366f1",
-          }))
-          .filter(d => d.value > 0);
-        if (pieData.length === 0) return null;
-        const total = pieData.reduce((s, d) => s + d.value, 0);
-        return (
-          <div className="bg-white rounded-xl border p-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Distribucion por categoria</h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={55}
-                  outerRadius={90}
-                  paddingAngle={2}
-                  dataKey="value"
-                >
-                  {pieData.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null;
-                    const d = payload[0].payload;
-                    return (
-                      <div className="bg-white border rounded-lg px-3 py-2 text-xs shadow-sm space-y-0.5">
-                        <p className="font-semibold text-gray-900">{d.name}</p>
-                        <p className="text-gray-600">{new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(d.value)}</p>
-                        <p className="text-muted-foreground">{((d.value / total) * 100).toFixed(1)}%</p>
-                      </div>
-                    );
-                  }}
-                />
-                <Legend
-                  formatter={(value, entry: any) => (
-                    <span className="text-xs text-gray-700">
-                      {value} ({((entry.payload.value / total) * 100).toFixed(1)}%)
-                    </span>
-                  )}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        );
-      })()}
-
+      
       {showCatForm && (
         <form onSubmit={handleAddCat} className="bg-white rounded-xl border p-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
