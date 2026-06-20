@@ -175,6 +175,7 @@ export default function ExpensesPage() {
             color: cat.color || "#6366f1",
           }))
           .filter(d => d.value > 0);
+        if (pieData.length === 0) return null;
         const total = pieData.reduce((s, d) => s + d.value, 0);
         return (
           <div className="bg-white rounded-xl border p-4">

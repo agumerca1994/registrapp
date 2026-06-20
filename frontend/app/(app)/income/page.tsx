@@ -500,6 +500,7 @@ export default function IncomePage() {
             Dolar: usdChg != null ? parseFloat(usdChg.toFixed(1)) : null,
           };
         });
+        if (chartData.length === 0) return null;
         return (
           <div className="bg-white rounded-xl border p-4">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Variacion mensual: ingreso, inflacion y dolar oficial (%)</h3>
