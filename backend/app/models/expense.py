@@ -30,6 +30,8 @@ class ExpenseEntry(Base):
     description: Mapped[str | None] = mapped_column(String(255))
     expense_date: Mapped[date] = mapped_column(Date, index=True)
     notes: Mapped[str | None] = mapped_column(String(500))
+    payment_method: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    entity: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     category: Mapped["ExpenseCategory"] = relationship(back_populates="entries")

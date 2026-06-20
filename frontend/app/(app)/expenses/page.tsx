@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { formatARS, formatDate } from "@/lib/utils";
-import { Plus, Trash2, Pencil, X, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Pencil, X, ChevronRight, CreditCard } from "lucide-react";
 
 interface Category { id: number; name: string; color?: string; is_fixed: boolean; }
 interface ExpenseEntry {
   id: number; category_id: number; amount: number;
   description?: string; expense_date: string; notes?: string;
+  payment_method?: string; entity?: string;
   category: Category;
 }
 
@@ -272,9 +273,16 @@ export default function ExpensesPage() {
               onClick={() => setDetailEntry(entry)}
             >
               <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.category.color || "#6366f1" }} />
-              <span className="flex-1 text-sm font-medium text-gray-900 truncate">
-                {entry.description || entry.category.name}
-              </span>
+              <div className="flex-1 min-w-0">
+                <span className="block text-sm font-medium text-gray-900 truncate">
+                  {entry.description || entry.category.name}
+                </span>
+                {entry.payment_method === "tarjeta_credito" && (
+                  <span className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium">
+                    <CreditCard className="w-3 h-3" />{entry.entity}
+                  </span>
+                )}
+              </div>
               <span className="w-24 text-xs text-muted-foreground shrink-0 text-right truncate">{formatDate(entry.expense_date)}</span>
               <span className="w-28 text-sm font-semibold text-red-500 shrink-0 text-right">{formatARS(entry.amount)}</span>
               <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />

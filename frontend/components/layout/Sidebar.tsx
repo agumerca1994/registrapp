@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, TrendingUp, TrendingDown, BarChart3,
-  Home, LogOut, Settings, Menu, X, Users2,
+  Home, LogOut, Settings, Menu, X, Users2, CreditCard,
 } from "lucide-react";
 
 const nav = [
@@ -15,6 +15,7 @@ const nav = [
   { href: "/income", label: "Ingresos", icon: TrendingUp },
   { href: "/expenses", label: "Egresos", icon: TrendingDown },
   { href: "/shared", label: "Gastos compartidos", icon: Users2 },
+  { href: "/tarjetas", label: "Tarjetas", icon: CreditCard },
   { href: "/macro", label: "Variables macro", icon: BarChart3 },
   { href: "/mortgage", label: "Hipoteca", icon: Home },
   { href: "/settings", label: "Configuración", icon: Settings },

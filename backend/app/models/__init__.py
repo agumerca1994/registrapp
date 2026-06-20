@@ -5,6 +5,7 @@ from app.models.expense import ExpenseCategory, ExpenseEntry
 from app.models.macro_variable import MacroVariable
 from app.models.mortgage import MortgageRecord
 from app.models.shared_expense import SharedExpense, SharedExpenseSplit
+from app.models.credit_card import CreditCard, CreditCardStatement, CreditCardItem
 
 __all__ = [
     "Tenant", "User",
@@ -12,4 +13,5 @@ __all__ = [
     "ExpenseCategory", "ExpenseEntry",
     "MacroVariable", "MortgageRecord",
     "SharedExpense", "SharedExpenseSplit",
+    "CreditCard", "CreditCardStatement", "CreditCardItem",
 ]

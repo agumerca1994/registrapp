@@ -43,5 +43,7 @@ class ExpenseEntryOut(BaseModel):
     description: str | None
     expense_date: date
     notes: str | None
+    payment_method: str | None
+    entity: str | None
     created_at: datetime
     category: ExpenseCategoryOut
