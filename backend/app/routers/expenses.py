@@ -24,6 +24,25 @@ async def _get_db_user(firebase_user: dict, db: AsyncSession) -> User:
     return user
 
 
+async def _get_or_create_usd_category(tenant_id: int, db: AsyncSession) -> int:
+    cat = await db.scalar(
+        select(ExpenseCategory).where(
+            ExpenseCategory.tenant_id == tenant_id,
+            ExpenseCategory.name == "Consumo en dólares",
+        )
+    )
+    if not cat:
+        cat = ExpenseCategory(
+            tenant_id=tenant_id,
+            name="Consumo en dólares",
+            color="#22c55e",
+            is_fixed=False,
+        )
+        db.add(cat)
+        await db.flush()
+    return cat.id
+
+
 # ── Categories ────────────────────────────────────────────────────────────────
 
 @router.get("/categories", response_model=list[ExpenseCategoryOut])
@@ -83,7 +102,12 @@ async def create_entry(
     db: AsyncSession = Depends(get_db),
 ):
     user = await _get_db_user(firebase_user, db)
-    entry = ExpenseEntry(**body.model_dump(), tenant_id=user.tenant_id, user_id=user.id)
+    data = body.model_dump()
+    if data.get("currency") == "USD":
+        data["category_id"] = await _get_or_create_usd_category(user.tenant_id, db)
+    elif data.get("category_id") is None:
+        raise HTTPException(status_code=422, detail="category_id es requerido para gastos en ARS")
+    entry = ExpenseEntry(**data, tenant_id=user.tenant_id, user_id=user.id)
     db.add(entry)
     await db.commit()
     result = await db.scalar(

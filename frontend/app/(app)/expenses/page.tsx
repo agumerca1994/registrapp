@@ -3,18 +3,18 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
-import { formatARS, formatDate } from "@/lib/utils";
+import { formatARS, formatDate, formatUSD } from "@/lib/utils";
 import { Plus, Trash2, Pencil, X, ChevronRight, CreditCard, ExternalLink } from "lucide-react";
 
 interface Category { id: number; name: string; color?: string; is_fixed: boolean; }
 interface ExpenseEntry {
   id: number; category_id: number; amount: number;
   description?: string; expense_date: string; notes?: string;
-  payment_method?: string; entity?: string;
+  payment_method?: string; entity?: string; currency?: string;
   category: Category;
 }
 
-const EMPTY_FORM = { category_id: "", amount: "", description: "", expense_date: "", notes: "" };
+const EMPTY_FORM = { category_id: "", amount: "", description: "", expense_date: "", notes: "", currency: "ARS" as "ARS" | "USD" };
 
 function EntryDetailModal({
   entry, onEdit, onDelete, onViewStatement, onClose,
@@ -131,7 +131,14 @@ export default function ExpensesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const payload = { ...form, category_id: parseInt(form.category_id), amount: parseFloat(form.amount) };
+    const payload: Record<string, unknown> = {
+      amount: parseFloat(form.amount),
+      description: form.description,
+      expense_date: form.expense_date,
+      notes: form.notes,
+      currency: form.currency,
+    };
+    if (form.currency === "ARS") payload.category_id = parseInt(form.category_id);
     if (editId) await api.patch(`/expenses/entries/${editId}`, payload);
     else await api.post("/expenses/entries", payload);
     closeForm();
@@ -237,15 +244,32 @@ export default function ExpensesPage() {
       {showForm && (
         <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-4 md:p-5 space-y-3">
           <p className="text-sm font-medium text-gray-700">{editId ? "Editar egreso" : "Nuevo egreso"}</p>
+          <div className="flex gap-2 mb-1">
+            {(["ARS", "USD"] as const).map(cur => (
+              <button key={cur} type="button"
+                onClick={() => setForm(p => ({ ...p, currency: cur, category_id: cur === "USD" ? "" : p.category_id }))}
+                className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${form.currency === cur ? "bg-primary text-white border-primary" : "text-gray-600 hover:bg-gray-50"}`}>
+                {cur === "ARS" ? "$ ARS" : "U$D"}
+              </button>
+            ))}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {form.currency === "USD" ? (
+              <div className="sm:col-span-2">
+                <p className="text-xs text-gray-500 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                  Se agrega automáticamente a la categoría <strong>Consumo en dólares</strong>
+                </p>
+              </div>
+            ) : (
             <div>
               <label className="text-xs font-medium text-gray-600">Categoria</label>
               <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
-                value={form.category_id} onChange={e => setForm(p => ({ ...p, category_id: e.target.value }))} required>
+                value={form.category_id} onChange={e => setForm(p => ({ ...p, category_id: e.target.value }))} required={form.currency === "ARS"}>
                 <option value="">Selecciona una categoria</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
+            )}
             <div>
               <label className="text-xs font-medium text-gray-600">Fecha</label>
               <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
@@ -329,11 +353,24 @@ export default function ExpensesPage() {
                 )}
               </div>
               <span className="text-xs text-muted-foreground shrink-0">{formatDate(entry.expense_date)}</span>
-              <span className="text-sm font-semibold text-red-500 shrink-0">{formatARS(entry.amount)}</span>
+              <span className="text-sm font-semibold text-red-500 shrink-0">{entry.currency === "USD" ? formatUSD(entry.amount) : formatARS(entry.amount)}</span>
               <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
             </button>
           </div>
         ))}
+        {entries.length > 0 && (() => {
+          const arsTotal = entries.filter(e => e.currency !== "USD").reduce((s, e) => s + Number(e.amount), 0);
+          const usdTotal = entries.filter(e => e.currency === "USD").reduce((s, e) => s + Number(e.amount), 0);
+          return (
+            <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-t rounded-b-xl flex-wrap gap-1">
+              <span className="text-sm font-medium text-gray-700">Total</span>
+              <div className="flex flex-col items-end gap-0.5">
+                {arsTotal > 0 && <span className="text-base font-bold text-red-500">{formatARS(arsTotal)}</span>}
+                {usdTotal > 0 && <span className="text-sm font-bold text-green-600">U$D {usdTotal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {detailEntry && (

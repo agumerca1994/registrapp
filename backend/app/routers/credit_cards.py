@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.firebase import get_current_user
 from app.models.user import User
-from app.models.expense import ExpenseEntry
+from app.models.expense import ExpenseEntry, ExpenseCategory
 from app.models.credit_card import CreditCard, CreditCardStatement, CreditCardItem
 from app.schemas.credit_card import (
     CreditCardCreate, CreditCardUpdate, CreditCardOut,
@@ -27,6 +27,25 @@ async def _get_db_user(firebase_user: dict, db: AsyncSession) -> User:
     if not user:
         raise HTTPException(status_code=401, detail="Usuario no registrado")
     return user
+
+
+async def _get_or_create_usd_category(tenant_id: int, db: AsyncSession) -> int:
+    cat = await db.scalar(
+        select(ExpenseCategory).where(
+            ExpenseCategory.tenant_id == tenant_id,
+            ExpenseCategory.name == "Consumo en dólares",
+        )
+    )
+    if not cat:
+        cat = ExpenseCategory(
+            tenant_id=tenant_id,
+            name="Consumo en dólares",
+            color="#22c55e",
+            is_fixed=False,
+        )
+        db.add(cat)
+        await db.flush()
+    return cat.id
 
 
 def _items_query(stmt_id: int):
@@ -92,6 +111,7 @@ async def _create_expense_entry(
     tenant_id: int,
     user_id: int,
     db: AsyncSession,
+    currency: str = "ARS",
 ) -> ExpenseEntry:
     entry = ExpenseEntry(
         tenant_id=tenant_id,
@@ -102,6 +122,7 @@ async def _create_expense_entry(
         expense_date=item_date,
         payment_method="tarjeta_credito",
         entity=card.bank,
+        currency=currency,
     )
     db.add(entry)
     await db.flush()
@@ -461,19 +482,28 @@ async def create_item(
     if body.item_type == "installment":
         cuota_label = f" ({body.installment_number}/{body.installment_count})"
 
+    category_id = body.category_id
+    if body.currency == "USD":
+        category_id = await _get_or_create_usd_category(user.tenant_id, db)
+    elif category_id is None:
+        from fastapi import HTTPException as _HTTPException
+        raise _HTTPException(status_code=422, detail="category_id es requerido para gastos en ARS")
+
     entry = await _create_expense_entry(
         card, body.item_date, body.amount,
         f"{body.description}{cuota_label}",
-        body.category_id, user.tenant_id, user.id, db,
+        category_id, user.tenant_id, user.id, db,
+        currency=body.currency,
     )
 
     item = CreditCardItem(
         statement_id=stmt_id,
         description=body.description,
-        category_id=body.category_id,
+        category_id=category_id,
         item_date=body.item_date,
         item_type=body.item_type,
         amount=body.amount,
+        currency=body.currency,
         installment_count=body.installment_count,
         installment_number=body.installment_number if body.item_type == "installment" else None,
         purchase_total=body.purchase_total,

@@ -71,6 +71,7 @@ class CreditCardItem(Base):
     expense_entry_id: Mapped[int | None] = mapped_column(
         ForeignKey("expense_entries.id", ondelete="SET NULL"), nullable=True
     )
+    currency: Mapped[str] = mapped_column(String(3), default="ARS", server_default="ARS")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     statement: Mapped["CreditCardStatement"] = relationship(back_populates="items")

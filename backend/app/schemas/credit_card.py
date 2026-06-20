@@ -34,10 +34,11 @@ class StatementCreate(BaseModel):
 
 class CreditCardItemCreate(BaseModel):
     description: str
-    category_id: int
+    category_id: int | None = None
     item_date: date
     item_type: str  # "single" | "installment" | "recurring"
     amount: Decimal
+    currency: str = "ARS"
     # Installment fields
     installment_count: int | None = None
     installment_number: int = 1
@@ -45,6 +46,8 @@ class CreditCardItemCreate(BaseModel):
 
     @model_validator(mode="after")
     def compute_installment_amounts(self) -> "CreditCardItemCreate":
+        if self.currency == "USD" and self.item_type != "single":
+            raise ValueError("Los gastos en USD solo pueden ser de tipo único")
         if self.item_type == "installment":
             if not self.installment_count or self.installment_count < 2:
                 raise ValueError("installment_count debe ser al menos 2")
@@ -85,6 +88,7 @@ class CreditCardItemOut(BaseModel):
     installment_group_id: int | None
     expense_entry_id: int | None
     installment_root_statement_id: int | None = None
+    currency: str = "ARS"
     category: CategoryOut
 
 

@@ -19,11 +19,12 @@ class ExpenseCategoryOut(BaseModel):
 
 
 class ExpenseEntryCreate(BaseModel):
-    category_id: int
+    category_id: int | None = None
     amount: Decimal
     description: str | None = None
     expense_date: date
     notes: str | None = None
+    currency: str = "ARS"
 
 
 class ExpenseEntryUpdate(BaseModel):
@@ -32,6 +33,7 @@ class ExpenseEntryUpdate(BaseModel):
     description: str | None = None
     expense_date: date | None = None
     notes: str | None = None
+    currency: str | None = None
 
 
 class ExpenseEntryOut(BaseModel):
@@ -45,5 +47,6 @@ class ExpenseEntryOut(BaseModel):
     notes: str | None
     payment_method: str | None
     entity: str | None
+    currency: str = "ARS"
     created_at: datetime
     category: ExpenseCategoryOut

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
-import { formatARS, formatDate } from "@/lib/utils";
+import { formatARS, formatDate, formatUSD } from "@/lib/utils";
 import { Plus, Trash2, ChevronLeft, Pencil, X, CheckCircle, ExternalLink } from "lucide-react";
 
 const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -12,7 +12,7 @@ interface Category { id: number; name: string; color?: string; is_fixed: boolean
 interface CardItem {
   id: number; description: string; category_id: number; item_date: string; item_type: string;
   amount: number; installment_count?: number; installment_number?: number;
-  purchase_total?: number; installment_group_id?: number; installment_root_statement_id?: number; expense_entry_id?: number;
+  purchase_total?: number; installment_group_id?: number; installment_root_statement_id?: number; expense_entry_id?: number; currency?: string;
   category: { id: number; name: string; color?: string };
 }
 interface Statement {
@@ -29,6 +29,7 @@ type AmountMode = "per_installment" | "total";
 const EMPTY_ITEM = {
   description: "", category_id: "", item_date: "", item_type: "single" as ItemType,
   amount: "", installment_count: "2", purchase_total: "", amount_mode: "per_installment" as AmountMode,
+  currency: "ARS" as "ARS" | "USD",
 };
 
 function itemTypeBadge(item: CardItem) {
@@ -263,11 +264,12 @@ export default function StatementDetailPage() {
     setAdding(true);
     const payload: Record<string, unknown> = {
       description: form.description,
-      category_id: parseInt(form.category_id),
       item_date: form.item_date,
       item_type: form.item_type,
       amount: parseFloat(form.amount),
+      currency: form.currency,
     };
+    if (form.currency === "ARS") payload.category_id = parseInt(form.category_id);
     if (form.item_type === "installment") {
       payload.installment_count = parseInt(form.installment_count);
       payload.installment_number = 1;
@@ -365,11 +367,12 @@ export default function StatementDetailPage() {
               <input className={INPUT} placeholder="TV Samsung"
                 value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} required />
             </div>
+            {form.currency !== "USD" && (
             <div>
               <label className="text-xs font-medium text-gray-600">Categoria</label>
               <div className="flex gap-1.5">
                 <select className={INPUT}
-                  value={form.category_id} onChange={(e) => setForm((p) => ({ ...p, category_id: e.target.value }))} required>
+                  value={form.category_id} onChange={(e) => setForm((p) => ({ ...p, category_id: e.target.value }))} required={form.currency === "ARS"}>
                   <option value="">Seleccionar...</option>
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
@@ -377,6 +380,7 @@ export default function StatementDetailPage() {
                   className="mt-1 px-2.5 border rounded-lg text-gray-500 hover:bg-gray-50 shrink-0 text-lg leading-none">+</button>
               </div>
             </div>
+            )}
             <div>
               <label className="text-xs font-medium text-gray-600">Fecha</label>
               <input type="date" className={INPUT}
@@ -387,7 +391,7 @@ export default function StatementDetailPage() {
               <div className="mt-1 flex gap-2">
                 {(["single","installment","recurring"] as ItemType[]).map((t) => (
                   <button key={t} type="button"
-                    onClick={() => setForm((p) => ({ ...p, item_type: t }))}
+                    onClick={() => setForm((p) => ({ ...p, item_type: t, currency: t !== "single" ? "ARS" : p.currency }))}
                     className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${
                       form.item_type === t ? "bg-primary text-white border-primary" : "text-gray-600 hover:bg-gray-50"
                     }`}>
@@ -396,6 +400,26 @@ export default function StatementDetailPage() {
                 ))}
               </div>
             </div>
+
+            {form.item_type === "single" && (
+              <div className="sm:col-span-2">
+                <label className="text-xs font-medium text-gray-600">Moneda</label>
+                <div className="mt-1 flex gap-2">
+                  {(["ARS", "USD"] as const).map(cur => (
+                    <button key={cur} type="button"
+                      onClick={() => setForm(p => ({ ...p, currency: cur, category_id: cur === "USD" ? "" : p.category_id }))}
+                      className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${form.currency === cur ? "bg-primary text-white border-primary" : "text-gray-600 hover:bg-gray-50"}`}>
+                      {cur === "ARS" ? "$ ARS" : "U$D"}
+                    </button>
+                  ))}
+                </div>
+                {form.currency === "USD" && (
+                  <p className="mt-1.5 text-xs text-gray-500 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
+                    Se agrega automáticamente a la categoría <strong>Consumo en dólares</strong>
+                  </p>
+                )}
+              </div>
+            )}
 
             {form.item_type === "installment" ? (
               <>
@@ -453,7 +477,7 @@ export default function StatementDetailPage() {
                   <span className="text-xs text-gray-400">{formatDate(item.item_date)}</span>
                 </div>
               </div>
-              <span className="text-sm font-semibold text-red-500 shrink-0">{formatARS(item.amount)}</span>
+              <span className="text-sm font-semibold text-red-500 shrink-0">{item.currency === "USD" ? formatUSD(item.amount) : formatARS(item.amount)}</span>
               {item.installment_group_id ? (
                 <button
                   onClick={() => router.push(`/tarjetas/${cardId}/${item.installment_root_statement_id}`)}
@@ -476,12 +500,19 @@ export default function StatementDetailPage() {
             </div>
           ))
         )}
-        {statement.items.length > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-b-xl">
-            <span className="text-sm font-medium text-gray-700">Total</span>
-            <span className="text-base font-bold text-red-500">{formatARS(statement.total)}</span>
-          </div>
-        )}
+        {statement.items.length > 0 && (() => {
+          const arsTotal = statement.items.filter(i => i.currency !== "USD").reduce((s, i) => s + i.amount, 0);
+          const usdTotal = statement.items.filter(i => i.currency === "USD").reduce((s, i) => s + i.amount, 0);
+          return (
+            <div className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-b-xl flex-wrap gap-1">
+              <span className="text-sm font-medium text-gray-700">Total</span>
+              <div className="flex flex-col items-end gap-0.5">
+                {arsTotal > 0 && <span className="text-base font-bold text-red-500">{formatARS(arsTotal)}</span>}
+                {usdTotal > 0 && <span className="text-sm font-bold text-green-600">U$D {usdTotal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Category summary */}
