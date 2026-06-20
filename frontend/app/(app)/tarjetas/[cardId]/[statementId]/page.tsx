@@ -361,6 +361,23 @@ export default function StatementDetailPage() {
       {showAddForm && (
         <form onSubmit={handleAddItem} className="bg-white rounded-xl border p-4 space-y-3">
           <p className="text-sm font-medium text-gray-700">Nuevo item</p>
+
+          {/* Currency toggle — always at top */}
+          <div className="flex gap-2">
+            {(["ARS", "USD"] as const).map(cur => (
+              <button key={cur} type="button"
+                onClick={() => setForm(p => ({ ...p, currency: cur, category_id: cur === "USD" ? "" : p.category_id, item_type: cur === "USD" ? "single" : p.item_type }))}
+                className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${form.currency === cur ? "bg-primary text-white border-primary" : "text-gray-600 hover:bg-gray-50"}`}>
+                {cur === "ARS" ? "$ ARS" : "U$D"}
+              </button>
+            ))}
+          </div>
+          {form.currency === "USD" && (
+            <p className="text-xs text-gray-500 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
+              Se agrega automáticamente a la categoría <strong>Consumo en dólares</strong>
+            </p>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-gray-600">Descripcion</label>
@@ -386,12 +403,13 @@ export default function StatementDetailPage() {
               <input type="date" className={INPUT}
                 value={form.item_date} onChange={(e) => setForm((p) => ({ ...p, item_date: e.target.value }))} required />
             </div>
+            {form.currency !== "USD" && (
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-gray-600">Tipo</label>
               <div className="mt-1 flex gap-2">
                 {(["single","installment","recurring"] as ItemType[]).map((t) => (
                   <button key={t} type="button"
-                    onClick={() => setForm((p) => ({ ...p, item_type: t, currency: t !== "single" ? "ARS" : p.currency }))}
+                    onClick={() => setForm((p) => ({ ...p, item_type: t }))}
                     className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${
                       form.item_type === t ? "bg-primary text-white border-primary" : "text-gray-600 hover:bg-gray-50"
                     }`}>
@@ -400,25 +418,6 @@ export default function StatementDetailPage() {
                 ))}
               </div>
             </div>
-
-            {form.item_type === "single" && (
-              <div className="sm:col-span-2">
-                <label className="text-xs font-medium text-gray-600">Moneda</label>
-                <div className="mt-1 flex gap-2">
-                  {(["ARS", "USD"] as const).map(cur => (
-                    <button key={cur} type="button"
-                      onClick={() => setForm(p => ({ ...p, currency: cur, category_id: cur === "USD" ? "" : p.category_id }))}
-                      className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${form.currency === cur ? "bg-primary text-white border-primary" : "text-gray-600 hover:bg-gray-50"}`}>
-                      {cur === "ARS" ? "$ ARS" : "U$D"}
-                    </button>
-                  ))}
-                </div>
-                {form.currency === "USD" && (
-                  <p className="mt-1.5 text-xs text-gray-500 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
-                    Se agrega automáticamente a la categoría <strong>Consumo en dólares</strong>
-                  </p>
-                )}
-              </div>
             )}
 
             {form.item_type === "installment" ? (
