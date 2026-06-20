@@ -47,11 +47,25 @@ interface ParticipantRow {
   user_id: number | null;
   member_name: string;
   amount: string;
+  manual: boolean;
+}
+
+function parseAmt(s: string): number {
+  return parseFloat(s.replace(",", ".")) || 0;
 }
 
 function fmtDate(d: string) {
   try { return format(new Date(d + "T12:00:00"), "d MMM yyyy", { locale: es }); }
   catch { return d; }
+}
+
+function redistAuto(parts: ParticipantRow[], total: number): ParticipantRow[] {
+  const manualSum = parts.filter(p => p.manual).reduce((s, p) => s + parseAmt(p.amount), 0);
+  const remaining = Math.max(0, total - manualSum);
+  const autoCount = parts.filter(p => !p.manual).length;
+  if (autoCount === 0) return parts;
+  const perAuto = (remaining / autoCount).toFixed(2);
+  return parts.map(p => p.manual ? p : { ...p, amount: perAuto });
 }
 
 function StatusChip({ status }: { status: string }) {
@@ -80,7 +94,8 @@ export default function SharedExpensesPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [showCatForm, setShowCatForm] = useState(false);
-  const [catForm, setCatForm] = useState({ name: "", color: "#6366f1" });
+  const [catName, setCatName] = useState("");
+  const [catColor, setCatColor] = useState("#6366f1");
   const [savingCat, setSavingCat] = useState(false);
 
   const [title, setTitle] = useState("");
@@ -89,16 +104,18 @@ export default function SharedExpensesPage() {
   const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [splitType, setSplitType] = useState<"equal" | "custom">("equal");
   const [participants, setParticipants] = useState<ParticipantRow[]>([
-    { type: "member", user_id: null, member_name: "", amount: "" },
+    { type: "member", user_id: null, member_name: "", amount: "", manual: false },
   ]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+
+  const total = parseAmt(totalAmount);
 
   const loadCategories = async () => {
     try {
       const res = await api.get("/expenses/categories");
       setCategories(res.data);
-    } catch { /* ignore */ }
+    } catch { /* ignorar */ }
   };
 
   const load = async () => {
@@ -115,34 +132,102 @@ export default function SharedExpensesPage() {
 
   useEffect(() => { load(); }, []);
 
-  const total = parseFloat(totalAmount) || 0;
+  // Pre-cargar el primer participante con el usuario actual
+  useEffect(() => {
+    if (!appUser || members.length === 0) return;
+    const me = members.find(m => m.id === appUser.id);
+    if (!me) return;
+    setParticipants(prev => {
+      if (prev[0].user_id !== null) return prev;
+      const updated: ParticipantRow[] = [
+        { ...prev[0], user_id: me.id, member_name: me.display_name || me.email || "Yo" },
+        ...prev.slice(1),
+      ];
+      return splitType === "custom" ? redistAuto(updated, total) : updated;
+    });
+  }, [members, appUser]);
+
+  // Redistribuir automaticos cuando cambia el monto total
+  useEffect(() => {
+    if (splitType === "custom" && total > 0) {
+      setParticipants(prev => redistAuto(prev, total));
+    }
+  }, [totalAmount, splitType]);
+
+  // --- Valores derivados ---
   const equalShare = participants.length > 0 && total > 0
     ? (total / participants.length).toFixed(2) : "0.00";
 
+  const manualSum = splitType === "custom"
+    ? participants.filter(p => p.manual).reduce((s, p) => s + parseAmt(p.amount), 0)
+    : 0;
+  const assignedSum = splitType === "custom"
+    ? participants.reduce((s, p) => s + parseAmt(p.amount), 0)
+    : 0;
+  const overBudget = splitType === "custom" && total > 0 && manualSum > total + 0.01;
+
+  // --- Helpers de participantes ---
   function updateParticipant(idx: number, patch: Partial<ParticipantRow>) {
     setParticipants(prev => prev.map((p, i) => i === idx ? { ...p, ...patch } : p));
   }
+
+  function setManualAmount(idx: number, value: string) {
+    setParticipants(prev => {
+      const updated = prev.map((p, i) =>
+        i === idx ? { ...p, amount: value, manual: true } : p
+      );
+      return redistAuto(updated, total);
+    });
+  }
+
   function addParticipant() {
-    setParticipants(prev => [...prev, { type: "member", user_id: null, member_name: "", amount: "" }]);
+    setParticipants(prev => {
+      const newRow: ParticipantRow = {
+        type: "member", user_id: null, member_name: "", amount: "", manual: false,
+      };
+      const updated = [...prev, newRow];
+      return splitType === "custom" ? redistAuto(updated, total) : updated;
+    });
   }
+
   function removeParticipant(idx: number) {
-    if (participants.length <= 1) return;
-    setParticipants(prev => prev.filter((_, i) => i !== idx));
+    if (idx === 0 || participants.length <= 1) return;
+    setParticipants(prev => {
+      const updated = prev.filter((_, i) => i !== idx);
+      return splitType === "custom" ? redistAuto(updated, total) : updated;
+    });
   }
+
+  function handleSplitTypeChange(newType: "equal" | "custom") {
+    setSplitType(newType);
+    if (newType === "custom") {
+      setParticipants(prev => redistAuto(prev.map(p => ({ ...p, manual: false })), total));
+    } else {
+      setParticipants(prev => prev.map(p => ({ ...p, amount: "", manual: false })));
+    }
+  }
+
   function resetForm() {
     setTitle(""); setTotalAmount(""); setCategoryId("");
     setExpenseDate(new Date().toISOString().slice(0, 10));
     setSplitType("equal");
-    setParticipants([{ type: "member", user_id: null, member_name: "", amount: "" }]);
+    const me = members.find(m => m.id === appUser?.id);
+    setParticipants([{
+      type: "member",
+      user_id: me?.id ?? null,
+      member_name: me?.display_name || me?.email || "Yo",
+      amount: "",
+      manual: false,
+    }]);
     setFormError("");
   }
 
-  async function handleAddCat(e: React.FormEvent) {
-    e.preventDefault();
+  async function saveCat() {
+    if (!catName.trim()) return;
     setSavingCat(true);
     try {
-      await api.post("/expenses/categories", { ...catForm, is_fixed: false });
-      setCatForm({ name: "", color: "#6366f1" });
+      await api.post("/expenses/categories", { name: catName, color: catColor, is_fixed: false });
+      setCatName(""); setCatColor("#6366f1");
       setShowCatForm(false);
       await loadCategories();
     } finally { setSavingCat(false); }
@@ -151,14 +236,17 @@ export default function SharedExpensesPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError("");
+    if (overBudget) {
+      setFormError("La division supera el monto total"); return;
+    }
     const splits = participants.map(p => ({
       user_id: p.type === "member" ? p.user_id : null,
       member_name: p.member_name,
-      amount: parseFloat(splitType === "equal" ? equalShare : p.amount) || 0,
+      amount: splitType === "equal" ? parseFloat(equalShare) : parseAmt(p.amount),
     }));
-    const sumAmounts = splits.reduce((s, x) => s + x.amount, 0);
-    if (Math.abs(sumAmounts - total) > 0.02) {
-      setFormError(`La suma de los montos (${formatARS(sumAmounts)}) no coincide con el total (${formatARS(total)})`);
+    const sumAmts = splits.reduce((s, x) => s + x.amount, 0);
+    if (Math.abs(sumAmts - total) > 0.02) {
+      setFormError(`La suma (${formatARS(sumAmts)}) no coincide con el total (${formatARS(total)})`);
       return;
     }
     if (splits.some(s => !s.member_name.trim())) {
@@ -208,21 +296,27 @@ export default function SharedExpensesPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-gray-600">{"Descripcion *"}</label>
+              <label className="text-xs font-medium text-gray-600">Descripcion *</label>
               <input required value={title} onChange={e => setTitle(e.target.value)}
                 className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
                 placeholder="ej: Supermercado del fin de semana" />
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-600">{"Monto ($) *"}</label>
-              <input required type="number" step="0.01" min="0"
-                value={totalAmount} onChange={e => setTotalAmount(e.target.value)}
-                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" placeholder="0.00" />
+              <label className="text-xs font-medium text-gray-600">Monto ($) *</label>
+              <input
+                required
+                type="text"
+                inputMode="decimal"
+                value={totalAmount}
+                onChange={e => setTotalAmount(e.target.value)}
+                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                placeholder="0,00"
+              />
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-600">{"Fecha *"}</label>
+              <label className="text-xs font-medium text-gray-600">Fecha *</label>
               <input required type="date" value={expenseDate}
                 onChange={e => setExpenseDate(e.target.value)}
                 className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
@@ -230,35 +324,38 @@ export default function SharedExpensesPage() {
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-medium text-gray-600">{"Categoria *"}</label>
+                <label className="text-xs font-medium text-gray-600">Categoria *</label>
                 <button type="button" onClick={() => setShowCatForm(v => !v)}
                   className="text-xs text-primary hover:underline">
                   + Crear
                 </button>
               </div>
               {showCatForm && (
-                <form onSubmit={handleAddCat} className="mb-1 border rounded-lg p-2 bg-gray-50 space-y-2">
+                <div className="mb-1 border rounded-lg p-2 bg-gray-50 space-y-2">
                   <div className="flex gap-2">
-                    <input required value={catForm.name}
-                      onChange={e => setCatForm(p => ({ ...p, name: e.target.value }))}
-                      placeholder="Nombre categoria" className="flex-1 border rounded-lg px-2 py-1.5 text-sm" />
-                    <input type="color" value={catForm.color}
-                      onChange={e => setCatForm(p => ({ ...p, color: e.target.value }))}
+                    <input
+                      value={catName}
+                      onChange={e => setCatName(e.target.value)}
+                      placeholder="Nombre categoria"
+                      className="flex-1 border rounded-lg px-2 py-1.5 text-sm"
+                    />
+                    <input type="color" value={catColor}
+                      onChange={e => setCatColor(e.target.value)}
                       className="h-8 w-10 border rounded-lg cursor-pointer" />
                   </div>
                   <div className="flex gap-2 justify-end">
                     <button type="button" onClick={() => setShowCatForm(false)}
                       className="text-xs border px-2 py-1 rounded-lg hover:bg-white">Cancelar</button>
-                    <button type="submit" disabled={savingCat}
+                    <button type="button" disabled={savingCat || !catName.trim()} onClick={saveCat}
                       className="text-xs bg-primary text-white px-2 py-1 rounded-lg disabled:opacity-60">
                       Guardar
                     </button>
                   </div>
-                </form>
+                </div>
               )}
               <select required value={categoryId} onChange={e => setCategoryId(e.target.value)}
                 className="w-full border rounded-lg px-3 py-2 text-sm bg-white">
-                <option value="">{"Seleccionar..."}</option>
+                <option value="">Seleccionar...</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
               {!showCatForm && categories.length === 0 && (
@@ -269,8 +366,8 @@ export default function SharedExpensesPage() {
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-600">{"Division *"}</label>
-              <select value={splitType} onChange={e => setSplitType(e.target.value as "equal" | "custom")}
+              <label className="text-xs font-medium text-gray-600">Division *</label>
+              <select value={splitType} onChange={e => handleSplitTypeChange(e.target.value as "equal" | "custom")}
                 className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white">
                 <option value="equal">Equitativa</option>
                 <option value="custom">Personalizada</option>
@@ -280,7 +377,7 @@ export default function SharedExpensesPage() {
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-medium text-gray-600">{"Participantes *"}</label>
+              <label className="text-xs font-medium text-gray-600">Participantes *</label>
               <button type="button" onClick={addParticipant}
                 className="text-xs text-primary hover:underline flex items-center gap-1">
                 <Plus className="w-3 h-3" /> Agregar
@@ -288,66 +385,98 @@ export default function SharedExpensesPage() {
             </div>
 
             <div className="space-y-2">
-              {participants.map((p, idx) => (
-                <div key={idx} className="border rounded-lg p-2.5 bg-gray-50 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <select value={p.type}
-                      onChange={e => {
-                        const t = e.target.value as "member" | "external";
-                        updateParticipant(idx, { type: t, user_id: null, member_name: "" });
-                      }}
-                      className="border rounded-lg px-2 py-1.5 text-xs bg-white shrink-0">
-                      <option value="member">Del hogar</option>
-                      <option value="external">Externo</option>
-                    </select>
-                    <button type="button" onClick={() => removeParticipant(idx)}
-                      className="ml-auto text-gray-400 hover:text-red-500 px-1 text-base leading-none">
-                      x
-                    </button>
+              {participants.map((p, idx) => {
+                const isCreator = idx === 0;
+                return (
+                  <div key={idx} className="border rounded-lg p-2.5 bg-gray-50 space-y-2">
+                    <div className="flex items-center gap-2">
+                      {isCreator ? (
+                        <span className="text-xs font-medium text-primary border border-primary/30 bg-primary/5 rounded-lg px-2 py-1.5">
+                          Yo
+                        </span>
+                      ) : (
+                        <select value={p.type}
+                          onChange={e => {
+                            const t = e.target.value as "member" | "external";
+                            updateParticipant(idx, { type: t, user_id: null, member_name: "" });
+                          }}
+                          className="border rounded-lg px-2 py-1.5 text-xs bg-white shrink-0">
+                          <option value="member">Del hogar</option>
+                          <option value="external">Externo</option>
+                        </select>
+                      )}
+                      {!isCreator && (
+                        <button type="button" onClick={() => removeParticipant(idx)}
+                          className="ml-auto text-gray-400 hover:text-red-500 px-1 text-base leading-none">
+                          x
+                        </button>
+                      )}
+                    </div>
+
+                    {isCreator ? (
+                      <p className="text-sm text-gray-700 px-1">
+                        {p.member_name || "Yo"}
+                      </p>
+                    ) : p.type === "member" ? (
+                      <select required value={p.user_id ?? ""}
+                        onChange={e => {
+                          const id = parseInt(e.target.value);
+                          const mem = members.find(m => m.id === id);
+                          updateParticipant(idx, { user_id: id, member_name: mem?.display_name || mem?.email || "" });
+                        }}
+                        className="w-full border rounded-lg px-2 py-2 text-sm bg-white">
+                        <option value="">Seleccionar miembro...</option>
+                        {members.filter(m => m.id !== appUser?.id).map(m => (
+                          <option key={m.id} value={m.id}>{m.display_name || m.email}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input required type="text" placeholder="Nombre del externo"
+                        value={p.member_name} onChange={e => updateParticipant(idx, { member_name: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm" />
+                    )}
+
+                    {splitType === "custom" ? (
+                      <div>
+                        <label className="text-xs text-gray-500">Monto ($)</label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0,00"
+                          value={p.amount}
+                          onChange={e => setManualAmount(idx, e.target.value)}
+                          className={`mt-0.5 w-full border rounded-lg px-3 py-2 text-sm ${!p.manual ? "text-gray-400 italic" : ""}`}
+                        />
+                        {!p.manual && parseAmt(p.amount) > 0 && (
+                          <p className="text-xs text-blue-500 mt-0.5">sugerencia</p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-xs text-gray-500">Monto</span>
+                        <span className="text-sm font-medium text-gray-700">
+                          {total > 0 ? formatARS(parseFloat(equalShare)) : "-"}
+                        </span>
+                      </div>
+                    )}
                   </div>
-
-                  {p.type === "member" ? (
-                    <select required value={p.user_id ?? ""}
-                      onChange={e => {
-                        const id = parseInt(e.target.value);
-                        const mem = members.find(m => m.id === id);
-                        updateParticipant(idx, { user_id: id, member_name: mem?.display_name || mem?.email || "" });
-                      }}
-                      className="w-full border rounded-lg px-2 py-2 text-sm bg-white">
-                      <option value="">Seleccionar miembro...</option>
-                      {members.map(m => (
-                        <option key={m.id} value={m.id}>{m.display_name || m.email}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input required type="text" placeholder="Nombre del externo"
-                      value={p.member_name} onChange={e => updateParticipant(idx, { member_name: e.target.value })}
-                      className="w-full border rounded-lg px-3 py-2 text-sm" />
-                  )}
-
-                  {splitType === "custom" ? (
-                    <div>
-                      <label className="text-xs text-gray-500">Monto ($)</label>
-                      <input required type="number" step="0.01" min="0" placeholder="0.00"
-                        value={p.amount} onChange={e => updateParticipant(idx, { amount: e.target.value })}
-                        className="mt-0.5 w-full border rounded-lg px-3 py-2 text-sm" />
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between px-1">
-                      <span className="text-xs text-gray-500">Monto</span>
-                      <span className="text-sm font-medium text-gray-700">
-                        {total > 0 ? formatARS(parseFloat(equalShare)) : "-"}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {splitType === "equal" && total > 0 && (
               <p className="text-xs text-muted-foreground mt-1.5">
                 {formatARS(total)} / {participants.length} = {formatARS(parseFloat(equalShare))} por persona
               </p>
+            )}
+
+            {splitType === "custom" && total > 0 && (
+              <div className={`mt-2 text-xs rounded-lg px-3 py-2 ${overBudget ? "bg-red-50 text-red-600 font-medium" : "bg-blue-50 text-blue-700"}`}>
+                {overBudget
+                  ? `La division supera el total: asignaste ${formatARS(manualSum)} de ${formatARS(total)}`
+                  : `Distribuido: ${formatARS(assignedSum)} | Restante: ${formatARS(total - assignedSum)}`
+                }
+              </div>
             )}
           </div>
 
@@ -357,7 +486,7 @@ export default function SharedExpensesPage() {
           <div className="flex gap-2 justify-end">
             <button type="button" onClick={() => setShowForm(false)}
               className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">Cancelar</button>
-            <button type="submit" disabled={saving}
+            <button type="submit" disabled={saving || overBudget}
               className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-60">
               {saving ? "Generando..." : "Generar gasto"}
             </button>
