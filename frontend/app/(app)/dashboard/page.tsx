@@ -220,11 +220,11 @@ export default function DashboardPage() {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState<Record<ChartKey, boolean>>({
-    incomeVsMortgage: true,
-    mortgagePct: true,
-    incomeVsExpenses: true,
-    incomeVsInflation: true,
-    uva: true,
+    incomeVsMortgage: false,
+    mortgagePct: false,
+    incomeVsExpenses: false,
+    incomeVsInflation: false,
+    uva: false,
   });
 
   useEffect(() => {
