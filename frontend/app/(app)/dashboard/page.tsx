@@ -32,9 +32,9 @@ interface MacroPoint {
   usd_official: number | null;
 }
 
-interface ExpenseEntry { id: number; category_id: number; amount: number; }
+interface ExpenseEntry { id: number; category_id: number; amount: number; expense_date: string; }
 interface ExpenseCategory { id: number; name: string; color?: string; }
-interface IncomeEntry { id: number; source_id: number; amount: number; }
+interface IncomeEntry { id: number; source_id: number; amount: number; period_date: string; }
 interface IncomeSource { id: number; name: string; }
 
 const PIE_COLORS = ["#ef4444","#f97316","#eab308","#22c55e","#14b8a6","#3b82f6","#8b5cf6","#ec4899","#f43f5e","#06b6d4"];
@@ -113,13 +113,16 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, [year, month]);
 
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+
   useEffect(() => {
     Promise.all([
       api.get("/dashboard/history"),
       api.get("/macro"),
-      api.get("/expenses/entries"),
+      api.get(`/expenses/entries?year=${currentYear}&month=${currentMonth}`),
       api.get("/expenses/categories"),
-      api.get("/income/entries"),
+      api.get(`/income/entries?year=${currentYear}&month=${currentMonth}`),
       api.get("/income/sources"),
     ]).then(([h, m, e, c, ie, is_]) => {
       setHistoryData(h.data);
@@ -129,6 +132,7 @@ export default function DashboardPage() {
       setIncEntries(ie.data);
       setIncSources(is_.data);
     }).finally(() => setChartsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const prev = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
@@ -158,6 +162,8 @@ export default function DashboardPage() {
     });
   })();
 
+  const currentMonthLabel = format(new Date(currentYear, currentMonth - 1, 1), "MMMM yyyy", { locale: es });
+
   const pieData = (() => {
     const total = expEntries.reduce((s, e) => s + Number(e.amount), 0);
     if (total === 0) return [];
@@ -171,7 +177,6 @@ export default function DashboardPage() {
       .filter(d => d.value > 0)
       .map(d => ({ ...d, pct: parseFloat(((d.value / total) * 100).toFixed(1)) }));
   })();
-
 
   const incomePieData = (() => {
     const total = incEntries.reduce((s, e) => s + Number(e.amount), 0);
@@ -189,7 +194,7 @@ export default function DashboardPage() {
   return (
     <div className="max-w-4xl space-y-4 md:space-y-6">
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center justify-end gap-2">
         <button onClick={prev} className="p-2 rounded-lg border hover:bg-gray-50 text-gray-600 text-sm font-bold leading-none">&#8249;</button>
         <span className="text-sm md:text-base font-semibold text-gray-800 capitalize min-w-[130px] text-center">{periodLabel}</span>
         <button onClick={next} className="p-2 rounded-lg border hover:bg-gray-50 text-gray-600 text-sm font-bold leading-none">&#8250;</button>
@@ -286,7 +291,7 @@ export default function DashboardPage() {
           {pieData.length > 0 && (
             <div className="bg-white rounded-xl border p-4 md:p-5">
               <h3 className="font-semibold text-gray-900 mb-4 text-sm md:text-base">
-                {"Distribución de egresos por categoría"}
+                {"Distribución de egresos por categoría"} — {currentMonthLabel}
               </h3>
               <ResponsiveContainer width="100%" height={280}>
                 <PieChart>
@@ -306,7 +311,7 @@ export default function DashboardPage() {
           {incomePieData.length > 0 && (
             <div className="bg-white rounded-xl border p-4 md:p-5">
               <h3 className="font-semibold text-gray-900 mb-4 text-sm md:text-base">
-                {"Distribución de ingresos por fuente"}
+                {"Distribución de ingresos por fuente"} — {currentMonthLabel}
               </h3>
               <ResponsiveContainer width="100%" height={280}>
                 <PieChart>

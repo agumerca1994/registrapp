@@ -5,7 +5,7 @@ import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "@/lib/api";
 import { formatARS, formatDate } from "@/lib/utils";
-import { Settings2, X, Loader2, Home, Trash2 } from "lucide-react";
+import { Settings2, X, Loader2, Home, Trash2, CalendarDays } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -66,9 +66,8 @@ const EMPTY_FORM = {
   loan_type: "",
   description: "",
   loan_number: "",
-  total_cuotas: "",
-  fp_month: "",
-  fp_year: "",
+  total_cuotas: "240",
+  first_payment_date: "",
   payment_day_mode: "biz" as "biz" | "fixed",
   payment_day: "",
   cuota_uva: "",
@@ -108,9 +107,9 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
     loan_type: editLoan?.loan_type ?? "",
     description: editLoan?.description ?? "",
     loan_number: editLoan?.loan_number ?? "",
-    total_cuotas: editLoan?.total_cuotas != null ? String(editLoan.total_cuotas) : "",
-    fp_month: editLoan?.first_payment_date?.substring(5, 7) ?? "",
-    fp_year: editLoan?.first_payment_date?.substring(0, 4) ?? "",
+    total_cuotas: String(editLoan?.total_cuotas ?? 240),
+    // type="month" needs YYYY-MM, strip the day part if coming from API
+    first_payment_date: editLoan?.first_payment_date?.substring(0, 7) ?? "",
     payment_day_mode: (editLoan?.payment_day != null ? "fixed" : "biz") as "biz" | "fixed",
     payment_day: editLoan?.payment_day != null ? String(editLoan.payment_day) : "",
     cuota_uva: fmtDecimal(editLoan?.cuota_uva ?? null),
@@ -122,9 +121,6 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
   const [error, setError] = useState("");
 
   const f = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm(p => ({ ...p, [k]: e.target.value }));
-
-  const fs = (k: string) => (e: React.ChangeEvent<HTMLSelectElement>) =>
     setForm(p => ({ ...p, [k]: e.target.value }));
 
   const isUva = form.loan_type === "uva_frances" || form.loan_type === "uva_aleman";
@@ -155,7 +151,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
           description: form.description || null,
           loan_number: form.loan_number || null,
           total_cuotas: parseInt(form.total_cuotas),
-          first_payment_date: `${form.fp_year}-${form.fp_month}-01`,
+          first_payment_date: form.first_payment_date + "-01",  // YYYY-MM → YYYY-MM-01
           payment_day: paymentDay,
           cuota_uva: cuotaUva,
           cuota_pesos: cuotaPesos,
@@ -224,37 +220,21 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {!editLoan && (
                   <>
-                    <div className="sm:col-span-2">
+                    <div>
                       <label className="text-xs font-medium text-gray-600">Primera cuota *</label>
-                      <div className="mt-1 grid grid-cols-2 gap-2">
-                        <select
-                          value={form.fp_month}
-                          onChange={fs("fp_month")}
-                          required
-                          className="w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm bg-white"
-                        >
-                          <option value="">Mes</option>
-                          {["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"].map((m, i) => (
-                            <option key={i} value={String(i + 1).padStart(2, "0")}>{m}</option>
-                          ))}
-                        </select>
-                        <select
-                          value={form.fp_year}
-                          onChange={fs("fp_year")}
-                          required
-                          className="w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm bg-white"
-                        >
-                          <option value="">Año</option>
-                          {Array.from({ length: 16 }, (_, i) => 2016 + i).map(y => (
-                            <option key={y} value={String(y)}>{y}</option>
-                          ))}
-                        </select>
+                      <div className="relative mt-1">
+                        <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                        <input
+                          type="month" required
+                          value={form.first_payment_date} onChange={f("first_payment_date")}
+                          className="w-full border rounded-lg pl-9 pr-3 py-2 text-[16px] sm:text-sm bg-white text-gray-900"
+                        />
                       </div>
                     </div>
                     <div>
                       <label className="text-xs font-medium text-gray-600">Cantidad de cuotas *</label>
                       <input
-                        type="number" min={1} step={1} inputMode="numeric" pattern="[0-9]*" required
+                        type="number" min={1} required
                         value={form.total_cuotas} onChange={f("total_cuotas")}
                         className={inputCls}
                       />
@@ -281,18 +261,12 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                     </button>
                   </div>
                   {form.payment_day_mode === "fixed" ? (
-                    <div className="mt-2">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number" min={1} max={28} inputMode="numeric" pattern="[0-9]*"
-                          value={form.payment_day} onChange={f("payment_day")}
-                          className={inputCls + " w-20 mt-0"}
-                        />
-                        <span className="text-sm text-gray-600">
-                          {form.payment_day ? `Todos los ${form.payment_day} de cada mes` : "de cada mes"}
-                        </span>
-                      </div>
-                    </div>
+                    <input
+                      type="number" min={1} max={28}
+                      placeholder="ej: 10"
+                      value={form.payment_day} onChange={f("payment_day")}
+                      className={inputCls + " mt-2"}
+                    />
                   ) : (
                     <p className="text-xs text-muted-foreground mt-1.5">
                       Si el 1° cae sábado o domingo, se usa el lunes siguiente.
@@ -305,6 +279,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                     <label className="text-xs font-medium text-gray-600">Cuota en UVAs *</label>
                     <input
                       type="text" inputMode="decimal" required
+                      placeholder="ej: 750,74"
                       value={form.cuota_uva} onChange={f("cuota_uva")}
                       className={inputCls}
                     />
@@ -316,6 +291,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                     <label className="text-xs font-medium text-gray-600">Cuota mensual ($) *</label>
                     <input
                       type="text" inputMode="decimal" required
+                      placeholder="ej: 150.000,00"
                       value={form.cuota_pesos} onChange={f("cuota_pesos")}
                       className={inputCls}
                     />
@@ -328,6 +304,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                       <label className="text-xs font-medium text-gray-600">TNA % (opcional)</label>
                       <input
                         type="text" inputMode="decimal"
+                        placeholder="ej: 8,50"
                         value={form.tna} onChange={f("tna")}
                         className={inputCls}
                       />
@@ -336,6 +313,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                       <label className="text-xs font-medium text-gray-600">Capital original en UVAs (opcional)</label>
                       <input
                         type="text" inputMode="decimal"
+                        placeholder="para desglose capital/interés"
                         value={form.original_capital_uva} onChange={f("original_capital_uva")}
                         className={inputCls}
                       />
@@ -347,6 +325,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                   <label className="text-xs font-medium text-gray-600">Banco (opcional)</label>
                   <input
                     type="text"
+                    placeholder="ej: Banco Nación"
                     value={form.description} onChange={f("description")}
                     className={inputCls}
                   />

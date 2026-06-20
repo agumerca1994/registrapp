@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, extract
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
@@ -130,16 +130,23 @@ async def create_source(
 
 @router.get("/entries", response_model=list[IncomeEntryOut])
 async def list_entries(
+    year: int | None = None,
+    month: int | None = None,
     firebase_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     user = await _get_db_user(firebase_user, db)
-    result = await db.scalars(
+    q = (
         select(IncomeEntry)
         .where(IncomeEntry.tenant_id == user.tenant_id)
         .options(selectinload(IncomeEntry.source))
         .order_by(IncomeEntry.period_date.desc())
     )
+    if year:
+        q = q.where(extract("year", IncomeEntry.period_date) == year)
+    if month:
+        q = q.where(extract("month", IncomeEntry.period_date) == month)
+    result = await db.scalars(q)
     return result.all()
 
 

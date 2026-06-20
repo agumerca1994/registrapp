@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, extract
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
@@ -55,16 +55,23 @@ async def create_category(
 
 @router.get("/entries", response_model=list[ExpenseEntryOut])
 async def list_entries(
+    year: int | None = None,
+    month: int | None = None,
     firebase_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     user = await _get_db_user(firebase_user, db)
-    result = await db.scalars(
+    q = (
         select(ExpenseEntry)
         .where(ExpenseEntry.tenant_id == user.tenant_id)
         .options(selectinload(ExpenseEntry.category))
         .order_by(ExpenseEntry.expense_date.desc())
     )
+    if year:
+        q = q.where(extract("year", ExpenseEntry.expense_date) == year)
+    if month:
+        q = q.where(extract("month", ExpenseEntry.expense_date) == month)
+    result = await db.scalars(q)
     return result.all()
 
 
