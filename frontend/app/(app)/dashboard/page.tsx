@@ -34,6 +34,8 @@ interface MacroPoint {
 
 interface ExpenseEntry { id: number; category_id: number; amount: number; }
 interface ExpenseCategory { id: number; name: string; color?: string; }
+interface IncomeEntry { id: number; source_id: number; amount: number; }
+interface IncomeSource { id: number; name: string; }
 
 const PIE_COLORS = ["#ef4444","#f97316","#eab308","#22c55e","#14b8a6","#3b82f6","#8b5cf6","#ec4899","#f43f5e","#06b6d4"];
 
@@ -45,6 +47,20 @@ function fmtPeriod(p: string): string {
 function StatCard({ label, value, icon: Icon, positive }: {
   label: string; value: string; icon: React.ElementType; positive?: boolean;
 }) {
+  const incomePieData = (() => {
+    const total = incEntries.reduce((s, e) => s + Number(e.amount), 0);
+    if (total === 0) return [];
+    return incSources
+      .map((src, i) => ({
+        name: src.name,
+        value: incEntries.filter(e => e.source_id === src.id).reduce((s, e) => s + Number(e.amount), 0),
+        color: PIE_COLORS[i % PIE_COLORS.length],
+        pct: 0,
+      }))
+      .filter(d => d.value > 0)
+      .map(d => ({ ...d, pct: parseFloat(((d.value / total) * 100).toFixed(1)) }));
+  })();
+
   return (
     <div className="bg-white rounded-xl border p-3 md:p-5 flex items-center gap-3">
       <div className={`p-2 md:p-3 rounded-lg shrink-0 ${positive === false ? "bg-red-50 text-red-500" : positive ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"}`}>
@@ -96,6 +112,8 @@ export default function DashboardPage() {
   const [macro, setMacro] = useState<MacroPoint[]>([]);
   const [expEntries, setExpEntries] = useState<ExpenseEntry[]>([]);
   const [expCategories, setExpCategories] = useState<ExpenseCategory[]>([]);
+  const [incEntries, setIncEntries] = useState<IncomeEntry[]>([]);
+  const [incSources, setIncSources] = useState<IncomeSource[]>([]);
   const [chartsLoading, setChartsLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
@@ -114,11 +132,15 @@ export default function DashboardPage() {
       api.get("/macro"),
       api.get("/expenses/entries"),
       api.get("/expenses/categories"),
-    ]).then(([h, m, e, c]) => {
+      api.get("/income/entries"),
+      api.get("/income/sources"),
+    ]).then(([h, m, e, c, ie, is_]) => {
       setHistoryData(h.data);
       setMacro(m.data);
       setExpEntries(e.data);
       setExpCategories(c.data);
+      setIncEntries(ie.data);
+      setIncSources(is_.data);
     }).finally(() => setChartsLoading(false));
   }, []);
 
@@ -270,6 +292,26 @@ export default function DashboardPage() {
                   <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%"
                     innerRadius={55} outerRadius={90} paddingAngle={2}>
                     {pieData.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<PieCustomTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {incomePieData.length > 0 && (
+            <div className="bg-white rounded-xl border p-4 md:p-5">
+              <h3 className="font-semibold text-gray-900 mb-4 text-sm md:text-base">
+                {"Distribución de ingresos por fuente"}
+              </h3>
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie data={incomePieData} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                    innerRadius={55} outerRadius={90} paddingAngle={2}>
+                    {incomePieData.map((entry, i) => (
                       <Cell key={i} fill={entry.color} />
                     ))}
                   </Pie>
