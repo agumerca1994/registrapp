@@ -47,19 +47,6 @@ function fmtPeriod(p: string): string {
 function StatCard({ label, value, icon: Icon, positive }: {
   label: string; value: string; icon: React.ElementType; positive?: boolean;
 }) {
-  const incomePieData = (() => {
-    const total = incEntries.reduce((s, e) => s + Number(e.amount), 0);
-    if (total === 0) return [];
-    return incSources
-      .map((src, i) => ({
-        name: src.name,
-        value: incEntries.filter(e => e.source_id === src.id).reduce((s, e) => s + Number(e.amount), 0),
-        color: PIE_COLORS[i % PIE_COLORS.length],
-        pct: 0,
-      }))
-      .filter(d => d.value > 0)
-      .map(d => ({ ...d, pct: parseFloat(((d.value / total) * 100).toFixed(1)) }));
-  })();
 
   return (
     <div className="bg-white rounded-xl border p-3 md:p-5 flex items-center gap-3">
@@ -185,6 +172,20 @@ export default function DashboardPage() {
       .map(d => ({ ...d, pct: parseFloat(((d.value / total) * 100).toFixed(1)) }));
   })();
 
+
+  const incomePieData = (() => {
+    const total = incEntries.reduce((s, e) => s + Number(e.amount), 0);
+    if (total === 0) return [];
+    return incSources
+      .map((src, i) => ({
+        name: src.name,
+        value: incEntries.filter(e => e.source_id === src.id).reduce((s, e) => s + Number(e.amount), 0),
+        color: PIE_COLORS[i % PIE_COLORS.length],
+        pct: 0,
+      }))
+      .filter(d => d.value > 0)
+      .map(d => ({ ...d, pct: parseFloat(((d.value / total) * 100).toFixed(1)) }));
+  })();
   return (
     <div className="max-w-4xl space-y-4 md:space-y-6">
 
