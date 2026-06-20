@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
-import { formatARS, formatDate, formatUSD } from "@/lib/utils";
+import { formatARS, formatDate, formatUSD, parseAmount } from "@/lib/utils";
 import { Plus, Trash2, ChevronLeft, Pencil, X, CheckCircle, ExternalLink } from "lucide-react";
 
 const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -112,7 +112,7 @@ function EditItemModal({
       description: form.description,
       category_id: parseInt(form.category_id),
       item_date: form.item_date,
-      amount: parseFloat(form.amount),
+      amount: parseAmount(form.amount),
     });
     setSaving(false);
   };
@@ -242,10 +242,10 @@ export default function StatementDetailPage() {
     }
     const count = parseInt(form.installment_count) || 1;
     if (field === "amount") {
-      const pt = parseFloat(value) * count;
+      const pt = parseAmount(value) * count;
       setForm((p) => ({ ...p, amount: value, purchase_total: isNaN(pt) ? "" : pt.toFixed(2) }));
     } else {
-      const amt = parseFloat(value) / count;
+      const amt = parseAmount(value) / count;
       setForm((p) => ({ ...p, purchase_total: value, amount: isNaN(amt) ? "" : amt.toFixed(2) }));
     }
   };
@@ -253,7 +253,7 @@ export default function StatementDetailPage() {
   const handleInstallmentCountChange = (value: string) => {
     const count = parseInt(value) || 1;
     setForm((p) => {
-      const amt = parseFloat(p.amount);
+      const amt = parseAmount(p.amount);
       const pt = isNaN(amt) ? "" : (amt * count).toFixed(2);
       return { ...p, installment_count: value, purchase_total: pt };
     });
@@ -266,14 +266,14 @@ export default function StatementDetailPage() {
       description: form.description,
       item_date: form.item_date,
       item_type: form.item_type,
-      amount: parseFloat(form.amount),
+      amount: parseAmount(form.amount),
       currency: form.currency,
     };
     if (form.currency === "ARS") payload.category_id = parseInt(form.category_id);
     if (form.item_type === "installment") {
       payload.installment_count = parseInt(form.installment_count);
       payload.installment_number = 1;
-      payload.purchase_total = parseFloat(form.purchase_total);
+      payload.purchase_total = parseAmount(form.purchase_total);
     }
     await api.post(`/credit-cards/statements/${statementId}/items`, payload);
     setForm(EMPTY_ITEM);

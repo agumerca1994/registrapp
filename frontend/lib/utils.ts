@@ -28,3 +28,10 @@ export function formatUSD(amount: number | string): string {
     maximumFractionDigits: 2,
   }).format(Number(amount));
 }
+
+// Parse Argentine decimal format: "9,99" or "1.000,99" → 9.99 or 1000.99
+export function parseAmount(value: string | number): number {
+  if (typeof value === "number") return value;
+  // Remove thousands dots, replace decimal comma with dot
+  return parseFloat(value.replace(/\./g, "").replace(",", ".")) || 0;
+}

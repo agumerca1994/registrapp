@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
-import { formatARS, formatDate } from "@/lib/utils";
+import { formatARS, formatDate, parseAmount } from "@/lib/utils";
 import { Plus, Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle, ChevronRight } from "lucide-react";
 
 interface IncomeSource { id: number; name: string; income_type: string; }
@@ -360,8 +360,8 @@ export default function IncomePage() {
     setForm(prev => {
       const next = { ...prev, [key]: value };
       if (!netoManual.current) {
-        const b = parseFloat(key === "bruto" ? value : prev.bruto) || 0;
-        const d = parseFloat(key === "deducciones" ? value : prev.deducciones) || 0;
+        const b = parseAmount(key === "bruto" ? value : prev.bruto);
+        const d = parseAmount(key === "deducciones" ? value : prev.deducciones);
         next.amount = b > 0 || d > 0 ? String(Math.max(0, b - d)) : "";
       }
       return next;
@@ -394,9 +394,9 @@ export default function IncomePage() {
     setLoading(true);
     const payload = {
       source_id: parseInt(form.source_id),
-      bruto: form.bruto ? parseFloat(form.bruto) : null,
-      deducciones: form.deducciones ? parseFloat(form.deducciones) : null,
-      amount: parseFloat(form.amount),
+      bruto: form.bruto ? parseAmount(form.bruto) : null,
+      deducciones: form.deducciones ? parseAmount(form.deducciones) : null,
+      amount: parseAmount(form.amount),
       period_date: form.period_date,
       notes: form.notes || null,
     };

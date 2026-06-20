@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
-import { formatARS, formatDate, formatUSD } from "@/lib/utils";
+import { formatARS, formatDate, formatUSD, parseAmount } from "@/lib/utils";
 import { Plus, Trash2, Pencil, X, ChevronRight, CreditCard, ExternalLink } from "lucide-react";
 
 interface Category { id: number; name: string; color?: string; is_fixed: boolean; }
@@ -133,7 +133,7 @@ export default function ExpensesPage() {
     e.preventDefault();
     setLoading(true);
     const payload: Record<string, unknown> = {
-      amount: parseFloat(form.amount),
+      amount: parseAmount(form.amount),
       description: form.description,
       expense_date: form.expense_date,
       notes: form.notes,
