@@ -500,8 +500,8 @@ export default function StatementDetailPage() {
           ))
         )}
         {statement.items.length > 0 && (() => {
-          const arsTotal = statement.items.filter(i => i.currency !== "USD").reduce((s, i) => s + i.amount, 0);
-          const usdTotal = statement.items.filter(i => i.currency === "USD").reduce((s, i) => s + i.amount, 0);
+          const arsTotal = statement.items.filter(i => i.currency !== "USD").reduce((s, i) => s + Number(i.amount), 0);
+          const usdTotal = statement.items.filter(i => i.currency === "USD").reduce((s, i) => s + Number(i.amount), 0);
           return (
             <div className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-b-xl flex-wrap gap-1">
               <span className="text-sm font-medium text-gray-700">Total</span>
