@@ -174,6 +174,7 @@ export default function SettingsPage() {
   const { appUser } = useAuth();
   const [members, setMembers] = useState<Member[]>([]);
   const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   useEffect(() => {
     api.get("/auth/members").then(r => setMembers(r.data));
@@ -183,6 +184,12 @@ export default function SettingsPage() {
     navigator.clipboard.writeText(String(appUser?.tenant_id));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(window.location.origin);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   return (
@@ -231,6 +238,26 @@ export default function SettingsPage() {
               </span>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border p-6 space-y-4">
+        <h3 className="font-semibold text-gray-900">Invitar amigos</h3>
+        <p className="text-sm text-muted-foreground">
+          {"Compartí el enlace de la app con quien quieras. Pueden registrarse con Google y crear o unirse a un hogar."}
+        </p>
+        <div className="flex items-center gap-3">
+          <div className="flex-1 bg-gray-50 border rounded-lg px-4 py-3 min-w-0">
+            <p className="text-xs text-muted-foreground mb-1">Enlace de la app</p>
+            <p className="text-sm font-medium text-primary truncate">{typeof window !== "undefined" ? window.location.origin : ""}</p>
+          </div>
+          <button
+            onClick={copyLink}
+            className="flex items-center gap-2 border px-4 py-3 rounded-lg text-sm hover:bg-gray-50 transition-colors shrink-0"
+          >
+            {copiedLink ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+            {copiedLink ? "¡Copiado!" : "Copiar"}
+          </button>
         </div>
       </div>
 
