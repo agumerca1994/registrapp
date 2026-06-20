@@ -1,24 +1,31 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { formatARS, formatDate } from "@/lib/utils";
-import { Plus, Trash2, Pencil, X, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Pencil, X, ChevronRight, CreditCard, ExternalLink } from "lucide-react";
 
 interface Category { id: number; name: string; color?: string; is_fixed: boolean; }
 interface ExpenseEntry {
   id: number; category_id: number; amount: number;
   description?: string; expense_date: string; notes?: string;
+  payment_method?: string; entity?: string;
   category: Category;
 }
 
 const EMPTY_FORM = { category_id: "", amount: "", description: "", expense_date: "", notes: "" };
 
 function EntryDetailModal({
-  entry, onEdit, onDelete, onClose,
+  entry, onEdit, onDelete, onViewStatement, onClose,
 }: {
-  entry: ExpenseEntry; onEdit: () => void; onDelete: () => void; onClose: () => void;
+  entry: ExpenseEntry;
+  onEdit: () => void;
+  onDelete: () => void;
+  onViewStatement: () => void;
+  onClose: () => void;
 }) {
+  const isCreditCard = entry.payment_method === "tarjeta_credito";
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
       <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
@@ -48,6 +55,14 @@ function EntryDetailModal({
             <span className="font-medium text-gray-700">Monto</span>
             <span className="font-bold text-red-500 text-base">{formatARS(entry.amount)}</span>
           </div>
+          {isCreditCard && (
+            <div className="flex justify-between py-2">
+              <span className="text-muted-foreground">Tarjeta</span>
+              <span className="flex items-center gap-1 font-medium text-blue-600">
+                <CreditCard className="w-3.5 h-3.5" />{entry.entity}
+              </span>
+            </div>
+          )}
           {entry.notes && (
             <div className="flex justify-between py-2 gap-4">
               <span className="text-muted-foreground shrink-0">Notas</span>
@@ -55,22 +70,33 @@ function EntryDetailModal({
             </div>
           )}
         </div>
-        <div className="flex gap-2 pt-1">
-          <button onClick={onDelete}
-            className="flex-1 flex items-center justify-center gap-1.5 border border-red-200 text-red-500 hover:bg-red-50 py-2.5 rounded-xl text-sm font-medium">
-            <Trash2 className="w-4 h-4" /> Eliminar
-          </button>
-          <button onClick={onEdit}
-            className="flex-1 flex items-center justify-center gap-1.5 bg-primary text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90">
-            <Pencil className="w-4 h-4" /> Editar
-          </button>
-        </div>
+        {isCreditCard ? (
+          <div className="pt-1">
+            <p className="text-xs text-gray-500 mb-2 text-center">Este gasto es de tarjeta. Para editar o eliminar, ir al resumen.</p>
+            <button onClick={onViewStatement}
+              className="w-full flex items-center justify-center gap-1.5 bg-primary text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90">
+              <ExternalLink className="w-4 h-4" /> Ver en resumen
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-2 pt-1">
+            <button onClick={onDelete}
+              className="flex-1 flex items-center justify-center gap-1.5 border border-red-200 text-red-500 hover:bg-red-50 py-2.5 rounded-xl text-sm font-medium">
+              <Trash2 className="w-4 h-4" /> Eliminar
+            </button>
+            <button onClick={onEdit}
+              className="flex-1 flex items-center justify-center gap-1.5 bg-primary text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90">
+              <Pencil className="w-4 h-4" /> Editar
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 export default function ExpensesPage() {
+  const router = useRouter();
   const [entries, setEntries] = useState<ExpenseEntry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -129,11 +155,27 @@ export default function ExpensesPage() {
     await load();
   };
 
-  const toggleSelect = (id: number) =>
+  const handleViewStatement = async (entryId: number) => {
+    try {
+      const res = await api.get(`/credit-cards/for-expense/${entryId}`);
+      const { card_id, statement_id } = res.data;
+      setDetailEntry(null);
+      router.push(`/tarjetas/${card_id}/${statement_id}`);
+    } catch {
+      alert("No se encontro el resumen de tarjeta.");
+    }
+  };
+
+  const selectableEntries = entries.filter(e => e.payment_method !== "tarjeta_credito");
+
+  const toggleSelect = (id: number) => {
+    const entry = entries.find(e => e.id === id);
+    if (entry?.payment_method === "tarjeta_credito") return;
     setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  };
 
   const toggleAll = () =>
-    setSelected(s => s.size === entries.length ? new Set() : new Set(entries.map(e => e.id)));
+    setSelected(s => s.size === selectableEntries.length ? new Set() : new Set(selectableEntries.map(e => e.id)));
 
   const handleBulkDelete = async () => {
     if (!confirm(`Eliminar ${selected.size} egreso${selected.size !== 1 ? "s" : ""}?`)) return;
@@ -144,7 +186,7 @@ export default function ExpensesPage() {
     setBulkDeleting(false);
   };
 
-  const allSelected = entries.length > 0 && selected.size === entries.length;
+  const allSelected = selectableEntries.length > 0 && selected.size === selectableEntries.length;
   const someSelected = selected.size > 0 && !allSelected;
 
   return (
@@ -261,20 +303,31 @@ export default function ExpensesPage() {
           <p className="p-6 text-muted-foreground text-sm">No hay egresos registrados.</p>
         ) : entries.map(entry => (
           <div key={entry.id} className="flex items-center gap-2 px-3 md:px-4 py-3">
-            <input
-              type="checkbox"
-              checked={selected.has(entry.id)}
-              onChange={() => toggleSelect(entry.id)}
-              className="w-4 h-4 rounded cursor-pointer shrink-0"
-            />
+            {entry.payment_method === "tarjeta_credito" ? (
+                <div className="w-4 h-4 shrink-0" />
+              ) : (
+                <input
+                  type="checkbox"
+                  checked={selected.has(entry.id)}
+                  onChange={() => toggleSelect(entry.id)}
+                  className="w-4 h-4 rounded cursor-pointer shrink-0"
+                />
+              )}
             <button
               className="flex-1 flex items-center gap-2 min-w-0 text-left hover:opacity-80 active:opacity-60"
               onClick={() => setDetailEntry(entry)}
             >
               <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.category.color || "#6366f1" }} />
-              <span className="flex-1 text-sm font-medium text-gray-900 truncate">
-                {entry.description || entry.category.name}
-              </span>
+              <div className="flex-1 min-w-0">
+                <span className="block text-sm font-medium text-gray-900 truncate">
+                  {entry.description || entry.category.name}
+                </span>
+                {entry.payment_method === "tarjeta_credito" && (
+                  <span className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium">
+                    <CreditCard className="w-3 h-3" />{entry.entity}
+                  </span>
+                )}
+              </div>
               <span className="text-xs text-muted-foreground shrink-0">{formatDate(entry.expense_date)}</span>
               <span className="text-sm font-semibold text-red-500 shrink-0">{formatARS(entry.amount)}</span>
               <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
@@ -288,6 +341,7 @@ export default function ExpensesPage() {
           entry={detailEntry}
           onEdit={() => { setDetailEntry(null); openEdit(detailEntry); }}
           onDelete={() => handleDelete(detailEntry.id)}
+          onViewStatement={() => handleViewStatement(detailEntry.id)}
           onClose={() => setDetailEntry(null)}
         />
       )}

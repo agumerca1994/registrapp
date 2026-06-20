@@ -16,8 +16,8 @@ const nav = [
   { href: "/expenses", label: "Egresos", icon: TrendingDown },
   { href: "/shared", label: "Gastos compartidos", icon: Users2 },
   { href: "/tarjetas", label: "Tarjetas", icon: CreditCard },
-  { href: "/macro", label: "Variables macro", icon: BarChart3 },
   { href: "/mortgage", label: "Hipoteca", icon: Home },
+  { href: "/macro", label: "Variables macro", icon: BarChart3 },
   { href: "/settings", label: "Configuración", icon: Settings },
 ];
 
