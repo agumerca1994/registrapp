@@ -1,14 +1,14 @@
 """move closing_due_dates to statement, add for-expense lookup
 
-Revision ID: k1l2m3n4o5p6
-Revises: j0k1l2m3n4o5
+Revision ID: l2m3n4o5p6q7
+Revises: k1l2m3n4o5p6
 Create Date: 2026-06-20
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "k1l2m3n4o5p6"
-down_revision = "j0k1l2m3n4o5"
+revision = "l2m3n4o5p6q7"
+down_revision = "k1l2m3n4o5p6"
 branch_labels = None
 depends_on = None
 
