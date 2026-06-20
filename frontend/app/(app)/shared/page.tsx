@@ -132,20 +132,18 @@ export default function SharedExpensesPage() {
 
   useEffect(() => { load(); }, []);
 
-  // Pre-cargar el primer participante con el usuario actual
+  // Pre-cargar el primer participante con el usuario actual (appUser siempre disponible)
   useEffect(() => {
-    if (!appUser || members.length === 0) return;
-    const me = members.find(m => m.id === appUser.id);
-    if (!me) return;
+    if (!appUser) return;
     setParticipants(prev => {
       if (prev[0].user_id !== null) return prev;
       const updated: ParticipantRow[] = [
-        { ...prev[0], user_id: me.id, member_name: me.display_name || me.email || "Yo" },
+        { ...prev[0], user_id: appUser.id, member_name: appUser.display_name || appUser.email },
         ...prev.slice(1),
       ];
       return splitType === "custom" ? redistAuto(updated, total) : updated;
     });
-  }, [members, appUser]);
+  }, [appUser]);
 
   // Redistribuir automaticos cuando cambia el monto total
   useEffect(() => {
@@ -211,11 +209,10 @@ export default function SharedExpensesPage() {
     setTitle(""); setTotalAmount(""); setCategoryId("");
     setExpenseDate(new Date().toISOString().slice(0, 10));
     setSplitType("equal");
-    const me = members.find(m => m.id === appUser?.id);
     setParticipants([{
       type: "member",
-      user_id: me?.id ?? null,
-      member_name: me?.display_name || me?.email || "Yo",
+      user_id: appUser?.id ?? null,
+      member_name: appUser?.display_name || appUser?.email || "",
       amount: "",
       manual: false,
     }]);
@@ -391,8 +388,8 @@ export default function SharedExpensesPage() {
                   <div key={idx} className="border rounded-lg p-2.5 bg-gray-50 space-y-2">
                     <div className="flex items-center gap-2">
                       {isCreator ? (
-                        <span className="text-xs font-medium text-primary border border-primary/30 bg-primary/5 rounded-lg px-2 py-1.5">
-                          Yo
+                        <span className="border rounded-lg px-2 py-1.5 text-xs bg-white text-gray-600 shrink-0">
+                          Del hogar
                         </span>
                       ) : (
                         <select value={p.type}
@@ -415,7 +412,7 @@ export default function SharedExpensesPage() {
 
                     {isCreator ? (
                       <p className="text-sm text-gray-700 px-1">
-                        {p.member_name || "Yo"}
+                        {p.member_name}
                       </p>
                     ) : p.type === "member" ? (
                       <select required value={p.user_id ?? ""}
