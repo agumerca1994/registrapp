@@ -282,7 +282,7 @@ async def list_members(
     return result.all()
 
 async def _move_to_new_solo_tenant(user: User, db: AsyncSession) -> None:
-    new_tenant = Tenant(code=_generate_tenant_code())
+    new_tenant = Tenant(name="", code=_generate_tenant_code())
     db.add(new_tenant)
     await db.flush()
     user.tenant_id = new_tenant.id
