@@ -15,18 +15,20 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("tenants", sa.Column("code", sa.String(8), nullable=True))
-
-    # Assign random 8-char alphanumeric codes using PostgreSQL native functions
-    # substring(md5(...)) gives hex chars 0-9a-f, upper() makes them uppercase
+    # Use IF NOT EXISTS so re-running after a partial failure is safe
     op.execute(sa.text(
-        "UPDATE tenants SET code = upper(substring(md5(random()::text || id::text) from 1 for 8)) "
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS code VARCHAR(8)"
+    ))
+    op.execute(sa.text(
+        "UPDATE tenants "
+        "SET code = upper(substring(md5(random()::text || id::text) from 1 for 8)) "
         "WHERE code IS NULL"
     ))
-
-    op.create_index("ix_tenants_code", "tenants", ["code"], unique=True)
+    op.execute(sa.text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_tenants_code ON tenants (code)"
+    ))
 
 
 def downgrade() -> None:
-    op.drop_index("ix_tenants_code", table_name="tenants")
-    op.drop_column("tenants", "code")
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_tenants_code"))
+    op.execute(sa.text("ALTER TABLE tenants DROP COLUMN IF EXISTS code"))
