@@ -122,6 +122,7 @@ export default function ExpensesPage() {
     setForm({
       category_id: String(entry.category_id), amount: String(entry.amount),
       description: entry.description || "", expense_date: entry.expense_date, notes: entry.notes || "",
+      currency: (entry.currency as "ARS" | "USD") || "ARS",
     });
     setShowForm(true);
   };
