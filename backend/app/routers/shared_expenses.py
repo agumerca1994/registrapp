@@ -1,11 +1,15 @@
-﻿import secrets
+﻿import logging
+import re
+import secrets
 from datetime import datetime, timedelta
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.firebase import get_current_user
 from app.models.expense import ExpenseCategory, ExpenseEntry
@@ -18,6 +22,16 @@ from app.schemas.shared_expense import (
 )
 
 router = APIRouter(prefix="/shared-expenses", tags=["shared-expenses"])
+logger = logging.getLogger(__name__)
+
+
+def _is_email(value: str) -> bool:
+    return "@" in value
+
+
+def _is_phone(value: str) -> bool:
+    cleaned = re.sub(r"[\s\-().]", "", value)
+    return bool(re.match(r"^\+?\d{7,15}$", cleaned))
 
 
 async def _get_db_user(firebase_user: dict, db: AsyncSession) -> User:
@@ -28,7 +42,6 @@ async def _get_db_user(firebase_user: dict, db: AsyncSession) -> User:
 
 
 def _load_q(user_id: int, tenant_id: int):
-    """Return shared expenses owned by tenant OR where current user has a split."""
     return (
         select(SharedExpense)
         .where(
@@ -61,6 +74,25 @@ async def _get_or_create_shared_category(tenant_id: int, db: AsyncSession) -> in
     return cat.id
 
 
+async def _send_whatsapp_invite(phone: str, creator_name: str, title: str, amount, token: str) -> None:
+    if not settings.EVOLUTION_API_URL or not settings.EVOLUTION_INSTANCE:
+        return
+    link = f"{settings.FRONTEND_URL}/invite/{token}"
+    msg = (
+        f"Hola! {creator_name} te invito a compartir un gasto: '{title}' "
+        f"por ${amount}.\n\nEntra al link para verlo y aceptarlo:\n{link}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(
+                f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE}",
+                json={"number": phone, "text": msg},
+                headers={"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"},
+            )
+    except Exception as e:
+        logger.warning(f"WhatsApp invite send failed: {e}")
+
+
 @router.get("", response_model=list[SharedExpenseOut])
 async def list_shared_expenses(
     firebase_user: dict = Depends(get_current_user),
@@ -91,30 +123,43 @@ async def create_shared_expense(
     db.add(shared)
     await db.flush()
 
+    pending_wa_invites = []
+
     for split_in in body.splits:
         is_creator = split_in.user_id == user.id
 
         resolved_user_id = split_in.user_id
         resolved_name = split_in.member_name
         invite_token = None
-        invite_email = None
+        invite_email = None  # stores email OR phone in this column
         invite_expires_at = None
 
-        # If email provided and no user_id, try to find existing user
-        if split_in.invite_email and not split_in.user_id:
-            found = await db.scalar(
-                select(User).where(User.email == split_in.invite_email)
-            )
-            if found:
-                resolved_user_id = found.id
-                resolved_name = found.display_name or found.email
-            else:
-                invite_email = split_in.invite_email
-                invite_token = secrets.token_urlsafe(32)
-                invite_expires_at = datetime.utcnow() + timedelta(days=30)
+        if split_in.invite_contact and not split_in.user_id:
+            contact = split_in.invite_contact.strip()
+            if _is_email(contact):
+                # Look up existing user by email
+                found = await db.scalar(select(User).where(User.email == contact))
+                if found:
+                    resolved_user_id = found.id
+                    resolved_name = found.display_name or found.email
+                else:
+                    invite_email = contact
+                    invite_token = secrets.token_urlsafe(32)
+                    invite_expires_at = datetime.utcnow() + timedelta(days=30)
+            elif _is_phone(contact):
+                # Look up existing user by whatsapp_phone
+                found = await db.scalar(select(User).where(User.whatsapp_phone == contact))
+                if found:
+                    resolved_user_id = found.id
+                    resolved_name = found.display_name or found.email
+                else:
+                    invite_email = contact  # store phone in invite_email column
+                    invite_token = secrets.token_urlsafe(32)
+                    invite_expires_at = datetime.utcnow() + timedelta(days=30)
+                    # Queue WhatsApp invite to send after flush
+                    pending_wa_invites.append((contact, invite_token))
 
         is_external = resolved_user_id is None and not invite_token
-        has_invite = invite_token is not None
 
         split = SharedExpenseSplit(
             shared_expense_id=shared.id,
@@ -144,6 +189,11 @@ async def create_shared_expense(
             split.expense_entry_id = entry.id
 
     await db.commit()
+
+    # Send WhatsApp notifications after commit
+    creator_name = user.display_name or user.email
+    for phone, token in pending_wa_invites:
+        await _send_whatsapp_invite(phone, creator_name, body.title, body.total_amount, token)
 
     result = await db.scalar(
         _load_q(user.id, user.tenant_id).where(SharedExpense.id == shared.id)
@@ -187,7 +237,6 @@ async def accept_split(
 ):
     user = await _get_db_user(firebase_user, db)
 
-    # No filter by tenant_id — cross-tenant acceptance allowed
     shared = await db.scalar(
         select(SharedExpense)
         .where(SharedExpense.id == shared_id)
@@ -203,7 +252,6 @@ async def accept_split(
     if not split:
         raise HTTPException(status_code=400, detail="No hay un split pendiente para este usuario")
 
-    # Cross-tenant: use accepting user's category (auto-create "Gasto compartido" if needed)
     if shared.tenant_id != user.tenant_id:
         category_id = await _get_or_create_shared_category(user.tenant_id, db)
     else:
@@ -266,10 +314,6 @@ async def reject_split(
     )
     return result
 
-
-# ---------------------------------------------------------------------------
-# Public invite endpoints (no auth required for GET)
-# ---------------------------------------------------------------------------
 
 @router.get("/invite/{token}", response_model=InviteInfoOut)
 async def get_invite_info(

@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     EVOLUTION_API_KEY: str = ""
     EVOLUTION_INSTANCE: str = ""
     WHATSAPP_WEBHOOK_SECRET: str = ""
+    FRONTEND_URL: str = "http://localhost:3000"
 
 
 settings = Settings()

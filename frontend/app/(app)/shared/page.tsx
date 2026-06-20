@@ -50,7 +50,7 @@ interface ParticipantRow {
   member_name: string;
   amount: string;
   manual: boolean;
-  invite_email: string;
+  invite_contact: string;
 }
 
 function parseAmt(s: string): number {
@@ -113,7 +113,7 @@ export default function SharedExpensesPage() {
   const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [splitType, setSplitType] = useState<"equal" | "custom">("equal");
   const [participants, setParticipants] = useState<ParticipantRow[]>([
-    { type: "member", user_id: null, member_name: "", amount: "", manual: false, invite_email: "" },
+    { type: "member", user_id: null, member_name: "", amount: "", manual: false, invite_contact: "" },
   ]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -190,7 +190,7 @@ export default function SharedExpensesPage() {
   function addParticipant() {
     setParticipants(prev => {
       const newRow: ParticipantRow = {
-        type: "member", user_id: null, member_name: "", amount: "", manual: false, invite_email: "",
+        type: "member", user_id: null, member_name: "", amount: "", manual: false, invite_contact: "",
       };
       const updated = [...prev, newRow];
       return splitType === "custom" ? redistAuto(updated, total) : updated;
@@ -224,7 +224,7 @@ export default function SharedExpensesPage() {
       member_name: appUser?.display_name || appUser?.email || "",
       amount: "",
       manual: false,
-      invite_email: "",
+      invite_contact: "",
     }]);
     setFormError("");
   }
@@ -250,7 +250,7 @@ export default function SharedExpensesPage() {
       user_id: p.type === "member" ? p.user_id : null,
       member_name: p.member_name,
       amount: splitType === "equal" ? parseFloat(equalShare) : parseAmt(p.amount),
-      invite_email: p.type === "external" && p.invite_email.trim() ? p.invite_email.trim() : undefined,
+      invite_contact: p.type === "external" && p.invite_contact.trim() ? p.invite_contact.trim() : undefined,
     }));
     const sumAmts = splits.reduce((s, x) => s + x.amount, 0);
     if (Math.abs(sumAmts - total) > 0.02) {
@@ -452,15 +452,19 @@ export default function SharedExpensesPage() {
                           value={p.member_name} onChange={e => updateParticipant(idx, { member_name: e.target.value })}
                           className="w-full border rounded-lg px-3 py-2 text-sm" />
                         <input
-                          type="email"
-                          placeholder="Email para invitar (opcional)"
-                          value={p.invite_email}
-                          onChange={e => updateParticipant(idx, { invite_email: e.target.value })}
+                          type="text"
+                          inputMode="email"
+                          placeholder="Email o numero de WhatsApp (opcional)"
+                          value={p.invite_contact}
+                          onChange={e => updateParticipant(idx, { invite_contact: e.target.value })}
                           className="w-full border rounded-lg px-3 py-2 text-sm text-gray-600"
                         />
-                        {p.invite_email && (
+                        {p.invite_contact && (
                           <p className="text-xs text-violet-600">
-                            Se generara un link de invitacion para copiar y compartir
+                            {p.invite_contact.includes("@")
+                              ? "Se generara un link de invitacion para copiar y compartir"
+                              : "Se enviara una invitacion por WhatsApp con el link"
+                            }
                           </p>
                         )}
                       </div>

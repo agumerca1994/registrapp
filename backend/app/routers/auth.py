@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import random
 import secrets
 import string
@@ -249,6 +249,9 @@ async def list_members(
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     result = await db.scalars(
-        select(User).where(User.tenant_id == user.tenant_id).order_by(User.created_at)
+        select(User)
+        .where(User.tenant_id == user.tenant_id)
+        .options(selectinload(User.tenant))
+        .order_by(User.created_at)
     )
     return result.all()

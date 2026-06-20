@@ -7,7 +7,7 @@ class SplitIn(BaseModel):
     user_id: int | None = None
     member_name: str
     amount: Decimal
-    invite_email: str | None = None
+    invite_contact: str | None = None  # email or phone number
 
 
 class SharedExpenseCreate(BaseModel):
