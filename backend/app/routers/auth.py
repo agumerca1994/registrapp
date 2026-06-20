@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -62,7 +62,20 @@ async def register(
         select(User).where(User.firebase_uid == firebase_user["uid"])
     )
     if existing:
-        raise HTTPException(status_code=400, detail="Usuario ya registrado")
+        member_count = await db.scalar(
+            select(func.count()).select_from(User).where(User.tenant_id == existing.tenant_id)
+        )
+        if member_count > 1:
+            raise HTTPException(status_code=400, detail="Ya sos parte de un hogar activo")
+        new_t = Tenant(name=body.tenant_name, code=_generate_tenant_code())
+        db.add(new_t)
+        await db.flush()
+        existing.tenant_id = new_t.id
+        existing.role = UserRole.admin
+        await db.commit()
+        return await db.scalar(
+            select(User).options(selectinload(User.tenant)).where(User.id == existing.id)
+        )
 
     tenant = Tenant(name=body.tenant_name, code=_generate_tenant_code())
     db.add(tenant)
@@ -98,11 +111,23 @@ async def join_tenant(
         select(User).where(User.firebase_uid == firebase_user["uid"])
     )
     if existing:
-        raise HTTPException(status_code=400, detail="Usuario ya registrado")
+        member_count = await db.scalar(
+            select(func.count()).select_from(User).where(User.tenant_id == existing.tenant_id)
+        )
+        if member_count > 1:
+            raise HTTPException(status_code=400, detail="Ya sos parte de un hogar activo")
 
     tenant = await db.scalar(select(Tenant).where(Tenant.code == body.tenant_code.strip().upper()))
     if not tenant:
         raise HTTPException(status_code=404, detail="Codigo de hogar incorrecto")
+
+    if existing:
+        existing.tenant_id = tenant.id
+        existing.role = UserRole.member
+        await db.commit()
+        return await db.scalar(
+            select(User).options(selectinload(User.tenant)).where(User.id == existing.id)
+        )
 
     user = User(
         firebase_uid=firebase_user["uid"],
@@ -255,3 +280,52 @@ async def list_members(
         .order_by(User.created_at)
     )
     return result.all()
+
+async def _move_to_new_solo_tenant(user: User, db: AsyncSession) -> None:
+    new_tenant = Tenant(code=_generate_tenant_code())
+    db.add(new_tenant)
+    await db.flush()
+    user.tenant_id = new_tenant.id
+    user.role = UserRole.admin
+
+
+@router.delete("/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_member(
+    member_id: int,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await db.scalar(select(User).where(User.firebase_uid == firebase_user["uid"]))
+    if not user or user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Solo un admin puede eliminar miembros")
+    if user.id == member_id:
+        raise HTTPException(status_code=400, detail="No podes eliminarte a vos mismo desde aqui")
+    target = await db.scalar(
+        select(User).where(User.id == member_id, User.tenant_id == user.tenant_id)
+    )
+    if not target:
+        raise HTTPException(status_code=404, detail="Miembro no encontrado")
+    await _move_to_new_solo_tenant(target, db)
+    await db.commit()
+
+
+@router.post("/me/leave-household", status_code=status.HTTP_204_NO_CONTENT)
+async def leave_household(
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await db.scalar(
+        select(User).where(User.firebase_uid == firebase_user["uid"])
+    )
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    if user.role == UserRole.admin:
+        other = (await db.scalars(
+            select(User)
+            .where(User.tenant_id == user.tenant_id, User.id != user.id)
+            .order_by(User.created_at)
+        )).all()
+        if other:
+            other[0].role = UserRole.admin
+    await _move_to_new_solo_tenant(user, db)
+    await db.commit()

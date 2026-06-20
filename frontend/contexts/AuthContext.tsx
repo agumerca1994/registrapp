@@ -12,6 +12,7 @@ interface AuthContextType {
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  clearUser: () => void;
 }
 
 interface AppUser {
@@ -76,13 +77,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const clearUser = () => { setAppUser(null); };
+
   const logout = async () => {
     await signOut(auth);
     setAppUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ firebaseUser, appUser, loading, loginWithGoogle, logout, refreshUser }}>
+    <AuthContext.Provider value={{ firebaseUser, appUser, loading, loginWithGoogle, logout, refreshUser, clearUser }}>
       {children}
     </AuthContext.Provider>
   );

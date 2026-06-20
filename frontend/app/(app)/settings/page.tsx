@@ -270,18 +270,43 @@ function WhatsAppSection() {
 }
 
 export default function SettingsPage() {
-  const { appUser } = useAuth();
+  const { appUser, clearUser } = useAuth();
+  const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
   const [copied, setCopied] = useState(false);
+  const [confirmKickId, setConfirmKickId] = useState<number | null>(null);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  useEffect(() => {
-    api.get("/auth/members").then(r => setMembers(r.data));
-  }, []);
+  const loadMembers = () => { api.get("/auth/members").then(r => setMembers(r.data)); };
+  useEffect(loadMembers, []);
 
   const copyId = () => {
     navigator.clipboard.writeText(appUser?.tenant_code ?? String(appUser?.tenant_id));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const kickMember = async (memberId: number) => {
+    setActionLoading(true);
+    try {
+      await api.delete("/auth/members/" + memberId);
+      setConfirmKickId(null);
+      loadMembers();
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const leaveHousehold = async () => {
+    setActionLoading(true);
+    try {
+      await api.post("/auth/me/leave-household");
+      clearUser();
+      router.replace("/onboarding");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   return (
@@ -312,17 +337,57 @@ export default function SettingsPage() {
         <h3 className="font-semibold text-gray-900">Miembros ({members.length})</h3>
         <div className="divide-y">
           {members.map(m => (
-            <div key={m.id} className="flex items-center justify-between py-3">
-              <div>
+            <div key={m.id} className="flex items-center justify-between py-3 gap-3">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-gray-900">
                   {m.display_name || m.email}
                   {m.id === appUser?.id && <span className="ml-2 text-xs text-muted-foreground">(vos)</span>}
                 </p>
-                <p className="text-xs text-muted-foreground">{m.email}</p>
+                <p className="text-xs text-muted-foreground truncate">{m.email}</p>
               </div>
-              <span className="text-xs px-2 py-1 rounded-full font-medium bg-gray-100 text-gray-600">
-                {ROLE_LABELS[m.role] ?? m.role}
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs px-2 py-1 rounded-full font-medium bg-gray-100 text-gray-600">
+                  {ROLE_LABELS[m.role] ?? m.role}
+                </span>
+                {appUser?.role === "admin" && m.id !== appUser?.id && (
+                  confirmKickId === m.id ? (
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => kickMember(m.id)} disabled={actionLoading}
+                        className="text-xs bg-red-600 text-white px-2 py-1 rounded disabled:opacity-50">
+                        {actionLoading ? "..." : "Confirmar"}
+                      </button>
+                      <button onClick={() => setConfirmKickId(null)}
+                        className="text-xs border px-2 py-1 rounded text-gray-600 hover:bg-gray-50">
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setConfirmKickId(m.id)}
+                      className="text-red-400 hover:text-red-600 transition-colors" title="Eliminar del hogar">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )
+                )}
+                {m.id === appUser?.id && members.length > 1 && (
+                  confirmLeave ? (
+                    <div className="flex items-center gap-1">
+                      <button onClick={leaveHousehold} disabled={actionLoading}
+                        className="text-xs bg-red-600 text-white px-2 py-1 rounded disabled:opacity-50">
+                        {actionLoading ? "..." : "Confirmar"}
+                      </button>
+                      <button onClick={() => setConfirmLeave(false)}
+                        className="text-xs border px-2 py-1 rounded text-gray-600 hover:bg-gray-50">
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setConfirmLeave(true)}
+                      className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-1 rounded">
+                      Salir
+                    </button>
+                  )
+                )}
+              </div>
             </div>
           ))}
         </div>
