@@ -79,4 +79,5 @@ app.include_router(contacts.router)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    from app.core.config import settings
+    return {"status": "ok", "frontend_url": settings.FRONTEND_URL}
