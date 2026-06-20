@@ -1,4 +1,5 @@
 import logging
+import random
 import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -16,7 +17,50 @@ from app.models.user import User
 router = APIRouter(prefix="/webhook", tags=["webhook"])
 logger = logging.getLogger(__name__)
 
-AMOUNT_RE = re.compile(r"^([\d.,]+)\s+(.+)$")
+# monto categoria  (categoria = una sola palabra, sin espacios)
+AMOUNT_RE = re.compile(r"^([\d.,]+)\s+(\S+)$")
+MAX_AMOUNT = Decimal("999999999.00")
+EMOJI_RE = re.compile(
+    "[\U0001F600-\U0001F64F"
+    "\U0001F300-\U0001F5FF"
+    "\U0001F680-\U0001F6FF"
+    "\U0001F700-\U0001F7FF"
+    "\U0001F800-\U0001F8FF"
+    "\U0001F900-\U0001F9FF"
+    "\U0001FA00-\U0001FAFF"
+    "\U00002702-\U000027B0"
+    "\U000024C2-\U0001F251"
+    "]+"
+)
+COLORS = [
+    "#ef4444", "#f97316", "#eab308", "#22c55e", "#14b8a6",
+    "#3b82f6", "#8b5cf6", "#ec4899", "#f43f5e", "#06b6d4",
+]
+
+MSG_FORMAT_ERROR = (
+    "❌ *Formato incorrecto.*\n\n"
+    "El formato correcto es:\n"
+    "*monto categoria*\n\n"
+    "Reglas:\n"
+    "• El monto es un numero sin espacios\n"
+    "  (ej: 15000 • 1500,50 • 1.500.000)\n"
+    "• El monto maximo es 999.999.999,00\n"
+    "• La categoria va sin espacios ni emojis\n"
+    "  (ej: supermercado • nafta • alquiler)\n\n"
+    "Intenta de nuevo con el formato correcto."
+)
+
+MSG_OK = "✅ Gasto registrado correctamente."
+
+MSG_ERROR = (
+    "❌ Ocurrio un error al registrar el gasto.\n"
+    "Intenta de nuevo mas tarde."
+)
+
+MSG_NOT_LINKED = (
+    "⚠️ Numero no vinculado.\n"
+    "Vincula tu numero en RegistrApp (Configuracion > WhatsApp)."
+)
 
 
 async def _send_wa(phone: str, text: str) -> None:
@@ -79,46 +123,62 @@ async def whatsapp_webhook(
 
     user = await db.scalar(select(User).where(User.whatsapp_phone == phone))
     if not user:
-        await _send_wa(phone, "⚠️ Número no vinculado. Vinculá tu número en RegistrApp.")
+        await _send_wa(phone, MSG_NOT_LINKED)
         return {"status": "not_linked"}
 
+    # ── Format validation ───────────────────────────────────────────────────────
     m = AMOUNT_RE.match(text)
     if not m:
-        await _send_wa(phone, "❌ Formato inválido.\nEnviá: *monto descripción*\nEj: 15000 supermercado")
+        await _send_wa(phone, MSG_FORMAT_ERROR)
         return {"status": "invalid_format"}
 
-    amount = _parse_amount(m.group(1))
-    description = m.group(2).strip()
+    raw_amount, cat_name = m.group(1), m.group(2)
 
-    if amount is None or amount <= 0:
-        await _send_wa(phone, "❌ Monto inválido. Usá números: 15000 o 5.500,50")
+    # Emoji check on category name
+    if EMOJI_RE.search(cat_name):
+        await _send_wa(phone, MSG_FORMAT_ERROR)
+        return {"status": "invalid_format"}
+
+    amount = _parse_amount(raw_amount)
+    if amount is None or amount <= 0 or amount > MAX_AMOUNT:
+        await _send_wa(phone, MSG_FORMAT_ERROR)
         return {"status": "invalid_amount"}
 
-    categories = (await db.scalars(
-        select(ExpenseCategory).where(ExpenseCategory.tenant_id == user.tenant_id)
-    )).all()
+    # ── Category: find or create ────────────────────────────────────────────────
+    try:
+        categories = (await db.scalars(
+            select(ExpenseCategory).where(ExpenseCategory.tenant_id == user.tenant_id)
+        )).all()
 
-    if not categories:
-        await _send_wa(phone, "❌ No tenés categorías configuradas. Creá una en la app.")
-        return {"status": "no_categories"}
+        category = next(
+            (c for c in categories if c.name.lower() == cat_name.lower()),
+            None,
+        )
+        if category is None:
+            category = ExpenseCategory(
+                tenant_id=user.tenant_id,
+                name=cat_name,
+                color=random.choice(COLORS),
+                is_fixed=False,
+            )
+            db.add(category)
+            await db.flush()
 
-    desc_lower = description.lower()
-    category = next(
-        (c for c in categories if c.name.lower() in desc_lower or desc_lower in c.name.lower()),
-        categories[0],
-    )
+        entry = ExpenseEntry(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            category_id=category.id,
+            amount=amount,
+            description=cat_name,
+            expense_date=date.today(),
+        )
+        db.add(entry)
+        await db.commit()
+    except Exception as e:
+        logger.error(f"WA expense save error: {e}")
+        await db.rollback()
+        await _send_wa(phone, MSG_ERROR)
+        return {"status": "error"}
 
-    entry = ExpenseEntry(
-        tenant_id=user.tenant_id,
-        user_id=user.id,
-        category_id=category.id,
-        amount=amount,
-        description=description,
-        expense_date=date.today(),
-    )
-    db.add(entry)
-    await db.commit()
-
-    amount_fmt = f"${amount:,.0f}".replace(",", ".")
-    await _send_wa(phone, f"✅ {amount_fmt} – {description}\n📁 {category.name}")
+    await _send_wa(phone, MSG_OK)
     return {"status": "ok"}

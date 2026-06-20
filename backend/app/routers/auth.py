@@ -122,7 +122,16 @@ async def link_whatsapp(
 
     url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE}"
     headers = {"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"}
-    payload = {"number": body.phone, "text": f"Tu código RegistrApp: *{code}*\n_(válido 10 minutos)_"}
+    payload = {
+        "number": body.phone,
+        "text": (
+            "🔐 *RegistrApp* — Verificacion de WhatsApp\n\n"
+            f"Tu codigo de verificacion es: *{code}*\n"
+            "_Valido por 10 minutos._\n\n"
+            "Ingresa este codigo en la app (Configuracion > WhatsApp) "
+            "para vincular tu numero y empezar a registrar gastos desde este chat. 📊"
+        ),
+    }
     logger.info(f"Sending WA code to {body.phone} via {settings.EVOLUTION_API_URL}/instance/{settings.EVOLUTION_INSTANCE}")
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -160,6 +169,32 @@ async def verify_whatsapp(
     user.whatsapp_verify_expires = None
     await db.commit()
     await db.refresh(user)
+
+    # Send welcome message
+    if settings.EVOLUTION_API_URL and settings.EVOLUTION_INSTANCE:
+        welcome = (
+            "✅ *Bienvenido/a a RegistrApp!* 🎉\n\n"
+            "Tu WhatsApp quedo vinculado exitosamente.\n\n"
+            "📝 *Como registrar un gasto:*\n"
+            "Envia un mensaje con el formato:\n"
+            "*monto categoria*\n\n"
+            "Ejemplos:\n"
+            "• 15000 supermercado\n"
+            "• 2500 nafta\n"
+            "• 1500000 alquiler\n\n"
+            "_La categoria se crea automaticamente si no existe. "
+            "Sin espacios ni emojis en el nombre._"
+        )
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                await client.post(
+                    f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE}",
+                    json={"number": body.phone, "text": welcome},
+                    headers={"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"},
+                )
+        except Exception:
+            pass
+
     return user
 
 
