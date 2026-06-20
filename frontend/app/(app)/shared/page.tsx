@@ -513,7 +513,7 @@ export default function SharedExpensesPage() {
                               <select
                                 value={p.invite_phone_prefix}
                                 onChange={e => updateParticipant(idx, { invite_phone_prefix: e.target.value, invite_phone_local: "" })}
-                                className="border rounded-lg px-2 py-2 text-xs bg-white shrink-0">
+                                className="border rounded-lg px-2 py-2 text-sm bg-white shrink-0">
                                 {COUNTRIES.map(c => (
                                   <option key={c.prefix} value={c.prefix}>{c.flag} +{c.prefix}</option>
                                 ))}
@@ -525,6 +525,11 @@ export default function SharedExpensesPage() {
                                 inputMode="numeric"
                                 className="flex-1 border rounded-lg px-3 py-2 text-sm min-w-0" />
                             </div>
+                            {p.invite_phone_local.trim() && (
+                              <p className="text-xs text-gray-400">
+                                Numero a enviar: +{buildPhone(p.invite_phone_prefix, p.invite_phone_local)}
+                              </p>
+                            )}
                             <p className="text-xs text-green-700">Se enviara una invitacion automaticamente por WhatsApp al crear el gasto</p>
                           </div>
                         )}

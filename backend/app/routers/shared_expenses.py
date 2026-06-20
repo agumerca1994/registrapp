@@ -74,23 +74,47 @@ async def _get_or_create_shared_category(tenant_id: int, db: AsyncSession) -> in
     return cat.id
 
 
-async def _send_whatsapp_invite(phone: str, creator_name: str, title: str, amount, token: str) -> None:
+async def _send_wa_msg(phone: str, msg: str) -> None:
     if not settings.EVOLUTION_API_URL or not settings.EVOLUTION_INSTANCE:
+        logger.info("Evolution API not configured, skipping WhatsApp send")
         return
-    link = f"{settings.FRONTEND_URL}/invite/{token}"
-    msg = (
-        f"Hola! {creator_name} te invito a compartir un gasto: '{title}' "
-        f"por ${amount}.\n\nEntra al link para verlo y aceptarlo:\n{link}"
-    )
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            await client.post(
+            resp = await client.post(
                 f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE}",
                 json={"number": phone, "text": msg},
                 headers={"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"},
             )
+            if resp.status_code >= 400:
+                logger.warning(f"WhatsApp send failed {resp.status_code} to {phone}: {resp.text[:300]}")
+            else:
+                logger.info(f"WhatsApp sent to {phone}: {resp.status_code}")
     except Exception as e:
-        logger.warning(f"WhatsApp invite send failed: {e}")
+        logger.warning(f"WhatsApp send error to {phone}: {e}")
+
+
+async def _send_whatsapp_invite(phone: str, creator_name: str, title: str, amount, token: str) -> None:
+    link = f"{settings.FRONTEND_URL}/invite/{token}"
+    msg = (
+        f"Hola! {creator_name} te invito a compartir un gasto: '{title}' "
+        f"por ${amount}.
+
+Entra al link para verlo y aceptarlo:
+{link}"
+    )
+    await _send_wa_msg(phone, msg)
+
+
+async def _send_whatsapp_member_notify(phone: str, creator_name: str, title: str, total_amount, split_amount) -> None:
+    app_url = f"{settings.FRONTEND_URL}/shared"
+    msg = (
+        f"Hola! {creator_name} te compartio el gasto '{title}' "
+        f"por ${total_amount}.
+Tu parte: ${split_amount}.
+"
+        f"Ingresa a la app para aceptarlo: {app_url}"
+    )
+    await _send_wa_msg(phone, msg)
 
 
 @router.get("", response_model=list[SharedExpenseOut])
@@ -123,7 +147,8 @@ async def create_shared_expense(
     db.add(shared)
     await db.flush()
 
-    pending_wa_invites = []
+    pending_wa_invites = []    # (phone, token) for unregistered externals
+    pending_wa_notify = []     # user_id for registered members to notify
 
     for split_in in body.splits:
         is_creator = split_in.user_id == user.id
@@ -142,6 +167,8 @@ async def create_shared_expense(
                 if found:
                     resolved_user_id = found.id
                     resolved_name = found.display_name or found.email
+                    if found.id != user.id:
+                        pending_wa_notify.append(found.id)
                 else:
                     invite_email = contact
                     invite_token = secrets.token_urlsafe(32)
@@ -152,12 +179,17 @@ async def create_shared_expense(
                 if found:
                     resolved_user_id = found.id
                     resolved_name = found.display_name or found.email
+                    if found.id != user.id:
+                        pending_wa_notify.append(found.id)
                 else:
                     invite_email = contact  # store phone in invite_email column
                     invite_token = secrets.token_urlsafe(32)
                     invite_expires_at = datetime.utcnow() + timedelta(days=30)
                     # Queue WhatsApp invite to send after flush
                     pending_wa_invites.append((contact, invite_token))
+        elif split_in.user_id and split_in.user_id != user.id:
+            # Direct member selection — queue WhatsApp notification if they have phone
+            pending_wa_notify.append(split_in.user_id)
 
         is_external = resolved_user_id is None and not invite_token
 
@@ -194,6 +226,19 @@ async def create_shared_expense(
     creator_name = user.display_name or user.email
     for phone, token in pending_wa_invites:
         await _send_whatsapp_invite(phone, creator_name, body.title, body.total_amount, token)
+
+    # Notify registered members (if they have WhatsApp linked)
+    for notify_uid in pending_wa_notify:
+        notify_user = await db.get(User, notify_uid)
+        if notify_user and notify_user.whatsapp_phone:
+            split_row = next(
+                (s for s in body.splits if getattr(s, "user_id", None) == notify_uid),
+                None,
+            )
+            split_amt = split_row.amount if split_row else body.total_amount
+            await _send_whatsapp_member_notify(
+                notify_user.whatsapp_phone, creator_name, body.title, body.total_amount, split_amt
+            )
 
     result = await db.scalar(
         _load_q(user.id, user.tenant_id).where(SharedExpense.id == shared.id)
