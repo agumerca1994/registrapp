@@ -13,8 +13,6 @@ class CreditCard(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     bank: Mapped[str] = mapped_column(String(100))
     alias: Mapped[str] = mapped_column(String(100))
-    closing_day: Mapped[int] = mapped_column(Integer)
-    due_day: Mapped[int] = mapped_column(Integer)
     last_4_digits: Mapped[str | None] = mapped_column(String(4), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -32,6 +30,8 @@ class CreditCardStatement(Base):
     card_id: Mapped[int] = mapped_column(ForeignKey("credit_cards.id", ondelete="CASCADE"), index=True)
     year: Mapped[int] = mapped_column(Integer)
     month: Mapped[int] = mapped_column(Integer)
+    closing_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(10), default="open")  # "open" | "closed"
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

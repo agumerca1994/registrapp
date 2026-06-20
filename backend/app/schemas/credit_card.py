@@ -6,16 +6,12 @@ from pydantic import BaseModel, model_validator
 class CreditCardCreate(BaseModel):
     bank: str
     alias: str
-    closing_day: int
-    due_day: int
     last_4_digits: str | None = None
 
 
 class CreditCardUpdate(BaseModel):
     bank: str | None = None
     alias: str | None = None
-    closing_day: int | None = None
-    due_day: int | None = None
     last_4_digits: str | None = None
 
 
@@ -25,8 +21,6 @@ class CreditCardOut(BaseModel):
     id: int
     bank: str
     alias: str
-    closing_day: int
-    due_day: int
     last_4_digits: str | None
     created_at: datetime
 
@@ -34,6 +28,8 @@ class CreditCardOut(BaseModel):
 class StatementCreate(BaseModel):
     year: int
     month: int
+    closing_date: date | None = None
+    due_date: date | None = None
 
 
 class CreditCardItemCreate(BaseModel):
@@ -52,7 +48,6 @@ class CreditCardItemCreate(BaseModel):
         if self.item_type == "installment":
             if not self.installment_count or self.installment_count < 2:
                 raise ValueError("installment_count debe ser al menos 2")
-            # Auto-complete purchase_total from amount or vice versa
             if self.purchase_total is None and self.amount:
                 self.purchase_total = self.amount * self.installment_count
             elif self.purchase_total and not self.amount:
@@ -67,11 +62,12 @@ class CreditCardItemUpdate(BaseModel):
     amount: Decimal | None = None
 
 
-class CategorySummaryOut(BaseModel):
-    category_id: int
-    category_name: str
-    category_color: str | None
-    total: Decimal
+class CategoryOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: int
+    name: str
+    color: str | None
 
 
 class CreditCardItemOut(BaseModel):
@@ -88,18 +84,7 @@ class CreditCardItemOut(BaseModel):
     purchase_total: Decimal | None
     installment_group_id: int | None
     expense_entry_id: int | None
-    category: "CategoryOut"
-
-
-class CategoryOut(BaseModel):
-    model_config = {"from_attributes": True}
-
-    id: int
-    name: str
-    color: str | None
-
-
-CreditCardItemOut.model_rebuild()
+    category: CategoryOut
 
 
 class StatementOut(BaseModel):
@@ -109,6 +94,8 @@ class StatementOut(BaseModel):
     card_id: int
     year: int
     month: int
+    closing_date: date | None
+    due_date: date | None
     status: str
     created_at: datetime
     items: list[CreditCardItemOut] = []
@@ -119,3 +106,12 @@ class StatementOut(BaseModel):
         obj = cls.model_validate(stmt)
         obj.total = sum(i.amount for i in obj.items)
         return obj
+
+
+class ForExpenseOut(BaseModel):
+    card_id: int
+    statement_id: int
+    card_alias: str
+    card_bank: str
+    year: int
+    month: int

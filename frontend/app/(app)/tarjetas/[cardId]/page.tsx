@@ -7,34 +7,25 @@ import { formatARS } from "@/lib/utils";
 import { Plus, Trash2, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const INPUT = "mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900";
 
-interface Card {
-  id: number; bank: string; alias: string; closing_day: number; due_day: number; last_4_digits?: string;
-}
+interface Card { id: number; bank: string; alias: string; last_4_digits?: string; }
 interface StatementItem {
-  id: number; description: string; category_id: number; item_date: string; item_type: string;
+  id: number; description: string; item_date: string; item_type: string;
   amount: number; installment_count?: number; installment_number?: number;
   category: { id: number; name: string; color?: string };
 }
 interface Statement {
   id: number; card_id: number; year: number; month: number; status: string;
-  total: number; items: StatementItem[];
+  closing_date?: string; due_date?: string; total: number; items: StatementItem[];
 }
-
 type DeleteMode = "keep" | "delete";
 
-function DeleteStatementModal({
-  statement,
-  onConfirm,
-  onClose,
-}: {
-  statement: Statement;
-  onConfirm: (mode: DeleteMode) => Promise<void>;
-  onClose: () => void;
+function DeleteStatementModal({ statement, onConfirm, onClose }: {
+  statement: Statement; onConfirm: (mode: DeleteMode) => Promise<void>; onClose: () => void;
 }) {
   const [mode, setMode] = useState<DeleteMode>("keep");
   const [deleting, setDeleting] = useState(false);
-
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
       <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
@@ -43,31 +34,22 @@ function DeleteStatementModal({
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X className="w-5 h-5" /></button>
         </div>
         <p className="text-sm text-gray-600">
-          Que hacemos con los gastos en Egresos de <strong>{MONTH_NAMES[statement.month - 1]} {statement.year}</strong>?
+          ¿Qué hacemos con los gastos de <strong>{MONTH_NAMES[statement.month - 1]} {statement.year}</strong>?
         </p>
         <div className="space-y-2">
           <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
             <input type="radio" name="mode" value="keep" checked={mode === "keep"} onChange={() => setMode("keep")} className="mt-0.5" />
-            <div>
-              <p className="text-sm font-medium">Mantener los gastos</p>
-              <p className="text-xs text-gray-500">Los gastos quedan en Egresos sin el resumen</p>
-            </div>
+            <div><p className="text-sm font-medium">Mantener los gastos</p><p className="text-xs text-gray-500">Quedan en Egresos sin el resumen</p></div>
           </label>
           <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
             <input type="radio" name="mode" value="delete" checked={mode === "delete"} onChange={() => setMode("delete")} className="mt-0.5" />
-            <div>
-              <p className="text-sm font-medium">Eliminar los gastos</p>
-              <p className="text-xs text-gray-500">Se borran todos los gastos de este resumen</p>
-            </div>
+            <div><p className="text-sm font-medium">Eliminar los gastos</p><p className="text-xs text-gray-500">Se borran todos los gastos de este resumen</p></div>
           </label>
         </div>
         <div className="flex gap-2">
           <button onClick={onClose} className="flex-1 border px-4 py-2.5 rounded-xl text-sm">Cancelar</button>
-          <button
-            onClick={async () => { setDeleting(true); await onConfirm(mode); setDeleting(false); }}
-            disabled={deleting}
-            className="flex-1 bg-red-500 text-white px-4 py-2.5 rounded-xl text-sm disabled:opacity-50"
-          >
+          <button onClick={async () => { setDeleting(true); await onConfirm(mode); setDeleting(false); }}
+            disabled={deleting} className="flex-1 bg-red-500 text-white px-4 py-2.5 rounded-xl text-sm disabled:opacity-50">
             {deleting ? "Eliminando..." : "Eliminar"}
           </button>
         </div>
@@ -76,16 +58,15 @@ function DeleteStatementModal({
   );
 }
 
-function NewStatementModal({
-  onSave,
-  onClose,
-}: {
-  onSave: (year: number, month: number) => Promise<void>;
+function NewStatementModal({ onSave, onClose }: {
+  onSave: (year: number, month: number, closingDate: string, dueDate: string) => Promise<void>;
   onClose: () => void;
 }) {
   const now = new Date();
   const [year, setYear] = useState(String(now.getFullYear()));
   const [month, setMonth] = useState(String(now.getMonth() + 1));
+  const [closingDate, setClosingDate] = useState("");
+  const [dueDate, setDueDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -94,7 +75,7 @@ function NewStatementModal({
     setError("");
     setSaving(true);
     try {
-      await onSave(parseInt(year), parseInt(month));
+      await onSave(parseInt(year), parseInt(month), closingDate, dueDate);
     } catch (err: unknown) {
       const apiErr = err as { response?: { data?: { detail?: string } } };
       setError(apiErr?.response?.data?.detail || "Error al crear el resumen");
@@ -113,15 +94,21 @@ function NewStatementModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-gray-600">Mes</label>
-              <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
-                value={month} onChange={(e) => setMonth(e.target.value)}>
+              <select className={INPUT} value={month} onChange={(e) => setMonth(e.target.value)}>
                 {MONTH_NAMES.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600">Anio</label>
-              <input type="number" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
-                value={year} onChange={(e) => setYear(e.target.value)} required />
+              <label className="text-xs font-medium text-gray-600">Año</label>
+              <input type="number" className={INPUT} value={year} onChange={(e) => setYear(e.target.value)} required />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Fecha de cierre</label>
+              <input type="date" className={INPUT} value={closingDate} onChange={(e) => setClosingDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Fecha de vencimiento</label>
+              <input type="date" className={INPUT} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
           </div>
           {error && <p className="text-xs text-red-500">{error}</p>}
@@ -158,8 +145,12 @@ export default function CardDetailPage() {
 
   useEffect(() => { load(); }, [cardId]);
 
-  const handleCreateStatement = async (year: number, month: number) => {
-    await api.post(`/credit-cards/${cardId}/statements`, { year, month });
+  const handleCreateStatement = async (year: number, month: number, closingDate: string, dueDate: string) => {
+    await api.post(`/credit-cards/${cardId}/statements`, {
+      year, month,
+      closing_date: closingDate || null,
+      due_date: dueDate || null,
+    });
     setShowNewStmt(false);
     await load();
   };
@@ -175,16 +166,13 @@ export default function CardDetailPage() {
 
   return (
     <div className="max-w-3xl space-y-4 md:space-y-6">
-      <div className="flex items-center gap-3">
-        <button onClick={() => router.push("/tarjetas")} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+      <div className="sticky top-0 z-10 bg-gray-50 pt-2 pb-3 -mx-4 px-4 md:-mx-8 md:px-8 flex items-center gap-3">
+        <button onClick={() => router.push("/tarjetas")} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500">
           <ChevronLeft className="w-5 h-5" />
         </button>
         <div className="flex-1 min-w-0">
           <h2 className="text-xl md:text-2xl font-bold text-gray-900 truncate">{card.alias}</h2>
-          <p className="text-sm text-gray-500">
-            {card.bank}{card.last_4_digits ? ` .... ${card.last_4_digits}` : ""}
-            {" - "}Cierre dia {card.closing_day} - Vence dia {card.due_day}
-          </p>
+          <p className="text-sm text-gray-500">{card.bank}{card.last_4_digits ? ` •••• ${card.last_4_digits}` : ""}</p>
         </div>
         <button
           onClick={() => setShowNewStmt(true)}
@@ -198,38 +186,29 @@ export default function CardDetailPage() {
       <div className="bg-white rounded-xl border divide-y">
         {statements.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">
-            <p className="text-sm">No hay resumenes para esta tarjeta.</p>
-            <p className="text-xs mt-1">Crea el primer resumen mensual.</p>
+            <p className="text-sm">No hay resúmenes para esta tarjeta.</p>
+            <p className="text-xs mt-1">Creá el primer resumen mensual.</p>
           </div>
         ) : (
           statements.map((stmt) => (
             <div key={stmt.id} className="flex items-center gap-3 px-4 py-4">
               <button
-                className="flex-1 flex items-center gap-3 min-w-0 text-left hover:opacity-80 active:opacity-60"
+                className="flex-1 flex items-center gap-3 min-w-0 text-left hover:opacity-80"
                 onClick={() => router.push(`/tarjetas/${cardId}/${stmt.id}`)}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-semibold text-gray-900">
-                      {MONTH_NAMES[stmt.month - 1]} {stmt.year}
-                    </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold text-gray-900">{MONTH_NAMES[stmt.month - 1]} {stmt.year}</p>
                     <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                      stmt.status === "closed"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-yellow-100 text-yellow-700"
-                    }`}>
-                      {stmt.status === "closed" ? "Cerrado" : "Abierto"}
-                    </span>
+                      stmt.status === "closed" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                    }`}>{stmt.status === "closed" ? "Cerrado" : "Abierto"}</span>
                   </div>
-                  <p className="text-xs text-gray-500">{stmt.items.length} items</p>
+                  <p className="text-xs text-gray-500">{stmt.items.length} ítems</p>
                 </div>
                 <span className="text-sm font-bold text-red-500 shrink-0">{formatARS(stmt.total)}</span>
                 <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
               </button>
-              <button
-                onClick={() => setDeleteStmt(stmt)}
-                className="p-2 text-gray-400 hover:text-red-500 shrink-0"
-              >
+              <button onClick={() => setDeleteStmt(stmt)} className="p-2 text-gray-400 hover:text-red-500 shrink-0">
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
@@ -237,16 +216,8 @@ export default function CardDetailPage() {
         )}
       </div>
 
-      {showNewStmt && (
-        <NewStatementModal onSave={handleCreateStatement} onClose={() => setShowNewStmt(false)} />
-      )}
-      {deleteStmt && (
-        <DeleteStatementModal
-          statement={deleteStmt}
-          onConfirm={handleDeleteStatement}
-          onClose={() => setDeleteStmt(null)}
-        />
-      )}
+      {showNewStmt && <NewStatementModal onSave={handleCreateStatement} onClose={() => setShowNewStmt(false)} />}
+      {deleteStmt && <DeleteStatementModal statement={deleteStmt} onConfirm={handleDeleteStatement} onClose={() => setDeleteStmt(null)} />}
     </div>
   );
 }

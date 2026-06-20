@@ -9,13 +9,12 @@ interface Card {
   id: number;
   bank: string;
   alias: string;
-  closing_day: number;
-  due_day: number;
   last_4_digits?: string;
   created_at: string;
 }
 
-const EMPTY_FORM = { bank: "", alias: "", closing_day: "", due_day: "", last_4_digits: "" };
+const EMPTY_FORM = { bank: "", alias: "", last_4_digits: "" };
+const INPUT = "mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900";
 
 type DeleteMode = "keep" | "delete";
 
@@ -30,13 +29,7 @@ function CardModal({
 }) {
   const [form, setForm] = useState(
     initial
-      ? {
-          bank: initial.bank,
-          alias: initial.alias,
-          closing_day: String(initial.closing_day),
-          due_day: String(initial.due_day),
-          last_4_digits: initial.last_4_digits || "",
-        }
+      ? { bank: initial.bank, alias: initial.alias, last_4_digits: initial.last_4_digits || "" }
       : EMPTY_FORM
   );
   const [saving, setSaving] = useState(false);
@@ -59,27 +52,17 @@ function CardModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-gray-600">Banco</label>
-              <input className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" placeholder="Galicia"
+              <input className={INPUT} placeholder="Galicia"
                 value={form.bank} onChange={(e) => setForm((p) => ({ ...p, bank: e.target.value }))} required />
             </div>
             <div>
               <label className="text-xs font-medium text-gray-600">Alias</label>
-              <input className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" placeholder="Visa Gold"
+              <input className={INPUT} placeholder="Visa Gold"
                 value={form.alias} onChange={(e) => setForm((p) => ({ ...p, alias: e.target.value }))} required />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-600">Día de cierre</label>
-              <input type="number" min="1" max="31" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
-                value={form.closing_day} onChange={(e) => setForm((p) => ({ ...p, closing_day: e.target.value }))} required />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-600">Día de vencimiento</label>
-              <input type="number" min="1" max="31" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
-                value={form.due_day} onChange={(e) => setForm((p) => ({ ...p, due_day: e.target.value }))} required />
             </div>
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-gray-600">Últimos 4 dígitos (opcional)</label>
-              <input maxLength={4} className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" placeholder="1234"
+              <input maxLength={4} className={INPUT} placeholder="1234"
                 value={form.last_4_digits} onChange={(e) => setForm((p) => ({ ...p, last_4_digits: e.target.value }))} />
             </div>
           </div>
@@ -107,12 +90,6 @@ function DeleteCardModal({
   const [mode, setMode] = useState<DeleteMode>("keep");
   const [deleting, setDeleting] = useState(false);
 
-  const handleConfirm = async () => {
-    setDeleting(true);
-    await onConfirm(mode);
-    setDeleting(false);
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
       <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
@@ -136,14 +113,17 @@ function DeleteCardModal({
             <input type="radio" name="mode" value="delete" checked={mode === "delete"} onChange={() => setMode("delete")} className="mt-0.5" />
             <div>
               <p className="text-sm font-medium">Eliminar todos los gastos</p>
-              <p className="text-xs text-gray-500">Se borran permanentemente todos los gastos asociados a esta tarjeta</p>
+              <p className="text-xs text-gray-500">Se borran permanentemente todos los gastos de esta tarjeta</p>
             </div>
           </label>
         </div>
         <div className="flex gap-2">
           <button onClick={onClose} className="flex-1 border px-4 py-2.5 rounded-xl text-sm">Cancelar</button>
-          <button onClick={handleConfirm} disabled={deleting}
-            className="flex-1 bg-red-500 text-white px-4 py-2.5 rounded-xl text-sm disabled:opacity-50">
+          <button
+            onClick={async () => { setDeleting(true); await onConfirm(mode); setDeleting(false); }}
+            disabled={deleting}
+            className="flex-1 bg-red-500 text-white px-4 py-2.5 rounded-xl text-sm disabled:opacity-50"
+          >
             {deleting ? "Eliminando..." : "Eliminar"}
           </button>
         </div>
@@ -167,13 +147,7 @@ export default function TarjetasPage() {
   useEffect(() => { load(); }, []);
 
   const handleSave = async (form: typeof EMPTY_FORM) => {
-    const payload = {
-      bank: form.bank,
-      alias: form.alias,
-      closing_day: parseInt(form.closing_day),
-      due_day: parseInt(form.due_day),
-      last_4_digits: form.last_4_digits || null,
-    };
+    const payload = { bank: form.bank, alias: form.alias, last_4_digits: form.last_4_digits || null };
     if (editCard) await api.patch(`/credit-cards/${editCard.id}`, payload);
     else await api.post("/credit-cards", payload);
     setShowModal(false);
@@ -222,21 +196,14 @@ export default function TarjetasPage() {
                   <p className="font-semibold text-gray-900 truncate">{card.alias}</p>
                   <p className="text-xs text-gray-500">
                     {card.bank}{card.last_4_digits ? ` •••• ${card.last_4_digits}` : ""}
-                    {" · "}Cierre día {card.closing_day} · Vence día {card.due_day}
                   </p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 ml-auto" />
               </button>
-              <button
-                onClick={() => { setEditCard(card); setShowModal(true); }}
-                className="p-2 text-gray-400 hover:text-gray-600 shrink-0"
-              >
+              <button onClick={() => { setEditCard(card); setShowModal(true); }} className="p-2 text-gray-400 hover:text-gray-600 shrink-0">
                 <Pencil className="w-4 h-4" />
               </button>
-              <button
-                onClick={() => setDeleteCard(card)}
-                className="p-2 text-gray-400 hover:text-red-500 shrink-0"
-              >
+              <button onClick={() => setDeleteCard(card)} className="p-2 text-gray-400 hover:text-red-500 shrink-0">
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
@@ -245,18 +212,10 @@ export default function TarjetasPage() {
       </div>
 
       {showModal && (
-        <CardModal
-          initial={editCard || undefined}
-          onSave={handleSave}
-          onClose={() => { setShowModal(false); setEditCard(null); }}
-        />
+        <CardModal initial={editCard || undefined} onSave={handleSave} onClose={() => { setShowModal(false); setEditCard(null); }} />
       )}
       {deleteCard && (
-        <DeleteCardModal
-          card={deleteCard}
-          onConfirm={handleDelete}
-          onClose={() => setDeleteCard(null)}
-        />
+        <DeleteCardModal card={deleteCard} onConfirm={handleDelete} onClose={() => setDeleteCard(null)} />
       )}
     </div>
   );

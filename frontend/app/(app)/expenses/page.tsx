@@ -3,13 +3,12 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { formatARS, formatDate } from "@/lib/utils";
-import { Plus, Trash2, Pencil, X, ChevronRight, CreditCard } from "lucide-react";
+import { Plus, Trash2, Pencil, X, ChevronRight } from "lucide-react";
 
 interface Category { id: number; name: string; color?: string; is_fixed: boolean; }
 interface ExpenseEntry {
   id: number; category_id: number; amount: number;
   description?: string; expense_date: string; notes?: string;
-  payment_method?: string; entity?: string;
   category: Category;
 }
 
@@ -91,6 +90,7 @@ export default function ExpensesPage() {
   };
 
   useEffect(() => { load(); }, []);
+
   const openEdit = (entry: ExpenseEntry) => {
     setEditId(entry.id);
     setForm({
@@ -154,7 +154,7 @@ export default function ExpensesPage() {
         <div className="flex gap-1 md:gap-2 shrink-0">
           <button onClick={() => setShowCatForm(true)}
             className="text-sm border px-2 md:px-3 py-1.5 rounded-lg hover:bg-gray-50">
-            + Categoria
+            + Cat.
           </button>
           <button onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true); }}
             className="flex items-center gap-1 bg-primary text-white text-sm px-3 py-1.5 rounded-lg hover:opacity-90">
@@ -164,7 +164,6 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      
       {showCatForm && (
         <form onSubmit={handleAddCat} className="bg-white rounded-xl border p-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -273,18 +272,11 @@ export default function ExpensesPage() {
               onClick={() => setDetailEntry(entry)}
             >
               <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.category.color || "#6366f1" }} />
-              <div className="flex-1 min-w-0">
-                <span className="block text-sm font-medium text-gray-900 truncate">
-                  {entry.description || entry.category.name}
-                </span>
-                {entry.payment_method === "tarjeta_credito" && (
-                  <span className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium">
-                    <CreditCard className="w-3 h-3" />{entry.entity}
-                  </span>
-                )}
-              </div>
-              <span className="w-24 text-xs text-muted-foreground shrink-0 text-right truncate">{formatDate(entry.expense_date)}</span>
-              <span className="w-28 text-sm font-semibold text-red-500 shrink-0 text-right">{formatARS(entry.amount)}</span>
+              <span className="flex-1 text-sm font-medium text-gray-900 truncate">
+                {entry.description || entry.category.name}
+              </span>
+              <span className="text-xs text-muted-foreground shrink-0">{formatDate(entry.expense_date)}</span>
+              <span className="text-sm font-semibold text-red-500 shrink-0">{formatARS(entry.amount)}</span>
               <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
             </button>
           </div>

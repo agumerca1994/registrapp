@@ -1,4 +1,4 @@
-﻿from calendar import monthrange
+from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 
@@ -16,6 +16,7 @@ from app.schemas.credit_card import (
     CreditCardCreate, CreditCardUpdate, CreditCardOut,
     StatementCreate, StatementOut,
     CreditCardItemCreate, CreditCardItemUpdate, CreditCardItemOut,
+    ForExpenseOut,
 )
 
 router = APIRouter(prefix="/credit-cards", tags=["credit-cards"])
@@ -229,6 +230,8 @@ async def create_statement(
         card_id=card_id,
         year=body.year,
         month=body.month,
+        closing_date=body.closing_date,
+        due_date=body.due_date,
         status="open",
     )
     db.add(stmt)
@@ -348,6 +351,37 @@ async def finalize_statement(
     await db.commit()
     result = await db.scalar(_statement_query(stmt_id))
     return StatementOut.from_orm_with_total(result)
+
+
+
+# -- For-expense lookup -------------------------------------------------------
+
+@router.get("/for-expense/{expense_entry_id}", response_model=ForExpenseOut)
+async def find_statement_for_expense(
+    expense_entry_id: int,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await _get_db_user(firebase_user, db)
+    item = await db.scalar(
+        select(CreditCardItem)
+        .where(CreditCardItem.expense_entry_id == expense_entry_id)
+        .options(
+            selectinload(CreditCardItem.statement).selectinload(CreditCardStatement.card)
+        )
+    )
+    if not item or item.statement.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404, detail="No se encontro el resumen para este gasto")
+    stmt = item.statement
+    card = stmt.card
+    return ForExpenseOut(
+        card_id=card.id,
+        statement_id=stmt.id,
+        card_alias=card.alias,
+        card_bank=card.bank,
+        year=stmt.year,
+        month=stmt.month,
+    )
 
 
 # -- Items --------------------------------------------------------------------
