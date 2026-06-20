@@ -81,6 +81,10 @@ Three models: `CreditCard` (card metadata: bank, alias, last 4 digits) → `Cred
 
 Frontend routes: `/tarjetas` → `/tarjetas/[cardId]` (statements list) → `/tarjetas/[cardId]/[statementId]` (items).
 
+**Installment (cuotas) propagation**: when `create_item` receives `item_type="installment"`, it immediately creates all future cuota records (cuotas 2..N) in their respective statements (auto-created via `_find_or_create_statement`). Child cuotas have `installment_group_id` pointing to the root item's `id`; the root has `installment_group_id = NULL`. Edit/delete is blocked on non-root cuotas (400 error); deleting the root cascades all children. `finalize_statement` skips items that already have children (avoids duplicate propagation). `CreditCardItemOut` includes `installment_root_statement_id: int | None` — populated from `installment_group.statement_id` — so the frontend can navigate to the root's statement for non-root cuotas ("Ver original" button).
+
+**Currency (ARS/USD)**: `CreditCardItem` and `ExpenseEntry` both have a `currency VARCHAR(3)` field (default `"ARS"`). USD items are only allowed for `item_type="single"` (validated in schema). The backend auto-assigns the category via `_get_or_create_usd_category(tenant_id, db)` which lazily creates a "Consumo en dólares" category (color `#22c55e`) per tenant on first USD expense — callers don't pass `category_id` for USD. The frontend form shows the ARS/USD toggle at the **top** of the form; selecting USD hides the category selector and (in tarjetas) the tipo selector. Totals in list pages show `arsTotal` and `usdTotal` on separate lines. Use `formatUSD(n)` from `lib/utils.ts` for USD display (`"U$D X,XX"` format).
+
 ### Shared expenses (Gastos compartidos)
 `SharedExpense` has a `split_type` ("equal" or "custom") and links to `SharedExpenseSplit` rows (one per participant). Splits track `user_id` (nullable — may be an external guest), `member_name`, `amount`, and `status` ("pending"/"accepted"/"rejected").
 
@@ -105,7 +109,7 @@ frontend/app/
 frontend/
   contexts/AuthContext.tsx   # Firebase auth state + /auth/me → appUser
   lib/api.ts                 # Axios instance; adds Firebase ID token to every request
-  lib/utils.ts               # formatARS, formatPct, cn()
+  lib/utils.ts               # formatARS, formatUSD, formatPct, parseAmount, cn()
 ```
 
 `AuthContext` exposes `firebaseUser`, `appUser`, `loading`, and `refreshUser()`. `refreshUser()` re-fetches `GET /auth/me` **and then auto-claims any `pendingInviteToken` stored in localStorage** — call it after register/join to complete the invite flow. The `(app)` layout redirects to `/login` if not authenticated, or `/onboarding` if authenticated but no `appUser` (tenant not created yet).
@@ -141,3 +145,5 @@ All form inputs (text, number, date, select) must share the same CSS classes so 
 
 ### Amount fields
 Use `type="text" inputMode="decimal" pattern="[0-9.,]*"` instead of `type="number"` for currency inputs. `type="number"` causes UX issues on mobile and with large Argentine peso values.
+
+When reading user-entered amounts, always use `parseAmount(value)` from `lib/utils.ts` — never `parseFloat(value)` directly. `parseFloat("9,99")` returns `9` in JavaScript (stops at comma). `parseAmount` normalizes Argentine format first: removes thousands dots, replaces decimal comma with dot, then calls `parseFloat`.
