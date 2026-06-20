@@ -1,4 +1,4 @@
-from datetime import date, datetime
+﻿from datetime import date, datetime
 from decimal import Decimal
 from sqlalchemy import String, Date, DateTime, ForeignKey, Numeric, Boolean, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -40,6 +40,9 @@ class SharedExpenseSplit(Base):
     expense_entry_id: Mapped[int | None] = mapped_column(
         ForeignKey("expense_entries.id", ondelete="SET NULL"), nullable=True
     )
+    invite_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    invite_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    invite_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     shared_expense: Mapped["SharedExpense"] = relationship(back_populates="splits")

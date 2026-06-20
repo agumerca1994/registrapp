@@ -1,9 +1,9 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, Users } from "lucide-react";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link } from "lucide-react";
 import api from "@/lib/api";
 import { formatARS } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,6 +15,8 @@ interface Split {
   amount: number;
   status: "pending" | "accepted" | "rejected";
   expense_entry_id: number | null;
+  invite_email: string | null;
+  invite_token: string | null;
 }
 
 interface SharedExpense {
@@ -48,6 +50,7 @@ interface ParticipantRow {
   member_name: string;
   amount: string;
   manual: boolean;
+  invite_email: string;
 }
 
 function parseAmt(s: string): number {
@@ -68,7 +71,7 @@ function redistAuto(parts: ParticipantRow[], total: number): ParticipantRow[] {
   return parts.map(p => p.manual ? p : { ...p, amount: perAuto });
 }
 
-function StatusChip({ status }: { status: string }) {
+function StatusChip({ status, hasToken }: { status: string; hasToken?: boolean }) {
   if (status === "accepted") return (
     <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
       <CheckCircle className="w-3 h-3" /> Aceptado
@@ -77,6 +80,11 @@ function StatusChip({ status }: { status: string }) {
   if (status === "rejected") return (
     <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">
       <XCircle className="w-3 h-3" /> Rechazado
+    </span>
+  );
+  if (hasToken) return (
+    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">
+      <Link className="w-3 h-3" /> Invitado
     </span>
   );
   return (
@@ -97,6 +105,7 @@ export default function SharedExpensesPage() {
   const [catName, setCatName] = useState("");
   const [catColor, setCatColor] = useState("#6366f1");
   const [savingCat, setSavingCat] = useState(false);
+  const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
@@ -104,7 +113,7 @@ export default function SharedExpensesPage() {
   const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [splitType, setSplitType] = useState<"equal" | "custom">("equal");
   const [participants, setParticipants] = useState<ParticipantRow[]>([
-    { type: "member", user_id: null, member_name: "", amount: "", manual: false },
+    { type: "member", user_id: null, member_name: "", amount: "", manual: false, invite_email: "" },
   ]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -181,7 +190,7 @@ export default function SharedExpensesPage() {
   function addParticipant() {
     setParticipants(prev => {
       const newRow: ParticipantRow = {
-        type: "member", user_id: null, member_name: "", amount: "", manual: false,
+        type: "member", user_id: null, member_name: "", amount: "", manual: false, invite_email: "",
       };
       const updated = [...prev, newRow];
       return splitType === "custom" ? redistAuto(updated, total) : updated;
@@ -215,6 +224,7 @@ export default function SharedExpensesPage() {
       member_name: appUser?.display_name || appUser?.email || "",
       amount: "",
       manual: false,
+      invite_email: "",
     }]);
     setFormError("");
   }
@@ -240,6 +250,7 @@ export default function SharedExpensesPage() {
       user_id: p.type === "member" ? p.user_id : null,
       member_name: p.member_name,
       amount: splitType === "equal" ? parseFloat(equalShare) : parseAmt(p.amount),
+      invite_email: p.type === "external" && p.invite_email.trim() ? p.invite_email.trim() : undefined,
     }));
     const sumAmts = splits.reduce((s, x) => s + x.amount, 0);
     if (Math.abs(sumAmts - total) > 0.02) {
@@ -271,6 +282,14 @@ export default function SharedExpensesPage() {
   async function handleDelete(sharedId: number) {
     if (!confirm("Eliminar este gasto compartido? Se borraran todos los egresos parciales asociados.")) return;
     await api.delete(`/shared-expenses/${sharedId}`); await load();
+  }
+
+  function copyInviteLink(token: string) {
+    const link = `${window.location.origin}/invite/${token}`;
+    navigator.clipboard.writeText(link).then(() => {
+      setCopiedToken(token);
+      setTimeout(() => setCopiedToken(null), 2000);
+    });
   }
 
   const currentUserId = appUser?.id;
@@ -428,9 +447,23 @@ export default function SharedExpensesPage() {
                         ))}
                       </select>
                     ) : (
-                      <input required type="text" placeholder="Nombre del externo"
-                        value={p.member_name} onChange={e => updateParticipant(idx, { member_name: e.target.value })}
-                        className="w-full border rounded-lg px-3 py-2 text-sm" />
+                      <div className="space-y-1.5">
+                        <input required type="text" placeholder="Nombre del externo"
+                          value={p.member_name} onChange={e => updateParticipant(idx, { member_name: e.target.value })}
+                          className="w-full border rounded-lg px-3 py-2 text-sm" />
+                        <input
+                          type="email"
+                          placeholder="Email para invitar (opcional)"
+                          value={p.invite_email}
+                          onChange={e => updateParticipant(idx, { invite_email: e.target.value })}
+                          className="w-full border rounded-lg px-3 py-2 text-sm text-gray-600"
+                        />
+                        {p.invite_email && (
+                          <p className="text-xs text-violet-600">
+                            Se generara un link de invitacion para copiar y compartir
+                          </p>
+                        )}
+                      </div>
                     )}
 
                     {splitType === "custom" ? (
@@ -504,8 +537,9 @@ export default function SharedExpensesPage() {
         <div className="space-y-3">
           {expenses.map(exp => {
             const myMemberSplit = exp.splits.find(s => s.user_id === currentUserId);
-            const pendingCount = exp.splits.filter(s => s.user_id !== null && s.status === "pending").length;
+            const pendingCount = exp.splits.filter(s => s.user_id !== null && s.status === "pending" && !s.invite_token).length;
             const isCreator = exp.created_by_user_id === currentUserId;
+            const isCrossTenant = !isCreator && exp.splits.some(s => s.user_id === currentUserId);
             return (
               <div key={exp.id} className="bg-white rounded-xl border p-4 space-y-3">
                 <div className="flex items-start justify-between gap-3">
@@ -515,6 +549,9 @@ export default function SharedExpensesPage() {
                       {fmtDate(exp.expense_date)} &middot; {exp.splits.length} participantes
                       {exp.locked && (
                         <span className="ml-2 text-orange-500 font-medium">&middot; bloqueado</span>
+                      )}
+                      {isCrossTenant && (
+                        <span className="ml-2 text-violet-500 font-medium">&middot; otro hogar</span>
                       )}
                     </p>
                   </div>
@@ -534,19 +571,37 @@ export default function SharedExpensesPage() {
                     <div key={split.id} className="flex items-center justify-between gap-2 text-sm">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-gray-700 truncate">{split.member_name}</span>
-                        {split.user_id === null && (
+                        {split.invite_email && (
+                          <span className="text-xs text-gray-400 shrink-0 truncate max-w-[100px]">({split.invite_email})</span>
+                        )}
+                        {split.user_id === null && !split.invite_token && !split.invite_email && (
                           <span className="text-xs text-gray-400 shrink-0">(ext)</span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <span className="text-gray-600">{formatARS(split.amount)}</span>
-                        <StatusChip status={split.user_id === null ? "accepted" : split.status} />
+                        <StatusChip
+                          status={split.user_id === null && !split.invite_token ? "accepted" : split.status}
+                          hasToken={!!split.invite_token}
+                        />
+                        {split.invite_token && isCreator && (
+                          <button
+                            onClick={() => copyInviteLink(split.invite_token!)}
+                            title="Copiar link de invitacion"
+                            className={`p-1 rounded transition-colors ${copiedToken === split.invite_token ? "text-green-600" : "text-gray-400 hover:text-violet-600"}`}
+                          >
+                            {copiedToken === split.invite_token
+                              ? <CheckCircle className="w-4 h-4" />
+                              : <Copy className="w-4 h-4" />
+                            }
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {myMemberSplit?.status === "pending" && (
+                {myMemberSplit?.status === "pending" && !myMemberSplit?.invite_token && (
                   <div className="flex items-center gap-2 pt-2 border-t">
                     <p className="text-sm text-gray-600 flex-1">
                       Te corresponden <strong>{formatARS(myMemberSplit.amount)}</strong>

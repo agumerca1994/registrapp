@@ -1,4 +1,4 @@
-from datetime import date, datetime
+﻿from datetime import date, datetime
 from decimal import Decimal
 from pydantic import BaseModel, model_validator
 
@@ -7,6 +7,7 @@ class SplitIn(BaseModel):
     user_id: int | None = None
     member_name: str
     amount: Decimal
+    invite_email: str | None = None
 
 
 class SharedExpenseCreate(BaseModel):
@@ -31,16 +32,20 @@ class SharedExpenseCreate(BaseModel):
 
 class SplitOut(BaseModel):
     model_config = {"from_attributes": True}
+
     id: int
     user_id: int | None
     member_name: str
     amount: Decimal
     status: str
     expense_entry_id: int | None
+    invite_email: str | None
+    invite_token: str | None
 
 
 class SharedExpenseOut(BaseModel):
     model_config = {"from_attributes": True}
+
     id: int
     title: str
     total_amount: Decimal
@@ -51,3 +56,26 @@ class SharedExpenseOut(BaseModel):
     created_by_user_id: int
     created_at: datetime
     splits: list[SplitOut]
+
+
+class InviteInfoOut(BaseModel):
+    shared_expense_id: int
+    title: str
+    total_amount: Decimal
+    split_amount: Decimal
+    expense_date: date
+    creator_name: str
+
+
+class ContactOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: int
+    contact_email: str
+    contact_name: str
+    contact_user_id: int | None
+
+
+class ContactCreate(BaseModel):
+    contact_email: str
+    contact_name: str

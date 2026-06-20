@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from app.routers import auth, income, expenses, macro, dashboard, mortgage, shared_expenses, whatsapp, credit_cards
+from app.routers import auth, income, expenses, macro, dashboard, mortgage, shared_expenses, whatsapp, credit_cards, contacts
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +31,9 @@ async def _daily_mortgage_sync():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Run syncs on startup (non-blocking)
     asyncio.create_task(_daily_sync())
     asyncio.create_task(_daily_mortgage_sync())
 
-    # Schedule daily jobs at 06:00 Argentina time (UTC-3 â†’ 09:00 UTC)
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(_daily_sync, "cron", hour=9, minute=0)
     scheduler.add_job(_daily_mortgage_sync, "cron", hour=9, minute=1)
@@ -76,9 +74,9 @@ app.include_router(mortgage.router)
 app.include_router(shared_expenses.router)
 app.include_router(credit_cards.router)
 app.include_router(whatsapp.router)
+app.include_router(contacts.router)
 
 
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-
