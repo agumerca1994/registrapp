@@ -84,6 +84,7 @@ class CreditCardItemOut(BaseModel):
     purchase_total: Decimal | None
     installment_group_id: int | None
     expense_entry_id: int | None
+    installment_root_statement_id: int | None = None
     category: CategoryOut
 
 
@@ -102,9 +103,12 @@ class StatementOut(BaseModel):
     total: Decimal = Decimal("0")
 
     @classmethod
-    def from_orm_with_total(cls, stmt: object) -> "StatementOut":
+    def from_orm_with_total(cls, stmt) -> "StatementOut":
         obj = cls.model_validate(stmt)
         obj.total = sum(i.amount for i in obj.items)
+        for pydantic_item, orm_item in zip(obj.items, stmt.items):
+            if orm_item.installment_group_id and orm_item.installment_group:
+                pydantic_item.installment_root_statement_id = orm_item.installment_group.statement_id
         return obj
 
 

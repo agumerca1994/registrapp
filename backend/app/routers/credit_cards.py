@@ -33,7 +33,10 @@ def _items_query(stmt_id: int):
     return (
         select(CreditCardItem)
         .where(CreditCardItem.statement_id == stmt_id)
-        .options(selectinload(CreditCardItem.category))
+        .options(
+            selectinload(CreditCardItem.category),
+            selectinload(CreditCardItem.installment_group),
+        )
         .order_by(CreditCardItem.item_date, CreditCardItem.id)
     )
 
@@ -42,7 +45,10 @@ def _statement_query(stmt_id: int):
     return (
         select(CreditCardStatement)
         .where(CreditCardStatement.id == stmt_id)
-        .options(selectinload(CreditCardStatement.items).selectinload(CreditCardItem.category))
+        .options(
+            selectinload(CreditCardStatement.items).selectinload(CreditCardItem.category),
+            selectinload(CreditCardStatement.items).selectinload(CreditCardItem.installment_group),
+        )
     )
 
 
@@ -197,7 +203,10 @@ async def list_statements(
     stmts = await db.scalars(
         select(CreditCardStatement)
         .where(CreditCardStatement.card_id == card_id)
-        .options(selectinload(CreditCardStatement.items).selectinload(CreditCardItem.category))
+        .options(
+            selectinload(CreditCardStatement.items).selectinload(CreditCardItem.category),
+            selectinload(CreditCardStatement.items).selectinload(CreditCardItem.installment_group),
+        )
         .order_by(CreditCardStatement.year.desc(), CreditCardStatement.month.desc())
     )
     return [StatementOut.from_orm_with_total(s) for s in stmts.all()]
@@ -294,10 +303,21 @@ async def finalize_statement(
     card = stmt.card
 
     for item in list(stmt.items):
+        # Skip non-root installments (already propagated from create_item)
+        if item.installment_group_id is not None:
+            continue
+
         months_done = item.installment_number or 0
         total_months = item.installment_count or 0
 
         if item.item_type == "installment" and months_done < total_months:
+            # Skip if future cuotas already exist (created at item creation time)
+            existing_child = await db.scalar(
+                select(CreditCardItem).where(CreditCardItem.installment_group_id == item.id).limit(1)
+            )
+            if existing_child is not None:
+                continue
+
             group_id = item.installment_group_id or item.id
             remaining = total_months - months_done
             for offset in range(1, remaining + 1):
@@ -372,6 +392,26 @@ async def find_statement_for_expense(
     )
     if not item or item.statement.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="No se encontro el resumen para este gasto")
+
+    # If this is a non-root installment, navigate to root's statement
+    if item.installment_group_id:
+        root_item = await db.scalar(
+            select(CreditCardItem)
+            .where(CreditCardItem.id == item.installment_group_id)
+            .options(selectinload(CreditCardItem.statement).selectinload(CreditCardStatement.card))
+        )
+        if root_item and root_item.statement:
+            stmt = root_item.statement
+            card = stmt.card
+            return ForExpenseOut(
+                card_id=card.id,
+                statement_id=stmt.id,
+                card_alias=card.alias,
+                card_bank=card.bank,
+                year=stmt.year,
+                month=stmt.month,
+            )
+
     stmt = item.statement
     card = stmt.card
     return ForExpenseOut(
@@ -440,6 +480,36 @@ async def create_item(
         expense_entry_id=entry.id,
     )
     db.add(item)
+    await db.flush()  # need item.id for installment_group_id
+
+    if body.item_type == "installment" and body.installment_count and body.installment_count > 1:
+        for offset in range(1, body.installment_count):
+            cuota_n = offset + 1
+            future_date = _next_month_date(date(stmt.year, stmt.month, 1), offset)
+            future_stmt = await _find_or_create_statement(
+                card, future_date.year, future_date.month, user.tenant_id, db
+            )
+            future_item_date = _next_month_date(body.item_date, offset)
+            future_entry = await _create_expense_entry(
+                card, future_item_date, body.amount,
+                f"{body.description} ({cuota_n}/{body.installment_count})",
+                body.category_id, user.tenant_id, user.id, db,
+            )
+            future_item = CreditCardItem(
+                statement_id=future_stmt.id,
+                description=body.description,
+                category_id=body.category_id,
+                item_date=future_item_date,
+                item_type="installment",
+                amount=body.amount,
+                installment_count=body.installment_count,
+                installment_number=cuota_n,
+                purchase_total=body.purchase_total,
+                installment_group_id=item.id,
+                expense_entry_id=future_entry.id,
+            )
+            db.add(future_item)
+
     await db.commit()
 
     result = await db.scalar(
@@ -468,6 +538,8 @@ async def update_item(
     )
     if not item or item.statement.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Item no encontrado")
+    if item.installment_group_id is not None:
+        raise HTTPException(status_code=400, detail="Para editar una cuota, ve al resumen de la cuota 1")
 
     updates = body.model_dump(exclude_none=True)
     for field, value in updates.items():
@@ -510,13 +582,13 @@ async def delete_item(
     if not item or item.statement.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Item no encontrado")
 
-    if delete_group and (item.installment_group_id or item.item_type == "installment"):
-        group_root_id = item.installment_group_id or item.id
+    if item.installment_group_id is not None:
+        raise HTTPException(status_code=400, detail="Para eliminar, ve al resumen de la cuota 1")
+
+    if item.item_type == "installment" and item.installment_group_id is None:
+        # Root installment: always cascade delete all future cuotas
         group_items = await db.scalars(
-            select(CreditCardItem).where(
-                (CreditCardItem.id == group_root_id)
-                | (CreditCardItem.installment_group_id == group_root_id)
-            )
+            select(CreditCardItem).where(CreditCardItem.installment_group_id == item.id)
         )
         for gi in group_items.all():
             if gi.expense_entry_id:
@@ -524,11 +596,11 @@ async def delete_item(
                 if entry:
                     await db.delete(entry)
             await db.delete(gi)
-    else:
-        if item.expense_entry_id:
-            entry = await db.get(ExpenseEntry, item.expense_entry_id)
-            if entry:
-                await db.delete(entry)
-        await db.delete(item)
+        await db.flush()
 
+    if item.expense_entry_id:
+        entry = await db.get(ExpenseEntry, item.expense_entry_id)
+        if entry:
+            await db.delete(entry)
+    await db.delete(item)
     await db.commit()

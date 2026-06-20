@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { formatARS, formatDate } from "@/lib/utils";
-import { Plus, Trash2, ChevronLeft, Pencil, X, CheckCircle } from "lucide-react";
+import { Plus, Trash2, ChevronLeft, Pencil, X, CheckCircle, ExternalLink } from "lucide-react";
 
 const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -12,7 +12,7 @@ interface Category { id: number; name: string; color?: string; is_fixed: boolean
 interface CardItem {
   id: number; description: string; category_id: number; item_date: string; item_type: string;
   amount: number; installment_count?: number; installment_number?: number;
-  purchase_total?: number; installment_group_id?: number; expense_entry_id?: number;
+  purchase_total?: number; installment_group_id?: number; installment_root_statement_id?: number; expense_entry_id?: number;
   category: { id: number; name: string; color?: string };
 }
 interface Statement {
@@ -36,11 +36,14 @@ function itemTypeBadge(item: CardItem) {
   if (item.item_type === "recurring") return (
     <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">Recurrente</span>
   );
-  if (item.item_type === "installment") return (
-    <span className="text-xs px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">
-      Cuota {item.installment_number}/{item.installment_count}
-    </span>
-  );
+  if (item.item_type === "installment") {
+    const isChild = !!item.installment_group_id;
+    return (
+      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${isChild ? "bg-orange-100 text-orange-700" : "bg-purple-100 text-purple-700"}`}>
+        Cuota {item.installment_number}/{item.installment_count}
+      </span>
+    );
+  }
   return null;
 }
 
@@ -56,47 +59,27 @@ function DeleteItemModal({
   const [deleting, setDeleting] = useState(false);
   const isInstallment = item.item_type === "installment";
 
-  if (!isInstallment) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-        <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
-          <h3 className="font-semibold text-gray-900">Eliminar item</h3>
-          <p className="text-sm text-gray-600">Se eliminara <strong>{item.description}</strong> y su gasto en Egresos.</p>
-          <div className="flex gap-2">
-            <button onClick={onClose} className="flex-1 border px-4 py-2.5 rounded-xl text-sm">Cancelar</button>
-            <button onClick={async () => { setDeleting(true); await onConfirm(false); setDeleting(false); }}
-              disabled={deleting} className="flex-1 bg-red-500 text-white px-4 py-2.5 rounded-xl text-sm disabled:opacity-50">
-              {deleting ? "Eliminando..." : "Eliminar"}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
       <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Eliminar cuota</h3>
+          <h3 className="font-semibold text-gray-900">Eliminar {isInstallment ? "cuotas" : "item"}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X className="w-5 h-5" /></button>
         </div>
-        <p className="text-sm text-gray-600"><strong>{item.description}</strong> es la cuota {item.installment_number}/{item.installment_count}.</p>
-        <div className="space-y-2">
-          <button onClick={async () => { setDeleting(true); await onConfirm(false); setDeleting(false); }}
-            disabled={deleting}
-            className="w-full text-left p-3 border rounded-lg hover:bg-gray-50 text-sm">
-            <p className="font-medium">Solo esta cuota</p>
-            <p className="text-xs text-gray-500">Elimina la cuota {item.installment_number} y su gasto</p>
-          </button>
-          <button onClick={async () => { setDeleting(true); await onConfirm(true); setDeleting(false); }}
-            disabled={deleting}
-            className="w-full text-left p-3 border border-red-200 rounded-lg hover:bg-red-50 text-sm">
-            <p className="font-medium text-red-600">Todas las cuotas</p>
-            <p className="text-xs text-gray-500">Elimina todas las {item.installment_count} cuotas y sus gastos en todos los resumenes</p>
+        {isInstallment ? (
+          <p className="text-sm text-gray-600">
+            Se eliminarán <strong>todas las {item.installment_count} cuotas</strong> de &quot;{item.description}&quot; y sus gastos en todos los resumenes.
+          </p>
+        ) : (
+          <p className="text-sm text-gray-600">Se eliminara <strong>{item.description}</strong> y su gasto en Egresos.</p>
+        )}
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 border px-4 py-2.5 rounded-xl text-sm">Cancelar</button>
+          <button onClick={async () => { setDeleting(true); await onConfirm(isInstallment); setDeleting(false); }}
+            disabled={deleting} className="flex-1 bg-red-500 text-white px-4 py-2.5 rounded-xl text-sm disabled:opacity-50">
+            {deleting ? "Eliminando..." : "Eliminar"}
           </button>
         </div>
-        <button onClick={onClose} className="w-full border px-4 py-2.5 rounded-xl text-sm">Cancelar</button>
       </div>
     </div>
   );
@@ -471,12 +454,25 @@ export default function StatementDetailPage() {
                 </div>
               </div>
               <span className="text-sm font-semibold text-red-500 shrink-0">{formatARS(item.amount)}</span>
-              <button onClick={() => setEditItem(item)} className="p-1.5 text-gray-400 hover:text-gray-600 shrink-0">
-                <Pencil className="w-3.5 h-3.5" />
-              </button>
-              <button onClick={() => setDeleteItem(item)} className="p-1.5 text-gray-400 hover:text-red-500 shrink-0">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              {item.installment_group_id ? (
+                <button
+                  onClick={() => router.push(`/tarjetas/${cardId}/${item.installment_root_statement_id}`)}
+                  className="flex items-center gap-1 text-xs text-blue-600 hover:underline shrink-0 px-1.5 py-1"
+                  title="Ver resumen de cuota 1"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  <span className="hidden sm:inline">Ver original</span>
+                </button>
+              ) : (
+                <>
+                  <button onClick={() => setEditItem(item)} className="p-1.5 text-gray-400 hover:text-gray-600 shrink-0">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => setDeleteItem(item)} className="p-1.5 text-gray-400 hover:text-red-500 shrink-0">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
             </div>
           ))
         )}
