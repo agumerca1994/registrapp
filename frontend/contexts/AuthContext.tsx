@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { User, onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
@@ -26,6 +26,17 @@ interface AppUser {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+async function claimPendingInvite() {
+  const token = localStorage.getItem("pendingInviteToken");
+  if (!token) return;
+  try {
+    await api.post(`/shared-expenses/invite/${token}/claim`);
+  } catch {
+    // Already claimed or expired — ignore
+  }
+  localStorage.removeItem("pendingInviteToken");
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
@@ -58,6 +69,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data } = await api.get("/auth/me");
       setAppUser(data);
+      // After registration/join, claim any pending invite link stored in localStorage
+      await claimPendingInvite();
     } catch {
       setAppUser(null);
     }

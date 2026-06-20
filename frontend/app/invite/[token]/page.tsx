@@ -145,13 +145,19 @@ export default function InvitePage() {
               Inicia sesion para aceptar este gasto compartido
             </p>
             <button
-              onClick={() => router.push(`/login?invite_token=${token}`)}
+              onClick={() => {
+                localStorage.setItem("pendingInviteToken", token);
+                router.push("/login");
+              }}
               className="w-full py-3 bg-primary text-white rounded-lg font-medium text-sm"
             >
               Iniciar sesion
             </button>
             <button
-              onClick={() => router.push(`/onboarding?invite_token=${token}`)}
+              onClick={() => {
+                localStorage.setItem("pendingInviteToken", token);
+                router.push("/login");
+              }}
               className="w-full py-2.5 border rounded-lg text-sm text-gray-700 hover:bg-gray-50"
             >
               Crear cuenta nueva

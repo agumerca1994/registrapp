@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import re
 import secrets
 from datetime import datetime, timedelta
@@ -372,6 +372,31 @@ async def claim_invite(
     split.member_name = user.display_name or user.email
     split.invite_token = None
     split.invite_expires_at = None
+
+    # Auto-accept: create ExpenseEntry immediately (same as accept flow)
+    shared = split.shared_expense
+    if shared.tenant_id != user.tenant_id:
+        category_id = await _get_or_create_shared_category(user.tenant_id, db)
+    else:
+        category_id = shared.category_id
+
+    entry = ExpenseEntry(
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        category_id=category_id,
+        amount=split.amount,
+        description=shared.title,
+        expense_date=shared.expense_date,
+        notes=f"Gasto compartido #{shared.id}",
+    )
+    db.add(entry)
+    await db.flush()
+    split.expense_entry_id = entry.id
+    split.status = "accepted"
+
+    if user.id != shared.created_by_user_id and not shared.locked:
+        shared.locked = True
+
     await db.commit()
 
     result = await db.scalar(
