@@ -1,6 +1,6 @@
 ﻿from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy import String, Date, DateTime, ForeignKey, Numeric, Boolean, func
+from sqlalchemy import String, Date, DateTime, ForeignKey, Numeric, Boolean, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
@@ -17,6 +17,9 @@ class SharedExpense(Base):
     split_type: Mapped[str] = mapped_column(String(10))
     expense_date: Mapped[date] = mapped_column(Date, index=True)
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    credit_card_item_id: Mapped[int | None] = mapped_column(
+        ForeignKey("credit_card_items.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     splits: Mapped[list["SharedExpenseSplit"]] = relationship(

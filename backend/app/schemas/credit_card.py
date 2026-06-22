@@ -88,6 +88,7 @@ class CreditCardItemOut(BaseModel):
     installment_group_id: int | None
     expense_entry_id: int | None
     installment_root_statement_id: int | None = None
+    shared_expense_id: int | None = None
     currency: str = "ARS"
     category: CategoryOut
 
@@ -113,6 +114,8 @@ class StatementOut(BaseModel):
         for pydantic_item, orm_item in zip(obj.items, stmt.items):
             if orm_item.installment_group_id and orm_item.installment_group:
                 pydantic_item.installment_root_statement_id = orm_item.installment_group.statement_id
+            if orm_item.shared_expense:
+                pydantic_item.shared_expense_id = orm_item.shared_expense.id
         return obj
 
 

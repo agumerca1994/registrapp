@@ -80,3 +80,8 @@ class CreditCardItem(Base):
     installment_group: Mapped["CreditCardItem | None"] = relationship(
         foreign_keys=[installment_group_id], remote_side="CreditCardItem.id"
     )
+    shared_expense: Mapped["SharedExpense | None"] = relationship(
+        "SharedExpense", foreign_keys="SharedExpense.credit_card_item_id",
+        primaryjoin="CreditCardItem.id == foreign(SharedExpense.credit_card_item_id)",
+        uselist=False,
+    )

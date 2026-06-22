@@ -18,6 +18,8 @@ from app.schemas.credit_card import (
     CreditCardItemCreate, CreditCardItemUpdate, CreditCardItemOut,
     ForExpenseOut,
 )
+from app.models.shared_expense import SharedExpense, SharedExpenseSplit
+from app.schemas.shared_expense import SharedExpenseOut, ShareCreditCardItemBody
 
 router = APIRouter(prefix="/credit-cards", tags=["credit-cards"])
 
@@ -67,6 +69,7 @@ def _statement_query(stmt_id: int):
         .options(
             selectinload(CreditCardStatement.items).selectinload(CreditCardItem.category),
             selectinload(CreditCardStatement.items).selectinload(CreditCardItem.installment_group),
+            selectinload(CreditCardStatement.items).selectinload(CreditCardItem.shared_expense),
         )
     )
 
@@ -227,6 +230,7 @@ async def list_statements(
         .options(
             selectinload(CreditCardStatement.items).selectinload(CreditCardItem.category),
             selectinload(CreditCardStatement.items).selectinload(CreditCardItem.installment_group),
+            selectinload(CreditCardStatement.items).selectinload(CreditCardItem.shared_expense),
         )
         .order_by(CreditCardStatement.year.desc(), CreditCardStatement.month.desc())
     )
@@ -634,3 +638,158 @@ async def delete_item(
             await db.delete(entry)
     await db.delete(item)
     await db.commit()
+
+
+@router.post("/items/{item_id}/share", response_model=list[SharedExpenseOut])
+async def share_item(
+    item_id: int,
+    body: ShareCreditCardItemBody,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.routers.shared_expenses import (
+        _is_email, _is_phone, _send_whatsapp_invite, _send_whatsapp_member_notify,
+    )
+    import secrets
+    from datetime import datetime, timedelta
+
+    user = await _get_db_user(firebase_user, db)
+
+    item = await db.scalar(
+        select(CreditCardItem)
+        .where(CreditCardItem.id == item_id)
+        .options(
+            selectinload(CreditCardItem.statement).selectinload(CreditCardStatement.card),
+            selectinload(CreditCardItem.shared_expense),
+        )
+    )
+    if not item or item.statement.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404, detail="Ítem no encontrado")
+
+    if item.shared_expense:
+        raise HTTPException(status_code=400, detail="Este ítem ya fue compartido")
+
+    if item.item_type == "installment" and item.installment_group_id is not None:
+        raise HTTPException(status_code=400, detail="Para compartir cuotas, hacelo desde la cuota 1")
+
+    total_splits = sum(s.amount for s in body.splits)
+    if abs(total_splits - item.amount) > Decimal("0.01"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"La suma de los montos ({total_splits}) no coincide con el monto del ítem ({item.amount})",
+        )
+
+    # Collect all items to share (root + all child cuotas for installments)
+    items_to_share = [item]
+    if item.item_type == "installment":
+        children = await db.scalars(
+            select(CreditCardItem)
+            .where(CreditCardItem.installment_group_id == item.id)
+            .order_by(CreditCardItem.installment_number)
+        )
+        items_to_share.extend(children.all())
+
+    created_shared_ids = []
+    creator_name = user.display_name or user.email
+
+    for target_item in items_to_share:
+        shared = SharedExpense(
+            tenant_id=user.tenant_id,
+            created_by_user_id=user.id,
+            title=item.description,
+            total_amount=target_item.amount,
+            category_id=target_item.category_id,
+            split_type=body.split_type,
+            expense_date=target_item.item_date,
+            credit_card_item_id=target_item.id,
+        )
+        db.add(shared)
+        await db.flush()
+
+        pending_wa_invites = []
+        pending_wa_notify = []
+        creator_split_amount = None
+
+        for split_in in body.splits:
+            is_creator = split_in.user_id == user.id
+            resolved_user_id = split_in.user_id
+            resolved_name = split_in.member_name
+            invite_token = None
+            invite_email = None
+            invite_expires_at = None
+
+            if split_in.invite_contact and not split_in.user_id:
+                contact = split_in.invite_contact.strip()
+                if _is_email(contact):
+                    from app.models.user import User as _User
+                    found = await db.scalar(select(_User).where(_User.email == contact))
+                    if found:
+                        resolved_user_id = found.id
+                        resolved_name = found.display_name or found.email
+                        if found.id != user.id:
+                            pending_wa_notify.append((found.id, split_in.amount))
+                    else:
+                        invite_email = contact
+                        invite_token = secrets.token_urlsafe(32)
+                        invite_expires_at = datetime.utcnow() + timedelta(days=30)
+                elif _is_phone(contact):
+                    from app.models.user import User as _User
+                    found = await db.scalar(select(_User).where(_User.whatsapp_phone == contact))
+                    if found:
+                        resolved_user_id = found.id
+                        resolved_name = found.display_name or found.email
+                        if found.id != user.id:
+                            pending_wa_notify.append((found.id, split_in.amount))
+                    else:
+                        invite_email = contact
+                        invite_token = secrets.token_urlsafe(32)
+                        invite_expires_at = datetime.utcnow() + timedelta(days=30)
+                        pending_wa_invites.append((contact, invite_token))
+            elif split_in.user_id and split_in.user_id != user.id:
+                pending_wa_notify.append((split_in.user_id, split_in.amount))
+
+            split = SharedExpenseSplit(
+                shared_expense_id=shared.id,
+                user_id=resolved_user_id,
+                member_name=resolved_name,
+                amount=split_in.amount,
+                status="accepted" if is_creator else "pending",
+                invite_email=invite_email,
+                invite_token=invite_token,
+                invite_expires_at=invite_expires_at,
+            )
+            db.add(split)
+            await db.flush()
+
+            if is_creator:
+                creator_split_amount = split_in.amount
+                # Reuse existing expense_entry, just update the amount to creator's share
+                if target_item.expense_entry_id:
+                    existing_entry = await db.get(ExpenseEntry, target_item.expense_entry_id)
+                    if existing_entry:
+                        existing_entry.amount = split_in.amount
+                        split.expense_entry_id = existing_entry.id
+
+        # Send notifications after creating all splits
+        await db.flush()
+        for phone, token in pending_wa_invites:
+            await _send_whatsapp_invite(phone, creator_name, item.description, target_item.amount, token)
+        for notify_uid, split_amt in pending_wa_notify:
+            from app.models.user import User as _User
+            notify_user = await db.get(_User, notify_uid)
+            if notify_user and notify_user.whatsapp_phone:
+                await _send_whatsapp_member_notify(
+                    notify_user.whatsapp_phone, creator_name,
+                    item.description, target_item.amount, split_amt,
+                )
+
+        created_shared_ids.append(shared.id)
+
+    await db.commit()
+
+    results = await db.scalars(
+        select(SharedExpense)
+        .where(SharedExpense.id.in_(created_shared_ids))
+        .options(selectinload(SharedExpense.splits))
+    )
+    return results.all()

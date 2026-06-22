@@ -54,6 +54,7 @@ class SharedExpenseOut(BaseModel):
     expense_date: date
     locked: bool
     created_by_user_id: int
+    credit_card_item_id: int | None = None
     created_at: datetime
     splits: list[SplitOut]
 
@@ -79,3 +80,7 @@ class ContactOut(BaseModel):
 class ContactCreate(BaseModel):
     contact_email: str
     contact_name: str
+
+class ShareCreditCardItemBody(BaseModel):
+    splits: list[SplitIn]
+    split_type: str

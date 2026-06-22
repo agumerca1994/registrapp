@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { formatARS, formatDate, formatUSD, parseAmount } from "@/lib/utils";
-import { Plus, Trash2, ChevronLeft, Pencil, X, CheckCircle, ExternalLink } from "lucide-react";
+import { Plus, Trash2, ChevronLeft, Pencil, X, CheckCircle, ExternalLink, Users2 } from "lucide-react";
 
 const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -12,12 +12,15 @@ interface Category { id: number; name: string; color?: string; is_fixed: boolean
 interface CardItem {
   id: number; description: string; category_id: number; item_date: string; item_type: string;
   amount: number; installment_count?: number; installment_number?: number;
-  purchase_total?: number; installment_group_id?: number; installment_root_statement_id?: number; expense_entry_id?: number; currency?: string;
+  purchase_total?: number; installment_group_id?: number; installment_root_statement_id?: number; shared_expense_id?: number; expense_entry_id?: number; currency?: string;
   category: { id: number; name: string; color?: string };
 }
 interface Statement {
   id: number; card_id: number; year: number; month: number; status: string;
   total: number; items: CardItem[];
+}
+interface Member {
+  id: number; display_name: string | null; email: string;
 }
 interface Card {
   id: number; bank: string; alias: string; closing_day: number; due_day: number;
@@ -46,6 +49,138 @@ function itemTypeBadge(item: CardItem) {
     );
   }
   return null;
+}
+
+
+function ShareItemModal({ item, onClose, onDone }: { item: CardItem; onClose: () => void; onDone: () => void }) {
+  const INPUT = "mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900";
+  const [members, setMembers] = useState<Member[]>([]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [splitType, setSplitType] = useState<"equal" | "custom">("equal");
+  const [customAmounts, setCustomAmounts] = useState<Record<number, string>>({});
+  const [sharing, setSharing] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api.get("/auth/members").then(r => {
+      const mem = r.data as Member[];
+      setMembers(mem);
+    });
+  }, []);
+
+  const totalAmount = Number(item.amount);
+  const selectedList = members.filter(m => selected.has(m.id));
+  const equalShare = selectedList.length > 0 ? (totalAmount / selectedList.length) : 0;
+
+  const cuotasRestantes = item.item_type === "installment" && !item.installment_group_id
+    ? (item.installment_count || 1) - (item.installment_number || 1) + 1
+    : 0;
+
+  const toggleMember = (id: number) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedList.length < 2) { setError("Seleccioná al menos 2 participantes"); return; }
+    setSharing(true);
+    setError("");
+    try {
+      const splits = selectedList.map(m => ({
+        user_id: m.id,
+        member_name: m.display_name || m.email,
+        amount: splitType === "equal"
+          ? parseFloat(equalShare.toFixed(2))
+          : parseAmount(customAmounts[m.id] || "0"),
+      }));
+      await api.post(`/credit-cards/items/${item.id}/share`, { splits, split_type: splitType });
+      onDone();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setError(msg || "Error al compartir");
+    }
+    setSharing(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">Compartir gasto</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="bg-gray-50 rounded-lg px-3 py-2 text-sm space-y-0.5">
+          <p className="font-medium text-gray-800">{item.description}</p>
+          <p className="text-gray-500">{item.currency === "USD" ? formatUSD(item.amount) : formatARS(item.amount)} por cuota</p>
+          {cuotasRestantes > 1 && (
+            <p className="text-xs text-amber-600 mt-1">Se compartirán las {cuotasRestantes} cuotas del plan</p>
+          )}
+          {item.item_type === "recurring" && (
+            <p className="text-xs text-blue-600 mt-1">Solo se comparte el mes actual</p>
+          )}
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <p className="text-xs font-medium text-gray-600 mb-2">Participantes</p>
+            {members.length === 0 ? (
+              <p className="text-sm text-gray-400">Sin otros miembros del hogar</p>
+            ) : (
+              <div className="space-y-2">
+                {members.map(m => (
+                  <div key={m.id} className="flex items-center gap-3">
+                    <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggleMember(m.id)}
+                      className="rounded border-gray-300 text-primary w-4 h-4 cursor-pointer" />
+                    <span className="text-sm text-gray-800 flex-1">{m.display_name || m.email}</span>
+                    {selected.has(m.id) && (
+                      <span className="text-sm text-gray-600 w-28 text-right">
+                        {splitType === "equal"
+                          ? formatARS(equalShare)
+                          : <input type="text" inputMode="decimal" pattern="[0-9.,]*"
+                              className="w-28 border rounded px-2 py-1 text-sm text-right bg-white text-gray-900"
+                              value={customAmounts[m.id] || equalShare.toFixed(2)}
+                              onChange={e => setCustomAmounts(p => ({...p, [m.id]: e.target.value}))} />
+                        }
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-gray-600 mb-1.5">División</p>
+            <div className="flex gap-2">
+              {(["equal", "custom"] as const).map(t => (
+                <button key={t} type="button" onClick={() => setSplitType(t)}
+                  className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${
+                    splitType === t ? "bg-primary text-white border-primary" : "text-gray-600 hover:bg-gray-50"
+                  }`}>
+                  {t === "equal" ? "Igual" : "Personalizado"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {error && <p className="text-xs text-red-500">{error}</p>}
+
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose} className="flex-1 border py-2 rounded-lg text-sm">Cancelar</button>
+            <button type="submit" disabled={sharing || selectedList.length < 2}
+              className="flex-1 bg-primary text-white py-2 rounded-lg text-sm disabled:opacity-50">
+              {sharing ? "Compartiendo..." : "Compartir"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 function DeleteItemModal({
@@ -218,6 +353,7 @@ export default function StatementDetailPage() {
   const [adding, setAdding] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [deleteItem, setDeleteItem] = useState<CardItem | null>(null);
+  const [shareItem, setShareItem] = useState<CardItem | null>(null);
   const [editItem, setEditItem] = useState<CardItem | null>(null);
 
   const load = useCallback(async () => {
@@ -477,6 +613,18 @@ export default function StatementDetailPage() {
                 </div>
               </div>
               <span className="text-sm font-semibold text-red-500 shrink-0">{item.currency === "USD" ? formatUSD(item.amount) : formatARS(item.amount)}</span>
+              <button
+                onClick={() => !item.installment_group_id && !item.shared_expense_id && setShareItem(item)}
+                disabled={!!item.installment_group_id}
+                title={item.shared_expense_id ? "Ya compartido" : item.installment_group_id ? "Compartir desde cuota 1" : "Compartir gasto"}
+                className={`p-1.5 rounded-lg transition-colors shrink-0 ${
+                  item.shared_expense_id ? "text-blue-500" :
+                  item.installment_group_id ? "text-gray-200 cursor-not-allowed" :
+                  "text-gray-300 hover:text-blue-500 hover:bg-blue-50"
+                }`}
+              >
+                <Users2 className="w-4 h-4" />
+              </button>
               {item.installment_group_id ? (
                 <button
                   onClick={() => router.push(`/tarjetas/${cardId}/${item.installment_root_statement_id}`)}
@@ -537,6 +685,9 @@ export default function StatementDetailPage() {
         <EditItemModal item={editItem} categories={categories} onSave={handleEditItem} onClose={() => setEditItem(null)} />
       )}
       {showNewCat && <NewCategoryModal onSave={handleCreateCategory} onClose={() => setShowNewCat(false)} />}
+      {shareItem && (
+        <ShareItemModal item={shareItem} onClose={() => setShareItem(null)} onDone={() => { setShareItem(null); load(); }} />
+      )}
     </div>
   );
 }
