@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle } from "lucide-react";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone } from "lucide-react";
 
 import api from "@/lib/api";
-import { formatARS } from "@/lib/utils";
+import { formatARS, normalizePhoneNumber } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
 const COUNTRIES = [
@@ -20,6 +20,32 @@ const COUNTRIES = [
 function buildPhone(prefix: string, local: string): string {
   const digits = local.replace(/\D/g, "");
   return prefix === "54" ? prefix + "9" + digits : prefix + digits;
+}
+
+// Pick a contact from device and normalize phone to prefix + local format
+async function pickContactAndNormalize(availablePrefixes: string[]): Promise<{ name: string; phone: string; prefix: string; local: string } | null> {
+  if (!("contacts" in navigator) || !navigator.contacts) return null;
+
+  try {
+    const contacts = navigator as unknown as { contacts: { select: (f: string[], o: object) => Promise<{ name?: string[]; tel?: string[] }[]> } };
+    const [contact] = await contacts.contacts.select(["name", "tel"], { multiple: false });
+    if (!contact) return null;
+
+    const name = contact.name?.[0] ?? "";
+    const rawPhone = contact.tel?.[0] ?? "";
+    if (!name || !rawPhone) return null;
+
+    const { prefix, local, isValid } = normalizePhoneNumber(rawPhone, availablePrefixes);
+    if (!isValid) {
+      alert(`Número no válido: ${rawPhone}. Por favor, completa manualmente.`);
+      return null;
+    }
+
+    return { name, phone: buildPhone(prefix, local), prefix, local };
+  } catch (err) {
+    console.error("Contact picker error:", err);
+    return null;
+  }
 }
 
 interface Split {
@@ -472,9 +498,28 @@ export default function SharedExpensesPage() {
                       </select>
                     ) : (
                       <div className="space-y-2">
-                        <input required type="text" placeholder="Nombre del externo"
-                          value={p.member_name} onChange={e => updateParticipant(idx, { member_name: e.target.value })}
-                          className="w-full border rounded-lg px-3 py-2 text-sm" />
+                        <div className="flex gap-2">
+                          <input required type="text" placeholder="Nombre del externo"
+                            value={p.member_name} onChange={e => updateParticipant(idx, { member_name: e.target.value })}
+                            className="flex-1 border rounded-lg px-3 py-2 text-sm" />
+                          <button type="button"
+                            onClick={async () => {
+                              const result = await pickContactAndNormalize(COUNTRIES.map(c => c.prefix));
+                              if (result) {
+                                updateParticipant(idx, {
+                                  member_name: result.name,
+                                  invite_phone_prefix: result.prefix,
+                                  invite_phone_local: result.local,
+                                  invite_method: "whatsapp",
+                                });
+                              }
+                            }}
+                            title="Seleccionar contacto del dispositivo"
+                            className="px-3 py-2 text-sm border rounded-lg bg-white hover:bg-gray-50 text-gray-600 hover:text-gray-900 transition-colors flex items-center gap-1 shrink-0"
+                          >
+                            <Smartphone className="w-4 h-4" />
+                          </button>
+                        </div>
 
                         <div>
                           <p className="text-xs font-medium text-gray-500 mb-1.5">Enviar invitacion</p>

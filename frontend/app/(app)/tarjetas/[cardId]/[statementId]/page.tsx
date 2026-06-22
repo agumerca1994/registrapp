@@ -52,25 +52,32 @@ function itemTypeBadge(item: CardItem) {
 }
 
 
+interface ExternalRow {
+  key: string;
+  contact: string;
+  name: string;
+  manual: boolean;
+}
+
 function ShareItemModal({ item, onClose, onDone }: { item: CardItem; onClose: () => void; onDone: () => void }) {
-  const INPUT = "mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900";
   const [members, setMembers] = useState<Member[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [externals, setExternals] = useState<ExternalRow[]>([]);
+  const [newContact, setNewContact] = useState("");
+  const [newContactName, setNewContactName] = useState("");
   const [splitType, setSplitType] = useState<"equal" | "custom">("equal");
-  const [customAmounts, setCustomAmounts] = useState<Record<number, string>>({});
+  const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
   const [sharing, setSharing] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api.get("/auth/members").then(r => {
-      const mem = r.data as Member[];
-      setMembers(mem);
-    });
+    api.get("/auth/members").then(r => setMembers(r.data as Member[]));
   }, []);
 
   const totalAmount = Number(item.amount);
-  const selectedList = members.filter(m => selected.has(m.id));
-  const equalShare = selectedList.length > 0 ? (totalAmount / selectedList.length) : 0;
+  const selectedMembers = members.filter(m => selected.has(m.id));
+  const allCount = selectedMembers.length + externals.length;
+  const equalShare = allCount > 0 ? totalAmount / allCount : 0;
 
   const cuotasRestantes = item.item_type === "installment" && !item.installment_group_id
     ? (item.installment_count || 1) - (item.installment_number || 1) + 1
@@ -84,20 +91,41 @@ function ShareItemModal({ item, onClose, onDone }: { item: CardItem; onClose: ()
     });
   };
 
+  const addExternal = () => {
+    const contact = newContact.trim();
+    if (!contact) return;
+    const key = "ext_" + Date.now();
+    setExternals(prev => [...prev, { key, contact, name: newContactName.trim() || contact, manual: false }]);
+    setNewContact("");
+    setNewContactName("");
+  };
+
+  const removeExternal = (key: string) => setExternals(prev => prev.filter(e => e.key !== key));
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedList.length < 2) { setError("Seleccioná al menos 2 participantes"); return; }
+    if (allCount < 2) { setError("Selecciona al menos 2 participantes"); return; }
     setSharing(true);
     setError("");
     try {
-      const splits = selectedList.map(m => ({
-        user_id: m.id,
-        member_name: m.display_name || m.email,
-        amount: splitType === "equal"
-          ? parseFloat(equalShare.toFixed(2))
-          : parseAmount(customAmounts[m.id] || "0"),
-      }));
-      await api.post(`/credit-cards/items/${item.id}/share`, { splits, split_type: splitType });
+      const splits = [
+        ...selectedMembers.map(m => ({
+          user_id: m.id,
+          member_name: m.display_name || m.email,
+          amount: splitType === "equal"
+            ? parseFloat(equalShare.toFixed(2))
+            : parseAmount(customAmounts[String(m.id)] || equalShare.toFixed(2)),
+        })),
+        ...externals.map(e => ({
+          user_id: null,
+          member_name: e.name,
+          amount: splitType === "equal"
+            ? parseFloat(equalShare.toFixed(2))
+            : parseAmount(customAmounts[e.key] || equalShare.toFixed(2)),
+          invite_contact: e.contact,
+        })),
+      ];
+      await api.post("/credit-cards/items/" + item.id + "/share", { splits, split_type: splitType });
       onDone();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
@@ -118,7 +146,7 @@ function ShareItemModal({ item, onClose, onDone }: { item: CardItem; onClose: ()
           <p className="font-medium text-gray-800">{item.description}</p>
           <p className="text-gray-500">{item.currency === "USD" ? formatUSD(item.amount) : formatARS(item.amount)} por cuota</p>
           {cuotasRestantes > 1 && (
-            <p className="text-xs text-amber-600 mt-1">Se compartirán las {cuotasRestantes} cuotas del plan</p>
+            <p className="text-xs text-amber-600 mt-1">Se compartiran las {cuotasRestantes} cuotas del plan</p>
           )}
           {item.item_type === "recurring" && (
             <p className="text-xs text-blue-600 mt-1">Solo se comparte el mes actual</p>
@@ -126,42 +154,81 @@ function ShareItemModal({ item, onClose, onDone }: { item: CardItem; onClose: ()
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <p className="text-xs font-medium text-gray-600 mb-2">Participantes</p>
-            {members.length === 0 ? (
-              <p className="text-sm text-gray-400">Sin otros miembros del hogar</p>
-            ) : (
+          {members.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-gray-600 mb-2">Miembros del hogar</p>
               <div className="space-y-2">
                 {members.map(m => (
                   <div key={m.id} className="flex items-center gap-3">
                     <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggleMember(m.id)}
                       className="rounded border-gray-300 text-primary w-4 h-4 cursor-pointer" />
                     <span className="text-sm text-gray-800 flex-1">{m.display_name || m.email}</span>
-                    {selected.has(m.id) && (
-                      <span className="text-sm text-gray-600 w-28 text-right">
-                        {splitType === "equal"
-                          ? formatARS(equalShare)
-                          : <input type="text" inputMode="decimal" pattern="[0-9.,]*"
-                              className="w-28 border rounded px-2 py-1 text-sm text-right bg-white text-gray-900"
-                              value={customAmounts[m.id] || equalShare.toFixed(2)}
-                              onChange={e => setCustomAmounts(p => ({...p, [m.id]: e.target.value}))} />
-                        }
-                      </span>
+                    {selected.has(m.id) && splitType === "custom" && (
+                      <input type="text" inputMode="decimal" pattern="[0-9.,]*"
+                        className="w-28 border rounded px-2 py-1 text-sm text-right bg-white text-gray-900"
+                        value={customAmounts[String(m.id)] ?? equalShare.toFixed(2)}
+                        onChange={e => setCustomAmounts(p => ({...p, [String(m.id)]: e.target.value}))} />
+                    )}
+                    {selected.has(m.id) && splitType === "equal" && (
+                      <span className="text-sm text-gray-500 w-28 text-right">{formatARS(equalShare)}</span>
                     )}
                   </div>
                 ))}
               </div>
-            )}
+            </div>
+          )}
+
+          {externals.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-gray-600 mb-2">Externos</p>
+              <div className="space-y-2">
+                {externals.map(e => (
+                  <div key={e.key} className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{e.name}</p>
+                      <p className="text-xs text-gray-400 truncate">{e.contact}</p>
+                    </div>
+                    {splitType === "custom" && (
+                      <input type="text" inputMode="decimal" pattern="[0-9.,]*"
+                        className="w-28 border rounded px-2 py-1 text-sm text-right bg-white text-gray-900"
+                        value={customAmounts[e.key] ?? equalShare.toFixed(2)}
+                        onChange={ev => setCustomAmounts(p => ({...p, [e.key]: ev.target.value}))} />
+                    )}
+                    {splitType === "equal" && (
+                      <span className="text-sm text-gray-500 w-28 text-right">{formatARS(equalShare)}</span>
+                    )}
+                    <button type="button" onClick={() => removeExternal(e.key)} className="text-gray-300 hover:text-red-400 shrink-0">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="border rounded-lg p-3 space-y-2">
+            <p className="text-xs font-medium text-gray-600">Agregar externo</p>
+            <input type="text" placeholder="Nombre"
+              className="w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+              value={newContactName} onChange={e => setNewContactName(e.target.value)} />
+            <div className="flex gap-2">
+              <input type="text" placeholder="Telefono o email"
+                className="flex-1 border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+                value={newContact} onChange={e => setNewContact(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addExternal(); } }} />
+              <button type="button" onClick={addExternal}
+                className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700">
+                +
+              </button>
+            </div>
           </div>
 
           <div>
-            <p className="text-xs font-medium text-gray-600 mb-1.5">División</p>
+            <p className="text-xs font-medium text-gray-600 mb-1.5">Division</p>
             <div className="flex gap-2">
               {(["equal", "custom"] as const).map(t => (
                 <button key={t} type="button" onClick={() => setSplitType(t)}
-                  className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${
-                    splitType === t ? "bg-primary text-white border-primary" : "text-gray-600 hover:bg-gray-50"
-                  }`}>
+                  className={"flex-1 py-1.5 text-xs rounded-lg border transition-colors " + (splitType === t ? "bg-primary text-white border-primary" : "text-gray-600 hover:bg-gray-50")}>
                   {t === "equal" ? "Igual" : "Personalizado"}
                 </button>
               ))}
@@ -172,7 +239,7 @@ function ShareItemModal({ item, onClose, onDone }: { item: CardItem; onClose: ()
 
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose} className="flex-1 border py-2 rounded-lg text-sm">Cancelar</button>
-            <button type="submit" disabled={sharing || selectedList.length < 2}
+            <button type="submit" disabled={sharing || allCount < 2}
               className="flex-1 bg-primary text-white py-2 rounded-lg text-sm disabled:opacity-50">
               {sharing ? "Compartiendo..." : "Compartir"}
             </button>
@@ -182,6 +249,7 @@ function ShareItemModal({ item, onClose, onDone }: { item: CardItem; onClose: ()
     </div>
   );
 }
+
 
 function DeleteItemModal({
   item,
@@ -225,11 +293,13 @@ function EditItemModal({
   item,
   categories,
   onSave,
+  onDelete,
   onClose,
 }: {
   item: CardItem;
   categories: Category[];
   onSave: (data: { description: string; category_id: number; item_date: string; amount: number }) => Promise<void>;
+  onDelete: (item: CardItem) => void;
   onClose: () => void;
 }) {
   const [form, setForm] = useState({
@@ -284,11 +354,17 @@ function EditItemModal({
                 value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} required />
             </div>
           </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="border px-4 py-2 rounded-lg text-sm">Cancelar</button>
-            <button type="submit" disabled={saving} className="bg-primary text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50">
-              {saving ? "Guardando..." : "Guardar"}
+          <div className="flex justify-between gap-2 pt-1">
+            <button type="button" onClick={() => { onClose(); onDelete(item); }}
+              className="px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 border border-red-200">
+              Eliminar
             </button>
+            <div className="flex gap-2">
+              <button type="button" onClick={onClose} className="border px-4 py-2 rounded-lg text-sm">Cancelar</button>
+              <button type="submit" disabled={saving} className="bg-primary text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50">
+                {saving ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -600,49 +676,44 @@ export default function StatementDetailPage() {
         ) : (
           statement.items.map((item) => (
             <div key={item.id} className="flex items-center gap-2 px-4 py-3">
-              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.category.color || "#6366f1" }} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-gray-900 truncate">{item.description}</span>
-                  {itemTypeBadge(item)}
-                </div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-xs text-gray-400">{item.category.name}</span>
-                  <span className="text-xs text-gray-300">|</span>
-                  <span className="text-xs text-gray-400">{formatDate(item.item_date)}</span>
-                </div>
-              </div>
-              <span className="text-sm font-semibold text-red-500 shrink-0">{item.currency === "USD" ? formatUSD(item.amount) : formatARS(item.amount)}</span>
               <button
-                onClick={() => !item.installment_group_id && !item.shared_expense_id && setShareItem(item)}
-                disabled={!!item.installment_group_id}
-                title={item.shared_expense_id ? "Ya compartido" : item.installment_group_id ? "Compartir desde cuota 1" : "Compartir gasto"}
-                className={`p-1.5 rounded-lg transition-colors shrink-0 ${
-                  item.shared_expense_id ? "text-blue-500" :
-                  item.installment_group_id ? "text-gray-200 cursor-not-allowed" :
-                  "text-gray-300 hover:text-blue-500 hover:bg-blue-50"
-                }`}
+                onClick={() => item.installment_group_id
+                  ? router.push(`/tarjetas/${cardId}/${item.installment_root_statement_id}`)
+                  : setEditItem(item)
+                }
+                className="flex items-center gap-2 flex-1 min-w-0 text-left"
               >
-                <Users2 className="w-4 h-4" />
+                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.category.color || "#6366f1" }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-gray-900 truncate">{item.description}</span>
+                    {itemTypeBadge(item)}
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-xs text-gray-400">{item.category.name}</span>
+                    <span className="text-xs text-gray-300">|</span>
+                    <span className="text-xs text-gray-400">{formatDate(item.item_date)}</span>
+                  </div>
+                </div>
               </button>
-              {item.installment_group_id ? (
+              <span className="text-sm font-semibold text-red-500 shrink-0">{item.currency === "USD" ? formatUSD(item.amount) : formatARS(item.amount)}</span>
+              {!item.installment_group_id && (
                 <button
-                  onClick={() => router.push(`/tarjetas/${cardId}/${item.installment_root_statement_id}`)}
-                  className="flex items-center gap-1 text-xs text-blue-600 hover:underline shrink-0 px-1.5 py-1"
-                  title="Ver resumen de cuota 1"
+                  onClick={() => !item.shared_expense_id && setShareItem(item)}
+                  title={item.shared_expense_id ? "Ya compartido" : "Compartir gasto"}
+                  className={`p-1.5 rounded-lg transition-colors shrink-0 ${
+                    item.shared_expense_id ? "text-blue-500 cursor-default" :
+                    "text-gray-300 hover:text-blue-500 hover:bg-blue-50"
+                  }`}
                 >
-                  <ExternalLink className="w-3 h-3" />
-                  <span className="hidden sm:inline">Ver original</span>
+                  <Users2 className="w-4 h-4" />
                 </button>
-              ) : (
-                <>
-                  <button onClick={() => setEditItem(item)} className="p-1.5 text-gray-400 hover:text-gray-600 shrink-0">
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                  <button onClick={() => setDeleteItem(item)} className="p-1.5 text-gray-400 hover:text-red-500 shrink-0">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </>
+              )}
+              {item.installment_group_id && (
+                <span className="flex items-center gap-1 text-xs text-blue-500 shrink-0 px-1">
+                  <ExternalLink className="w-3 h-3" />
+                  <span className="hidden sm:inline">Original</span>
+                </span>
               )}
             </div>
           ))
@@ -682,7 +753,7 @@ export default function StatementDetailPage() {
         <DeleteItemModal item={deleteItem} onConfirm={handleDeleteItem} onClose={() => setDeleteItem(null)} />
       )}
       {editItem && (
-        <EditItemModal item={editItem} categories={categories} onSave={handleEditItem} onClose={() => setEditItem(null)} />
+        <EditItemModal item={editItem} categories={categories} onSave={handleEditItem} onDelete={setDeleteItem} onClose={() => setEditItem(null)} />
       )}
       {showNewCat && <NewCategoryModal onSave={handleCreateCategory} onClose={() => setShowNewCat(false)} />}
       {shareItem && (
