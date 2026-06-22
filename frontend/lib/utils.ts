@@ -30,8 +30,14 @@ export function formatUSD(amount: number | string): string {
 }
 
 // Parse Argentine decimal format: "9,99" or "1.000,99" → 9.99 or 1000.99
+// Also handles standard decimal notation from toFixed(): "7500.00" → 7500
 export function parseAmount(value: string | number): number {
   if (typeof value === "number") return value;
-  // Remove thousands dots, replace decimal comma with dot
-  return parseFloat(value.replace(/\./g, "").replace(",", ".")) || 0;
+  const trimmed = value.trim();
+  // Standard decimal notation (from toFixed auto-calc): single dot + 1-2 decimal digits
+  // e.g. "7500.00", "9000000.00" — do NOT strip the dot
+  if (/^\d+\.\d{1,2}$/.test(trimmed)) return parseFloat(trimmed);
+  // Argentine format: remove thousands dots, replace decimal comma with dot
+  // e.g. "750.000", "1.000.000,99", "9,99"
+  return parseFloat(trimmed.replace(/\./g, "").replace(",", ".")) || 0;
 }

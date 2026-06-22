@@ -316,7 +316,7 @@ export default function StatementDetailPage() {
   const totalByCategory = statement.items.reduce<Record<number, { name: string; color?: string; total: number }>>((acc, item) => {
     const cid = item.category.id;
     if (!acc[cid]) acc[cid] = { name: item.category.name, color: item.category.color, total: 0 };
-    acc[cid].total += item.amount;
+    acc[cid].total += Number(item.amount);
     return acc;
   }, {});
 
