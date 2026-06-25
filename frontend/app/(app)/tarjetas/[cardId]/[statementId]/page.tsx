@@ -3,8 +3,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
-import { formatARS, formatDate, formatUSD, parseAmount } from "@/lib/utils";
-import { Plus, Trash2, ChevronLeft, Pencil, X, CheckCircle, ExternalLink, Users2 } from "lucide-react";
+import { formatARS, formatDate, formatUSD, parseAmount, normalizePhoneNumber } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { Plus, Trash2, ChevronLeft, Pencil, X, CheckCircle, ExternalLink, Users2, Phone } from "lucide-react";
 
 const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -52,79 +53,106 @@ function itemTypeBadge(item: CardItem) {
 }
 
 
-interface ExternalRow {
-  key: string;
+interface ShareParticipantRow {
+  type: "self" | "member" | "external";
+  user_id: number | null;
+  member_name: string;
   contact: string;
-  name: string;
-  manual: boolean;
+  amount: string;
 }
 
 function ShareItemModal({ item, onClose, onDone }: { item: CardItem; onClose: () => void; onDone: () => void }) {
+  const { appUser } = useAuth();
   const [members, setMembers] = useState<Member[]>([]);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [externals, setExternals] = useState<ExternalRow[]>([]);
-  const [newContact, setNewContact] = useState("");
-  const [newContactName, setNewContactName] = useState("");
+  const [participants, setParticipants] = useState<ShareParticipantRow[]>([]);
   const [splitType, setSplitType] = useState<"equal" | "custom">("equal");
-  const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
   const [sharing, setSharing] = useState(false);
   const [error, setError] = useState("");
+
+  const totalAmount = Number(item.amount);
 
   useEffect(() => {
     api.get("/auth/members").then(r => setMembers(r.data as Member[]));
   }, []);
 
-  const totalAmount = Number(item.amount);
-  const selectedMembers = members.filter(m => selected.has(m.id));
-  const allCount = selectedMembers.length + externals.length;
-  const equalShare = allCount > 0 ? totalAmount / allCount : 0;
+  useEffect(() => {
+    if (!appUser || participants.length > 0) return;
+    setParticipants([{
+      type: "self",
+      user_id: appUser.id,
+      member_name: appUser.display_name || appUser.email,
+      contact: "",
+      amount: "",
+    }]);
+  }, [appUser]);
 
   const cuotasRestantes = item.item_type === "installment" && !item.installment_group_id
     ? (item.installment_count || 1) - (item.installment_number || 1) + 1
     : 0;
 
-  const toggleMember = (id: number) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
+  const otherMembers = members.filter(m => m.id !== appUser?.id);
+  const equalShare = participants.length > 0 ? totalAmount / participants.length : 0;
+  const customTotal = participants.reduce((s, p) => s + parseAmount(p.amount || "0"), 0);
+  const overBudget = splitType === "custom" && customTotal > totalAmount + 0.01;
 
-  const addExternal = () => {
-    const contact = newContact.trim();
-    if (!contact) return;
-    const key = "ext_" + Date.now();
-    setExternals(prev => [...prev, { key, contact, name: newContactName.trim() || contact, manual: false }]);
-    setNewContact("");
-    setNewContactName("");
-  };
+  function updateParticipant(idx: number, patch: Partial<ShareParticipantRow>) {
+    setParticipants(prev => prev.map((p, i) => i === idx ? { ...p, ...patch } : p));
+  }
 
-  const removeExternal = (key: string) => setExternals(prev => prev.filter(e => e.key !== key));
+  function addParticipant() {
+    setParticipants(prev => [...prev, { type: "member", user_id: null, member_name: "", contact: "", amount: "" }]);
+  }
+
+  function removeParticipant(idx: number) {
+    setParticipants(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  const canPickContact = typeof navigator !== "undefined" && "contacts" in navigator;
+
+  async function pickContact(idx: number) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const contacts = await (navigator as any).contacts.select(["name", "tel"], { multiple: false });
+      if (!contacts.length) return;
+      const c = contacts[0];
+      const name: string = c.name?.[0] || "";
+      const raw: string = c.tel?.[0] || "";
+      if (!raw) return;
+      const norm = normalizePhoneNumber(raw);
+      const phone = norm.prefix === "54" ? "549" + norm.local : norm.prefix + norm.local;
+      updateParticipant(idx, { member_name: name || participants[idx].member_name, contact: phone });
+    } catch { /* user cancelled */ }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (allCount < 2) { setError("Selecciona al menos 2 participantes"); return; }
+    if (participants.length < 2) { setError("Agrega al menos 1 persona mas"); return; }
+    if (participants.some(p => p.type !== "self" && !p.member_name.trim())) {
+      setError("Todos los participantes deben tener nombre"); return;
+    }
     setSharing(true);
     setError("");
     try {
-      const splits = [
-        ...selectedMembers.map(m => ({
-          user_id: m.id,
-          member_name: m.display_name || m.email,
-          amount: splitType === "equal"
-            ? parseFloat(equalShare.toFixed(2))
-            : parseAmount(customAmounts[String(m.id)] || equalShare.toFixed(2)),
-        })),
-        ...externals.map(e => ({
-          user_id: null,
-          member_name: e.name,
-          amount: splitType === "equal"
-            ? parseFloat(equalShare.toFixed(2))
-            : parseAmount(customAmounts[e.key] || equalShare.toFixed(2)),
-          invite_contact: e.contact,
-        })),
-      ];
+      const splits = participants.map((p, i) => {
+        const amount = splitType === "equal"
+          ? (i === participants.length - 1
+            ? parseFloat((totalAmount - parseFloat(equalShare.toFixed(2)) * (participants.length - 1)).toFixed(2))
+            : parseFloat(equalShare.toFixed(2)))
+          : parseAmount(p.amount || "0");
+        return {
+          user_id: p.type === "external" ? null : p.user_id,
+          member_name: p.member_name,
+          amount,
+          ...(p.type === "external" && p.contact.trim() ? { invite_contact: p.contact.trim() } : {}),
+        };
+      });
+      if (splitType === "custom") {
+        const sum = splits.reduce((s, sp) => s + sp.amount, 0);
+        if (Math.abs(sum - totalAmount) > 0.02) {
+          setError("La suma no coincide con el total");
+          setSharing(false); return;
+        }
+      }
       await api.post("/credit-cards/items/" + item.id + "/share", { splits, split_type: splitType });
       onDone();
     } catch (err: unknown) {
@@ -154,92 +182,155 @@ function ShareItemModal({ item, onClose, onDone }: { item: CardItem; onClose: ()
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {members.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-gray-600 mb-2">Miembros del hogar</p>
-              <div className="space-y-2">
-                {members.map(m => (
-                  <div key={m.id} className="flex items-center gap-3">
-                    <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggleMember(m.id)}
-                      className="rounded border-gray-300 text-primary w-4 h-4 cursor-pointer" />
-                    <span className="text-sm text-gray-800 flex-1">{m.display_name || m.email}</span>
-                    {selected.has(m.id) && splitType === "custom" && (
-                      <input type="text" inputMode="decimal" pattern="[0-9.,]*"
-                        className="w-28 border rounded px-2 py-1 text-sm text-right bg-white text-gray-900"
-                        value={customAmounts[String(m.id)] ?? equalShare.toFixed(2)}
-                        onChange={e => setCustomAmounts(p => ({...p, [String(m.id)]: e.target.value}))} />
-                    )}
-                    {selected.has(m.id) && splitType === "equal" && (
-                      <span className="text-sm text-gray-500 w-28 text-right">{formatARS(equalShare)}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {externals.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-gray-600 mb-2">Externos</p>
-              <div className="space-y-2">
-                {externals.map(e => (
-                  <div key={e.key} className="flex items-center gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{e.name}</p>
-                      <p className="text-xs text-gray-400 truncate">{e.contact}</p>
-                    </div>
-                    {splitType === "custom" && (
-                      <input type="text" inputMode="decimal" pattern="[0-9.,]*"
-                        className="w-28 border rounded px-2 py-1 text-sm text-right bg-white text-gray-900"
-                        value={customAmounts[e.key] ?? equalShare.toFixed(2)}
-                        onChange={ev => setCustomAmounts(p => ({...p, [e.key]: ev.target.value}))} />
-                    )}
-                    {splitType === "equal" && (
-                      <span className="text-sm text-gray-500 w-28 text-right">{formatARS(equalShare)}</span>
-                    )}
-                    <button type="button" onClick={() => removeExternal(e.key)} className="text-gray-300 hover:text-red-400 shrink-0">
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="border rounded-lg p-3 space-y-2">
-            <p className="text-xs font-medium text-gray-600">Agregar externo</p>
-            <input type="text" placeholder="Nombre"
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
-              value={newContactName} onChange={e => setNewContactName(e.target.value)} />
-            <div className="flex gap-2">
-              <input type="text" placeholder="Telefono o email"
-                className="flex-1 border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
-                value={newContact} onChange={e => setNewContact(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addExternal(); } }} />
-              <button type="button" onClick={addExternal}
-                className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700">
-                +
+          <div className="flex gap-2">
+            {(["equal", "custom"] as const).map(t => (
+              <button key={t} type="button" onClick={() => setSplitType(t)}
+                className={"flex-1 py-1.5 text-xs rounded-lg border transition-colors " + (splitType === t ? "bg-primary text-white border-primary" : "text-gray-600 hover:bg-gray-50")}>
+                {t === "equal" ? "Division igual" : "Personalizado"}
               </button>
-            </div>
+            ))}
           </div>
 
           <div>
-            <p className="text-xs font-medium text-gray-600 mb-1.5">Division</p>
-            <div className="flex gap-2">
-              {(["equal", "custom"] as const).map(t => (
-                <button key={t} type="button" onClick={() => setSplitType(t)}
-                  className={"flex-1 py-1.5 text-xs rounded-lg border transition-colors " + (splitType === t ? "bg-primary text-white border-primary" : "text-gray-600 hover:bg-gray-50")}>
-                  {t === "equal" ? "Igual" : "Personalizado"}
-                </button>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium text-gray-600">Participantes</p>
+              <button type="button" onClick={addParticipant}
+                className="text-xs text-primary hover:underline flex items-center gap-1">
+                <Plus className="w-3 h-3" /> Agregar
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {participants.map((p, idx) => (
+                <div key={idx} className="border rounded-lg p-2.5 bg-gray-50 space-y-2">
+                  <div className="flex items-center gap-2">
+                    {p.type === "self" ? (
+                      <span className="border rounded-lg px-2 py-1.5 text-xs bg-white text-gray-600 shrink-0">Vos</span>
+                    ) : (
+                      <select
+                        value={p.type}
+                        onChange={e => {
+                          const t = e.target.value as "member" | "external";
+                          updateParticipant(idx, { type: t, user_id: null, member_name: "", contact: "" });
+                        }}
+                        className="border rounded-lg px-2 py-1.5 text-xs bg-white shrink-0"
+                      >
+                        <option value="member">Del hogar</option>
+                        <option value="external">Externo</option>
+                      </select>
+                    )}
+                    {p.type !== "self" && (
+                      <button type="button" onClick={() => removeParticipant(idx)}
+                        className="ml-auto text-gray-400 hover:text-red-500 px-1 text-base leading-none">x</button>
+                    )}
+                  </div>
+
+                  {p.type === "self" ? (
+                    <p className="text-sm text-gray-700 px-1">{p.member_name}</p>
+                  ) : p.type === "member" ? (
+                    <select
+                      required
+                      value={p.user_id ?? ""}
+                      onChange={e => {
+                        const id = parseInt(e.target.value);
+                        const mem = otherMembers.find(m => m.id === id);
+                        updateParticipant(idx, { user_id: id, member_name: mem?.display_name || mem?.email || "" });
+                      }}
+                      className="w-full border rounded-lg px-2 py-2 text-sm bg-white text-gray-900"
+                    >
+                      <option value="">Seleccionar miembro...</option>
+                      {otherMembers.map(m => (
+                        <option key={m.id} value={m.id}>{m.display_name || m.email}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <input
+                        required
+                        type="text"
+                        placeholder="Alias (ej: Maria)"
+                        value={p.member_name}
+                        onChange={e => updateParticipant(idx, { member_name: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          inputMode="tel"
+                          placeholder="WhatsApp o email (opcional)"
+                          value={p.contact}
+                          onChange={e => updateParticipant(idx, { contact: e.target.value })}
+                          className="flex-1 border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+                        />
+                        {canPickContact && (
+                          <button
+                            type="button"
+                            onClick={() => pickContact(idx)}
+                            title="Elegir de contactos"
+                            className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 shrink-0"
+                          >
+                            <Phone className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                      {p.contact && (
+                        <p className="text-xs text-violet-600">
+                          {p.contact.includes("@")
+                            ? "Se generara un link de invitacion para copiar"
+                            : "Se enviara una invitacion por WhatsApp"
+                          }
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {splitType === "custom" ? (
+                    <div>
+                      <label className="text-xs text-gray-500">Monto</label>
+                      <input
+                        required
+                        type="text"
+                        inputMode="decimal"
+                        pattern="[0-9.,]*"
+                        placeholder="0,00"
+                        value={p.amount}
+                        onChange={e => updateParticipant(idx, { amount: e.target.value })}
+                        className="mt-0.5 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-xs text-gray-500">Monto</span>
+                      <span className="text-sm font-medium text-gray-700">
+                        {totalAmount > 0 ? formatARS(equalShare) : "-"}
+                      </span>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
+
+            {splitType === "equal" && totalAmount > 0 && participants.length > 1 && (
+              <p className="text-xs text-gray-500 mt-1.5">
+                {formatARS(totalAmount)} / {participants.length} = {formatARS(equalShare)} por persona
+              </p>
+            )}
+
+            {splitType === "custom" && totalAmount > 0 && (
+              <div className={"mt-2 text-xs rounded-lg px-3 py-2 " + (overBudget ? "bg-red-50 text-red-600 font-medium" : "bg-blue-50 text-blue-700")}>
+                {overBudget
+                  ? "La division supera el total: " + formatARS(customTotal) + " de " + formatARS(totalAmount)
+                  : "Distribuido: " + formatARS(customTotal) + " | Restante: " + formatARS(totalAmount - customTotal)
+                }
+              </div>
+            )}
           </div>
 
-          {error && <p className="text-xs text-red-500">{error}</p>}
+          {error && <p className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
 
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose} className="flex-1 border py-2 rounded-lg text-sm">Cancelar</button>
-            <button type="submit" disabled={sharing || allCount < 2}
+            <button type="submit" disabled={sharing || participants.length < 2 || overBudget}
               className="flex-1 bg-primary text-white py-2 rounded-lg text-sm disabled:opacity-50">
               {sharing ? "Compartiendo..." : "Compartir"}
             </button>
@@ -249,7 +340,6 @@ function ShareItemModal({ item, onClose, onDone }: { item: CardItem; onClose: ()
     </div>
   );
 }
-
 
 function DeleteItemModal({
   item,

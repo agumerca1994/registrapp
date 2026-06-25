@@ -40,6 +40,13 @@ Production uses `docker-compose.prod.yml` which Easypanel pulls from the `main` 
 
 **`FRONTEND_URL`**: used to build invite links in WhatsApp messages (`{FRONTEND_URL}/invite/{token}`). Defaults to `http://localhost:3000`; set to the production domain in Easypanel env vars.
 
+## Git workflow and commits
+
+- **No CI/CD pipeline**: No automated tests run on push. Manual testing via `docker compose up` is required before merge.
+- **Main branch deploys directly**: Every push to `main` triggers a rebuild in Easypanel. Avoid pushing incomplete work.
+- **Commit messages**: Follow pattern `type: message` (e.g., `feat:`, `fix:`, `refactor:`, `docs:`). Include scope in parentheses for clarity: `feat(shared-expenses): add contact picker`. Keep messages concise.
+- **Utilities refactoring**: When adding utility functions, always commit them separately to avoid "breaking build" issues (as seen in recent history: `fix: commit missing normalizePhoneNumber util`). Run `npm run build` locally after adding utilities.
+
 ## Architecture
 
 ### Multi-tenancy
@@ -92,6 +99,8 @@ Frontend routes: `/tarjetas` → `/tarjetas/[cardId]` (statements list) → `/ta
 
 **Cross-tenant visibility**: the load query uses `or_(tenant_id == user.tenant_id, split.user_id == user.id)` so guests see expenses shared with them even if they belong to a different tenant. When a split is accepted, an `ExpenseEntry` is created in the acceptor's expense table.
 
+**Phone number normalization**: when a phone number is entered for WhatsApp invite, it's normalized to international format (`+54934567890`) via `_normalize_phone()` in the backend. The frontend uses `normalizePhoneNumber()` from `lib/utils.ts` to parse device contact picker results and split them into `prefix` (country code like "54") and `local` (number without prefix). The frontend's `buildPhone()` function reconstructs the format expected by the backend: for Argentina, adds "9" after the prefix (`549...`). Always normalize before sending to backend or Evolution API.
+
 ### Frontend structure
 ```
 frontend/app/
@@ -109,8 +118,10 @@ frontend/app/
 frontend/
   contexts/AuthContext.tsx   # Firebase auth state + /auth/me → appUser
   lib/api.ts                 # Axios instance; adds Firebase ID token to every request
-  lib/utils.ts               # formatARS, formatUSD, formatPct, parseAmount, cn()
+  lib/utils.ts               # formatARS, formatUSD, formatPct, parseAmount, normalizePhoneNumber, cn()
 ```
+
+**Device APIs (PWA-specific)**: The app uses Web Contact Picker API (`navigator.contacts.select()`) to let users pick contacts from their device (iOS Safari 14+, Chrome Android 80+). This is a progressively enhanced feature — the button is hidden on desktop. Always wrap contact picker calls in try-catch and check `"contacts" in navigator`. Desktop users can still enter data manually. When picking contacts, normalize the phone number result via `normalizePhoneNumber()` before using.
 
 `AuthContext` exposes `firebaseUser`, `appUser`, `loading`, and `refreshUser()`. `refreshUser()` re-fetches `GET /auth/me` **and then auto-claims any `pendingInviteToken` stored in localStorage** — call it after register/join to complete the invite flow. The `(app)` layout redirects to `/login` if not authenticated, or `/onboarding` if authenticated but no `appUser` (tenant not created yet).
 
@@ -147,3 +158,10 @@ All form inputs (text, number, date, select) must share the same CSS classes so 
 Use `type="text" inputMode="decimal" pattern="[0-9.,]*"` instead of `type="number"` for currency inputs. `type="number"` causes UX issues on mobile and with large Argentine peso values.
 
 When reading user-entered amounts, always use `parseAmount(value)` from `lib/utils.ts` — never `parseFloat(value)` directly. `parseFloat("9,99")` returns `9` in JavaScript (stops at comma). `parseAmount` normalizes Argentine format first: removes thousands dots, replaces decimal comma with dot, then calls `parseFloat`.
+
+### Phone number handling
+Phone numbers are stored in international format (+54934567890) but entered via user input, device contacts, or WhatsApp messages. Always normalize before database operations:
+- **Frontend**: Use `normalizePhoneNumber(rawInput)` from `lib/utils.ts` to parse unstructured input. Returns `{prefix, local, isValid}`.
+- **Backend**: Use `_normalize_phone(value)` from `routers/shared_expenses.py` to normalize before storing/comparing.
+- **Evolution API**: Expects full international format like `+54934567890`.
+- **User lookups**: Compare normalized forms: both stored (`user.whatsapp_phone`) and incoming must be normalized first.

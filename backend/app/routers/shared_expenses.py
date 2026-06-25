@@ -34,6 +34,32 @@ def _is_phone(value: str) -> bool:
     return bool(re.match(r"^\+?\d{7,15}$", cleaned))
 
 
+def _normalize_phone(value: str) -> str:
+    """Normalize phone to international format with + prefix.
+    Handles: +549351234567, 9351234567, 351234567, +54 9 351 234567, etc.
+    Returns: +549351234567 (for Argentina examples)
+    """
+    digits = re.sub(r"\D", "", value)
+
+    # Common country code prefixes: 54 (AR), 598 (UY), 56 (CL), 55 (BR), 595 (PY)
+    known_prefixes = ["595", "598", "54", "56", "55"]
+
+    for prefix in known_prefixes:
+        if digits.startswith(prefix):
+            # Remove 9 if Argentina (54) and present after prefix: +549... → +54 9...
+            remainder = digits[len(prefix):]
+            if prefix == "54" and remainder.startswith("9"):
+                return f"+{digits}"
+            return f"+{digits}"
+
+    # If no recognized prefix, assume Argentina (54) and add it
+    if len(digits) >= 9:
+        return f"+54{digits}"
+
+    # Fallback: just add + prefix
+    return f"+{digits}" if digits else ""
+
+
 async def _get_db_user(firebase_user: dict, db: AsyncSession) -> User:
     user = await db.scalar(select(User).where(User.firebase_uid == firebase_user["uid"]))
     if not user:
@@ -168,19 +194,20 @@ async def create_shared_expense(
                     invite_token = secrets.token_urlsafe(32)
                     invite_expires_at = datetime.utcnow() + timedelta(days=30)
             elif _is_phone(contact):
+                normalized_phone = _normalize_phone(contact)
                 # Look up existing user by whatsapp_phone
-                found = await db.scalar(select(User).where(User.whatsapp_phone == contact))
+                found = await db.scalar(select(User).where(User.whatsapp_phone == normalized_phone))
                 if found:
                     resolved_user_id = found.id
                     resolved_name = found.display_name or found.email
                     if found.id != user.id:
                         pending_wa_notify.append(found.id)
                 else:
-                    invite_email = contact  # store phone in invite_email column
+                    invite_email = normalized_phone  # store normalized phone in invite_email column
                     invite_token = secrets.token_urlsafe(32)
                     invite_expires_at = datetime.utcnow() + timedelta(days=30)
                     # Queue WhatsApp invite to send after flush
-                    pending_wa_invites.append((contact, invite_token))
+                    pending_wa_invites.append((normalized_phone, invite_token))
         elif split_in.user_id and split_in.user_id != user.id:
             # Direct member selection — queue WhatsApp notification if they have phone
             pending_wa_notify.append(split_in.user_id)
