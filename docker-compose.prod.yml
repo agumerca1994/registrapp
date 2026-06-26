@@ -1,4 +1,4 @@
-services:
+﻿services:
   registrapp-db:
     image: postgres:16-alpine
     environment:
@@ -31,6 +31,7 @@ services:
       WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET:-}
       APP_DOMAIN: ${APP_DOMAIN:-}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      INTERNAL_LOG_KEY: ${INTERNAL_LOG_KEY:-}
     restart: unless-stopped
     depends_on:
       registrapp-db:
@@ -79,3 +80,4 @@ networks:
   default:
     external: true
     name: easypanel
+

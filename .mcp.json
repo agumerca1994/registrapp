@@ -1,0 +1,14 @@
+﻿{
+    "mcpServers":  {
+                       "registrapp-logs":  {
+                                               "command":  "python",
+                                               "args":  [
+                                                            "mcp/server.py"
+                                                        ],
+                                               "env":  {
+                                                           "MCP_BACKEND_URL":  "https://registrapp-api.imanzanastore.com.ar",
+                                                           "MCP_INTERNAL_KEY":  "2PRDcwo5ZJJceheq5mBGsXJA1Lk2VfmyMGXIW5xu6Ow"
+                                                       }
+                                           }
+                   }
+}

@@ -7,6 +7,7 @@ from app.models.mortgage import MortgageRecord
 from app.models.shared_expense import SharedExpense, SharedExpenseSplit
 from app.models.credit_card import CreditCard, CreditCardStatement, CreditCardItem
 from app.models.contact import UserContact
+from app.models.app_log import AppLog
 
 __all__ = [
     "Tenant", "User",
@@ -15,5 +16,5 @@ __all__ = [
     "MacroVariable", "MortgageRecord",
     "SharedExpense", "SharedExpenseSplit",
     "CreditCard", "CreditCardStatement", "CreditCardItem",
-    "UserContact",
+    "UserContact",`n    "AppLog",
 ]
