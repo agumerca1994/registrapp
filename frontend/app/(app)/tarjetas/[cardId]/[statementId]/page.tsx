@@ -106,9 +106,10 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
     setParticipants(prev => prev.filter((_, i) => i !== idx));
   }
 
-  const canPickContact = typeof navigator !== "undefined" && "contacts" in navigator;
+  const hasContactsApi = typeof navigator !== "undefined" && "contacts" in navigator;
 
   async function pickContact(idx: number) {
+    if (!hasContactsApi) return;
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const contacts = await (navigator as any).contacts.select(["name", "tel"], { multiple: false });
@@ -261,16 +262,14 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                           onChange={e => updateParticipant(idx, { contact: e.target.value })}
                           className="flex-1 border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
                         />
-                        {canPickContact && (
-                          <button
-                            type="button"
-                            onClick={() => pickContact(idx)}
-                            title="Elegir de contactos"
-                            className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 shrink-0"
-                          >
-                            <Phone className="w-4 h-4" />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => pickContact(idx)}
+                          title={hasContactsApi ? "Elegir de contactos" : "Selector de contactos no disponible en este navegador"}
+                          className={"px-3 py-2 rounded-lg shrink-0 " + (hasContactsApi ? "bg-gray-100 hover:bg-gray-200 text-gray-600" : "bg-gray-50 text-gray-300 cursor-not-allowed")}
+                        >
+                          <Phone className="w-4 h-4" />
+                        </button>
                       </div>
                       {p.contact && (
                         <p className="text-xs text-violet-600">
