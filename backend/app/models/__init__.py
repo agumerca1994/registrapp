@@ -16,5 +16,6 @@ __all__ = [
     "MacroVariable", "MortgageRecord",
     "SharedExpense", "SharedExpenseSplit",
     "CreditCard", "CreditCardStatement", "CreditCardItem",
-    "UserContact",`n    "AppLog",
+    "UserContact",
+    "AppLog",
 ]
