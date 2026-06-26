@@ -1,4 +1,4 @@
-from pydantic import model_validator
+﻿from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     WHATSAPP_WEBHOOK_SECRET: str = ""
     APP_DOMAIN: str = ""
     FRONTEND_URL: str = "http://localhost:3000"
+    INTERNAL_LOG_KEY: str = ""
 
     @model_validator(mode="after")
     def derive_frontend_url(self) -> "Settings":
@@ -25,3 +26,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
