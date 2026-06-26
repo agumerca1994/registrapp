@@ -61,8 +61,7 @@ interface ShareParticipantRow {
   amount: string;
 }
 
-function ShareItemModal({ item, onClose, onDone }: { item: CardItem; onClose: () => void; onDone: () => void }) {
-  const { appUser } = useAuth();
+function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem; onClose: () => void; onDone: () => void; currentUser: { id: number; display_name: string | null; email: string } | null }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [participants, setParticipants] = useState<ShareParticipantRow[]>([]);
   const [splitType, setSplitType] = useState<"equal" | "custom">("equal");
@@ -76,21 +75,21 @@ function ShareItemModal({ item, onClose, onDone }: { item: CardItem; onClose: ()
   }, []);
 
   useEffect(() => {
-    if (!appUser || participants.length > 0) return;
+    if (!currentUser || participants.length > 0) return;
     setParticipants([{
       type: "self",
-      user_id: appUser.id,
-      member_name: appUser.display_name || appUser.email,
+      user_id: currentUser.id,
+      member_name: currentUser.display_name || currentUser.email,
       contact: "",
       amount: "",
     }]);
-  }, [appUser]);
+  }, [currentUser]);
 
   const cuotasRestantes = item.item_type === "installment" && !item.installment_group_id
     ? (item.installment_count || 1) - (item.installment_number || 1) + 1
     : 0;
 
-  const otherMembers = members.filter(m => m.id !== appUser?.id);
+  const otherMembers = members.filter(m => m.id !== currentUser?.id);
   const equalShare = participants.length > 0 ? totalAmount / participants.length : 0;
   const customTotal = participants.reduce((s, p) => s + parseAmount(p.amount || "0"), 0);
   const overBudget = splitType === "custom" && customTotal > totalAmount + 0.01;
@@ -505,6 +504,7 @@ function NewCategoryModal({ onSave, onClose }: {
 }
 
 export default function StatementDetailPage() {
+  const { appUser } = useAuth();
   const params = useParams();
   const router = useRouter();
   const cardId = Number(params.cardId);
@@ -847,7 +847,7 @@ export default function StatementDetailPage() {
       )}
       {showNewCat && <NewCategoryModal onSave={handleCreateCategory} onClose={() => setShowNewCat(false)} />}
       {shareItem && (
-        <ShareItemModal item={shareItem} onClose={() => setShareItem(null)} onDone={() => { setShareItem(null); load(); }} />
+        <ShareItemModal item={shareItem} onClose={() => setShareItem(null)} onDone={() => { setShareItem(null); load(); }} currentUser={appUser} />
       )}
     </div>
   );
