@@ -648,7 +648,8 @@ async def share_item(
     db: AsyncSession = Depends(get_db),
 ):
     from app.routers.shared_expenses import (
-        _is_email, _is_phone, _normalize_phone, _send_whatsapp_invite, _send_whatsapp_member_notify,
+        _is_email, _is_phone, _normalize_phone, _save_tenant_contact,
+        _send_whatsapp_invite, _send_whatsapp_member_notify,
     )
     import secrets
     from datetime import datetime, timedelta
@@ -746,6 +747,7 @@ async def share_item(
                         invite_token = secrets.token_urlsafe(32)
                         invite_expires_at = datetime.utcnow() + timedelta(days=30)
                         pending_wa_invites.append((normalized_phone, invite_token))
+                    await _save_tenant_contact(user.tenant_id, resolved_name, normalized_phone, db)
             elif split_in.user_id and split_in.user_id != user.id:
                 pending_wa_notify.append((split_in.user_id, split_in.amount))
 

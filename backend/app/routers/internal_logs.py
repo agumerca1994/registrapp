@@ -1,3 +1,4 @@
+import re
 import traceback as tb_module
 from datetime import datetime, timezone, timedelta
 from typing import Any
@@ -98,6 +99,73 @@ async def get_logs_summary(
         "ERROR": counts.get("ERROR", 0),
         "CRITICAL": counts.get("CRITICAL", 0),
     }
+
+
+@router.get("/pending-shared-invites")
+async def pending_shared_invites(
+    creator_email: str | None = Query(None, description="Filter to shared expenses created by this user's email"),
+    _: None = Depends(_require_internal_key),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Diagnostic: lists shared-expense splits (excluding the creator's own) so we can
+    tell apart already-registered recipients (visible in-app, split.user_id set) from
+    external unclaimed invites (invite_token set, user_id NULL) whose WhatsApp never sent.
+    """
+    from app.models.shared_expense import SharedExpense, SharedExpenseSplit
+    from app.models.user import User
+
+    conditions = []
+    if creator_email:
+        creator = await db.scalar(select(User).where(User.email == creator_email))
+        if not creator:
+            raise HTTPException(status_code=404, detail="Creator not found")
+        conditions.append(SharedExpense.created_by_user_id == creator.id)
+
+    rows = (await db.execute(
+        select(SharedExpense, SharedExpenseSplit)
+        .join(SharedExpenseSplit, SharedExpenseSplit.shared_expense_id == SharedExpense.id)
+        .where(*conditions)
+        .order_by(SharedExpense.created_at.desc())
+    )).all()
+
+    all_phone_users = (await db.execute(
+        select(User).where(User.whatsapp_phone.isnot(None))
+    )).scalars().all()
+
+    def _loose_match(phone: str | None) -> User | None:
+        if not phone:
+            return None
+        digits = re.sub(r"\D", "", phone)
+        for u in all_phone_users:
+            if re.sub(r"\D", "", u.whatsapp_phone or "") == digits:
+                return u
+        return None
+
+    items = []
+    for se, sp in rows:
+        if sp.user_id == se.created_by_user_id:
+            continue  # skip the creator's own split
+        target_user = await db.get(User, sp.user_id) if sp.user_id else None
+        loose_match = None if sp.user_id else _loose_match(sp.invite_email)
+        items.append({
+            "shared_expense_id": se.id,
+            "title": se.title,
+            "total_amount": float(se.total_amount),
+            "expense_date": se.expense_date.isoformat(),
+            "from_credit_card": se.credit_card_item_id is not None,
+            "created_at": se.created_at.isoformat(),
+            "split_id": sp.id,
+            "member_name": sp.member_name,
+            "split_amount": float(sp.amount),
+            "status": sp.status,
+            "user_id": sp.user_id,
+            "target_user_email": target_user.email if target_user else None,
+            "invite_token_present": sp.invite_token is not None,
+            "invite_phone_or_email": sp.invite_email,
+            "loose_match_existing_user_email": loose_match.email if loose_match else None,
+        })
+
+    return {"total": len(items), "items": items}
 
 
 @router.post("/logs/frontend-error")

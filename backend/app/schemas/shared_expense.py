@@ -68,19 +68,6 @@ class InviteInfoOut(BaseModel):
     creator_name: str
 
 
-class ContactOut(BaseModel):
-    model_config = {"from_attributes": True}
-
-    id: int
-    contact_email: str
-    contact_name: str
-    contact_user_id: int | None
-
-
-class ContactCreate(BaseModel):
-    contact_email: str
-    contact_name: str
-
 class ShareCreditCardItemBody(BaseModel):
     splits: list[SplitIn]
     split_type: str
