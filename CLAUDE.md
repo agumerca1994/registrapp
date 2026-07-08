@@ -57,11 +57,12 @@ Every data table has `tenant_id` (FK to `tenants`). The auth flow: Firebase JWT 
 backend/app/
   core/       # config (pydantic-settings), database (AsyncSession), firebase (get_current_user)
   models/     # SQLAlchemy ORM — Tenant, User, IncomeSource, IncomeEntry, ExpenseCategory,
-              #   ExpenseEntry, MacroVariable, MortgageRecord, CreditCard, CreditCardStatement,
-              #   CreditCardItem, SharedExpense, SharedExpenseSplit, UserContact
+              #   ExpenseEntry, MacroVariable, MortgageRecord, MortgageLoan, CreditCard,
+              #   CreditCardStatement, CreditCardItem, SharedExpense, SharedExpenseSplit,
+              #   TenantContact, AppLog
   schemas/    # Pydantic request/response models
   routers/    # FastAPI routers — auth, income, expenses, macro, mortgage, dashboard,
-              #   credit_cards, shared_expenses, contacts, whatsapp
+              #   credit_cards, shared_expenses, contacts, whatsapp, internal_logs
   services/   # (currently unused)
 ```
 
@@ -92,6 +93,8 @@ Frontend routes: `/tarjetas` → `/tarjetas/[cardId]` (statements list) → `/ta
 
 **Currency (ARS/USD)**: `CreditCardItem` and `ExpenseEntry` both have a `currency VARCHAR(3)` field (default `"ARS"`). USD items are only allowed for `item_type="single"` (validated in schema). The backend auto-assigns the category via `_get_or_create_usd_category(tenant_id, db)` which lazily creates a "Consumo en dólares" category (color `#22c55e`) per tenant on first USD expense — callers don't pass `category_id` for USD. The frontend form shows the ARS/USD toggle at the **top** of the form; selecting USD hides the category selector and (in tarjetas) the tipo selector. Totals in list pages show `arsTotal` and `usdTotal` on separate lines. Use `formatUSD(n)` from `lib/utils.ts` for USD display (`"U$D X,XX"` format).
 
+**Dashboard totals never mix currencies**: `GET /dashboard/summary/{year}/{month}` filters `total_expenses` and `expenses_by_category` to `currency == "ARS"` only, with USD tracked separately in `total_expenses_usd`. `balance` (`total_income - total_expenses`) is therefore ARS-only too. Since every USD entry lands in the single "Consumo en dólares" category, a currency-mixed category breakdown would otherwise double-count it against ARS categories — the dashboard's USD pie chart groups those entries by `description` instead of category (categories would all be identical), folding anything past the top 8 into an "Otros" slice.
+
 ### Shared expenses (Gastos compartidos)
 `SharedExpense` has a `split_type` ("equal" or "custom") and links to `SharedExpenseSplit` rows (one per participant). Splits track `user_id` (nullable — may be an external guest), `member_name`, `amount`, and `status` ("pending"/"accepted"/"rejected").
 
@@ -101,13 +104,26 @@ Frontend routes: `/tarjetas` → `/tarjetas/[cardId]` (statements list) → `/ta
 
 **Phone number normalization**: when a phone number is entered for WhatsApp invite, it's normalized to international format (`+54934567890`) via `_normalize_phone()` in the backend. The frontend uses `normalizePhoneNumber()` from `lib/utils.ts` to parse device contact picker results and split them into `prefix` (country code like "54") and `local` (number without prefix). The frontend's `buildPhone()` function reconstructs the format expected by the backend: for Argentina, adds "9" after the prefix (`549...`). Always normalize before sending to backend or Evolution API.
 
+### Contacts (household agenda)
+`TenantContact` (`routers/contacts.py`) is a **household-wide** address book — unique per `tenant_id + contact_phone`, not per user. It starts empty and auto-populates: `_save_tenant_contact()` in `shared_expenses.py` is called from both the shared-expenses and credit-cards phone-invite branches every time someone invites an external contact by phone, silently skipping if that phone is already saved (even under a different name). `GET /contacts` is used by the shared-expenses form and the credit-card "compartir ítem" modal to offer a "Elegir de la agenda" dropdown when adding an external participant — this is the primary way to pick a known contact on iOS, since the native Contact Picker API isn't usable there (see Device APIs below). There's no dedicated ABM screen yet.
+
+### Internal diagnostics
+`routers/internal_logs.py` exposes `/internal/*` endpoints gated by a shared-secret header (`x-internal-key` must match the `INTERNAL_LOG_KEY` env var), not user auth — used for ops/debugging, never called from the frontend:
+- `GET /internal/logs`, `GET /internal/logs/summary`, `POST /internal/logs/frontend-error` — read/write `AppLog` rows.
+- `GET /internal/pending-shared-invites` — diagnostic listing of `SharedExpenseSplit` rows (optionally filtered by `creator_email`) to distinguish already-registered recipients (visible in-app, `user_id` set) from external invites still waiting on `invite_token`.
+- `POST /internal/backfill-shared-invite-claims` — one-off data-repair tool that replicates `POST /shared-expenses/invite/{token}/claim` (assign `user_id`, create the `ExpenseEntry`, mark `accepted`) keyed by `{split_id, user_id}` pairs instead of a token, for manually linking splits whose invite never got delivered.
+
+The root `mcp/server.py` (a FastMCP stdio server registered in `.mcp.json` as `registrapp-logs`) wraps the `/internal/logs*` endpoints as Claude Code tools (`recent_errors`, `search_logs`, `logs_by_module`, `log_summary`), authenticating with `MCP_INTERNAL_KEY` against the same `INTERNAL_LOG_KEY`.
+
 ### Frontend structure
 ```
 frontend/app/
   (auth)/login/     # Google sign-in page
   onboarding/       # First-time tenant creation
   (app)/            # Protected layout (sidebar + auth guard)
-    dashboard/      # Monthly summary cards + line chart + two pie charts (both always current month)
+    dashboard/      # Monthly summary cards + pie charts (categories, income sources, USD by
+                    #   description) — all always current calendar month, independent of the
+                    #   month selector used for the summary cards
     income/         # Income entries with bruto/deducciones/neto + bulk import from Excel/CSV
     expenses/       # Expense entries; credit card entries show badge + "Ver en resumen" only
     mortgage/       # UVA mortgage payment records
@@ -121,7 +137,7 @@ frontend/
   lib/utils.ts               # formatARS, formatUSD, formatPct, parseAmount, normalizePhoneNumber, cn()
 ```
 
-**Device APIs (PWA-specific)**: The app uses Web Contact Picker API (`navigator.contacts.select()`) to let users pick contacts from their device (iOS Safari 14+, Chrome Android 80+). This is a progressively enhanced feature — the button is hidden on desktop. Always wrap contact picker calls in try-catch and check `"contacts" in navigator`. Desktop users can still enter data manually. When picking contacts, normalize the phone number result via `normalizePhoneNumber()` before using.
+**Device APIs (PWA-specific)**: The app uses the Web Contact Picker API (`navigator.contacts.select()`) to let users pick contacts from their device. **In practice this only works on Chrome/Edge for Android — Safari on iOS does not support it**, even in "Add to Home Screen" standalone mode, unless the user manually enables an experimental flag (unrealistic for real users). Always wrap contact picker calls in try-catch, check `"contacts" in navigator` before calling, and give the user visible feedback (not a silent no-op) when unsupported — the household agenda (`TenantContact`, see above) is the practical fallback for iOS. When picking contacts, normalize the phone number result via `normalizePhoneNumber()` before using.
 
 `AuthContext` exposes `firebaseUser`, `appUser`, `loading`, and `refreshUser()`. `refreshUser()` re-fetches `GET /auth/me` **and then auto-claims any `pendingInviteToken` stored in localStorage** — call it after register/join to complete the invite flow. The `(app)` layout redirects to `/login` if not authenticated, or `/onboarding` if authenticated but no `appUser` (tenant not created yet).
 
