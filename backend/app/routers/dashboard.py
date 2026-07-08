@@ -26,6 +26,7 @@ class MonthSummary(BaseModel):
     period: str
     total_income: Decimal
     total_expenses: Decimal
+    total_expenses_usd: Decimal
     balance: Decimal
     mortgage_payment: Decimal | None
     mortgage_is_projected: bool
@@ -69,13 +70,27 @@ async def monthly_summary(
 
     total_expenses = await db.scalar(
         select(func.coalesce(func.sum(ExpenseEntry.amount), 0))
-        .where(ExpenseEntry.tenant_id == tid, ExpenseEntry.expense_date >= start, ExpenseEntry.expense_date < end)
+        .where(
+            ExpenseEntry.tenant_id == tid, ExpenseEntry.expense_date >= start, ExpenseEntry.expense_date < end,
+            ExpenseEntry.currency == "ARS",
+        )
+    )
+
+    total_expenses_usd = await db.scalar(
+        select(func.coalesce(func.sum(ExpenseEntry.amount), 0))
+        .where(
+            ExpenseEntry.tenant_id == tid, ExpenseEntry.expense_date >= start, ExpenseEntry.expense_date < end,
+            ExpenseEntry.currency == "USD",
+        )
     )
 
     rows = await db.execute(
         select(ExpenseCategory.name, ExpenseCategory.color, func.sum(ExpenseEntry.amount).label("total"))
         .join(ExpenseEntry, ExpenseEntry.category_id == ExpenseCategory.id)
-        .where(ExpenseEntry.tenant_id == tid, ExpenseEntry.expense_date >= start, ExpenseEntry.expense_date < end)
+        .where(
+            ExpenseEntry.tenant_id == tid, ExpenseEntry.expense_date >= start, ExpenseEntry.expense_date < end,
+            ExpenseEntry.currency == "ARS",
+        )
         .group_by(ExpenseCategory.name, ExpenseCategory.color)
         .order_by(func.sum(ExpenseEntry.amount).desc())
     )
@@ -130,6 +145,7 @@ async def monthly_summary(
         period=f"{year}-{month:02d}",
         total_income=total_income,
         total_expenses=total_expenses,
+        total_expenses_usd=total_expenses_usd,
         balance=total_income - total_expenses,
         mortgage_payment=mortgage_payment,
         mortgage_is_projected=mortgage_is_projected,
