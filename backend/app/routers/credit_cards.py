@@ -648,7 +648,7 @@ async def share_item(
     db: AsyncSession = Depends(get_db),
 ):
     from app.routers.shared_expenses import (
-        _is_email, _is_phone, _send_whatsapp_invite, _send_whatsapp_member_notify,
+        _is_email, _is_phone, _normalize_phone, _send_whatsapp_invite, _send_whatsapp_member_notify,
     )
     import secrets
     from datetime import datetime, timedelta
@@ -734,17 +734,18 @@ async def share_item(
                         invite_expires_at = datetime.utcnow() + timedelta(days=30)
                 elif _is_phone(contact):
                     from app.models.user import User as _User
-                    found = await db.scalar(select(_User).where(_User.whatsapp_phone == contact))
+                    normalized_phone = _normalize_phone(contact)
+                    found = await db.scalar(select(_User).where(_User.whatsapp_phone == normalized_phone))
                     if found:
                         resolved_user_id = found.id
                         resolved_name = found.display_name or found.email
                         if found.id != user.id:
                             pending_wa_notify.append((found.id, split_in.amount))
                     else:
-                        invite_email = contact
+                        invite_email = normalized_phone
                         invite_token = secrets.token_urlsafe(32)
                         invite_expires_at = datetime.utcnow() + timedelta(days=30)
-                        pending_wa_invites.append((contact, invite_token))
+                        pending_wa_invites.append((normalized_phone, invite_token))
             elif split_in.user_id and split_in.user_id != user.id:
                 pending_wa_notify.append((split_in.user_id, split_in.amount))
 
