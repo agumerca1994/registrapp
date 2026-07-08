@@ -4,8 +4,10 @@ from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.config import settings
@@ -166,6 +168,84 @@ async def pending_shared_invites(
         })
 
     return {"total": len(items), "items": items}
+
+
+class SplitAssignment(BaseModel):
+    split_id: int
+    user_id: int
+
+
+class BackfillBody(BaseModel):
+    assignments: list[SplitAssignment]
+
+
+@router.post("/backfill-shared-invite-claims")
+async def backfill_shared_invite_claims(
+    body: BackfillBody,
+    _: None = Depends(_require_internal_key),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """One-off data fix: directly claims shared-expense splits on behalf of a known
+    user_id, replicating POST /shared-expenses/invite/{token}/claim exactly (assigns
+    user_id, creates the ExpenseEntry in the target user's tenant, marks accepted),
+    for splits whose WhatsApp invite never arrived (bug already fixed) but whose
+    identity is confidently known from other records.
+    """
+    from app.models.expense import ExpenseEntry
+    from app.models.shared_expense import SharedExpense, SharedExpenseSplit
+    from app.models.user import User
+    from app.routers.shared_expenses import _get_or_create_shared_category
+
+    results = []
+    for a in body.assignments:
+        split = await db.scalar(
+            select(SharedExpenseSplit)
+            .where(SharedExpenseSplit.id == a.split_id)
+            .options(selectinload(SharedExpenseSplit.shared_expense))
+        )
+        if not split:
+            results.append({"split_id": a.split_id, "status": "not_found"})
+            continue
+        if split.user_id is not None:
+            results.append({"split_id": a.split_id, "status": "skipped_already_assigned", "user_id": split.user_id})
+            continue
+
+        user = await db.get(User, a.user_id)
+        if not user:
+            results.append({"split_id": a.split_id, "status": "user_not_found"})
+            continue
+
+        shared = split.shared_expense
+        split.user_id = user.id
+        split.member_name = user.display_name or user.email
+        split.invite_token = None
+        split.invite_expires_at = None
+
+        category_id = (
+            shared.category_id if shared.tenant_id == user.tenant_id
+            else await _get_or_create_shared_category(user.tenant_id, db)
+        )
+        entry = ExpenseEntry(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            category_id=category_id,
+            amount=split.amount,
+            description=shared.title,
+            expense_date=shared.expense_date,
+            notes=f"Gasto compartido #{shared.id}",
+        )
+        db.add(entry)
+        await db.flush()
+        split.expense_entry_id = entry.id
+        split.status = "accepted"
+
+        if user.id != shared.created_by_user_id and not shared.locked:
+            shared.locked = True
+
+        results.append({"split_id": a.split_id, "status": "claimed", "user_id": user.id, "user_email": user.email})
+
+    await db.commit()
+    return {"results": results}
 
 
 @router.post("/logs/frontend-error")
