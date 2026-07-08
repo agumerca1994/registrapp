@@ -9,7 +9,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 import api from "@/lib/api";
-import { formatARS, formatPct } from "@/lib/utils";
+import { formatARS, formatUSD, formatPct } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Wallet, Percent } from "lucide-react";
 
 interface MonthSummary {
@@ -32,7 +32,7 @@ interface MacroPoint {
   usd_official: number | null;
 }
 
-interface ExpenseEntry { id: number; category_id: number; amount: number; expense_date: string; }
+interface ExpenseEntry { id: number; category_id: number; amount: number; expense_date: string; description: string | null; currency: string; }
 interface ExpenseCategory { id: number; name: string; color?: string; }
 interface IncomeEntry { id: number; source_id: number; amount: number; period_date: string; }
 interface IncomeSource { id: number; name: string; }
@@ -77,13 +77,13 @@ function PctTooltip({ active, payload, label }: any) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function PieCustomTooltip({ active, payload }: any) {
+function PieCustomTooltip({ active, payload, formatValue = formatARS }: any) {
   if (!active || !payload?.length) return null;
   const d = payload[0];
   return (
     <div className="bg-white border rounded-lg shadow-lg p-3 text-xs">
       <p className="font-medium" style={{ color: d.payload.color }}>{d.name}</p>
-      <p className="text-gray-700">{formatARS(d.value)}</p>
+      <p className="text-gray-700">{formatValue(d.value)}</p>
       <p className="text-muted-foreground">{d.payload.pct}%</p>
     </div>
   );
@@ -191,6 +191,24 @@ export default function DashboardPage() {
       .filter(d => d.value > 0)
       .map(d => ({ ...d, pct: parseFloat(((d.value / total) * 100).toFixed(1)) }));
   })();
+
+  const usdPieData = (() => {
+    const usdEntries = expEntries.filter(e => e.currency === "USD");
+    const total = usdEntries.reduce((s, e) => s + Number(e.amount), 0);
+    if (total === 0) return [];
+    const byDesc = new Map<string, number>();
+    usdEntries.forEach(e => {
+      const key = e.description?.trim() || "Sin descripción";
+      byDesc.set(key, (byDesc.get(key) || 0) + Number(e.amount));
+    });
+    const sorted = Array.from(byDesc.entries()).sort((a, b) => b[1] - a[1]);
+    const top = sorted.slice(0, 8);
+    const restTotal = sorted.slice(8).reduce((s, [, v]) => s + v, 0);
+    const rows = top.map(([name, value], i) => ({ name, value, color: PIE_COLORS[i % PIE_COLORS.length] }));
+    if (restTotal > 0) rows.push({ name: "Otros", value: restTotal, color: "#9ca3af" });
+    return rows.map(d => ({ ...d, pct: parseFloat(((d.value / total) * 100).toFixed(1)) }));
+  })();
+
   return (
     <div className="max-w-4xl space-y-4 md:space-y-6">
 
@@ -322,6 +340,26 @@ export default function DashboardPage() {
                     ))}
                   </Pie>
                   <Tooltip content={<PieCustomTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {usdPieData.length > 0 && (
+            <div className="bg-white rounded-xl border p-4 md:p-5">
+              <h3 className="font-semibold text-gray-900 mb-4 text-sm md:text-base">
+                {"Gastos en dólares por descripción"} — {currentMonthLabel}
+              </h3>
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie data={usdPieData} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                    innerRadius={55} outerRadius={90} paddingAngle={2}>
+                    {usdPieData.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<PieCustomTooltip formatValue={formatUSD} />} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                 </PieChart>
               </ResponsiveContainer>
