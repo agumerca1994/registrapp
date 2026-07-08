@@ -23,6 +23,9 @@ interface Statement {
 interface Member {
   id: number; display_name: string | null; email: string;
 }
+interface AgendaContact {
+  id: number; contact_name: string; contact_phone: string;
+}
 interface Card {
   id: number; bank: string; alias: string; closing_day: number; due_day: number;
 }
@@ -63,6 +66,7 @@ interface ShareParticipantRow {
 
 function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem; onClose: () => void; onDone: () => void; currentUser: { id: number; display_name: string | null; email: string } | null }) {
   const [members, setMembers] = useState<Member[]>([]);
+  const [agendaContacts, setAgendaContacts] = useState<AgendaContact[]>([]);
   const [participants, setParticipants] = useState<ShareParticipantRow[]>([]);
   const [splitType, setSplitType] = useState<"equal" | "custom">("equal");
   const [sharing, setSharing] = useState(false);
@@ -72,6 +76,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
 
   useEffect(() => {
     api.get("/auth/members").then(r => setMembers(r.data as Member[]));
+    api.get("/contacts").then(r => setAgendaContacts(r.data as AgendaContact[]));
   }, []);
 
   useEffect(() => {
@@ -109,7 +114,10 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
   const hasContactsApi = typeof navigator !== "undefined" && "contacts" in navigator;
 
   async function pickContact(idx: number) {
-    if (!hasContactsApi) return;
+    if (!hasContactsApi) {
+      alert("Tu navegador no permite elegir contactos del dispositivo. Completa el nombre y telefono manualmente, o elegi uno de la agenda si ya lo compartiste antes.");
+      return;
+    }
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const contacts = await (navigator as any).contacts.select(["name", "tel"], { multiple: false });
@@ -245,6 +253,22 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                     </select>
                   ) : (
                     <div className="space-y-1.5">
+                      {agendaContacts.length > 0 && (
+                        <select
+                          value=""
+                          onChange={e => {
+                            const c = agendaContacts.find(a => a.id === parseInt(e.target.value));
+                            if (!c) return;
+                            updateParticipant(idx, { member_name: c.contact_name, contact: c.contact_phone });
+                          }}
+                          className="w-full border rounded-lg px-2 py-1.5 text-xs bg-violet-50 border-violet-200 text-violet-700"
+                        >
+                          <option value="">📇 Elegir de la agenda...</option>
+                          {agendaContacts.map(c => (
+                            <option key={c.id} value={c.id}>{c.contact_name} · {c.contact_phone}</option>
+                          ))}
+                        </select>
+                      )}
                       <input
                         required
                         type="text"
@@ -266,7 +290,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                           type="button"
                           onClick={() => pickContact(idx)}
                           title={hasContactsApi ? "Elegir de contactos" : "Selector de contactos no disponible en este navegador"}
-                          className={"px-3 py-2 rounded-lg shrink-0 " + (hasContactsApi ? "bg-gray-100 hover:bg-gray-200 text-gray-600" : "bg-gray-50 text-gray-300 cursor-not-allowed")}
+                          className="px-3 py-2 rounded-lg shrink-0 bg-gray-100 hover:bg-gray-200 text-gray-600"
                         >
                           <Phone className="w-4 h-4" />
                         </button>

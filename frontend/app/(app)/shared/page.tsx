@@ -84,6 +84,12 @@ interface Category {
   color: string | null;
 }
 
+interface AgendaContact {
+  id: number;
+  contact_name: string;
+  contact_phone: string;
+}
+
 interface ParticipantRow {
   type: "member" | "external";
   user_id: number | null;
@@ -142,6 +148,7 @@ export default function SharedExpensesPage() {
   const [expenses, setExpenses] = useState<SharedExpense[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [agendaContacts, setAgendaContacts] = useState<AgendaContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [showCatForm, setShowCatForm] = useState(false);
@@ -172,12 +179,14 @@ export default function SharedExpensesPage() {
 
   const load = async () => {
     setLoading(true);
-    const [se, mem] = await Promise.allSettled([
+    const [se, mem, contacts] = await Promise.allSettled([
       api.get("/shared-expenses"),
       api.get("/auth/members"),
+      api.get("/contacts"),
     ]);
     if (se.status === "fulfilled") setExpenses(se.value.data);
     if (mem.status === "fulfilled") setMembers(mem.value.data);
+    if (contacts.status === "fulfilled") setAgendaContacts(contacts.value.data);
     await loadCategories();
     setLoading(false);
   };
@@ -498,6 +507,29 @@ export default function SharedExpensesPage() {
                       </select>
                     ) : (
                       <div className="space-y-2">
+                        {agendaContacts.length > 0 && (
+                          <select
+                            value=""
+                            onChange={e => {
+                              const c = agendaContacts.find(a => a.id === parseInt(e.target.value));
+                              if (!c) return;
+                              const { prefix, local, isValid } = normalizePhoneNumber(c.contact_phone, COUNTRIES.map(cc => cc.prefix));
+                              if (!isValid) return;
+                              updateParticipant(idx, {
+                                member_name: c.contact_name,
+                                invite_phone_prefix: prefix,
+                                invite_phone_local: local,
+                                invite_method: "whatsapp",
+                              });
+                            }}
+                            className="w-full border rounded-lg px-2 py-1.5 text-xs bg-violet-50 border-violet-200 text-violet-700"
+                          >
+                            <option value="">📇 Elegir de la agenda...</option>
+                            {agendaContacts.map(c => (
+                              <option key={c.id} value={c.id}>{c.contact_name} · {c.contact_phone}</option>
+                            ))}
+                          </select>
+                        )}
                         <div className="flex gap-2">
                           <input required type="text" placeholder="Nombre del externo"
                             value={p.member_name} onChange={e => updateParticipant(idx, { member_name: e.target.value })}
@@ -512,6 +544,8 @@ export default function SharedExpensesPage() {
                                   invite_phone_local: result.local,
                                   invite_method: "whatsapp",
                                 });
+                              } else if (!("contacts" in navigator) || !navigator.contacts) {
+                                alert("Tu navegador no permite elegir contactos del dispositivo. Completa el nombre y telefono manualmente, o elegi uno de la agenda si ya lo compartiste antes.");
                               }
                             }}
                             title="Seleccionar contacto del dispositivo"

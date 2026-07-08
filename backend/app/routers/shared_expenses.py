@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.firebase import get_current_user
+from app.models.contact import TenantContact
 from app.models.expense import ExpenseCategory, ExpenseEntry
 from app.models.shared_expense import SharedExpense, SharedExpenseSplit
 from app.models.user import User
@@ -58,6 +59,19 @@ def _normalize_phone(value: str) -> str:
 
     # Fallback: just add + prefix
     return f"+{digits}" if digits else ""
+
+
+async def _save_tenant_contact(tenant_id: int, name: str, phone: str, db: AsyncSession) -> None:
+    """Save a phone contact to the household agenda, skipping if that phone is already saved."""
+    existing = await db.scalar(
+        select(TenantContact).where(
+            TenantContact.tenant_id == tenant_id,
+            TenantContact.contact_phone == phone,
+        )
+    )
+    if existing:
+        return
+    db.add(TenantContact(tenant_id=tenant_id, contact_name=name.strip() or phone, contact_phone=phone))
 
 
 async def _get_db_user(firebase_user: dict, db: AsyncSession) -> User:
@@ -208,6 +222,7 @@ async def create_shared_expense(
                     invite_expires_at = datetime.utcnow() + timedelta(days=30)
                     # Queue WhatsApp invite to send after flush
                     pending_wa_invites.append((normalized_phone, invite_token))
+                await _save_tenant_contact(user.tenant_id, resolved_name, normalized_phone, db)
         elif split_in.user_id and split_in.user_id != user.id:
             # Direct member selection — queue WhatsApp notification if they have phone
             pending_wa_notify.append(split_in.user_id)

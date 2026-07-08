@@ -4,9 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.firebase import get_current_user
-from app.models.contact import UserContact
+from app.models.contact import TenantContact
 from app.models.user import User
-from app.schemas.shared_expense import ContactCreate, ContactOut
+from app.schemas.contact import ContactCreate, ContactOut
+from app.routers.shared_expenses import _normalize_phone
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 
@@ -25,9 +26,9 @@ async def list_contacts(
 ):
     user = await _get_db_user(firebase_user, db)
     result = await db.scalars(
-        select(UserContact)
-        .where(UserContact.user_id == user.id)
-        .order_by(UserContact.contact_name)
+        select(TenantContact)
+        .where(TenantContact.tenant_id == user.tenant_id)
+        .order_by(TenantContact.contact_name)
     )
     return result.all()
 
@@ -39,25 +40,21 @@ async def add_contact(
     db: AsyncSession = Depends(get_db),
 ):
     user = await _get_db_user(firebase_user, db)
+    normalized_phone = _normalize_phone(body.contact_phone)
 
     existing = await db.scalar(
-        select(UserContact).where(
-            UserContact.user_id == user.id,
-            UserContact.contact_email == body.contact_email,
+        select(TenantContact).where(
+            TenantContact.tenant_id == user.tenant_id,
+            TenantContact.contact_phone == normalized_phone,
         )
     )
     if existing:
-        raise HTTPException(status_code=409, detail="Ya tienes este contacto guardado")
+        return existing
 
-    found_user = await db.scalar(
-        select(User).where(User.email == body.contact_email)
-    )
-
-    contact = UserContact(
-        user_id=user.id,
-        contact_email=body.contact_email,
+    contact = TenantContact(
+        tenant_id=user.tenant_id,
         contact_name=body.contact_name,
-        contact_user_id=found_user.id if found_user else None,
+        contact_phone=normalized_phone,
     )
     db.add(contact)
     await db.commit()
@@ -73,9 +70,9 @@ async def delete_contact(
 ):
     user = await _get_db_user(firebase_user, db)
     contact = await db.scalar(
-        select(UserContact).where(
-            UserContact.id == contact_id,
-            UserContact.user_id == user.id,
+        select(TenantContact).where(
+            TenantContact.id == contact_id,
+            TenantContact.tenant_id == user.tenant_id,
         )
     )
     if not contact:
