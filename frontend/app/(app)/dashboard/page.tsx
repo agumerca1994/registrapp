@@ -10,12 +10,13 @@ import {
 } from "recharts";
 import api from "@/lib/api";
 import { formatARS, formatUSD, formatPct } from "@/lib/utils";
-import { TrendingUp, TrendingDown, Wallet, Percent } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, Percent, DollarSign } from "lucide-react";
 
 interface MonthSummary {
   period: string;
   total_income: number;
   total_expenses: number;
+  total_expenses_usd: number;
   balance: number;
   mortgage_payment: number | null;
   mortgage_is_projected: boolean;
@@ -165,12 +166,13 @@ export default function DashboardPage() {
   const currentMonthLabel = format(new Date(currentYear, currentMonth - 1, 1), "MMMM yyyy", { locale: es });
 
   const pieData = (() => {
-    const total = expEntries.reduce((s, e) => s + Number(e.amount), 0);
+    const arsEntries = expEntries.filter(e => e.currency !== "USD");
+    const total = arsEntries.reduce((s, e) => s + Number(e.amount), 0);
     if (total === 0) return [];
     return expCategories
       .map((c, i) => ({
         name: c.name,
-        value: expEntries.filter(e => e.category_id === c.id).reduce((s, e) => s + Number(e.amount), 0),
+        value: arsEntries.filter(e => e.category_id === c.id).reduce((s, e) => s + Number(e.amount), 0),
         color: c.color || PIE_COLORS[i % PIE_COLORS.length],
         pct: 0,
       }))
@@ -228,6 +230,9 @@ export default function DashboardPage() {
             <StatCard label="Ingresos" value={formatARS(data.total_income)} icon={TrendingUp} positive={true} />
             <StatCard label="Egresos" value={formatARS(data.total_expenses)} icon={TrendingDown} positive={false} />
             <StatCard label="Balance" value={formatARS(data.balance)} icon={Wallet} positive={data.balance >= 0} />
+            {data.total_expenses_usd > 0 && (
+              <StatCard label="Egresos USD" value={formatUSD(data.total_expenses_usd)} icon={DollarSign} positive={false} />
+            )}
             {data.inflation_pct !== null && (
               <StatCard label="Inflación" value={formatPct(data.inflation_pct)} icon={Percent} />
             )}
