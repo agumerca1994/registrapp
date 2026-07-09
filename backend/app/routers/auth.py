@@ -179,18 +179,22 @@ async def link_whatsapp(
         logger.error("Evolution API not configured")
         raise HTTPException(status_code=503, detail="WhatsApp no esta configurado en el servidor")
 
+    from app.routers.shared_expenses import _resolve_whatsapp_jid
+
     url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE}"
     headers = {"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"}
-    payload = {
-        "number": body.phone,
-        "text": (
-            "RegistrApp - Verificacion de WhatsApp\n\n"
-            f"Tu codigo de verificacion es: {code}\n"
-            "_Valido por 10 minutos._"
-        ),
-    }
     try:
         async with httpx.AsyncClient(timeout=10) as client:
+            resolved = await _resolve_whatsapp_jid(client, body.phone)
+            target = resolved or body.phone.lstrip("+")
+            payload = {
+                "number": target,
+                "text": (
+                    "RegistrApp - Verificacion de WhatsApp\n\n"
+                    f"Tu codigo de verificacion es: {code}\n"
+                    "_Valido por 10 minutos._"
+                ),
+            }
             resp = await client.post(url, json=payload, headers=headers)
             if resp.status_code >= 400:
                 raise HTTPException(status_code=502, detail=f"Error al enviar el codigo ({resp.status_code})")
