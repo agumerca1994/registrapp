@@ -3,6 +3,7 @@ import traceback as tb_module
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select, and_, func
@@ -299,6 +300,40 @@ async def delete_tenant_contact(
     await db.delete(contact)
     await db.commit()
     return {"status": "deleted", "id": contact_id}
+
+
+@router.get("/whatsapp-check")
+async def whatsapp_check(
+    phone: str = Query(..., description="Bare local digits, e.g. 3834721576"),
+    _: None = Depends(_require_internal_key),
+) -> dict[str, Any]:
+    """Diagnostic: ask Evolution API's own number-check endpoint (no message sent)
+    whether a number exists on WhatsApp, trying several plausible AR formats so we
+    can tell a genuine 'no WhatsApp account' from a formatting mismatch.
+    """
+    if not settings.EVOLUTION_API_URL or not settings.EVOLUTION_INSTANCE:
+        raise HTTPException(status_code=503, detail="Evolution API no configurado")
+
+    digits = re.sub(r"\D", "", phone)
+    variants = {
+        "with_9": f"549{digits}",
+        "without_9": f"54{digits}",
+        "bare_local": digits,
+    }
+
+    url = f"{settings.EVOLUTION_API_URL}/chat/whatsappNumbers/{settings.EVOLUTION_INSTANCE}"
+    headers = {"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"}
+
+    results = {}
+    async with httpx.AsyncClient(timeout=15) as client:
+        for label, number in variants.items():
+            try:
+                resp = await client.post(url, json={"numbers": [number]}, headers=headers)
+                results[label] = {"number_sent": number, "status_code": resp.status_code, "body": resp.json() if resp.content else None}
+            except Exception as e:
+                results[label] = {"number_sent": number, "error": str(e)}
+
+    return results
 
 
 @router.post("/logs/frontend-error")
