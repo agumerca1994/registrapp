@@ -115,21 +115,45 @@ async def _get_or_create_shared_category(tenant_id: int, db: AsyncSession) -> in
     return cat.id
 
 
+async def _resolve_whatsapp_jid(client: httpx.AsyncClient, phone: str) -> str | None:
+    """Ask Evolution's dedicated /chat/whatsappNumbers lookup for the canonical
+    number before sending. sendText's own internal existence check is stricter
+    (and buggier) than this endpoint — it rejects numbers this lookup happily
+    resolves, e.g. Argentine mobiles that already include the required 9.
+    """
+    digits = re.sub(r"\D", "", phone)
+    try:
+        resp = await client.post(
+            f"{settings.EVOLUTION_API_URL}/chat/whatsappNumbers/{settings.EVOLUTION_INSTANCE}",
+            json={"numbers": [digits]},
+            headers={"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"},
+        )
+        if resp.status_code < 400:
+            data = resp.json()
+            if data and data[0].get("exists"):
+                return data[0]["jid"].split("@")[0]
+    except Exception:
+        pass
+    return None
+
+
 async def _send_wa_msg(phone: str, msg: str) -> None:
     if not settings.EVOLUTION_API_URL or not settings.EVOLUTION_INSTANCE:
         logger.info("Evolution API not configured, skipping WhatsApp send")
         return
     try:
         async with httpx.AsyncClient(timeout=10) as client:
+            resolved = await _resolve_whatsapp_jid(client, phone)
+            target = resolved or phone.lstrip("+")
             resp = await client.post(
                 f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE}",
-                json={"number": phone, "text": msg},
+                json={"number": target, "text": msg},
                 headers={"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"},
             )
             if resp.status_code >= 400:
-                logger.warning(f"WhatsApp send failed {resp.status_code} to {phone}: {resp.text[:300]}")
+                logger.warning(f"WhatsApp send failed {resp.status_code} to {phone} (resolved {target}): {resp.text[:300]}")
             else:
-                logger.info(f"WhatsApp sent to {phone}: {resp.status_code}")
+                logger.info(f"WhatsApp sent to {phone} (resolved {target}): {resp.status_code}")
     except Exception as e:
         logger.warning(f"WhatsApp send error to {phone}: {e}")
 
