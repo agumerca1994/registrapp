@@ -248,6 +248,42 @@ async def backfill_shared_invite_claims(
     return {"results": results}
 
 
+@router.get("/tenant-contacts")
+async def list_tenant_contacts(
+    creator_email: str | None = Query(None, description="Filter to the agenda of this user's household"),
+    _: None = Depends(_require_internal_key),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Diagnostic: read-only dump of the household agenda (TenantContact)."""
+    from app.models.contact import TenantContact
+    from app.models.user import User
+
+    conditions = []
+    if creator_email:
+        creator = await db.scalar(select(User).where(User.email == creator_email))
+        if not creator:
+            raise HTTPException(status_code=404, detail="Creator not found")
+        conditions.append(TenantContact.tenant_id == creator.tenant_id)
+
+    rows = (await db.execute(
+        select(TenantContact).where(*conditions).order_by(TenantContact.contact_name)
+    )).scalars().all()
+
+    return {
+        "total": len(rows),
+        "items": [
+            {
+                "id": r.id,
+                "tenant_id": r.tenant_id,
+                "contact_name": r.contact_name,
+                "contact_phone": r.contact_phone,
+                "created_at": r.created_at.isoformat(),
+            }
+            for r in rows
+        ],
+    }
+
+
 @router.post("/logs/frontend-error")
 async def log_frontend_error(
     payload: dict[str, Any],
