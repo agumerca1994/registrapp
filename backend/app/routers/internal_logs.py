@@ -319,6 +319,7 @@ async def whatsapp_check(
         "with_9": f"549{digits}",
         "without_9": f"54{digits}",
         "bare_local": digits,
+        "raw_with_plus": f"+549{digits}",  # exactly what _send_wa_msg sends today
     }
 
     url = f"{settings.EVOLUTION_API_URL}/chat/whatsappNumbers/{settings.EVOLUTION_INSTANCE}"
