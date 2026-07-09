@@ -47,15 +47,16 @@ def _normalize_phone(value: str) -> str:
 
     for prefix in known_prefixes:
         if digits.startswith(prefix):
-            # Remove 9 if Argentina (54) and present after prefix: +549... → +54 9...
             remainder = digits[len(prefix):]
-            if prefix == "54" and remainder.startswith("9"):
-                return f"+{digits}"
-            return f"+{digits}"
+            # Argentina mobile numbers require a 9 right after the country code
+            # for WhatsApp — insert it if the caller didn't already include it.
+            if prefix == "54" and not remainder.startswith("9"):
+                remainder = "9" + remainder
+            return f"+{prefix}{remainder}"
 
-    # If no recognized prefix, assume Argentina (54) and add it
+    # No recognized prefix — assume a bare Argentine local number
     if len(digits) >= 9:
-        return f"+54{digits}"
+        return f"+549{digits}"
 
     # Fallback: just add + prefix
     return f"+{digits}" if digits else ""
