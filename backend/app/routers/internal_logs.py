@@ -284,6 +284,23 @@ async def list_tenant_contacts(
     }
 
 
+@router.delete("/tenant-contacts/{contact_id}")
+async def delete_tenant_contact(
+    contact_id: int,
+    _: None = Depends(_require_internal_key),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Diagnostic: delete a stale/duplicate household agenda entry."""
+    from app.models.contact import TenantContact
+
+    contact = await db.get(TenantContact, contact_id)
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    await db.delete(contact)
+    await db.commit()
+    return {"status": "deleted", "id": contact_id}
+
+
 @router.post("/logs/frontend-error")
 async def log_frontend_error(
     payload: dict[str, Any],
