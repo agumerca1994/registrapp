@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, extract, or_, and_
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
@@ -14,7 +14,7 @@ from app.models.expense import ExpenseEntry, ExpenseCategory
 from app.models.credit_card import CreditCard, CreditCardStatement, CreditCardItem
 from app.schemas.credit_card import (
     CreditCardCreate, CreditCardUpdate, CreditCardOut,
-    StatementCreate, StatementUpdate, StatementOut,
+    StatementCreate, StatementUpdate, StatementOut, StatementCalendarOut,
     CreditCardItemCreate, CreditCardItemUpdate, CreditCardItemOut,
     ForExpenseOut,
 )
@@ -272,6 +272,42 @@ async def create_statement(
     await db.commit()
     result = await db.scalar(_statement_query(stmt.id))
     return StatementOut.from_orm_with_total(result)
+
+
+@router.get("/statements/calendar", response_model=list[StatementCalendarOut])
+async def statements_calendar(
+    year: int = Query(...),
+    month: int = Query(..., ge=1, le=12),
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Statements from every card in the household whose closing_date or due_date
+    falls in the given calendar month — independent of the statement's own
+    year/month period, since a card can close/due in a different month than it
+    tracks (e.g. the "Julio" statement often closes in August)."""
+    user = await _get_db_user(firebase_user, db)
+
+    def _in_month(col):
+        return and_(extract("year", col) == year, extract("month", col) == month)
+
+    rows = await db.execute(
+        select(CreditCardStatement, CreditCard.alias)
+        .join(CreditCard, CreditCard.id == CreditCardStatement.card_id)
+        .where(
+            CreditCardStatement.tenant_id == user.tenant_id,
+            or_(_in_month(CreditCardStatement.closing_date), _in_month(CreditCardStatement.due_date)),
+        )
+        .options(selectinload(CreditCardStatement.items))
+    )
+    out = []
+    for stmt, alias in rows.all():
+        out.append(StatementCalendarOut(
+            id=stmt.id, card_id=stmt.card_id, card_alias=alias,
+            year=stmt.year, month=stmt.month,
+            closing_date=stmt.closing_date, due_date=stmt.due_date,
+            status=stmt.status, total=sum((i.amount for i in stmt.items), Decimal("0")),
+        ))
+    return out
 
 
 @router.patch("/statements/{stmt_id}", response_model=StatementOut)

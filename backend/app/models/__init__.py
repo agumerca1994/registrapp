@@ -8,6 +8,7 @@ from app.models.shared_expense import SharedExpense, SharedExpenseSplit
 from app.models.credit_card import CreditCard, CreditCardStatement, CreditCardItem
 from app.models.contact import TenantContact
 from app.models.app_log import AppLog
+from app.models.payment_reminder import PaymentReminder
 
 __all__ = [
     "Tenant", "User",
@@ -18,4 +19,5 @@ __all__ = [
     "CreditCard", "CreditCardStatement", "CreditCardItem",
     "TenantContact",
     "AppLog",
+    "PaymentReminder",
 ]
