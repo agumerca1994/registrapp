@@ -11,7 +11,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.routers import (
     auth, income, expenses, macro, dashboard, mortgage,
-    shared_expenses, whatsapp, credit_cards, contacts,
+    shared_expenses, whatsapp, credit_cards, contacts, reminders,
 )
 from app.routers.internal_logs import router as internal_logs_router
 from app.core.logging_config import setup_logging, log_queue_consumer, log_http_error
@@ -36,6 +36,14 @@ async def _daily_mortgage_sync():
         logger.error(f"Daily mortgage sync failed: {e}")
 
 
+async def _daily_reminder_check():
+    from app.routers.reminders import send_due_reminders
+    try:
+        await send_due_reminders()
+    except Exception as e:
+        logger.error(f"Daily reminder check failed: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
@@ -45,10 +53,12 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(_daily_sync())
     asyncio.create_task(_daily_mortgage_sync())
+    asyncio.create_task(_daily_reminder_check())
 
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(_daily_sync, "cron", hour=9, minute=0)
     scheduler.add_job(_daily_mortgage_sync, "cron", hour=9, minute=1)
+    scheduler.add_job(_daily_reminder_check, "cron", hour=9, minute=2)
     scheduler.start()
 
     yield
@@ -114,6 +124,7 @@ app.include_router(shared_expenses.router)
 app.include_router(credit_cards.router)
 app.include_router(whatsapp.router)
 app.include_router(contacts.router)
+app.include_router(reminders.router)
 app.include_router(internal_logs_router)
 
 

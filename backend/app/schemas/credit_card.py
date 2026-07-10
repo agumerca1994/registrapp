@@ -98,6 +98,18 @@ class CreditCardItemOut(BaseModel):
     category: CategoryOut
 
 
+class StatementCalendarOut(BaseModel):
+    id: int
+    card_id: int
+    card_alias: str
+    year: int
+    month: int
+    closing_date: date | None
+    due_date: date | None
+    status: str
+    total: Decimal = Decimal("0")
+
+
 class StatementOut(BaseModel):
     model_config = {"from_attributes": True}
 
