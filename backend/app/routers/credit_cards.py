@@ -14,7 +14,7 @@ from app.models.expense import ExpenseEntry, ExpenseCategory
 from app.models.credit_card import CreditCard, CreditCardStatement, CreditCardItem
 from app.schemas.credit_card import (
     CreditCardCreate, CreditCardUpdate, CreditCardOut,
-    StatementCreate, StatementOut,
+    StatementCreate, StatementUpdate, StatementOut,
     CreditCardItemCreate, CreditCardItemUpdate, CreditCardItemOut,
     ForExpenseOut,
 )
@@ -269,6 +269,30 @@ async def create_statement(
         status="open",
     )
     db.add(stmt)
+    await db.commit()
+    result = await db.scalar(_statement_query(stmt.id))
+    return StatementOut.from_orm_with_total(result)
+
+
+@router.patch("/statements/{stmt_id}", response_model=StatementOut)
+async def update_statement(
+    stmt_id: int,
+    body: StatementUpdate,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await _get_db_user(firebase_user, db)
+    stmt = await db.scalar(
+        select(CreditCardStatement).where(CreditCardStatement.id == stmt_id)
+    )
+    if not stmt or stmt.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404, detail="Resumen no encontrado")
+
+    if body.closing_date is not None:
+        stmt.closing_date = body.closing_date
+    if body.due_date is not None:
+        stmt.due_date = body.due_date
+
     await db.commit()
     result = await db.scalar(_statement_query(stmt.id))
     return StatementOut.from_orm_with_total(result)

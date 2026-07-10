@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
-import { formatARS } from "@/lib/utils";
-import { Plus, Trash2, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { formatARS, formatDate } from "@/lib/utils";
+import { Plus, Trash2, Pencil, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const INPUT = "mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900";
@@ -124,6 +124,62 @@ function NewStatementModal({ onSave, onClose }: {
   );
 }
 
+function EditStatementModal({ statement, onSave, onClose }: {
+  statement: Statement;
+  onSave: (closingDate: string, dueDate: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [closingDate, setClosingDate] = useState(statement.closing_date || "");
+  const [dueDate, setDueDate] = useState(statement.due_date || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSaving(true);
+    try {
+      await onSave(closingDate, dueDate);
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { detail?: string } } };
+      setError(apiErr?.response?.data?.detail || "Error al actualizar el resumen");
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">
+            Editar {MONTH_NAMES[statement.month - 1]} {statement.year}
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X className="w-5 h-5" /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-600">Fecha de cierre</label>
+              <input type="date" className={INPUT} value={closingDate} onChange={(e) => setClosingDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Fecha de vencimiento</label>
+              <input type="date" className={INPUT} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+          </div>
+          {error && <p className="text-xs text-red-500">{error}</p>}
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="border px-4 py-2 rounded-lg text-sm">Cancelar</button>
+            <button type="submit" disabled={saving} className="bg-primary text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50">
+              {saving ? "Guardando..." : "Guardar"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function CardDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -132,6 +188,7 @@ export default function CardDetailPage() {
   const [statements, setStatements] = useState<Statement[]>([]);
   const [showNewStmt, setShowNewStmt] = useState(false);
   const [deleteStmt, setDeleteStmt] = useState<Statement | null>(null);
+  const [editStmt, setEditStmt] = useState<Statement | null>(null);
 
   const load = async () => {
     const [cardRes, stmtRes] = await Promise.all([
@@ -159,6 +216,16 @@ export default function CardDetailPage() {
     if (!deleteStmt) return;
     await api.delete(`/credit-cards/statements/${deleteStmt.id}?keep_expenses=${mode === "keep"}`);
     setDeleteStmt(null);
+    await load();
+  };
+
+  const handleUpdateStatement = async (closingDate: string, dueDate: string) => {
+    if (!editStmt) return;
+    await api.patch(`/credit-cards/statements/${editStmt.id}`, {
+      closing_date: closingDate || null,
+      due_date: dueDate || null,
+    });
+    setEditStmt(null);
     await load();
   };
 
@@ -203,10 +270,17 @@ export default function CardDetailPage() {
                       stmt.status === "closed" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
                     }`}>{stmt.status === "closed" ? "Cerrado" : "Abierto"}</span>
                   </div>
-                  <p className="text-xs text-gray-500">{stmt.items.length} ítems</p>
+                  <p className="text-xs text-gray-500">
+                    {stmt.items.length} ítems
+                    {stmt.closing_date && <> &middot; Cierre {formatDate(stmt.closing_date)}</>}
+                    {stmt.due_date && <> &middot; Vence {formatDate(stmt.due_date)}</>}
+                  </p>
                 </div>
                 <span className="text-sm font-bold text-red-500 shrink-0">{formatARS(stmt.total)}</span>
                 <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
+              </button>
+              <button onClick={() => setEditStmt(stmt)} className="p-2 text-gray-400 hover:text-primary shrink-0">
+                <Pencil className="w-4 h-4" />
               </button>
               <button onClick={() => setDeleteStmt(stmt)} className="p-2 text-gray-400 hover:text-red-500 shrink-0">
                 <Trash2 className="w-4 h-4" />
@@ -218,6 +292,7 @@ export default function CardDetailPage() {
 
       {showNewStmt && <NewStatementModal onSave={handleCreateStatement} onClose={() => setShowNewStmt(false)} />}
       {deleteStmt && <DeleteStatementModal statement={deleteStmt} onConfirm={handleDeleteStatement} onClose={() => setDeleteStmt(null)} />}
+      {editStmt && <EditStatementModal statement={editStmt} onSave={handleUpdateStatement} onClose={() => setEditStmt(null)} />}
     </div>
   );
 }
