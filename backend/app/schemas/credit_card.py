@@ -32,6 +32,11 @@ class StatementCreate(BaseModel):
     due_date: date | None = None
 
 
+class StatementUpdate(BaseModel):
+    closing_date: date | None = None
+    due_date: date | None = None
+
+
 class CreditCardItemCreate(BaseModel):
     description: str
     category_id: int | None = None
