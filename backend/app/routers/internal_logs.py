@@ -337,6 +337,41 @@ async def whatsapp_check(
     return results
 
 
+@router.post("/resend-shared-invite/{split_id}")
+async def resend_shared_invite(
+    split_id: int,
+    _: None = Depends(_require_internal_key),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Re-send the original WhatsApp invite for a split whose invite_token was
+    already generated but never got delivered (e.g. Evolution API was down).
+    Reuses the existing token instead of minting a new one, so a link the
+    recipient may have already seen keeps working."""
+    from app.models.shared_expense import SharedExpense, SharedExpenseSplit
+    from app.models.user import User
+    from app.routers.shared_expenses import _send_whatsapp_invite
+
+    split = await db.scalar(
+        select(SharedExpenseSplit)
+        .where(SharedExpenseSplit.id == split_id)
+        .options(selectinload(SharedExpenseSplit.shared_expense))
+    )
+    if not split:
+        raise HTTPException(status_code=404, detail="Split not found")
+    if not split.invite_token or split.user_id is not None:
+        raise HTTPException(status_code=400, detail="This split has no pending invite to resend")
+    if not split.invite_email:
+        raise HTTPException(status_code=400, detail="No phone stored on this split")
+
+    shared = split.shared_expense
+    creator = await db.get(User, shared.created_by_user_id)
+    creator_name = (creator.display_name or creator.email) if creator else "Alguien"
+
+    await _send_whatsapp_invite(split.invite_email, creator_name, shared.title, shared.total_amount, split.invite_token)
+
+    return {"status": "sent", "split_id": split_id, "phone": split.invite_email}
+
+
 @router.post("/logs/frontend-error")
 async def log_frontend_error(
     payload: dict[str, Any],
