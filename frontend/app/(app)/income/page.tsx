@@ -4,6 +4,22 @@ import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import { formatARS, formatDate, parseAmount, getErrorMessage } from "@/lib/utils";
 import { Plus, Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle, ChevronRight } from "lucide-react";
+import ProductTour from "@/components/ProductTour";
+import type { Step } from "react-joyride";
+
+const INCOME_TOUR_STEPS: Step[] = [
+  {
+    target: "[data-tour='income-add']",
+    content: "Con este botón registrás un nuevo ingreso: sueldo u otra entrada, con bruto/deducciones/neto.",
+    placement: "bottom",
+    skipBeacon: true,
+  },
+  {
+    target: "[data-tour='income-import']",
+    content: "Si tenés varios ingresos para cargar, podés importarlos de una desde un Excel o CSV.",
+    placement: "bottom",
+  },
+];
 
 interface IncomeSource { id: number; name: string; income_type: string; }
 interface IncomeEntry {
@@ -442,6 +458,7 @@ export default function IncomePage() {
 
   return (
     <div className="max-w-3xl space-y-4 md:space-y-6">
+      <ProductTour tourId="income-intro" steps={INCOME_TOUR_STEPS} />
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xl md:text-2xl font-bold text-gray-900">Ingresos</h2>
@@ -450,12 +467,12 @@ export default function IncomePage() {
             className="text-sm border px-2 md:px-3 py-1.5 rounded-lg hover:bg-gray-50">
             + Fuente
           </button>
-          <button onClick={() => setShowImport(true)}
+          <button onClick={() => setShowImport(true)} data-tour="income-import"
             className="flex items-center gap-1 text-sm border px-2 md:px-3 py-1.5 rounded-lg hover:bg-gray-50">
             <Upload className="w-3.5 h-3.5 shrink-0" />
             <span className="hidden sm:inline">Importar</span>
           </button>
-          <button onClick={() => { setEditId(null); setForm(EMPTY_FORM); netoManual.current = false; setShowForm(true); }}
+          <button onClick={() => { setEditId(null); setForm(EMPTY_FORM); netoManual.current = false; setShowForm(true); }} data-tour="income-add"
             className="flex items-center gap-1 bg-primary text-white text-sm px-3 py-1.5 rounded-lg hover:opacity-90">
             <Plus className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Registrar</span>

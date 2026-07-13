@@ -11,12 +11,12 @@ import {
 } from "lucide-react";
 
 const nav = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/income", label: "Ingresos", icon: TrendingUp },
-  { href: "/expenses", label: "Egresos", icon: TrendingDown },
-  { href: "/shared", label: "Gastos compartidos", icon: Users2 },
-  { href: "/tarjetas", label: "Tarjetas", icon: CreditCard },
-  { href: "/calendario", label: "Calendario de pagos", icon: CalendarDays },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, tour: "nav-dashboard" },
+  { href: "/income", label: "Ingresos", icon: TrendingUp, tour: "nav-income" },
+  { href: "/expenses", label: "Egresos", icon: TrendingDown, tour: "nav-expenses" },
+  { href: "/shared", label: "Gastos compartidos", icon: Users2, tour: "nav-shared" },
+  { href: "/tarjetas", label: "Tarjetas", icon: CreditCard, tour: "nav-tarjetas" },
+  { href: "/calendario", label: "Calendario de pagos", icon: CalendarDays, tour: "nav-calendario" },
   { href: "/mortgage", label: "Hipoteca", icon: Home },
   { href: "/macro", label: "Variables macro", icon: BarChart3 },
   { href: "/settings", label: "Configuración", icon: Settings },
@@ -36,11 +36,12 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {nav.map(({ href, label, icon: Icon }) => (
+        {nav.map(({ href, label, icon: Icon, tour }) => (
           <Link
             key={href}
             href={href}
             onClick={onNavigate}
+            data-tour={tour}
             className={cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
               pathname === href

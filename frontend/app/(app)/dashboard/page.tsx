@@ -11,6 +11,42 @@ import {
 import api from "@/lib/api";
 import { formatARS, formatUSD, formatPct } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Wallet, Percent, DollarSign } from "lucide-react";
+import ProductTour from "@/components/ProductTour";
+import type { Step } from "react-joyride";
+
+const DASHBOARD_TOUR_STEPS: Step[] = [
+  {
+    target: "[data-tour='nav-dashboard']",
+    content: "Este es tu Dashboard: un resumen mensual de ingresos, egresos y balance.",
+    placement: "right",
+    skipBeacon: true,
+  },
+  {
+    target: "[data-tour='nav-income']",
+    content: "En Ingresos registrás tus sueldos u otras entradas de dinero, con bruto/deducciones/neto.",
+    placement: "right",
+  },
+  {
+    target: "[data-tour='nav-expenses']",
+    content: "En Egresos cargás tus gastos del mes, organizados por categoría.",
+    placement: "right",
+  },
+  {
+    target: "[data-tour='nav-shared']",
+    content: "Gastos compartidos te permite dividir un gasto con otras personas, del hogar o invitadas por WhatsApp/email.",
+    placement: "right",
+  },
+  {
+    target: "[data-tour='nav-tarjetas']",
+    content: "En Tarjetas administrás tus resúmenes de tarjeta de crédito, incluyendo compras en cuotas.",
+    placement: "right",
+  },
+  {
+    target: "[data-tour='nav-calendario']",
+    content: "El Calendario de pagos te muestra los vencimientos de tarjetas y tus recordatorios de pago.",
+    placement: "right",
+  },
+];
 
 interface MonthSummary {
   period: string;
@@ -213,6 +249,7 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-4xl space-y-4 md:space-y-6">
+      <ProductTour tourId="dashboard-intro" steps={DASHBOARD_TOUR_STEPS} />
 
       <div className="flex items-center justify-end gap-2">
         <button onClick={prev} className="p-2 rounded-lg border hover:bg-gray-50 text-gray-600 text-sm font-bold leading-none">&#8249;</button>

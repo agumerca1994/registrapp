@@ -5,6 +5,17 @@ import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { formatARS, formatDate, formatUSD, parseAmount } from "@/lib/utils";
 import { Plus, Trash2, Pencil, X, ChevronRight, CreditCard, ExternalLink } from "lucide-react";
+import ProductTour from "@/components/ProductTour";
+import type { Step } from "react-joyride";
+
+const EXPENSES_TOUR_STEPS: Step[] = [
+  {
+    target: "[data-tour='expenses-add']",
+    content: "Con este botón registrás un nuevo egreso, eligiendo una categoría.",
+    placement: "bottom",
+    skipBeacon: true,
+  },
+];
 
 interface Category { id: number; name: string; color?: string; is_fixed: boolean; }
 interface ExpenseEntry {
@@ -199,6 +210,7 @@ export default function ExpensesPage() {
 
   return (
     <div className="max-w-3xl space-y-4 md:space-y-6">
+      <ProductTour tourId="expenses-intro" steps={EXPENSES_TOUR_STEPS} />
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xl md:text-2xl font-bold text-gray-900">Egresos</h2>
         <div className="flex gap-1 md:gap-2 shrink-0">
@@ -206,7 +218,7 @@ export default function ExpensesPage() {
             className="text-sm border px-2 md:px-3 py-1.5 rounded-lg hover:bg-gray-50">
             + Categoria
           </button>
-          <button onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true); }}
+          <button onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true); }} data-tour="expenses-add"
             className="flex items-center gap-1 bg-primary text-white text-sm px-3 py-1.5 rounded-lg hover:opacity-90">
             <Plus className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Registrar</span>
