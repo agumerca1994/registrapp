@@ -61,6 +61,7 @@ interface Split {
 
 interface SharedExpense {
   id: number;
+  tenant_id: number;
   title: string;
   total_amount: number;
   category_id: number;
@@ -704,7 +705,7 @@ export default function SharedExpensesPage() {
               const myMemberSplit = exp.splits.find(s => s.user_id === currentUserId);
               const pendingCount = exp.splits.filter(s => s.user_id !== null && s.status === "pending" && !s.invite_token).length;
               const isCreator = exp.created_by_user_id === currentUserId;
-              const isCrossTenant = !isCreator && exp.splits.some(s => s.user_id === currentUserId);
+              const isCrossTenant = exp.tenant_id !== appUser?.tenant_id;
               return (
                 <div key={exp.id} className="bg-white rounded-xl border p-4 space-y-3">
                   <div className="flex items-start justify-between gap-3">
