@@ -701,7 +701,7 @@ export default function SharedExpensesPage() {
 
             return displayGroups.map(({ root: exp, cuotas }) => {
               const isGrouped = cuotas.length > 1;
-              const groupTotal = cuotas.reduce((s, c) => s + c.total_amount, 0);
+              const groupTotal = cuotas.reduce((s, c) => s + Number(c.total_amount), 0);
               const myMemberSplit = exp.splits.find(s => s.user_id === currentUserId);
               const pendingCount = exp.splits.filter(s => s.user_id !== null && s.status === "pending" && !s.invite_token).length;
               const isCreator = exp.created_by_user_id === currentUserId;

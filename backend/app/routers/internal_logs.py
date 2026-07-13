@@ -373,6 +373,46 @@ async def resend_shared_invite(
     return {"status": "sent", "split_id": split_id, "phone": split.invite_email}
 
 
+@router.get("/credit-card-item-raw/{shared_expense_id}")
+async def credit_card_item_raw(
+    shared_expense_id: int,
+    _: None = Depends(_require_internal_key),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Diagnostic: raw CreditCardItem fields behind a SharedExpense, to tell apart
+    a genuine per-cuota amount from a data-entry mistake (amount vs purchase_total)."""
+    from app.models.credit_card import CreditCardItem
+    from app.models.shared_expense import SharedExpense
+
+    shared = await db.get(SharedExpense, shared_expense_id)
+    if not shared or not shared.credit_card_item_id:
+        raise HTTPException(status_code=404, detail="Not linked to a credit card item")
+
+    item = await db.get(CreditCardItem, shared.credit_card_item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    root_id = item.installment_group_id or item.id
+    siblings = (await db.scalars(
+        select(CreditCardItem).where(
+            (CreditCardItem.id == root_id) | (CreditCardItem.installment_group_id == root_id)
+        ).order_by(CreditCardItem.installment_number)
+    )).all()
+
+    return {
+        "item_id": item.id,
+        "description": item.description,
+        "amount_per_cuota": float(item.amount),
+        "installment_count": item.installment_count,
+        "installment_number": item.installment_number,
+        "purchase_total": float(item.purchase_total) if item.purchase_total is not None else None,
+        "group_items": [
+            {"id": s.id, "installment_number": s.installment_number, "amount": float(s.amount), "item_date": s.item_date.isoformat()}
+            for s in siblings
+        ],
+    }
+
+
 @router.post("/logs/frontend-error")
 async def log_frontend_error(
     payload: dict[str, Any],
