@@ -56,7 +56,7 @@ function StatCard({ label, value, icon: Icon, positive }: {
       </div>
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-sm md:text-lg font-bold text-gray-900 truncate">{value}</p>
+        <p className="text-sm md:text-lg font-bold text-gray-900 break-words">{value}</p>
       </div>
     </div>
   );
