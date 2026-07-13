@@ -90,10 +90,16 @@ def _parse_amount(raw: str) -> Decimal | None:
 async def whatsapp_webhook(
     payload: dict,
     x_webhook_secret: str = Header(default=""),
+    secret: str = "",
     db: AsyncSession = Depends(get_db),
 ):
-    if settings.WHATSAPP_WEBHOOK_SECRET and x_webhook_secret != settings.WHATSAPP_WEBHOOK_SECRET:
+    # Accept the shared secret via header (x-webhook-secret) or query string
+    # (?secret=) — some Evolution API panels don't support custom webhook
+    # headers, so the query param is the fallback that always works.
+    if settings.WHATSAPP_WEBHOOK_SECRET and settings.WHATSAPP_WEBHOOK_SECRET not in (x_webhook_secret, secret):
         raise HTTPException(status_code=403, detail="Forbidden")
+    if not settings.WHATSAPP_WEBHOOK_SECRET:
+        logger.warning("WHATSAPP_WEBHOOK_SECRET is not set — /webhook/whatsapp is accepting unauthenticated requests")
 
     try:
         data = payload.get("data", {})
