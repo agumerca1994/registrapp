@@ -5,6 +5,23 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// Safely extract a display string from an axios error's response body.
+// FastAPI's `detail` is a plain string for manual HTTPExceptions, but an
+// array of {type, loc, msg, input} objects for automatic 422 validation
+// errors — rendering that array directly as a React child crashes the page
+// ("Objects are not valid as a React child"). Always route error display
+// through this instead of reading `err.response?.data?.detail` directly.
+export function getErrorMessage(err: unknown, fallback = "Ocurrió un error"): string {
+  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    return detail
+      .map((item) => (item && typeof item === "object" && "msg" in item ? String((item as { msg: unknown }).msg) : String(item)))
+      .join(" ");
+  }
+  return fallback;
+}
+
 export function formatARS(amount: number | string): string {
   return new Intl.NumberFormat("es-AR", {
     style: "currency",

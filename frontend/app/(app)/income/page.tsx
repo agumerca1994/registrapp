@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
-import { formatARS, formatDate, parseAmount } from "@/lib/utils";
+import { formatARS, formatDate, parseAmount, getErrorMessage } from "@/lib/utils";
 import { Plus, Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle, ChevronRight } from "lucide-react";
 
 interface IncomeSource { id: number; name: string; income_type: string; }
@@ -151,8 +151,7 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
       setResult(data);
       setStep("done");
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(msg || "Error al importar");
+      setError(getErrorMessage(e, "Error al importar"));
       setStep("map");
     }
   };

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
-import { formatARS, formatDate } from "@/lib/utils";
+import { formatARS, formatDate, getErrorMessage } from "@/lib/utils";
 import { Plus, Trash2, Pencil, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -77,8 +77,7 @@ function NewStatementModal({ onSave, onClose }: {
     try {
       await onSave(parseInt(year), parseInt(month), closingDate, dueDate);
     } catch (err: unknown) {
-      const apiErr = err as { response?: { data?: { detail?: string } } };
-      setError(apiErr?.response?.data?.detail || "Error al crear el resumen");
+      setError(getErrorMessage(err, "Error al crear el resumen"));
     }
     setSaving(false);
   };
@@ -141,8 +140,7 @@ function EditStatementModal({ statement, onSave, onClose }: {
     try {
       await onSave(closingDate, dueDate);
     } catch (err: unknown) {
-      const apiErr = err as { response?: { data?: { detail?: string } } };
-      setError(apiErr?.response?.data?.detail || "Error al actualizar el resumen");
+      setError(getErrorMessage(err, "Error al actualizar el resumen"));
     }
     setSaving(false);
   };

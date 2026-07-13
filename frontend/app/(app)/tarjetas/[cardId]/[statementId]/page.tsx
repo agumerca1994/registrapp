@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
-import { formatARS, formatDate, formatUSD, parseAmount, normalizePhoneNumber } from "@/lib/utils";
+import { formatARS, formatDate, formatUSD, parseAmount, normalizePhoneNumber, getErrorMessage } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Plus, Trash2, ChevronLeft, Pencil, X, CheckCircle, ExternalLink, Users2, Phone } from "lucide-react";
 
@@ -164,8 +164,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
       await api.post("/credit-cards/items/" + item.id + "/share", { splits, split_type: splitType });
       onDone();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(msg || "Error al compartir");
+      setError(getErrorMessage(err, "Error al compartir"));
     }
     setSharing(false);
   };
