@@ -6,7 +6,7 @@ import { es } from "date-fns/locale";
 import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone, Layers } from "lucide-react";
 
 import api from "@/lib/api";
-import { formatARS, normalizePhoneNumber } from "@/lib/utils";
+import { formatARS, normalizePhoneNumber, getErrorMessage } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
 const COUNTRIES = [
@@ -328,8 +328,7 @@ export default function SharedExpensesPage() {
       });
       resetForm(); setShowForm(false); await load();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setFormError(msg || "Error al crear el gasto compartido");
+      setFormError(getErrorMessage(err, "Error al crear el gasto compartido"));
     } finally { setSaving(false); }
   }
 

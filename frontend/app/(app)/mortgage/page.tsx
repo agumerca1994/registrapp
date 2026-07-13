@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "@/lib/api";
-import { formatARS, formatDate } from "@/lib/utils";
+import { formatARS, formatDate, getErrorMessage } from "@/lib/utils";
 import { Settings2, X, Loader2, Home, Trash2, CalendarDays } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -162,7 +162,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
       onSaved();
       onClose();
     } catch (e: any) {
-      setError(e.response?.data?.detail ?? "Error al guardar");
+      setError(getErrorMessage(e, "Error al guardar"));
     } finally {
       setSaving(false);
     }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
+import { getErrorMessage } from "@/lib/utils";
 import { Copy, Check, MessageCircle, CheckCircle2, Unlink, Mail, UserPlus, Trash2 } from "lucide-react";
 
 interface Member {
@@ -143,7 +144,7 @@ function WhatsAppSection() {
       await api.post("/auth/me/link-whatsapp", { phone: fullPhone });
       setPhase("pending");
     } catch (e: any) {
-      setError(e.response?.data?.detail ?? "Error al enviar el código");
+      setError(getErrorMessage(e, "Error al enviar el código"));
     } finally {
       setLoading(false);
     }
@@ -157,7 +158,7 @@ function WhatsAppSection() {
       await refreshUser();
       setPhase("idle"); setLocalPhone(""); setCode("");
     } catch (e: any) {
-      setError(e.response?.data?.detail ?? "Código incorrecto o expirado");
+      setError(getErrorMessage(e, "Código incorrecto o expirado"));
     } finally {
       setLoading(false);
     }
@@ -169,7 +170,7 @@ function WhatsAppSection() {
       await api.delete("/auth/me/whatsapp");
       await refreshUser();
     } catch (e: any) {
-      setError(e.response?.data?.detail ?? "Error al desvincular");
+      setError(getErrorMessage(e, "Error al desvincular"));
     } finally {
       setLoading(false);
     }

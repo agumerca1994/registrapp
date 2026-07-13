@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { CheckCircle, Users, AlertCircle, Loader2 } from "lucide-react";
 import api from "@/lib/api";
-import { formatARS } from "@/lib/utils";
+import { formatARS, getErrorMessage } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface InviteInfo {
@@ -49,8 +49,7 @@ export default function InvitePage() {
       setClaimed(true);
       setTimeout(() => router.push("/shared"), 2000);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setClaimError(msg || "Error al reclamar la invitacion");
+      setClaimError(getErrorMessage(err, "Error al reclamar la invitacion"));
     } finally {
       setClaiming(false);
     }

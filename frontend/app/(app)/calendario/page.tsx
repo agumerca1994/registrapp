@@ -9,7 +9,7 @@ import { es } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Plus, X, Trash2, Bell, CreditCard as CardIcon } from "lucide-react";
 
 import api from "@/lib/api";
-import { formatARS, cn } from "@/lib/utils";
+import { formatARS, cn, getErrorMessage } from "@/lib/utils";
 
 const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const INPUT = "mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900";
@@ -62,8 +62,7 @@ function AddReminderModal({
     try {
       await onSave(title.trim(), dateStr);
     } catch (err: unknown) {
-      const apiErr = err as { response?: { data?: { detail?: string } } };
-      setError(apiErr?.response?.data?.detail || "Error al crear el recordatorio");
+      setError(getErrorMessage(err, "Error al crear el recordatorio"));
     }
     setSaving(false);
   };

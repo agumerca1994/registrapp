@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { getErrorMessage } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function OnboardingPage() {
@@ -34,8 +35,7 @@ export default function OnboardingPage() {
       await refreshUser();
       router.replace("/dashboard");
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(msg || "Ocurrió un error");
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
