@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, DateTime, ForeignKey, func, Enum
+from sqlalchemy import Boolean, String, DateTime, ForeignKey, func, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum
 from app.core.database import Base
@@ -25,6 +25,7 @@ class User(Base):
     whatsapp_phone: Mapped[str | None] = mapped_column(String(20), nullable=True, unique=True, index=True)
     whatsapp_verify_code: Mapped[str | None] = mapped_column(String(6), nullable=True)
     whatsapp_verify_expires: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    whatsapp_gate_pending: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false", default=False)
 
     tenant: Mapped["Tenant"] = relationship(back_populates="users")
 

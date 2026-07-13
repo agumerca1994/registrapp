@@ -1,7 +1,7 @@
 import logging
 import re
 import secrets
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.firebase import get_current_user
 from app.models.contact import TenantContact
+from app.models.credit_card import CreditCardItem
 from app.models.expense import ExpenseCategory, ExpenseEntry
 from app.models.shared_expense import SharedExpense, SharedExpenseSplit
 from app.models.user import User
@@ -124,6 +125,22 @@ async def _find_group_shared_ids(shared: SharedExpense, exclude_id: int, db: Asy
         select(SharedExpense.id).where(
             or_(SharedExpense.id == root_id, SharedExpense.installment_group_id == root_id),
             SharedExpense.id != exclude_id,
+        )
+    )
+    return list(rows.all())
+
+
+async def _find_future_group_shared_ids(shared: SharedExpense, db: AsyncSession) -> list[int]:
+    """Root + child cuotas in the same installment group as `shared` whose
+    expense_date >= today. Includes `shared.id` itself if it qualifies. Keep
+    separate from `_find_group_shared_ids` (used by accept/reject/claim, which
+    must stay unfiltered by date and excludes the anchor).
+    """
+    root_id = shared.installment_group_id or shared.id
+    rows = await db.scalars(
+        select(SharedExpense.id).where(
+            or_(SharedExpense.id == root_id, SharedExpense.installment_group_id == root_id),
+            SharedExpense.expense_date >= date.today(),
         )
     )
     return list(rows.all())
@@ -384,13 +401,53 @@ async def delete_shared_expense(
     if shared.created_by_user_id != user.id:
         raise HTTPException(status_code=403, detail="Solo el creador puede eliminar este gasto")
 
-    entry_ids = [s.expense_entry_id for s in shared.splits if s.expense_entry_id is not None]
-    for eid in entry_ids:
-        entry = await db.get(ExpenseEntry, eid)
-        if entry:
-            await db.delete(entry)
+    sibling_ids = await _find_group_shared_ids(shared, shared.id, db)
 
-    await db.delete(shared)
+    if not sibling_ids:
+        # Not part of an installment (cuota) group — original single-delete behavior.
+        entry_ids = [s.expense_entry_id for s in shared.splits if s.expense_entry_id is not None]
+        for eid in entry_ids:
+            entry = await db.get(ExpenseEntry, eid)
+            if entry:
+                await db.delete(entry)
+
+        await db.delete(shared)
+        await db.commit()
+        return
+
+    future_ids = await _find_future_group_shared_ids(shared, db)
+    if not future_ids:
+        raise HTTPException(status_code=400, detail="No hay cuotas futuras para eliminar")
+
+    deleted_entry_ids: set[int] = set()
+    for sid in future_ids:
+        target = await db.scalar(
+            select(SharedExpense)
+            .where(SharedExpense.id == sid)
+            .options(selectinload(SharedExpense.splits))
+        )
+        if not target:
+            continue
+
+        for split in target.splits:
+            if split.expense_entry_id is not None and split.expense_entry_id not in deleted_entry_ids:
+                entry = await db.get(ExpenseEntry, split.expense_entry_id)
+                if entry:
+                    await db.delete(entry)
+                deleted_entry_ids.add(split.expense_entry_id)
+
+        if target.credit_card_item_id is not None:
+            cci = await db.get(CreditCardItem, target.credit_card_item_id)
+            if cci:
+                if cci.expense_entry_id is not None and cci.expense_entry_id not in deleted_entry_ids:
+                    entry = await db.get(ExpenseEntry, cci.expense_entry_id)
+                    if entry:
+                        await db.delete(entry)
+                    deleted_entry_ids.add(cci.expense_entry_id)
+                await db.delete(cci)
+
+        await db.delete(target)
+
     await db.commit()
 
 

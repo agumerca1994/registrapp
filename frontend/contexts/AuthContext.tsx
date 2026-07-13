@@ -23,6 +23,7 @@ interface AppUser {
   email: string;
   display_name: string | null;
   whatsapp_phone: string | null;
+  whatsapp_gate_pending: boolean;
   role: string;
 }
 

@@ -6,6 +6,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/utils";
 import { Copy, Check, MessageCircle, CheckCircle2, Unlink, Mail, UserPlus, Trash2 } from "lucide-react";
+import { COUNTRIES } from "@/lib/countries";
+import WhatsAppVerifyForm from "@/components/WhatsAppVerifyForm";
+import { resetAllTours } from "@/components/ProductTour";
 
 interface Member {
   id: number;
@@ -16,14 +19,7 @@ interface Member {
 }
 
 const ROLE_LABELS: Record<string, string> = { admin: "Admin", member: "Miembro" };
-
-const COUNTRIES = [
-  { flag: "🇦🇷", prefix: "54", placeholder: "351 234 5678" },
-  { flag: "🇺🇾", prefix: "598", placeholder: "9 234 5678" },
-  { flag: "🇨🇱", prefix: "56", placeholder: "9 1234 5678" },
-  { flag: "🇧🇷", prefix: "55", placeholder: "11 98765 4321" },
-  { flag: "🇵🇾", prefix: "595", placeholder: "981 234 567" },
-];
+const APP_TOUR_IDS = ["dashboard-intro", "income-intro", "expenses-intro"];
 
 function HouseholdInviteSection() {
   const { appUser } = useAuth();
@@ -125,44 +121,10 @@ function HouseholdInviteSection() {
 
 function WhatsAppSection() {
   const { appUser, refreshUser } = useAuth();
-  const [phase, setPhase] = useState<"idle" | "pending">("idle");
-  const [prefix, setPrefix] = useState("54");
-  const [localPhone, setLocalPhone] = useState("");
-  const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const isLinked = !!appUser?.whatsapp_phone;
-  const digits = localPhone.replace(/\D/g, "");
-  const fullPhone = prefix === "54" ? prefix + "9" + digits : prefix + digits;
-  const country = COUNTRIES.find(c => c.prefix === prefix) ?? COUNTRIES[0];
-
-  const sendCode = async () => {
-    if (!localPhone.trim()) return;
-    setLoading(true); setError("");
-    try {
-      await api.post("/auth/me/link-whatsapp", { phone: fullPhone });
-      setPhase("pending");
-    } catch (e: any) {
-      setError(getErrorMessage(e, "Error al enviar el código"));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const verifyCode = async () => {
-    if (!code.trim()) return;
-    setLoading(true); setError("");
-    try {
-      await api.post("/auth/me/verify-whatsapp", { phone: fullPhone, code: code.trim() });
-      await refreshUser();
-      setPhase("idle"); setLocalPhone(""); setCode("");
-    } catch (e: any) {
-      setError(getErrorMessage(e, "Código incorrecto o expirado"));
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const unlink = async () => {
     setLoading(true); setError("");
@@ -200,72 +162,10 @@ function WhatsAppSection() {
             <Unlink className="w-3.5 h-3.5" />
             Desvincular
           </button>
-        </div>
-      ) : phase === "idle" ? (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Vinculá tu número para registrar egresos enviando un mensaje de WhatsApp al bot.
-          </p>
-          <div className="flex gap-2">
-            <select
-              value={prefix}
-              onChange={e => { setPrefix(e.target.value); setLocalPhone(""); }}
-              className="border rounded-lg px-2 py-2 text-sm bg-white shrink-0"
-            >
-              {COUNTRIES.map(c => (
-                <option key={c.prefix} value={c.prefix}>
-                  {c.flag} +{c.prefix}
-                </option>
-              ))}
-            </select>
-            <input
-              type="tel"
-              value={localPhone}
-              onChange={e => setLocalPhone(e.target.value.replace(/[^\d\s]/g, ""))}
-              placeholder={country.placeholder}
-              inputMode="numeric"
-              className="flex-1 border rounded-lg px-3 py-2 text-sm min-w-0"
-            />
-            <button
-              onClick={sendCode}
-              disabled={loading || !localPhone.trim()}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50 shrink-0"
-            >
-              {loading ? "Enviando..." : "Enviar código"}
-            </button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Ingresá el número sin el código de país. Para Argentina sin el 0 inicial y sin el 15: <span className="font-mono">351 2345678</span>
-          </p>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
       ) : (
-        <div className="space-y-3">
-          <p className="text-sm text-gray-700">
-            Te enviamos un código de 6 dígitos al <span className="font-medium">+{fullPhone}</span> por WhatsApp.
-          </p>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={code}
-              onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="123456"
-              maxLength={6}
-              className="w-32 border rounded-lg px-3 py-2 text-sm text-center tracking-widest font-mono"
-            />
-            <button
-              onClick={verifyCode}
-              disabled={loading || code.length < 6}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50"
-            >
-              {loading ? "Verificando..." : "Verificar"}
-            </button>
-          </div>
-          <button onClick={() => { setPhase("idle"); setCode(""); setError(""); }} className="text-xs text-muted-foreground hover:underline">
-            ← Cambiar número
-          </button>
-          {error && <p className="text-xs text-red-600">{error}</p>}
-        </div>
+        <WhatsAppVerifyForm onVerified={refreshUser} />
       )}
     </div>
   );
@@ -396,6 +296,17 @@ export default function SettingsPage() {
       </div>
 
       <WhatsAppSection />
+
+      <div className="bg-white rounded-xl border p-6 space-y-2">
+        <h3 className="font-semibold text-gray-900">Guía de la app</h3>
+        <p className="text-sm text-muted-foreground">Volvé a ver la guía introductoria de cada sección.</p>
+        <button
+          onClick={() => { resetAllTours(APP_TOUR_IDS); window.location.href = "/dashboard"; }}
+          className="text-sm border px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700"
+        >
+          Reiniciar guía
+        </button>
+      </div>
 
       <div className="bg-white rounded-xl border p-6 space-y-2">
         <h3 className="font-semibold text-gray-900">Tu cuenta</h3>
