@@ -115,6 +115,52 @@ async def _get_or_create_shared_category(tenant_id: int, db: AsyncSession) -> in
     return cat.id
 
 
+async def _find_group_shared_ids(shared: SharedExpense, exclude_id: int, db: AsyncSession) -> list[int]:
+    """All SharedExpense ids in the same installment-cuota group as `shared`
+    (root + every child cuota), excluding `exclude_id` (the one already handled).
+    """
+    root_id = shared.installment_group_id or shared.id
+    rows = await db.scalars(
+        select(SharedExpense.id).where(
+            or_(SharedExpense.id == root_id, SharedExpense.installment_group_id == root_id),
+            SharedExpense.id != exclude_id,
+        )
+    )
+    return list(rows.all())
+
+
+async def _accept_split(user: User, shared: SharedExpense, split: SharedExpenseSplit, db: AsyncSession) -> None:
+    """Accept a single split: create its ExpenseEntry, mark accepted, lock the
+    shared expense. Assumes the caller already validated the split is claimable
+    by `user` (pending + belongs to them, or an unclaimed invite by phone/email).
+    """
+    category_id = (
+        shared.category_id if shared.tenant_id == user.tenant_id
+        else await _get_or_create_shared_category(user.tenant_id, db)
+    )
+    entry = ExpenseEntry(
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        category_id=category_id,
+        amount=split.amount,
+        description=shared.title,
+        expense_date=shared.expense_date,
+        notes=f"Gasto compartido #{shared.id}",
+    )
+    db.add(entry)
+    await db.flush()
+
+    split.user_id = user.id
+    split.member_name = user.display_name or user.email
+    split.invite_token = None
+    split.invite_expires_at = None
+    split.expense_entry_id = entry.id
+    split.status = "accepted"
+
+    if user.id != shared.created_by_user_id and not shared.locked:
+        shared.locked = True
+
+
 async def _resolve_whatsapp_jid(client: httpx.AsyncClient, phone: str) -> str | None:
     """Ask Evolution's dedicated /chat/whatsappNumbers lookup for the canonical
     number before sending. sendText's own internal existence check is stricter
@@ -158,22 +204,35 @@ async def _send_wa_msg(phone: str, msg: str) -> None:
         logger.warning(f"WhatsApp send error to {phone}: {e}")
 
 
-async def _send_whatsapp_invite(phone: str, creator_name: str, title: str, amount, token: str) -> None:
+async def _send_whatsapp_invite(phone: str, creator_name: str, title: str, amount, token: str, cuotas_count: int = 1) -> None:
     link = f"{settings.FRONTEND_URL}/invite/{token}"
-    msg = (
-        f"Hola! {creator_name} te invito a compartir un gasto: '{title}' "
-        f"por ${amount}.\n\nEntra al link para verlo y aceptarlo:\n{link}"
-    )
+    if cuotas_count > 1:
+        msg = (
+            f"Hola! {creator_name} te invito a compartir un gasto: '{title}' "
+            f"en {cuotas_count} cuotas de ${amount} c/u.\n\nEntra al link para ver el detalle y aceptarlas:\n{link}"
+        )
+    else:
+        msg = (
+            f"Hola! {creator_name} te invito a compartir un gasto: '{title}' "
+            f"por ${amount}.\n\nEntra al link para verlo y aceptarlo:\n{link}"
+        )
     await _send_wa_msg(phone, msg)
 
 
-async def _send_whatsapp_member_notify(phone: str, creator_name: str, title: str, total_amount, split_amount) -> None:
+async def _send_whatsapp_member_notify(phone: str, creator_name: str, title: str, total_amount, split_amount, cuotas_count: int = 1) -> None:
     app_url = f"{settings.FRONTEND_URL}/shared"
-    msg = (
-        f"Hola! {creator_name} te compartio el gasto '{title}' "
-        f"por ${total_amount}.\nTu parte: ${split_amount}.\n"
-        f"Ingresa a la app para aceptarlo: {app_url}"
-    )
+    if cuotas_count > 1:
+        msg = (
+            f"Hola! {creator_name} te compartio el gasto '{title}' "
+            f"en {cuotas_count} cuotas de ${total_amount} c/u.\nTu parte por cuota: ${split_amount}.\n"
+            f"Ingresa a la app para aceptarlas: {app_url}"
+        )
+    else:
+        msg = (
+            f"Hola! {creator_name} te compartio el gasto '{title}' "
+            f"por ${total_amount}.\nTu parte: ${split_amount}.\n"
+            f"Ingresa a la app para aceptarlo: {app_url}"
+        )
     await _send_wa_msg(phone, msg)
 
 @router.get("", response_model=list[SharedExpenseOut])
@@ -358,28 +417,20 @@ async def accept_split(
     if not split:
         raise HTTPException(status_code=400, detail="No hay un split pendiente para este usuario")
 
-    if shared.tenant_id != user.tenant_id:
-        category_id = await _get_or_create_shared_category(user.tenant_id, db)
-    else:
-        category_id = shared.category_id
+    await _accept_split(user, shared, split, db)
 
-    entry = ExpenseEntry(
-        tenant_id=user.tenant_id,
-        user_id=user.id,
-        category_id=category_id,
-        amount=split.amount,
-        description=shared.title,
-        expense_date=shared.expense_date,
-        notes=f"Gasto compartido #{shared.id}",
-    )
-    db.add(entry)
-    await db.flush()
-
-    split.expense_entry_id = entry.id
-    split.status = "accepted"
-
-    if user.id != shared.created_by_user_id and not shared.locked:
-        shared.locked = True
+    # Installment purchases: accepting one cuota accepts the whole plan in one go.
+    for sib_id in await _find_group_shared_ids(shared, shared.id, db):
+        sib_shared = await db.scalar(
+            select(SharedExpense).where(SharedExpense.id == sib_id)
+            .options(selectinload(SharedExpense.splits))
+        )
+        sib_split = next(
+            (s for s in sib_shared.splits if s.user_id == user.id and s.status == "pending"),
+            None,
+        )
+        if sib_split:
+            await _accept_split(user, sib_shared, sib_split, db)
 
     await db.commit()
 
@@ -413,6 +464,18 @@ async def reject_split(
         raise HTTPException(status_code=400, detail="No hay un split pendiente para este usuario")
 
     split.status = "rejected"
+
+    for sib_id in await _find_group_shared_ids(shared, shared.id, db):
+        sib_split = await db.scalar(
+            select(SharedExpenseSplit).where(
+                SharedExpenseSplit.shared_expense_id == sib_id,
+                SharedExpenseSplit.user_id == user.id,
+                SharedExpenseSplit.status == "pending",
+            )
+        )
+        if sib_split:
+            sib_split.status = "rejected"
+
     await db.commit()
 
     result = await db.scalar(
@@ -443,6 +506,18 @@ async def get_invite_info(
     creator = await db.get(User, shared.created_by_user_id)
     creator_name = creator.display_name or creator.email if creator else "Desconocido"
 
+    group_ids = [shared.id] + await _find_group_shared_ids(shared, shared.id, db)
+    cuotas_count = len(group_ids)
+    cuotas_total_amount = None
+    if cuotas_count > 1:
+        amounts = await db.scalars(
+            select(SharedExpenseSplit.amount).where(
+                SharedExpenseSplit.shared_expense_id.in_(group_ids),
+                SharedExpenseSplit.invite_email == split.invite_email,
+            )
+        )
+        cuotas_total_amount = sum(amounts.all())
+
     return InviteInfoOut(
         shared_expense_id=shared.id,
         title=shared.title,
@@ -450,6 +525,8 @@ async def get_invite_info(
         split_amount=split.amount,
         expense_date=shared.expense_date,
         creator_name=creator_name,
+        cuotas_count=cuotas_count,
+        cuotas_total_amount=cuotas_total_amount,
     )
 
 
@@ -474,34 +551,27 @@ async def claim_invite(
     if split.invite_expires_at and split.invite_expires_at < datetime.utcnow():
         raise HTTPException(status_code=410, detail="La invitacion ha expirado")
 
-    split.user_id = user.id
-    split.member_name = user.display_name or user.email
-    split.invite_token = None
-    split.invite_expires_at = None
-
     # Auto-accept: create ExpenseEntry immediately (same as accept flow)
     shared = split.shared_expense
-    if shared.tenant_id != user.tenant_id:
-        category_id = await _get_or_create_shared_category(user.tenant_id, db)
-    else:
-        category_id = shared.category_id
+    invite_email = split.invite_email
+    await _accept_split(user, shared, split, db)
 
-    entry = ExpenseEntry(
-        tenant_id=user.tenant_id,
-        user_id=user.id,
-        category_id=category_id,
-        amount=split.amount,
-        description=shared.title,
-        expense_date=shared.expense_date,
-        notes=f"Gasto compartido #{shared.id}",
-    )
-    db.add(entry)
-    await db.flush()
-    split.expense_entry_id = entry.id
-    split.status = "accepted"
-
-    if user.id != shared.created_by_user_id and not shared.locked:
-        shared.locked = True
+    # Installment purchases: the invite link is only ever sent for the root
+    # cuota, so claiming it must sweep up every sibling cuota's matching
+    # (still-unclaimed) split in one shot — otherwise the guest would be stuck
+    # re-claiming a token that was never sent for each future month.
+    if invite_email:
+        for sib_id in await _find_group_shared_ids(shared, shared.id, db):
+            sib_shared = await db.scalar(
+                select(SharedExpense).where(SharedExpense.id == sib_id)
+                .options(selectinload(SharedExpense.splits))
+            )
+            sib_split = next(
+                (s for s in sib_shared.splits if s.invite_email == invite_email and s.user_id is None),
+                None,
+            )
+            if sib_split:
+                await _accept_split(user, sib_shared, sib_split, db)
 
     await db.commit()
 

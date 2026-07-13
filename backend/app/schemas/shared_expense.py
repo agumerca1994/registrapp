@@ -55,6 +55,7 @@ class SharedExpenseOut(BaseModel):
     locked: bool
     created_by_user_id: int
     credit_card_item_id: int | None = None
+    installment_group_id: int | None = None
     created_at: datetime
     splits: list[SplitOut]
 
@@ -66,6 +67,8 @@ class InviteInfoOut(BaseModel):
     split_amount: Decimal
     expense_date: date
     creator_name: str
+    cuotas_count: int = 1
+    cuotas_total_amount: Decimal | None = None
 
 
 class ShareCreditCardItemBody(BaseModel):
