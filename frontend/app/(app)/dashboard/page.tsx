@@ -249,7 +249,7 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-4xl space-y-4 md:space-y-6">
-      <ProductTour tourId="dashboard-intro" steps={DASHBOARD_TOUR_STEPS} />
+      <ProductTour tourId="dashboard-intro" steps={DASHBOARD_TOUR_STEPS} requireDesktop />
 
       <div className="flex items-center justify-end gap-2">
         <button onClick={prev} className="p-2 rounded-lg border hover:bg-gray-50 text-gray-600 text-sm font-bold leading-none">&#8249;</button>

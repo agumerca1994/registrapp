@@ -18,14 +18,20 @@ export function resetAllTours(tourIds: string[]): void {
   tourIds.forEach(resetTour);
 }
 
-export default function ProductTour({ tourId, steps }: { tourId: string; steps: Step[] }) {
+export default function ProductTour({ tourId, steps, requireDesktop }: {
+  tourId: string;
+  steps: Step[];
+  /** Skip entirely (without marking as seen) on viewports narrower than md — use
+   * when steps target elements only rendered in the desktop Sidebar. */
+  requireDesktop?: boolean;
+}) {
   const [run, setRun] = useState(false);
 
   useEffect(() => {
-    if (!localStorage.getItem(tourSeenKey(tourId))) {
-      setRun(true);
-    }
-  }, [tourId]);
+    if (localStorage.getItem(tourSeenKey(tourId))) return;
+    if (requireDesktop && !window.matchMedia("(min-width: 768px)").matches) return;
+    setRun(true);
+  }, [tourId, requireDesktop]);
 
   const handleEvent = (data: EventData) => {
     if (data.status === "finished" || data.status === "skipped") {
