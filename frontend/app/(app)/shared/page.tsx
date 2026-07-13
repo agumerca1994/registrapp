@@ -759,7 +759,7 @@ export default function SharedExpensesPage() {
 
                   <div className="space-y-1.5">
                     {exp.splits.map(split => (
-                      <div key={split.id} className="flex items-center justify-between gap-2 text-sm">
+                      <div key={split.id} className="flex items-center justify-between gap-x-2 gap-y-1 text-sm flex-wrap">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span className="text-gray-700 truncate">{split.member_name}</span>
                           {split.invite_email && (
@@ -769,7 +769,7 @@ export default function SharedExpensesPage() {
                             <span className="text-xs text-gray-400 shrink-0">(ext)</span>
                           )}
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                           <span className="text-gray-600">
                             {formatARS(split.amount)}{isGrouped && <span className="text-gray-400"> /cuota</span>}
                           </span>
