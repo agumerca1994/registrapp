@@ -47,6 +47,7 @@ class SharedExpenseOut(BaseModel):
     model_config = {"from_attributes": True}
 
     id: int
+    tenant_id: int
     title: str
     total_amount: Decimal
     category_id: int
