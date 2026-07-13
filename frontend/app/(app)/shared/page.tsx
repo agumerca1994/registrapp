@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone } from "lucide-react";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone, Layers } from "lucide-react";
 
 import api from "@/lib/api";
 import { formatARS, normalizePhoneNumber } from "@/lib/utils";
@@ -69,6 +69,7 @@ interface SharedExpense {
   locked: boolean;
   created_by_user_id: number;
   created_at: string;
+  installment_group_id: number | null;
   splits: Split[];
 }
 
@@ -684,95 +685,140 @@ export default function SharedExpensesPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {expenses.map(exp => {
-            const myMemberSplit = exp.splits.find(s => s.user_id === currentUserId);
-            const pendingCount = exp.splits.filter(s => s.user_id !== null && s.status === "pending" && !s.invite_token).length;
-            const isCreator = exp.created_by_user_id === currentUserId;
-            const isCrossTenant = !isCreator && exp.splits.some(s => s.user_id === currentUserId);
-            return (
-              <div key={exp.id} className="bg-white rounded-xl border p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-gray-900 truncate">{exp.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {fmtDate(exp.expense_date)} &middot; {exp.splits.length} participantes
-                      {exp.locked && (
-                        <span className="ml-2 text-orange-500 font-medium">&middot; bloqueado</span>
-                      )}
-                      {isCrossTenant && (
-                        <span className="ml-2 text-violet-500 font-medium">&middot; otro hogar</span>
-                      )}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <p className="text-lg font-bold text-gray-900">{formatARS(exp.total_amount)}</p>
-                    {isCreator && (
-                      <button onClick={() => handleDelete(exp.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-500 transition-colors">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
+          {(() => {
+            const groupsMap = new Map<number, SharedExpense[]>();
+            for (const exp of expenses) {
+              const rootId = exp.installment_group_id ?? exp.id;
+              if (!groupsMap.has(rootId)) groupsMap.set(rootId, []);
+              groupsMap.get(rootId)!.push(exp);
+            }
+            const displayGroups = Array.from(groupsMap.entries())
+              .map(([rootId, members]) => ({
+                root: members.find(m => m.id === rootId) ?? members[0],
+                cuotas: [...members].sort((a, b) => a.expense_date.localeCompare(b.expense_date)),
+              }))
+              .sort((a, b) => b.root.created_at.localeCompare(a.root.created_at));
 
-                <div className="space-y-1.5">
-                  {exp.splits.map(split => (
-                    <div key={split.id} className="flex items-center justify-between gap-2 text-sm">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-gray-700 truncate">{split.member_name}</span>
-                        {split.invite_email && (
-                          <span className="text-xs text-gray-400 shrink-0 truncate max-w-[100px]">({split.invite_email})</span>
+            return displayGroups.map(({ root: exp, cuotas }) => {
+              const isGrouped = cuotas.length > 1;
+              const groupTotal = cuotas.reduce((s, c) => s + c.total_amount, 0);
+              const myMemberSplit = exp.splits.find(s => s.user_id === currentUserId);
+              const pendingCount = exp.splits.filter(s => s.user_id !== null && s.status === "pending" && !s.invite_token).length;
+              const isCreator = exp.created_by_user_id === currentUserId;
+              const isCrossTenant = !isCreator && exp.splits.some(s => s.user_id === currentUserId);
+              return (
+                <div key={exp.id} className="bg-white rounded-xl border p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900 truncate flex items-center gap-1.5">
+                        {exp.title}
+                        {isGrouped && (
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 font-medium shrink-0">
+                            <Layers className="w-3 h-3" /> {cuotas.length} cuotas
+                          </span>
                         )}
-                        {split.user_id === null && !split.invite_token && !split.invite_email && (
-                          <span className="text-xs text-gray-400 shrink-0">(ext)</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {isGrouped
+                          ? `${fmtDate(cuotas[0].expense_date)} — ${fmtDate(cuotas[cuotas.length - 1].expense_date)}`
+                          : fmtDate(exp.expense_date)}
+                        {" "}&middot; {exp.splits.length} participantes
+                        {exp.locked && (
+                          <span className="ml-2 text-orange-500 font-medium">&middot; bloqueado</span>
                         )}
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-gray-600">{formatARS(split.amount)}</span>
-                        <StatusChip
-                          status={split.user_id === null && !split.invite_token ? "accepted" : split.status}
-                          hasToken={!!split.invite_token}
-                        />
-                        {split.invite_token && isCreator && (
-                          <button
-                            onClick={() => copyInviteLink(split.invite_token!)}
-                            title="Copiar link de invitacion"
-                            className={`p-1 rounded transition-colors ${copiedToken === split.invite_token ? "text-green-600" : "text-gray-400 hover:text-violet-600"}`}
-                          >
-                            {copiedToken === split.invite_token
-                              ? <CheckCircle className="w-4 h-4" />
-                              : <Copy className="w-4 h-4" />
-                            }
-                          </button>
+                        {isCrossTenant && (
+                          <span className="ml-2 text-violet-500 font-medium">&middot; otro hogar</span>
                         )}
-                      </div>
+                      </p>
                     </div>
-                  ))}
-                </div>
-
-                {myMemberSplit?.status === "pending" && !myMemberSplit?.invite_token && (
-                  <div className="flex items-center gap-2 pt-2 border-t">
-                    <p className="text-sm text-gray-600 flex-1">
-                      Te corresponden <strong>{formatARS(myMemberSplit.amount)}</strong>
-                    </p>
-                    <button onClick={() => handleAccept(exp.id)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700">
-                      <CheckCircle className="w-3.5 h-3.5" /> Aceptar
-                    </button>
-                    <button onClick={() => handleReject(exp.id)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium border text-gray-600 rounded-lg hover:bg-gray-50">
-                      <XCircle className="w-3.5 h-3.5" /> Rechazar
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <p className="text-lg font-bold text-gray-900">{formatARS(groupTotal)}</p>
+                      {isCreator && !isGrouped && (
+                        <button onClick={() => handleDelete(exp.id)}
+                          className="p-1.5 text-gray-400 hover:text-red-500 transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                )}
-                {pendingCount > 0 && isCreator && (
-                  <p className="text-xs text-muted-foreground pt-1 border-t">
-                    {pendingCount} participante{pendingCount > 1 ? "s" : ""} aun no acepto
-                  </p>
-                )}
-              </div>
-            );
-          })}
+
+                  {isGrouped && (
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-violet-600 hover:text-violet-700 select-none">
+                        Ver detalle de las {cuotas.length} cuotas
+                      </summary>
+                      <div className="mt-1.5 space-y-1 border-l-2 border-violet-100 pl-2.5">
+                        {cuotas.map((c, i) => (
+                          <div key={c.id} className="flex items-center justify-between text-gray-500">
+                            <span>Cuota {i + 1}/{cuotas.length} &middot; {fmtDate(c.expense_date)}</span>
+                            <span className="font-medium text-gray-600">{formatARS(c.total_amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+
+                  <div className="space-y-1.5">
+                    {exp.splits.map(split => (
+                      <div key={split.id} className="flex items-center justify-between gap-2 text-sm">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-gray-700 truncate">{split.member_name}</span>
+                          {split.invite_email && (
+                            <span className="text-xs text-gray-400 shrink-0 truncate max-w-[100px]">({split.invite_email})</span>
+                          )}
+                          {split.user_id === null && !split.invite_token && !split.invite_email && (
+                            <span className="text-xs text-gray-400 shrink-0">(ext)</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-gray-600">
+                            {formatARS(split.amount)}{isGrouped && <span className="text-gray-400"> /cuota</span>}
+                          </span>
+                          <StatusChip
+                            status={split.user_id === null && !split.invite_token ? "accepted" : split.status}
+                            hasToken={!!split.invite_token}
+                          />
+                          {split.invite_token && isCreator && (
+                            <button
+                              onClick={() => copyInviteLink(split.invite_token!)}
+                              title="Copiar link de invitacion"
+                              className={`p-1 rounded transition-colors ${copiedToken === split.invite_token ? "text-green-600" : "text-gray-400 hover:text-violet-600"}`}
+                            >
+                              {copiedToken === split.invite_token
+                                ? <CheckCircle className="w-4 h-4" />
+                                : <Copy className="w-4 h-4" />
+                              }
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {myMemberSplit?.status === "pending" && !myMemberSplit?.invite_token && (
+                    <div className="flex items-center gap-2 pt-2 border-t">
+                      <p className="text-sm text-gray-600 flex-1">
+                        Te corresponden <strong>{formatARS(myMemberSplit.amount)}</strong>{isGrouped && ` por cuota (${cuotas.length} cuotas)`}
+                      </p>
+                      <button onClick={() => handleAccept(exp.id)}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700">
+                        <CheckCircle className="w-3.5 h-3.5" /> {isGrouped ? "Aceptar todas" : "Aceptar"}
+                      </button>
+                      <button onClick={() => handleReject(exp.id)}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium border text-gray-600 rounded-lg hover:bg-gray-50">
+                        <XCircle className="w-3.5 h-3.5" /> Rechazar
+                      </button>
+                    </div>
+                  )}
+                  {pendingCount > 0 && isCreator && (
+                    <p className="text-xs text-muted-foreground pt-1 border-t">
+                      {pendingCount} participante{pendingCount > 1 ? "s" : ""} aun no acepto
+                    </p>
+                  )}
+                </div>
+              );
+            });
+          })()}
         </div>
       )}
     </div>

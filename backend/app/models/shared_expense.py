@@ -20,6 +20,9 @@ class SharedExpense(Base):
     credit_card_item_id: Mapped[int | None] = mapped_column(
         ForeignKey("credit_card_items.id", ondelete="SET NULL"), nullable=True
     )
+    installment_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("shared_expenses.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     splits: Mapped[list["SharedExpenseSplit"]] = relationship(

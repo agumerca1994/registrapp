@@ -752,8 +752,16 @@ async def share_item(
 
     created_shared_ids = []
     creator_name = user.display_name or user.email
+    cuotas_count = len(items_to_share)
+    root_shared_id: int | None = None
 
-    for target_item in items_to_share:
+    # Only the root cuota (idx 0) mints invite tokens and queues notifications —
+    # sharing an installment purchase must send ONE WhatsApp for the whole plan,
+    # not one per future cuota. Child cuotas' matching splits stay tokenless and
+    # get swept up automatically when the root is accepted/claimed (see
+    # _find_group_shared_ids / _accept_split in shared_expenses.py).
+    for idx, target_item in enumerate(items_to_share):
+        is_root = idx == 0
         shared = SharedExpense(
             tenant_id=user.tenant_id,
             created_by_user_id=user.id,
@@ -763,13 +771,15 @@ async def share_item(
             split_type=body.split_type,
             expense_date=target_item.item_date,
             credit_card_item_id=target_item.id,
+            installment_group_id=None if is_root else root_shared_id,
         )
         db.add(shared)
         await db.flush()
+        if is_root:
+            root_shared_id = shared.id
 
         pending_wa_invites = []
         pending_wa_notify = []
-        creator_split_amount = None
 
         for split_in in body.splits:
             is_creator = split_in.user_id == user.id
@@ -787,12 +797,14 @@ async def share_item(
                     if found:
                         resolved_user_id = found.id
                         resolved_name = found.display_name or found.email
-                        if found.id != user.id:
+                        if found.id != user.id and is_root:
                             pending_wa_notify.append((found.id, split_in.amount))
                     else:
                         invite_email = contact
-                        invite_token = secrets.token_urlsafe(32)
-                        invite_expires_at = datetime.utcnow() + timedelta(days=30)
+                        if is_root:
+                            invite_token = secrets.token_urlsafe(32)
+                            invite_expires_at = datetime.utcnow() + timedelta(days=30)
+                            pending_wa_invites.append((contact, invite_token))
                 elif _is_phone(contact):
                     from app.models.user import User as _User
                     normalized_phone = _normalize_phone(contact)
@@ -800,16 +812,19 @@ async def share_item(
                     if found:
                         resolved_user_id = found.id
                         resolved_name = found.display_name or found.email
-                        if found.id != user.id:
+                        if found.id != user.id and is_root:
                             pending_wa_notify.append((found.id, split_in.amount))
                     else:
                         invite_email = normalized_phone
-                        invite_token = secrets.token_urlsafe(32)
-                        invite_expires_at = datetime.utcnow() + timedelta(days=30)
-                        pending_wa_invites.append((normalized_phone, invite_token))
-                    await _save_tenant_contact(user.tenant_id, resolved_name, normalized_phone, db)
+                        if is_root:
+                            invite_token = secrets.token_urlsafe(32)
+                            invite_expires_at = datetime.utcnow() + timedelta(days=30)
+                            pending_wa_invites.append((normalized_phone, invite_token))
+                    if is_root:
+                        await _save_tenant_contact(user.tenant_id, resolved_name, normalized_phone, db)
             elif split_in.user_id and split_in.user_id != user.id:
-                pending_wa_notify.append((split_in.user_id, split_in.amount))
+                if is_root:
+                    pending_wa_notify.append((split_in.user_id, split_in.amount))
 
             split = SharedExpenseSplit(
                 shared_expense_id=shared.id,
@@ -825,7 +840,6 @@ async def share_item(
             await db.flush()
 
             if is_creator:
-                creator_split_amount = split_in.amount
                 # Reuse existing expense_entry, just update the amount to creator's share
                 if target_item.expense_entry_id:
                     existing_entry = await db.get(ExpenseEntry, target_item.expense_entry_id)
@@ -833,18 +847,18 @@ async def share_item(
                         existing_entry.amount = split_in.amount
                         split.expense_entry_id = existing_entry.id
 
-        # Send notifications after creating all splits
-        await db.flush()
-        for phone, token in pending_wa_invites:
-            await _send_whatsapp_invite(phone, creator_name, item.description, target_item.amount, token)
-        for notify_uid, split_amt in pending_wa_notify:
-            from app.models.user import User as _User
-            notify_user = await db.get(_User, notify_uid)
-            if notify_user and notify_user.whatsapp_phone:
-                await _send_whatsapp_member_notify(
-                    notify_user.whatsapp_phone, creator_name,
-                    item.description, target_item.amount, split_amt,
-                )
+        if is_root:
+            await db.flush()
+            for phone, token in pending_wa_invites:
+                await _send_whatsapp_invite(phone, creator_name, item.description, target_item.amount, token, cuotas_count)
+            for notify_uid, split_amt in pending_wa_notify:
+                from app.models.user import User as _User
+                notify_user = await db.get(_User, notify_uid)
+                if notify_user and notify_user.whatsapp_phone:
+                    await _send_whatsapp_member_notify(
+                        notify_user.whatsapp_phone, creator_name,
+                        item.description, target_item.amount, split_amt, cuotas_count,
+                    )
 
         created_shared_ids.append(shared.id)
 

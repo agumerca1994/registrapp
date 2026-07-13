@@ -14,6 +14,8 @@ interface InviteInfo {
   split_amount: number;
   expense_date: string;
   creator_name: string;
+  cuotas_count: number;
+  cuotas_total_amount: number | null;
 }
 
 export default function InvitePage() {
@@ -102,18 +104,33 @@ export default function InvitePage() {
           <div className="bg-white rounded-xl border p-5 space-y-4">
             <div>
               <p className="text-xs text-gray-500 mb-0.5">Descripcion</p>
-              <p className="font-semibold text-gray-900">{info.title}</p>
+              <p className="font-semibold text-gray-900">
+                {info.title}
+                {info.cuotas_count > 1 && (
+                  <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 font-medium align-middle">
+                    {info.cuotas_count} cuotas
+                  </span>
+                )}
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <p className="text-xs text-gray-500 mb-0.5">Total del gasto</p>
+                <p className="text-xs text-gray-500 mb-0.5">{info.cuotas_count > 1 ? "Monto por cuota" : "Total del gasto"}</p>
                 <p className="font-semibold text-gray-900">{formatARS(info.total_amount)}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-500 mb-0.5">Tu parte</p>
+                <p className="text-xs text-gray-500 mb-0.5">{info.cuotas_count > 1 ? "Tu parte por cuota" : "Tu parte"}</p>
                 <p className="font-bold text-lg text-primary">{formatARS(info.split_amount)}</p>
               </div>
             </div>
+            {info.cuotas_count > 1 && info.cuotas_total_amount !== null && (
+              <div className="bg-violet-50 rounded-lg px-3 py-2">
+                <p className="text-xs text-violet-700">
+                  Se van a compartir las <strong>{info.cuotas_count} cuotas</strong> de esta compra, una por mes.
+                  Tu parte total sumando todas las cuotas es <strong>{formatARS(info.cuotas_total_amount)}</strong>.
+                </p>
+              </div>
+            )}
             <div>
               <p className="text-xs text-gray-500 mb-0.5">Creado por</p>
               <p className="text-sm text-gray-700">{info.creator_name}</p>
@@ -133,7 +150,7 @@ export default function InvitePage() {
               className="w-full py-3 bg-primary text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2 disabled:opacity-60"
             >
               {claiming ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-              {claiming ? "Procesando..." : "Aceptar y agregar a mis gastos"}
+              {claiming ? "Procesando..." : info && info.cuotas_count > 1 ? `Aceptar las ${info.cuotas_count} cuotas` : "Aceptar y agregar a mis gastos"}
             </button>
             <p className="text-xs text-center text-gray-500">
               Sesion iniciada como <strong>{appUser.display_name || appUser.email}</strong>
