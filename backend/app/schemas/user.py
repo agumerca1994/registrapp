@@ -26,5 +26,6 @@ class UserOut(BaseModel):
     display_name: str | None
     phone_number: str | None
     whatsapp_phone: str | None
+    whatsapp_gate_pending: bool
     role: UserRole
     created_at: datetime

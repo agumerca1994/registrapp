@@ -14,10 +14,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return;
     if (!firebaseUser) router.replace("/login");
-    else if (!appUser) router.replace("/onboarding");
+    else if (!appUser || appUser.whatsapp_gate_pending) router.replace("/onboarding");
   }, [firebaseUser, appUser, loading, router]);
 
-  if (loading || !appUser) return null;
+  if (loading || !appUser || appUser.whatsapp_gate_pending) return null;
 
   return (
     <div className="flex min-h-screen bg-gray-50">

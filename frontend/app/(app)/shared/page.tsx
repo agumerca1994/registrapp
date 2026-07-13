@@ -8,14 +8,7 @@ import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCi
 import api from "@/lib/api";
 import { formatARS, normalizePhoneNumber, getErrorMessage } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-
-const COUNTRIES = [
-  { flag: "🇦🇷", prefix: "54", placeholder: "351 234 5678" },
-  { flag: "🇺🇾", prefix: "598", placeholder: "9 234 5678" },
-  { flag: "🇨🇱", prefix: "56", placeholder: "9 1234 5678" },
-  { flag: "🇧🇷", prefix: "55", placeholder: "11 98765 4321" },
-  { flag: "🇵🇾", prefix: "595", placeholder: "981 234 567" },
-];
+import { COUNTRIES } from "@/lib/countries";
 
 function buildPhone(prefix: string, local: string): string {
   const digits = local.replace(/\D/g, "");
@@ -339,9 +332,17 @@ export default function SharedExpensesPage() {
   async function handleReject(sharedId: number) {
     await api.post(`/shared-expenses/${sharedId}/reject`); await load();
   }
-  async function handleDelete(sharedId: number) {
-    if (!confirm("Eliminar este gasto compartido? Se borraran todos los egresos parciales asociados.")) return;
-    await api.delete(`/shared-expenses/${sharedId}`); await load();
+  async function handleDelete(sharedId: number, isGrouped: boolean) {
+    const msg = isGrouped
+      ? "Se eliminará esta cuota y todas las cuotas futuras del plan. Las cuotas ya pasadas no se van a tocar. ¿Continuar?"
+      : "Eliminar este gasto compartido? Se borraran todos los egresos parciales asociados.";
+    if (!confirm(msg)) return;
+    try {
+      await api.delete(`/shared-expenses/${sharedId}`);
+      await load();
+    } catch (err) {
+      alert(getErrorMessage(err, "No se pudo eliminar"));
+    }
   }
 
   function copyInviteLink(token: string) {
@@ -733,8 +734,8 @@ export default function SharedExpensesPage() {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <p className="text-lg font-bold text-gray-900">{formatARS(groupTotal)}</p>
-                      {isCreator && !isGrouped && (
-                        <button onClick={() => handleDelete(exp.id)}
+                      {isCreator && (
+                        <button onClick={() => handleDelete(exp.id, isGrouped)}
                           className="p-1.5 text-gray-400 hover:text-red-500 transition-colors">
                           <Trash2 className="w-4 h-4" />
                         </button>

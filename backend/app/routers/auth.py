@@ -88,6 +88,7 @@ async def register(
         display_name=body.display_name or firebase_user.get("name"),
         phone_number=body.phone_number,
         role=UserRole.admin,
+        whatsapp_gate_pending=True,
     )
     db.add(user)
     await db.flush()
@@ -136,6 +137,7 @@ async def join_tenant(
         display_name=body.display_name or firebase_user.get("name"),
         phone_number=body.phone_number,
         role=UserRole.member,
+        whatsapp_gate_pending=True,
     )
     db.add(user)
     await db.flush()
@@ -226,6 +228,7 @@ async def verify_whatsapp(
     user.whatsapp_phone = body.phone
     user.whatsapp_verify_code = None
     user.whatsapp_verify_expires = None
+    user.whatsapp_gate_pending = False
     await db.commit()
     user = await db.scalar(
         select(User).options(selectinload(User.tenant)).where(User.id == user.id)
@@ -267,6 +270,26 @@ async def unlink_whatsapp(
     user.whatsapp_verify_code = None
     user.whatsapp_verify_expires = None
     await db.commit()
+
+
+@router.post("/me/skip-whatsapp-gate", response_model=UserOut)
+async def skip_whatsapp_gate(
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Escape hatch for the mandatory onboarding WhatsApp gate: lets a new
+    user into the app without verifying (e.g. Evolution API is down, or the
+    OTP never arrived). They can still link/verify later from Configuracion,
+    which is unaffected by this — it does not touch whatsapp_phone.
+    """
+    user = await db.scalar(select(User).where(User.firebase_uid == firebase_user["uid"]))
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    user.whatsapp_gate_pending = False
+    await db.commit()
+    return await db.scalar(
+        select(User).options(selectinload(User.tenant)).where(User.id == user.id)
+    )
 
 
 @router.get("/members", response_model=list[UserOut])
