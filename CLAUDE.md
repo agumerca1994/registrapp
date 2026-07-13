@@ -59,16 +59,16 @@ backend/app/
   models/     # SQLAlchemy ORM — Tenant, User, IncomeSource, IncomeEntry, ExpenseCategory,
               #   ExpenseEntry, MacroVariable, MortgageRecord, MortgageLoan, CreditCard,
               #   CreditCardStatement, CreditCardItem, SharedExpense, SharedExpenseSplit,
-              #   TenantContact, AppLog
+              #   TenantContact, PaymentReminder, AppLog
   schemas/    # Pydantic request/response models
   routers/    # FastAPI routers — auth, income, expenses, macro, mortgage, dashboard,
-              #   credit_cards, shared_expenses, contacts, whatsapp, internal_logs
+              #   credit_cards, shared_expenses, contacts, reminders, whatsapp, internal_logs
   services/   # (currently unused)
 ```
 
 All routers follow the pattern: `Depends(get_current_user)` + `Depends(get_db)` → `_get_db_user()` → query with `tenant_id`. Dashboard schemas (`MonthSummary`, `HistoryPoint`) are defined inline in `routers/dashboard.py`.
 
-**Scheduled jobs**: APScheduler runs inside the FastAPI lifespan. Two daily jobs at 09:00 and 09:01 UTC: `_daily_sync` (macro BCRA sync) and `_daily_mortgage_sync` (updates active mortgage records).
+**Scheduled jobs**: APScheduler runs inside the FastAPI lifespan (each also fires once via `asyncio.create_task` at startup, not just on the cron schedule). Three daily jobs, all UTC: `_daily_sync` at 09:00 (macro BCRA sync), `_daily_mortgage_sync` at 09:01 (updates active mortgage records), `_daily_reminder_check` at 09:02 (sends WhatsApp for due `PaymentReminder`s — see Calendario de pagos below).
 
 **Household (tenant) code**: `Tenant` has a `code: str | None` field (8-char alphanumeric, unique). `POST /auth/register` creates a new tenant with a generated code; `POST /auth/join` accepts `{ tenant_code }` and looks up the tenant by code. `UserOut` includes `tenant_code` via a `@property` on `User` that reads `user.tenant.code` — requires `selectinload(User.tenant)` wherever the user is reloaded after a write. **This applies to every endpoint returning `UserOut` or `list[UserOut]`** — missing the `selectinload` causes a `MissingGreenlet` crash at response serialization time.
 
@@ -87,7 +87,7 @@ Three models: `CreditCard` (card metadata: bank, alias, last 4 digits) → `Cred
 - `GET /credit-cards/for-expense/{expense_entry_id}`: reverse lookup — given an `ExpenseEntry` id, returns `ForExpenseOut` (card_id, statement_id, year, month) so the frontend can navigate to `/tarjetas/{card_id}/{statement_id}`.
 - Expense entries created by credit cards are **read-only from Egresos** — the frontend shows "Ver en resumen" instead of edit/delete buttons, and their checkboxes are hidden (can't bulk-delete them).
 
-Frontend routes: `/tarjetas` → `/tarjetas/[cardId]` (statements list) → `/tarjetas/[cardId]/[statementId]` (items).
+Frontend routes: `/tarjetas` → `/tarjetas/[cardId]` (statements list) → `/tarjetas/[cardId]/[statementId]` (items). `PATCH /credit-cards/statements/{id}` lets `closing_date`/`due_date` be corrected after creation (pencil icon on the statements list); `GET /credit-cards/statements/calendar?year=&month=` returns statements from every card in the household whose `closing_date` or `due_date` falls in that calendar month regardless of the statement's own `year`/`month` period — feeds the payment calendar (see below).
 
 **Installment (cuotas) propagation**: when `create_item` receives `item_type="installment"`, it immediately creates all future cuota records (cuotas 2..N) in their respective statements (auto-created via `_find_or_create_statement`). Child cuotas have `installment_group_id` pointing to the root item's `id`; the root has `installment_group_id = NULL`. Edit/delete is blocked on non-root cuotas (400 error); deleting the root cascades all children. `finalize_statement` skips items that already have children (avoids duplicate propagation). `CreditCardItemOut` includes `installment_root_statement_id: int | None` — populated from `installment_group.statement_id` — so the frontend can navigate to the root's statement for non-root cuotas ("Ver original" button).
 
@@ -107,13 +107,20 @@ Frontend routes: `/tarjetas` → `/tarjetas/[cardId]` (statements list) → `/ta
 ### Contacts (household agenda)
 `TenantContact` (`routers/contacts.py`) is a **household-wide** address book — unique per `tenant_id + contact_phone`, not per user. It starts empty and auto-populates: `_save_tenant_contact()` in `shared_expenses.py` is called from both the shared-expenses and credit-cards phone-invite branches every time someone invites an external contact by phone, silently skipping if that phone is already saved (even under a different name). `GET /contacts` is used by the shared-expenses form and the credit-card "compartir ítem" modal to offer a "Elegir de la agenda" dropdown when adding an external participant — this is the primary way to pick a known contact on iOS, since the native Contact Picker API isn't usable there (see Device APIs below). There's no dedicated ABM screen yet.
 
+### Calendario de pagos (payment reminders)
+`PaymentReminder` (`routers/reminders.py`) is a **household-wide** freeform reminder: `title` + `remind_date`, optionally linked to a `statement_id` (`SET NULL` on delete). `GET /reminders?year=&month=` / `POST /reminders` / `DELETE /reminders/{id}` are the CRUD; any member of the tenant can see/delete any reminder, but `user_id` (the creator) is who gets notified. The `/calendario` frontend page renders a month grid combining `GET /credit-cards/statements/calendar` (closing/due dates, orange/red dots) with `GET /reminders` (violet dots) built with `date-fns` — no calendar UI library is used, just `startOfWeek`/`eachDayOfInterval`/etc. Clicking a day opens a panel to add a reminder for that date.
+
+`send_due_reminders()` (called by the `_daily_reminder_check` scheduled job) WhatsApps each reminder due today to its creator via `_send_wa_msg`, then marks it `notified=True` regardless of send outcome (fire-once semantics — failures are logged, not retried). **Only works if that specific user has linked their own WhatsApp number** (`user.whatsapp_phone`) via `/auth/me/link-whatsapp` in Settings; otherwise the reminder still shows on the calendar but silently skips the WhatsApp.
+
 ### Internal diagnostics
 `routers/internal_logs.py` exposes `/internal/*` endpoints gated by a shared-secret header (`x-internal-key` must match the `INTERNAL_LOG_KEY` env var), not user auth — used for ops/debugging, never called from the frontend:
 - `GET /internal/logs`, `GET /internal/logs/summary`, `POST /internal/logs/frontend-error` — read/write `AppLog` rows.
 - `GET /internal/pending-shared-invites` — diagnostic listing of `SharedExpenseSplit` rows (optionally filtered by `creator_email`) to distinguish already-registered recipients (visible in-app, `user_id` set) from external invites still waiting on `invite_token`.
 - `POST /internal/backfill-shared-invite-claims` — one-off data-repair tool that replicates `POST /shared-expenses/invite/{token}/claim` (assign `user_id`, create the `ExpenseEntry`, mark `accepted`) keyed by `{split_id, user_id}` pairs instead of a token, for manually linking splits whose invite never got delivered.
+- `GET /internal/tenant-contacts` / `DELETE /internal/tenant-contacts/{id}` — read and clean up the household agenda (`TenantContact`) directly, e.g. to remove stale/duplicate entries.
+- `GET /internal/whatsapp-check?phone=` — calls Evolution's own `/chat/whatsappNumbers/{instance}` lookup (no message sent) for a phone in several plausible AR formats (with/without the leading 9, bare local). Useful because Evolution's dedicated lookup and its `/message/sendText` endpoint's internal existence check don't always agree — see Phone number handling below.
 
-The root `mcp/server.py` (a FastMCP stdio server registered in `.mcp.json` as `registrapp-logs`) wraps the `/internal/logs*` endpoints as Claude Code tools (`recent_errors`, `search_logs`, `logs_by_module`, `log_summary`), authenticating with `MCP_INTERNAL_KEY` against the same `INTERNAL_LOG_KEY`.
+The root `mcp/server.py` (a FastMCP stdio server registered in `.mcp.json` as `registrapp-logs`) wraps the `/internal/logs*` endpoints as Claude Code tools (`recent_errors`, `search_logs`, `logs_by_module`, `log_summary`), authenticating with `MCP_INTERNAL_KEY` against the same `INTERNAL_LOG_KEY`. It only covers the log endpoints — the other `/internal/*` diagnostics above are called directly with `curl` + the same key.
 
 ### Frontend structure
 ```
@@ -131,6 +138,7 @@ frontend/app/
     settings/       # User/tenant settings
     shared/         # Shared expense list with accept/reject
     tarjetas/       # Credit cards → [cardId] (statements) → [cardId]/[statementId] (items)
+    calendario/     # Monthly payment calendar (statement dates + reminders)
 frontend/
   contexts/AuthContext.tsx   # Firebase auth state + /auth/me → appUser
   lib/api.ts                 # Axios instance; adds Firebase ID token to every request
@@ -178,6 +186,7 @@ When reading user-entered amounts, always use `parseAmount(value)` from `lib/uti
 ### Phone number handling
 Phone numbers are stored in international format (+54934567890) but entered via user input, device contacts, or WhatsApp messages. Always normalize before database operations:
 - **Frontend**: Use `normalizePhoneNumber(rawInput)` from `lib/utils.ts` to parse unstructured input. Returns `{prefix, local, isValid}`.
-- **Backend**: Use `_normalize_phone(value)` from `routers/shared_expenses.py` to normalize before storing/comparing.
+- **Backend**: Use `_normalize_phone(value)` from `routers/shared_expenses.py` to normalize before storing/comparing. It always inserts the mandatory `9` after the `54` country code for Argentine numbers (even for a bare 10-digit local input) — don't reintroduce a code path that only *preserves* a `9` the caller already included, that silently produces invalid JIDs for the common case of a freshly-typed number.
 - **Evolution API**: Expects full international format like `+54934567890`.
-- **User lookups**: Compare normalized forms: both stored (`user.whatsapp_phone`) and incoming must be normalized first.
+- **User lookups**: Compare normalized forms: both stored (`user.whatsapp_phone`) and incoming must be normalized first. Note `user.whatsapp_phone` is set directly from `WhatsAppVerifyRequest.phone` in `/auth/me/verify-whatsapp` without going through `_normalize_phone` — a stored number can therefore fail to match a freshly-normalized comparison value if the frontend ever sends it in a different shape.
+- **Sending is a two-step resolve-then-send, not a direct `sendText` call**: Evolution API's `/message/sendText/{instance}` endpoint has its own internal number-existence check that is stricter (and inconsistent) with its dedicated `/chat/whatsappNumbers/{instance}` lookup endpoint — a number the lookup confirms `exists: true` can still get rejected by `sendText` with `exists: false` for the exact same string. `_resolve_whatsapp_jid()` in `shared_expenses.py` calls the lookup endpoint first and sends to whatever canonical number it returns (falling back to the locally-normalized number only if the lookup itself fails); both `_send_wa_msg` and `/auth/me/link-whatsapp` go through it. Diagnose future "WhatsApp doesn't arrive" reports with `GET /internal/whatsapp-check?phone=` before assuming it's a formatting bug.
