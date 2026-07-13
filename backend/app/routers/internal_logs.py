@@ -156,6 +156,7 @@ async def pending_shared_invites(
             "total_amount": float(se.total_amount),
             "expense_date": se.expense_date.isoformat(),
             "from_credit_card": se.credit_card_item_id is not None,
+            "installment_group_id": se.installment_group_id,
             "created_at": se.created_at.isoformat(),
             "split_id": sp.id,
             "member_name": sp.member_name,
