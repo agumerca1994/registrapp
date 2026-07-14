@@ -49,7 +49,10 @@ export default function ProductTour({ tourId, steps, requireDesktop }: {
       continuous
       scrollToFirstStep
       onEvent={handleEvent}
-      locale={{ back: "Atrás", close: "Cerrar", last: "Finalizar", next: "Siguiente", skip: "Saltar" }}
+      locale={{
+        back: "Atrás", close: "Cerrar", last: "Finalizar", next: "Siguiente",
+        nextWithProgress: "Siguiente ({current} de {total})", skip: "Saltar",
+      }}
       options={{
         buttons: ["back", "close", "primary", "skip"],
         showProgress: true,
