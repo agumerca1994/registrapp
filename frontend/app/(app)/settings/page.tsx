@@ -21,7 +21,27 @@ interface Member {
 const ROLE_LABELS: Record<string, string> = { admin: "Admin", member: "Miembro" };
 const APP_TOUR_IDS = ["dashboard-intro", "income-intro", "expenses-intro"];
 
-function HouseholdInviteSection() {
+function buildHouseholdInviteMessage(name: string, code: string, appUrl: string): string {
+  return [
+    "Hola! " + name + " te invita a sumarte a su hogar en RegistrApp.",
+    "",
+    "Para unirte:",
+    "1. Ingresa a " + appUrl,
+    "2. Inicia sesion con Google",
+    "3. Elige la opcion Unirme a un hogar",
+    "4. Ingresa el codigo: " + code,
+  ].join(String.fromCharCode(10));
+}
+
+function buildFriendInviteMessage(name: string, appUrl: string): string {
+  return [
+    "Hola! " + name + " te invita a probar RegistrApp, una app para llevar tus ingresos, gastos y gastos compartidos.",
+    "",
+    "Entra a " + appUrl + " e inicia sesion con Google para crear tu cuenta.",
+  ].join(String.fromCharCode(10));
+}
+
+function InviteFriendSection() {
   const { appUser } = useAuth();
   const [method, setMethod] = useState<"none" | "email" | "whatsapp">("none");
   const [email, setEmail] = useState("");
@@ -31,19 +51,10 @@ function HouseholdInviteSection() {
   const country = COUNTRIES.find(c => c.prefix === prefix) ?? COUNTRIES[0];
   const digits = localPhone.replace(/[^0-9]/g, "");
   const fullPhone = prefix === "54" ? prefix + "9" + digits : prefix + digits;
-  const code = appUser?.tenant_code ?? String(appUser?.tenant_id ?? "");
   const name = appUser?.display_name || appUser?.email || "Alguien";
   const appUrl = typeof window !== "undefined" ? window.location.origin : "";
 
-  const buildMessage = () => [
-    "Hola! " + name + " te invita a sumarte a su hogar en RegistrApp.",
-    "",
-    "Para unirte:",
-    "1. Ingresa a " + appUrl,
-    "2. Inicia sesion con Google",
-    "3. Elige la opcion Unirme a un hogar",
-    "4. Ingresa el codigo: " + code,
-  ].join(String.fromCharCode(10));
+  const buildMessage = () => buildFriendInviteMessage(name, appUrl);
 
   const sendWhatsApp = () => {
     if (!localPhone.trim()) return;
@@ -62,11 +73,10 @@ function HouseholdInviteSection() {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <UserPlus className="w-5 h-5 text-primary" />
-          <h3 className="font-semibold text-gray-900">Invitar al hogar</h3>
+          <h3 className="font-semibold text-gray-900">Invitar amigo</h3>
         </div>
         <p className="text-sm text-muted-foreground">
-          {"Envia una invitacion para que alguien se una con el codigo "}
-          <span className="font-mono font-semibold text-gray-800">{code}</span>.
+          Invitá a alguien a probar RegistrApp. Va a crear su propia cuenta y hogar, sin relación con el tuyo.
         </p>
       </div>
       <div className="flex gap-2">
@@ -189,6 +199,14 @@ export default function SettingsPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const shareHouseholdCodeByWhatsApp = () => {
+    const code = appUser?.tenant_code ?? String(appUser?.tenant_id ?? "");
+    const name = appUser?.display_name || appUser?.email || "Alguien";
+    const appUrl = typeof window !== "undefined" ? window.location.origin : "";
+    const message = buildHouseholdInviteMessage(name, code, appUrl);
+    window.open("https://wa.me/?text=" + encodeURIComponent(message), "_blank");
+  };
+
   const kickMember = async (memberId: number) => {
     setActionLoading(true);
     try {
@@ -220,20 +238,27 @@ export default function SettingsPage() {
         <p className="text-sm text-muted-foreground">
           {"Comparte este codigo con quien quieras que se una a tu hogar."}
         </p>
-        <div className="flex items-center gap-3">
-          <div className="flex-1 bg-gray-50 border rounded-lg px-4 py-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex-1 min-w-[140px] bg-gray-50 border rounded-lg px-4 py-3">
             <p className="text-xs text-muted-foreground mb-1">{"Codigo del hogar"}</p>
             <p className="text-2xl font-bold text-primary tracking-widest">{appUser?.tenant_code ?? appUser?.tenant_id}</p>
           </div>
-          <button onClick={copyId}
-            className="flex items-center gap-2 border px-4 py-3 rounded-lg text-sm hover:bg-gray-50 transition-colors">
-            {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-            {copied ? "Copiado!" : "Copiar"}
-          </button>
+          <div className="flex gap-2 shrink-0">
+            <button onClick={copyId}
+              className="flex items-center gap-2 border px-4 py-3 rounded-lg text-sm hover:bg-gray-50 transition-colors">
+              {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+              {copied ? "Copiado!" : "Copiar"}
+            </button>
+            <button onClick={shareHouseholdCodeByWhatsApp}
+              className="flex items-center gap-2 border px-4 py-3 rounded-lg text-sm text-green-700 border-green-200 hover:bg-green-50 transition-colors">
+              <MessageCircle className="w-4 h-4" />
+              WhatsApp
+            </button>
+          </div>
         </div>
       </div>
 
-      <HouseholdInviteSection />
+      <InviteFriendSection />
 
       <div className="bg-white rounded-xl border p-6 space-y-4">
         <h3 className="font-semibold text-gray-900">Miembros ({members.length})</h3>
