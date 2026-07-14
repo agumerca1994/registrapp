@@ -92,7 +92,7 @@ function StatCard({ label, value, icon: Icon, positive }: {
       </div>
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-sm md:text-lg font-bold text-gray-900 break-words">{value}</p>
+        <p className="text-sm md:text-base font-bold text-gray-900 break-words">{value}</p>
       </div>
     </div>
   );
@@ -248,7 +248,7 @@ export default function DashboardPage() {
   })();
 
   return (
-    <div className="max-w-4xl space-y-4 md:space-y-6">
+    <div className="max-w-6xl space-y-4 md:space-y-6">
       <ProductTour tourId="dashboard-intro" steps={DASHBOARD_TOUR_STEPS} requireDesktop />
 
       <div className="flex items-center justify-end gap-2">

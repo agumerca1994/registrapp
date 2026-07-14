@@ -48,5 +48,8 @@
 @layer base {
   * { @apply border-border; -webkit-tap-highlight-color: transparent; }
   body { @apply bg-background text-foreground; overscroll-behavior: none; }
-  input, select, textarea { font-size: 16px; }
+  /* !important: guarantees no component text-size utility (e.g. text-sm) can
+     shrink this below 16px, which is what triggers iOS Safari's auto-zoom-on-
+     focus on form fields. */
+  input, select, textarea { font-size: 16px !important; }
 }
