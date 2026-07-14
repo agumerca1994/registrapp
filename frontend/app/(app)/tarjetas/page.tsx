@@ -163,7 +163,7 @@ export default function TarjetasPage() {
   };
 
   return (
-    <div className="max-w-3xl space-y-4 md:space-y-6">
+    <div className="max-w-4xl space-y-4 md:space-y-6">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xl md:text-2xl font-bold text-gray-900">Tarjetas de crédito</h2>
         <button

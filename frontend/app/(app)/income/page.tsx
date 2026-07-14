@@ -457,7 +457,7 @@ export default function IncomePage() {
   const someSelected = selected.size > 0 && !allSelected;
 
   return (
-    <div className="max-w-3xl space-y-4 md:space-y-6">
+    <div className="max-w-4xl space-y-4 md:space-y-6">
       <ProductTour tourId="income-intro" steps={INCOME_TOUR_STEPS} />
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
