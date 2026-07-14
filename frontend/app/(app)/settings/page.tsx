@@ -27,9 +27,9 @@ function buildHouseholdInviteMessage(name: string, code: string, appUrl: string)
     "",
     "Para unirte:",
     "1. Ingresa a " + appUrl,
-    "2. Inicia sesion con Google",
-    "3. Elige la opcion Unirme a un hogar",
-    "4. Ingresa el codigo: " + code,
+    "2. Inicia sesión con Google",
+    "3. Elige la opción Unirme a un hogar",
+    "4. Ingresa el código: " + code,
   ].join(String.fromCharCode(10));
 }
 
@@ -37,7 +37,7 @@ function buildFriendInviteMessage(name: string, appUrl: string): string {
   return [
     "Hola! " + name + " te invita a probar RegistrApp, una app para llevar tus ingresos, gastos y gastos compartidos.",
     "",
-    "Entra a " + appUrl + " e inicia sesion con Google para crear tu cuenta.",
+    "Entra a " + appUrl + " e inicia sesión con Google para crear tu cuenta.",
   ].join(String.fromCharCode(10));
 }
 
@@ -230,17 +230,17 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="max-w-2xl space-y-8">
-      <h2 className="text-2xl font-bold text-gray-900">{"Configuracion"}</h2>
+    <div className="max-w-3xl space-y-8">
+      <h2 className="text-2xl font-bold text-gray-900">{"Configuración"}</h2>
 
       <div className="bg-white rounded-xl border p-6 space-y-4">
         <h3 className="font-semibold text-gray-900">{"Tu hogar"}</h3>
         <p className="text-sm text-muted-foreground">
-          {"Comparte este codigo con quien quieras que se una a tu hogar."}
+          {"Comparte este código con quien quieras que se una a tu hogar."}
         </p>
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex-1 min-w-[140px] bg-gray-50 border rounded-lg px-4 py-3">
-            <p className="text-xs text-muted-foreground mb-1">{"Codigo del hogar"}</p>
+            <p className="text-xs text-muted-foreground mb-1">{"Código del hogar"}</p>
             <p className="text-2xl font-bold text-primary tracking-widest">{appUser?.tenant_code ?? appUser?.tenant_id}</p>
           </div>
           <div className="flex gap-2 shrink-0">

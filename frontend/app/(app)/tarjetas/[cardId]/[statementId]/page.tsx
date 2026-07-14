@@ -115,7 +115,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
 
   async function pickContact(idx: number) {
     if (!hasContactsApi) {
-      alert("Tu navegador no permite elegir contactos del dispositivo. Completa el nombre y telefono manualmente, o elegi uno de la agenda si ya lo compartiste antes.");
+      alert("Tu navegador no permite elegir contactos del dispositivo. Completá el nombre y teléfono manualmente, o elegí uno de la agenda si ya lo compartiste antes.");
       return;
     }
     try {
@@ -443,12 +443,12 @@ function EditItemModal({
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-gray-600">Descripcion</label>
+              <label className="text-xs font-medium text-gray-600">Descripción</label>
               <input className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
                 value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} required />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600">Categoria</label>
+              <label className="text-xs font-medium text-gray-600">Categoría</label>
               <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
                 value={form.category_id} onChange={(e) => setForm((p) => ({ ...p, category_id: e.target.value }))}>
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -494,7 +494,7 @@ function NewCategoryModal({ onSave, onClose }: {
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" style={{background:"rgba(0,0,0,0.4)"}} onClick={onClose}>
       <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Nueva categoria</h3>
+          <h3 className="font-semibold text-gray-900">Nueva categoría</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={async (e) => { e.preventDefault(); setSaving(true); await onSave(form); setSaving(false); }} className="space-y-3">
@@ -645,7 +645,7 @@ export default function StatementDetailPage() {
   }, {});
 
   return (
-    <div className="max-w-3xl space-y-4 md:space-y-6">
+    <div className="max-w-4xl space-y-4 md:space-y-6">
       <div className="sticky top-0 z-10 bg-gray-50 pt-2 pb-3 -mx-4 px-4 md:-mx-8 md:px-8">
         <div className="flex items-center gap-3">
         <button onClick={() => router.push(`/tarjetas/${cardId}`)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
@@ -704,13 +704,13 @@ export default function StatementDetailPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-gray-600">Descripcion</label>
+              <label className="text-xs font-medium text-gray-600">Descripción</label>
               <input className={INPUT} placeholder="TV Samsung"
                 value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} required />
             </div>
             {form.currency !== "USD" && (
             <div>
-              <label className="text-xs font-medium text-gray-600">Categoria</label>
+              <label className="text-xs font-medium text-gray-600">Categoría</label>
               <div className="flex gap-1.5">
                 <select className={INPUT}
                   value={form.category_id} onChange={(e) => setForm((p) => ({ ...p, category_id: e.target.value }))} required={form.currency === "ARS"}>
@@ -848,7 +848,7 @@ export default function StatementDetailPage() {
       {/* Category summary */}
       {Object.keys(totalByCategory).length > 0 && (
         <div className="bg-white rounded-xl border p-4">
-          <p className="text-sm font-medium text-gray-700 mb-3">Por categoria</p>
+          <p className="text-sm font-medium text-gray-700 mb-3">Por categoría</p>
           <div className="space-y-2">
             {Object.values(totalByCategory).sort((a, b) => b.total - a.total).map((cat) => (
               <div key={cat.name} className="flex items-center gap-2">
