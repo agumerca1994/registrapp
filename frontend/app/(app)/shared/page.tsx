@@ -356,7 +356,7 @@ export default function SharedExpensesPage() {
   const currentUserId = appUser?.id;
 
   return (
-    <div className="max-w-3xl space-y-4 md:space-y-6">
+    <div className="max-w-4xl space-y-4 md:space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-lg md:text-2xl font-bold text-gray-900">Gastos compartidos</h1>
         <button
@@ -373,7 +373,7 @@ export default function SharedExpensesPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-gray-600">Descripcion *</label>
+              <label className="text-xs font-medium text-gray-600">Descripción *</label>
               <input required value={title} onChange={e => setTitle(e.target.value)}
                 className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
                 placeholder="ej: Supermercado del fin de semana" />
@@ -401,7 +401,7 @@ export default function SharedExpensesPage() {
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-medium text-gray-600">Categoria *</label>
+                <label className="text-xs font-medium text-gray-600">Categoría *</label>
                 <button type="button" onClick={() => setShowCatForm(v => !v)}
                   className="text-xs text-primary hover:underline">
                   + Crear
@@ -413,7 +413,7 @@ export default function SharedExpensesPage() {
                     <input
                       value={catName}
                       onChange={e => setCatName(e.target.value)}
-                      placeholder="Nombre categoria"
+                      placeholder="Nombre categoría"
                       className="flex-1 border rounded-lg px-2 py-1.5 text-sm"
                     />
                     <input type="color" value={catColor}
@@ -437,7 +437,7 @@ export default function SharedExpensesPage() {
               </select>
               {!showCatForm && categories.length === 0 && (
                 <p className="text-xs text-amber-600 mt-1">
-                  No hay categorias. Usa <strong>+ Crear</strong> para agregar una.
+                  No hay categorías. Usa <strong>+ Crear</strong> para agregar una.
                 </p>
               )}
             </div>
@@ -547,7 +547,7 @@ export default function SharedExpensesPage() {
                                   invite_method: "whatsapp",
                                 });
                               } else if (!("contacts" in navigator) || !navigator.contacts) {
-                                alert("Tu navegador no permite elegir contactos del dispositivo. Completa el nombre y telefono manualmente, o elegi uno de la agenda si ya lo compartiste antes.");
+                                alert("Tu navegador no permite elegir contactos del dispositivo. Completá el nombre y teléfono manualmente, o elegí uno de la agenda si ya lo compartiste antes.");
                               }
                             }}
                             title="Seleccionar contacto del dispositivo"
@@ -608,7 +608,7 @@ export default function SharedExpensesPage() {
                             </div>
                             {p.invite_phone_local.trim() && (
                               <p className="text-xs text-gray-400">
-                                Numero a enviar: +{buildPhone(p.invite_phone_prefix, p.invite_phone_local)}
+                                Número a enviar: +{buildPhone(p.invite_phone_prefix, p.invite_phone_local)}
                               </p>
                             )}
                             <p className="text-xs text-green-700">Se enviara una invitacion automaticamente por WhatsApp al crear el gasto</p>

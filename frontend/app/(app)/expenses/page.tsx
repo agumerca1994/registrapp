@@ -53,12 +53,12 @@ function EntryDetailModal({
             <span className="font-medium">{formatDate(entry.expense_date)}</span>
           </div>
           <div className="flex justify-between py-2">
-            <span className="text-muted-foreground">Categoria</span>
+            <span className="text-muted-foreground">Categoría</span>
             <span className="font-medium">{entry.category.name}</span>
           </div>
           {entry.description && entry.description !== entry.category.name && (
             <div className="flex justify-between py-2 gap-4">
-              <span className="text-muted-foreground shrink-0">Descripcion</span>
+              <span className="text-muted-foreground shrink-0">Descripción</span>
               <span className="font-medium text-right">{entry.description}</span>
             </div>
           )}
@@ -209,14 +209,14 @@ export default function ExpensesPage() {
   const someSelected = selected.size > 0 && !allSelected;
 
   return (
-    <div className="max-w-3xl space-y-4 md:space-y-6">
+    <div className="max-w-4xl space-y-4 md:space-y-6">
       <ProductTour tourId="expenses-intro" steps={EXPENSES_TOUR_STEPS} />
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xl md:text-2xl font-bold text-gray-900">Egresos</h2>
         <div className="flex gap-1 md:gap-2 shrink-0">
           <button onClick={() => setShowCatForm(true)}
             className="text-sm border px-2 md:px-3 py-1.5 rounded-lg hover:bg-gray-50">
-            + Categoria
+            + Categoría
           </button>
           <button onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true); }} data-tour="expenses-add"
             className="flex items-center gap-1 bg-primary text-white text-sm px-3 py-1.5 rounded-lg hover:opacity-90">
@@ -275,10 +275,10 @@ export default function ExpensesPage() {
               </div>
             ) : (
             <div>
-              <label className="text-xs font-medium text-gray-600">Categoria</label>
+              <label className="text-xs font-medium text-gray-600">Categoría</label>
               <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
                 value={form.category_id} onChange={e => setForm(p => ({ ...p, category_id: e.target.value }))} required={form.currency === "ARS"}>
-                <option value="">Selecciona una categoria</option>
+                <option value="">Selecciona una categoría</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
@@ -294,7 +294,7 @@ export default function ExpensesPage() {
                 value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} required />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600">Descripcion</label>
+              <label className="text-xs font-medium text-gray-600">Descripción</label>
               <input className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
                 value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
             </div>

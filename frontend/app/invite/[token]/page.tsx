@@ -102,7 +102,7 @@ export default function InvitePage() {
         {info && (
           <div className="bg-white rounded-xl border p-5 space-y-4">
             <div>
-              <p className="text-xs text-gray-500 mb-0.5">Descripcion</p>
+              <p className="text-xs text-gray-500 mb-0.5">Descripción</p>
               <p className="font-semibold text-gray-900">
                 {info.title}
                 {info.cuotas_count > 1 && (
@@ -152,13 +152,13 @@ export default function InvitePage() {
               {claiming ? "Procesando..." : info && info.cuotas_count > 1 ? `Aceptar las ${info.cuotas_count} cuotas` : "Aceptar y agregar a mis gastos"}
             </button>
             <p className="text-xs text-center text-gray-500">
-              Sesion iniciada como <strong>{appUser.display_name || appUser.email}</strong>
+              Sesión iniciada como <strong>{appUser.display_name || appUser.email}</strong>
             </p>
           </div>
         ) : (
           <div className="space-y-2">
             <p className="text-sm text-center text-gray-600">
-              Inicia sesion para aceptar este gasto compartido
+              Inicia sesión para aceptar este gasto compartido
             </p>
             <button
               onClick={() => {
@@ -167,7 +167,7 @@ export default function InvitePage() {
               }}
               className="w-full py-3 bg-primary text-white rounded-lg font-medium text-sm"
             >
-              Iniciar sesion
+              Iniciar sesión
             </button>
             <button
               onClick={() => {
