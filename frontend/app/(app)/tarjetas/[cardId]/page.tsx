@@ -230,7 +230,7 @@ export default function CardDetailPage() {
   if (!card) return <div className="p-6 text-sm text-gray-500">Cargando...</div>;
 
   return (
-    <div className="max-w-3xl space-y-4 md:space-y-6">
+    <div className="max-w-4xl space-y-4 md:space-y-6">
       <div className="sticky top-0 z-10 bg-gray-50 pt-2 pb-3 -mx-4 px-4 md:-mx-8 md:px-8 flex items-center gap-3">
         <button onClick={() => router.push("/tarjetas")} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500">
           <ChevronLeft className="w-5 h-5" />
