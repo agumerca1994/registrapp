@@ -6,12 +6,14 @@ from pydantic import BaseModel, model_validator
 class CreditCardCreate(BaseModel):
     bank: str
     alias: str
+    titular: str | None = None
     last_4_digits: str | None = None
 
 
 class CreditCardUpdate(BaseModel):
     bank: str | None = None
     alias: str | None = None
+    titular: str | None = None
     last_4_digits: str | None = None
 
 
@@ -21,6 +23,7 @@ class CreditCardOut(BaseModel):
     id: int
     bank: str
     alias: str
+    titular: str | None
     last_4_digits: str | None
     created_at: datetime
 
