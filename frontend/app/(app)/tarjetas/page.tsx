@@ -9,11 +9,12 @@ interface Card {
   id: number;
   bank: string;
   alias: string;
+  titular?: string;
   last_4_digits?: string;
   created_at: string;
 }
 
-const EMPTY_FORM = { bank: "", alias: "", last_4_digits: "" };
+const EMPTY_FORM = { bank: "", alias: "", titular: "", last_4_digits: "" };
 const INPUT = "mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900";
 
 type DeleteMode = "keep" | "delete";
@@ -29,7 +30,12 @@ function CardModal({
 }) {
   const [form, setForm] = useState(
     initial
-      ? { bank: initial.bank, alias: initial.alias, last_4_digits: initial.last_4_digits || "" }
+      ? {
+          bank: initial.bank,
+          alias: initial.alias,
+          titular: initial.titular || "",
+          last_4_digits: initial.last_4_digits || "",
+        }
       : EMPTY_FORM
   );
   const [saving, setSaving] = useState(false);
@@ -59,6 +65,11 @@ function CardModal({
               <label className="text-xs font-medium text-gray-600">Alias</label>
               <input className={INPUT} placeholder="Visa Gold"
                 value={form.alias} onChange={(e) => setForm((p) => ({ ...p, alias: e.target.value }))} required />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs font-medium text-gray-600">Titular (opcional)</label>
+              <input className={INPUT} placeholder="Miguel Mercado"
+                value={form.titular} onChange={(e) => setForm((p) => ({ ...p, titular: e.target.value }))} />
             </div>
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-gray-600">Últimos 4 dígitos (opcional)</label>
@@ -147,7 +158,12 @@ export default function TarjetasPage() {
   useEffect(() => { load(); }, []);
 
   const handleSave = async (form: typeof EMPTY_FORM) => {
-    const payload = { bank: form.bank, alias: form.alias, last_4_digits: form.last_4_digits || null };
+    const payload = {
+      bank: form.bank,
+      alias: form.alias,
+      titular: form.titular || null,
+      last_4_digits: form.last_4_digits || null,
+    };
     if (editCard) await api.patch(`/credit-cards/${editCard.id}`, payload);
     else await api.post("/credit-cards", payload);
     setShowModal(false);
@@ -197,6 +213,7 @@ export default function TarjetasPage() {
                   <p className="text-xs text-gray-500">
                     {card.bank}{card.last_4_digits ? ` •••• ${card.last_4_digits}` : ""}
                   </p>
+                  {card.titular && <p className="text-xs text-gray-400 truncate">{card.titular}</p>}
                 </div>
                 <ChevronRight className="w-4 h-4 text-gray-300 shrink-0 ml-auto" />
               </button>

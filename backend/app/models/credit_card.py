@@ -13,6 +13,7 @@ class CreditCard(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     bank: Mapped[str] = mapped_column(String(100))
     alias: Mapped[str] = mapped_column(String(100))
+    titular: Mapped[str | None] = mapped_column(String(100), nullable=True)
     last_4_digits: Mapped[str | None] = mapped_column(String(4), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
