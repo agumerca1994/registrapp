@@ -224,9 +224,16 @@ async def history(
     )
     for r in rows:
         k = str(r.p)[:7]
-        ensure(k)
-        data[k]["uva_value"] = r.uva
-        data[k]["inflation_pct"] = r.inflation
+        # Macro data is global (no tenant_id) and can span years of history —
+        # unlike the income/expense/mortgage loops above, it must only
+        # enrich months where the tenant already has activity, never
+        # fabricate a new all-zero month on its own (that pollutes the tail
+        # of the sorted history with phantom recent months, breaking the
+        # dashboard's "last 4 months" income trend when the tenant hasn't
+        # logged the current month yet but macro already synced it).
+        if k in data:
+            data[k]["uva_value"] = r.uva
+            data[k]["inflation_pct"] = r.inflation
 
     return [HistoryPoint(period=k, **data[k]) for k in sorted(data.keys())]
 
