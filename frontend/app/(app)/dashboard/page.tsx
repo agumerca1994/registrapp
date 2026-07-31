@@ -294,9 +294,11 @@ export default function DashboardPage() {
     ? ((Number(data.balance) - prevBalance) / Math.abs(prevBalance)) * 100
     : null;
 
-  // Last few points of the already-fetched income history — a real (if
-  // modest) sparkline instead of a decorative placeholder.
-  const quarterlyTrend = historyData.slice(-4);
+  // Last 4 months with real income — filtered before slicing so future
+  // income-less months (e.g. credit card installment cuotas propagated
+  // years ahead, which still create real ExpenseEntry-only history points)
+  // never crowd out the tenant's actual income trend.
+  const quarterlyTrend = historyData.filter(h => Number(h.total_income) > 0).slice(-4);
 
   const pieData = (() => {
     const arsEntries = expEntries.filter(e => e.currency !== "USD");
