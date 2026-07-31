@@ -590,12 +590,12 @@ export default function MortgagePage() {
           <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Historial de cuotas</p>
           <Card className="p-0 md:p-0 divide-y">
             {records.map(r => (
-              <div key={r.id} className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium text-foreground">
+              <div key={r.id} className="flex items-center justify-between gap-2 px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
                     {format(parseISO(r.period_date), "MMMM yyyy", { locale: es })}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground truncate">
                     {r.uva_units ? `${Number(r.uva_units).toFixed(2)} UVAs` : ""}
                     {r.capital ? ` · Capital ${formatARS(r.capital)}` : ""}
                     {r.interest ? ` · Interés ${formatARS(r.interest)}` : ""}

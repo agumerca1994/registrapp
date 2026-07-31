@@ -598,8 +598,11 @@ export default function IncomePage() {
               className="flex-1 flex items-center gap-2 min-w-0 text-left hover:opacity-80 active:opacity-60"
               onClick={() => setDetailEntry(entry)}
             >
-              <span className="flex-1 min-w-0 text-sm font-medium text-foreground truncate">{entry.source.name}</span>
-              <span className="w-[10ch] shrink-0 text-xs text-muted-foreground text-right truncate">{formatDate(entry.period_date)}</span>
+              <div className="flex-1 min-w-0">
+                <span className="block text-sm font-medium text-foreground truncate">{entry.source.name}</span>
+                <span className="block sm:hidden text-xs text-muted-foreground">{formatDate(entry.period_date)}</span>
+              </div>
+              <span className="hidden sm:block w-[10ch] shrink-0 text-xs text-muted-foreground text-right truncate">{formatDate(entry.period_date)}</span>
               <span className="w-[16ch] shrink-0 text-sm font-semibold text-emerald-600 text-right truncate">{formatARS(entry.amount)}</span>
               <ChevronRight className="w-4 h-4 text-muted-foreground/50 shrink-0" />
             </button>
