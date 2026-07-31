@@ -24,7 +24,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <ScrollToTop />
       <ErrorReporter />
-      <main id="main-content" className="flex-1 p-4 md:p-8 overflow-auto pt-20 pb-20 md:pt-8 md:pb-8">
+      <main id="main-content" className="flex-1 p-4 md:p-8 overflow-auto pt-20 pb-28 md:pt-8 md:pb-8">
         {children}
       </main>
     </div>

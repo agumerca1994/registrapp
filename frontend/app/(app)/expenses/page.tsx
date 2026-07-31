@@ -368,8 +368,9 @@ export default function ExpensesPage() {
                     <CreditCard className="w-3 h-3" />{entry.entity}
                   </span>
                 )}
+                <span className="block sm:hidden text-xs text-muted-foreground">{formatDate(entry.expense_date)}</span>
               </div>
-              <span className="w-[10ch] shrink-0 text-xs text-muted-foreground text-right truncate">{formatDate(entry.expense_date)}</span>
+              <span className="hidden sm:block w-[10ch] shrink-0 text-xs text-muted-foreground text-right truncate">{formatDate(entry.expense_date)}</span>
               <span className="w-[18ch] shrink-0 text-sm font-semibold text-rose-600 text-right truncate">{entry.currency === "USD" ? formatUSD(entry.amount) : formatARS(entry.amount)}</span>
               <ChevronRight className="w-4 h-4 text-muted-foreground/50 shrink-0" />
             </button>

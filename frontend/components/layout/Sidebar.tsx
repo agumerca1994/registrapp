@@ -218,8 +218,12 @@ export default function Sidebar() {
         </span>
       </div>
 
-      {/* Mobile bottom tab bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card border-t flex items-stretch h-16 pb-[env(safe-area-inset-bottom)]">
+      {/* Mobile bottom tab bar — floating, matching the hero-card treatment
+          (thick border + hard shadow) instead of a flat edge-to-edge strip. */}
+      <nav
+        className="md:hidden fixed left-3 right-3 z-40 bg-card border-[2.5px] border-ink rounded-2xl shadow-hero flex items-stretch h-[68px] px-1"
+        style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+      >
         {mobileTabs.map(({ href, label, icon: Icon, tour }) => {
           const active = pathname === href;
           return (
@@ -228,8 +232,8 @@ export default function Sidebar() {
               href={href}
               data-tour={tour}
               className={cn(
-                "flex-1 flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors",
-                active ? "text-primary" : "text-muted-foreground"
+                "flex-1 flex flex-col items-center justify-center gap-1 text-xs font-medium transition-colors rounded-xl m-1",
+                active ? "text-primary bg-accent" : "text-muted-foreground"
               )}
             >
               <Icon className="w-5 h-5" />
@@ -240,8 +244,8 @@ export default function Sidebar() {
         <button
           onClick={() => setMoreOpen(true)}
           className={cn(
-            "flex-1 flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors",
-            isMoreActive ? "text-primary" : "text-muted-foreground"
+            "flex-1 flex flex-col items-center justify-center gap-1 text-xs font-medium transition-colors rounded-xl m-1",
+            isMoreActive ? "text-primary bg-accent" : "text-muted-foreground"
           )}
         >
           <MoreHorizontal className="w-5 h-5" />

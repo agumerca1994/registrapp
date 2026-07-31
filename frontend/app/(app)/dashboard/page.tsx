@@ -387,7 +387,7 @@ export default function DashboardPage() {
                   </p>
                 )}
               </div>
-              {quarterlyTrend.length > 1 && (
+              {mounted && quarterlyTrend.length > 1 && (
                 <div className="w-full md:w-64 rounded-2xl bg-accent p-4 flex flex-col">
                   <p className="text-xs font-medium text-primary mb-2">Ingresos — últimos meses</p>
                   <div className="h-20">
