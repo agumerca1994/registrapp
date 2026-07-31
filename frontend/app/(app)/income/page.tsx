@@ -6,6 +6,8 @@ import { formatARS, formatDate, parseAmount, getErrorMessage } from "@/lib/utils
 import { Plus, Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle, ChevronRight } from "lucide-react";
 import ProductTour from "@/components/ProductTour";
 import type { Step } from "react-joyride";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 const INCOME_TOUR_STEPS: Step[] = [
   {
@@ -48,10 +50,10 @@ function EntryDetailModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
+      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">{entry.source.name}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X className="w-5 h-5" /></button>
+          <h3 className="font-semibold text-foreground">{entry.source.name}</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="divide-y text-sm">
@@ -72,12 +74,12 @@ function EntryDetailModal({
           {entry.deducciones != null && (
             <div className="flex justify-between py-2">
               <span className="text-muted-foreground">Deducciones</span>
-              <span className="font-medium text-red-500">− {formatARS(entry.deducciones)}</span>
+              <span className="font-medium text-rose-600">− {formatARS(entry.deducciones)}</span>
             </div>
           )}
           <div className="flex justify-between py-2">
-            <span className="font-medium text-gray-700">Neto</span>
-            <span className="font-bold text-green-600 text-base">{formatARS(entry.amount)}</span>
+            <span className="font-medium text-foreground">Neto</span>
+            <span className="font-bold text-emerald-600 text-base">{formatARS(entry.amount)}</span>
           </div>
           {entry.notes && (
             <div className="flex justify-between py-2 gap-4">
@@ -88,16 +90,14 @@ function EntryDetailModal({
         </div>
 
         <div className="flex gap-2 pt-1">
-          <button onClick={onDelete}
-            className="flex-1 flex items-center justify-center gap-1.5 border border-red-200 text-red-500 hover:bg-red-50 py-2.5 rounded-xl text-sm font-medium">
+          <Button variant="destructive" onClick={onDelete} className="flex-1">
             <Trash2 className="w-4 h-4" /> Eliminar
-          </button>
-          <button onClick={onEdit}
-            className="flex-1 flex items-center justify-center gap-1.5 bg-primary text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90">
+          </Button>
+          <Button onClick={onEdit} className="flex-1">
             <Pencil className="w-4 h-4" /> Editar
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -176,35 +176,35 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <Card className="p-0 md:p-0 w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h3 className="font-semibold text-gray-900">Importar ingresos</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X className="w-5 h-5" /></button>
+          <h3 className="font-semibold text-foreground">Importar ingresos</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {(["Archivo", "Mapeo", "Procesando", "Resultado"]).map((label, i) => (
               <span key={label} className="flex items-center gap-1">
-                {i > 0 && <span className="text-gray-300">›</span>}
+                {i > 0 && <span className="text-muted-foreground/40">›</span>}
                 <span className={i === ["upload","map","importing","done"].indexOf(step) ? "text-primary font-medium" : ""}>{label}</span>
               </span>
             ))}
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 bg-red-50 text-red-600 text-sm rounded-lg px-4 py-2.5">
+            <div className="flex items-center gap-2 bg-destructive/10 text-destructive text-sm rounded-lg px-4 py-2.5">
               <AlertCircle className="w-4 h-4 shrink-0" />{error}
             </div>
           )}
 
           {step === "upload" && (
             <div
-              className="border-2 border-dashed rounded-xl p-10 flex flex-col items-center gap-3 cursor-pointer hover:bg-gray-50"
+              className="border-2 border-dashed border-border rounded-xl p-10 flex flex-col items-center gap-3 cursor-pointer hover:bg-accent"
               onClick={() => fileRef.current?.click()}
             >
-              <Upload className="w-10 h-10 text-gray-300" />
-              <p className="text-sm font-medium text-gray-700">Seleccioná un archivo</p>
+              <Upload className="w-10 h-10 text-muted-foreground/50" />
+              <p className="text-sm font-medium text-foreground">Seleccioná un archivo</p>
               <p className="text-xs text-muted-foreground">Excel (.xlsx) o CSV (.csv)</p>
               {loadingPreview && <p className="text-xs text-primary mt-2">Leyendo archivo...</p>}
               <input ref={fileRef} type="file" accept=".xlsx,.csv" className="hidden"
@@ -215,15 +215,15 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
           {step === "map" && preview && (
             <div className="space-y-5">
               <div>
-                <p className="text-xs font-medium text-gray-500 mb-2">Vista previa · {preview.row_count} filas</p>
+                <p className="text-xs font-medium text-muted-foreground mb-2">Vista previa · {preview.row_count} filas</p>
                 <div className="overflow-x-auto rounded-lg border text-xs">
                   <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>{preview.columns.map(c => <th key={c} className="px-3 py-2 text-left font-medium text-gray-600">{c}</th>)}</tr>
+                    <thead className="bg-muted">
+                      <tr>{preview.columns.map(c => <th key={c} className="px-3 py-2 text-left font-medium text-muted-foreground">{c}</th>)}</tr>
                     </thead>
                     <tbody className="divide-y">
                       {preview.sample.map((row, i) => (
-                        <tr key={i}>{row.map((cell, j) => <td key={j} className="px-3 py-1.5 text-gray-700 max-w-[120px] truncate">{cell}</td>)}</tr>
+                        <tr key={i}>{row.map((cell, j) => <td key={j} className="px-3 py-1.5 text-foreground max-w-[120px] truncate">{cell}</td>)}</tr>
                       ))}
                     </tbody>
                   </table>
@@ -239,7 +239,7 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
                   ["notes_col", "Columna de notas"],
                 ].map(([key, label, required]) => (
                   <div key={key as string}>
-                    <label className="text-xs font-medium text-gray-600">{label as string}</label>
+                    <label className="text-xs font-medium text-muted-foreground">{label as string}</label>
                     <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
                       value={mapping[key as keyof typeof mapping]}
                       onChange={e => setMapping(m => ({ ...m, [key as string]: e.target.value }))}>
@@ -250,7 +250,7 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
                   </div>
                 ))}
                 <div>
-                  <label className="text-xs font-medium text-gray-600">Fuente de ingreso *</label>
+                  <label className="text-xs font-medium text-muted-foreground">Fuente de ingreso *</label>
                   <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
                     value={mapping.source_id} onChange={e => setMapping(m => ({ ...m, source_id: e.target.value }))}>
                     <option value="">+ Crear nueva fuente</option>
@@ -260,17 +260,17 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
               </div>
 
               {!mapping.source_id && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 rounded-xl p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-muted rounded-xl p-4">
                   <div>
-                    <label className="text-xs font-medium text-gray-600">Nombre *</label>
-                    <input className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white"
+                    <label className="text-xs font-medium text-muted-foreground">Nombre *</label>
+                    <input className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card"
                       placeholder="Ej: Sueldo Empresa"
                       value={mapping.new_source_name}
                       onChange={e => setMapping(m => ({ ...m, new_source_name: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-gray-600">Tipo</label>
-                    <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white"
+                    <label className="text-xs font-medium text-muted-foreground">Tipo</label>
+                    <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card"
                       value={mapping.new_source_type}
                       onChange={e => setMapping(m => ({ ...m, new_source_type: e.target.value }))}>
                       {Object.entries(INCOME_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -284,36 +284,36 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
           {step === "importing" && (
             <div className="flex flex-col items-center gap-4 py-10">
               <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-              <p className="text-sm text-gray-600">Importando registros...</p>
+              <p className="text-sm text-muted-foreground">Importando registros...</p>
             </div>
           )}
 
           {step === "done" && result && (
             <div className="space-y-4 py-4">
               <div className="flex items-center gap-3">
-                <CheckCircle2 className="w-8 h-8 text-green-500 shrink-0" />
+                <CheckCircle2 className="w-8 h-8 text-emerald-500 shrink-0" />
                 <div>
-                  <p className="font-semibold text-gray-900">Importación completada</p>
+                  <p className="font-semibold text-foreground">Importación completada</p>
                   <p className="text-sm text-muted-foreground">{result.imported + result.skipped} registros procesados</p>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <div className="bg-green-50 rounded-xl p-3 text-center">
-                  <p className="text-2xl font-bold text-green-600">{result.imported}</p>
-                  <p className="text-xs text-green-700 mt-0.5">Importados</p>
+                <div className="bg-emerald-50 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-emerald-600">{result.imported}</p>
+                  <p className="text-xs text-emerald-700 mt-0.5">Importados</p>
                 </div>
                 <div className="bg-amber-50 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-amber-600">{result.skipped}</p>
                   <p className="text-xs text-amber-700 mt-0.5">Duplicados</p>
                 </div>
-                <div className="bg-red-50 rounded-xl p-3 text-center">
-                  <p className="text-2xl font-bold text-red-600">{result.errors.length}</p>
-                  <p className="text-xs text-red-700 mt-0.5">Errores</p>
+                <div className="bg-rose-50 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-rose-600">{result.errors.length}</p>
+                  <p className="text-xs text-rose-700 mt-0.5">Errores</p>
                 </div>
               </div>
               {result.errors.length > 0 && (
-                <div className="bg-red-50 rounded-lg p-3 space-y-1">
-                  {result.errors.map((e, i) => <p key={i} className="text-xs text-red-600">{e}</p>)}
+                <div className="bg-destructive/10 rounded-lg p-3 space-y-1">
+                  {result.errors.map((e, i) => <p key={i} className="text-xs text-destructive">{e}</p>)}
                 </div>
               )}
             </div>
@@ -321,24 +321,24 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
         </div>
 
         <div className="px-6 py-4 border-t flex justify-between items-center">
-          {step === "upload" && <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">Cancelar</button>}
+          {step === "upload" && <button onClick={onClose} className="text-sm text-muted-foreground hover:text-foreground">Cancelar</button>}
           {step === "map" && (
             <>
-              <button onClick={() => { setStep("upload"); setPreview(null); setFile(null); }}
-                className="text-sm border px-4 py-2 rounded-lg hover:bg-gray-50">← Atrás</button>
-              <button onClick={handleImport}
-                className="bg-primary text-white text-sm px-5 py-2 rounded-lg hover:opacity-90 font-medium">
+              <Button variant="outline" onClick={() => { setStep("upload"); setPreview(null); setFile(null); }}>
+                ← Atrás
+              </Button>
+              <Button onClick={handleImport}>
                 Importar {preview?.row_count} filas →
-              </button>
+              </Button>
             </>
           )}
           {step === "done" && (
-            <button onClick={onClose} className="ml-auto bg-primary text-white text-sm px-5 py-2 rounded-lg hover:opacity-90">
+            <Button onClick={onClose} className="ml-auto">
               Cerrar
-            </button>
+            </Button>
           )}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -439,7 +439,7 @@ export default function IncomePage() {
   };
 
   const toggleSelect = (id: number) =>
-    setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelected(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const toggleAll = () =>
     setSelected(s => s.size === entries.length ? new Set() : new Set(entries.map(e => e.id)));
@@ -461,105 +461,104 @@ export default function IncomePage() {
       <ProductTour tourId="income-intro" steps={INCOME_TOUR_STEPS} />
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xl md:text-2xl font-bold text-gray-900">Ingresos</h2>
+        <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Ingresos</h2>
         <div className="flex gap-1 md:gap-2 shrink-0">
-          <button onClick={() => setShowSourceForm(true)}
-            className="text-sm border px-2 md:px-3 py-1.5 rounded-lg hover:bg-gray-50">
+          <Button variant="outline" onClick={() => setShowSourceForm(true)}>
             + Fuente
-          </button>
-          <button onClick={() => setShowImport(true)} data-tour="income-import"
-            className="flex items-center gap-1 text-sm border px-2 md:px-3 py-1.5 rounded-lg hover:bg-gray-50">
+          </Button>
+          <Button variant="outline" onClick={() => setShowImport(true)} data-tour="income-import">
             <Upload className="w-3.5 h-3.5 shrink-0" />
             <span className="hidden sm:inline">Importar</span>
-          </button>
-          <button onClick={() => { setEditId(null); setForm(EMPTY_FORM); netoManual.current = false; setShowForm(true); }} data-tour="income-add"
-            className="flex items-center gap-1 bg-primary text-white text-sm px-3 py-1.5 rounded-lg hover:opacity-90">
+          </Button>
+          <Button onClick={() => { setEditId(null); setForm(EMPTY_FORM); netoManual.current = false; setShowForm(true); }} data-tour="income-add">
             <Plus className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Registrar</span>
-          </button>
+          </Button>
         </div>
       </div>
 
-      {/* Income vs inflation chart */}
-      
       {/* Source form */}
       {showSourceForm && (
-        <form onSubmit={handleAddSource} className="bg-white rounded-xl border p-4">
+        <Card className="p-4">
+          <form onSubmit={handleAddSource}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input className="border rounded-lg px-3 py-2 text-sm" placeholder="Nombre de la fuente"
               value={newSource.name} onChange={e => setNewSource(p => ({ ...p, name: e.target.value }))} required />
-            <select className="w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+            <select className="w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
               value={newSource.income_type} onChange={e => setNewSource(p => ({ ...p, income_type: e.target.value }))}>
               {Object.entries(INCOME_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
           <div className="flex justify-end gap-2 mt-3">
-            <button type="button" onClick={() => setShowSourceForm(false)} className="border px-3 py-2 rounded-lg text-sm">Cancelar</button>
-            <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg text-sm">Guardar</button>
+            <Button type="button" variant="outline" onClick={() => setShowSourceForm(false)}>Cancelar</Button>
+            <Button type="submit">Guardar</Button>
           </div>
-        </form>
+          </form>
+        </Card>
       )}
 
       {/* Entry form */}
       {showForm && (
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-4 md:p-5 space-y-3">
-          <p className="text-sm font-medium text-gray-700">{editId ? "Editar ingreso" : "Nuevo ingreso"}</p>
+        <Card className="p-4 md:p-5">
+          <form onSubmit={handleSubmit} className="space-y-3">
+          <p className="text-sm font-medium text-foreground">{editId ? "Editar ingreso" : "Nuevo ingreso"}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-gray-600">Fuente</label>
-              <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+              <label className="text-xs font-medium text-muted-foreground">Fuente</label>
+              <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
                 value={form.source_id} onChange={e => setForm(p => ({ ...p, source_id: e.target.value }))} required>
                 <option value="">Seleccioná una fuente</option>
                 {sources.map(s => <option key={s.id} value={s.id}>{s.name} ({INCOME_TYPE_LABELS[s.income_type]})</option>)}
               </select>
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600">Período</label>
-              <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+              <label className="text-xs font-medium text-muted-foreground">Período</label>
+              <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
                 value={form.period_date} onChange={e => setForm(p => ({ ...p, period_date: e.target.value }))} required />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600">Sueldo bruto ($)</label>
-              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+              <label className="text-xs font-medium text-muted-foreground">Sueldo bruto ($)</label>
+              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
                 value={form.bruto} onChange={e => updateBrutoOrDed("bruto", e.target.value)} />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600">Deducciones ($)</label>
-              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+              <label className="text-xs font-medium text-muted-foreground">Deducciones ($)</label>
+              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
                 value={form.deducciones} onChange={e => updateBrutoOrDed("deducciones", e.target.value)} />
             </div>
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-gray-600">
+              <label className="text-xs font-medium text-muted-foreground">
                 Sueldo neto ($)
                 {!netoManual.current && form.bruto && (
                   <span className="text-muted-foreground font-normal ml-1">— calculado automáticamente</span>
                 )}
               </label>
-              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
                 value={form.amount}
                 onFocus={() => { netoManual.current = true; }}
                 onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}
                 required />
             </div>
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-gray-600">Notas (opcional)</label>
+              <label className="text-xs font-medium text-muted-foreground">Notas (opcional)</label>
               <input className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
                 value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={closeForm} className="border px-4 py-2 rounded-lg text-sm">Cancelar</button>
-            <button type="submit" disabled={loading} className="bg-primary text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50">
+            <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
+            <Button type="submit" disabled={loading}>
               {loading ? "Guardando..." : "Guardar"}
-            </button>
+            </Button>
           </div>
-        </form>
+          </form>
+        </Card>
       )}
 
       {/* List */}
-      <div className="bg-white rounded-xl border divide-y">
+      <Card className="p-0 md:p-0 divide-y">
         {entries.length > 0 && (
-          <div className="flex items-center gap-3 px-3 md:px-5 py-2 bg-gray-50 rounded-t-xl">
+          <div className="flex items-center gap-3 px-3 md:px-5 py-2 bg-muted rounded-t-2xl">
             <input
               type="checkbox"
               checked={allSelected}
@@ -569,11 +568,11 @@ export default function IncomePage() {
             />
             {selected.size > 0 ? (
               <div className="flex items-center gap-3 flex-1">
-                <span className="text-sm text-gray-600">{selected.size} seleccionado{selected.size !== 1 ? "s" : ""}</span>
+                <span className="text-sm text-muted-foreground">{selected.size} seleccionado{selected.size !== 1 ? "s" : ""}</span>
                 <button
                   onClick={handleBulkDelete}
                   disabled={bulkDeleting}
-                  className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700 disabled:opacity-50"
+                  className="flex items-center gap-1 text-sm text-destructive hover:opacity-80 disabled:opacity-50"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   {bulkDeleting ? "Eliminando..." : "Eliminar seleccionados"}
@@ -599,14 +598,14 @@ export default function IncomePage() {
               className="flex-1 flex items-center gap-2 min-w-0 text-left hover:opacity-80 active:opacity-60"
               onClick={() => setDetailEntry(entry)}
             >
-              <span className="flex-1 text-sm font-medium text-gray-900 truncate">{entry.source.name}</span>
-              <span className="w-24 text-xs text-muted-foreground shrink-0 text-right truncate">{formatDate(entry.period_date)}</span>
-              <span className="w-28 text-sm font-semibold text-green-600 shrink-0 text-right">{formatARS(entry.amount)}</span>
-              <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
+              <span className="flex-1 min-w-0 text-sm font-medium text-foreground truncate">{entry.source.name}</span>
+              <span className="w-[10ch] shrink-0 text-xs text-muted-foreground text-right truncate">{formatDate(entry.period_date)}</span>
+              <span className="w-[16ch] shrink-0 text-sm font-semibold text-emerald-600 text-right truncate">{formatARS(entry.amount)}</span>
+              <ChevronRight className="w-4 h-4 text-muted-foreground/50 shrink-0" />
             </button>
           </div>
         ))}
-      </div>
+      </Card>
 
       {detailEntry && (
         <EntryDetailModal

@@ -23,7 +23,7 @@ export default function WhatsAppVerifyForm({ onVerified, onSkip }: {
     try {
       await api.post("/auth/me/skip-whatsapp-gate");
       await onSkip();
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(getErrorMessage(e, "No se pudo continuar. Intentá de nuevo."));
     } finally {
       setSkipping(false);
@@ -40,7 +40,7 @@ export default function WhatsAppVerifyForm({ onVerified, onSkip }: {
     try {
       await api.post("/auth/me/link-whatsapp", { phone: fullPhone });
       setPhase("pending");
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(getErrorMessage(e, "Error al enviar el código"));
     } finally {
       setLoading(false);
@@ -54,7 +54,7 @@ export default function WhatsAppVerifyForm({ onVerified, onSkip }: {
       await api.post("/auth/me/verify-whatsapp", { phone: fullPhone, code: code.trim() });
       await onVerified();
       setPhase("idle"); setLocalPhone(""); setCode("");
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(getErrorMessage(e, "Código incorrecto o expirado"));
     } finally {
       setLoading(false);

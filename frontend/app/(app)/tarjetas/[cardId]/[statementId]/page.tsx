@@ -3,9 +3,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
-import { formatARS, formatDate, formatUSD, parseAmount, normalizePhoneNumber, getErrorMessage } from "@/lib/utils";
+import { formatARS, formatDate, formatUSD, parseAmount, normalizePhoneNumber, getErrorMessage, pickCategoryColor } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, Trash2, ChevronLeft, Pencil, X, CheckCircle, ExternalLink, Users2, Phone } from "lucide-react";
+import { Plus, ChevronLeft, X, CheckCircle, ExternalLink, Users2, Phone } from "lucide-react";
+import { Card as UiCard } from "@/components/ui/card";
+import { Chip } from "@/components/ui/chip";
+import { Button } from "@/components/ui/button";
 
 const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -42,14 +45,14 @@ const EMPTY_ITEM = {
 function itemTypeBadge(item: CardItem) {
   if (item.item_type === "single") return null;
   if (item.item_type === "recurring") return (
-    <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">Recurrente</span>
+    <Chip tone="violet">Recurrente</Chip>
   );
   if (item.item_type === "installment") {
     const isChild = !!item.installment_group_id;
     return (
-      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${isChild ? "bg-orange-100 text-orange-700" : "bg-purple-100 text-purple-700"}`}>
+      <Chip tone={isChild ? "amber" : "violet"}>
         Cuota {item.installment_number}/{item.installment_count}
-      </span>
+      </Chip>
     );
   }
   return null;
@@ -171,20 +174,20 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <UiCard className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Compartir gasto</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X className="w-5 h-5" /></button>
+          <h3 className="font-semibold text-foreground">Compartir gasto</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
 
-        <div className="bg-gray-50 rounded-lg px-3 py-2 text-sm space-y-0.5">
-          <p className="font-medium text-gray-800">{item.description}</p>
-          <p className="text-gray-500">{item.currency === "USD" ? formatUSD(item.amount) : formatARS(item.amount)} por cuota</p>
+        <div className="bg-muted rounded-lg px-3 py-2 text-sm space-y-0.5">
+          <p className="font-medium text-foreground">{item.description}</p>
+          <p className="text-muted-foreground">{item.currency === "USD" ? formatUSD(item.amount) : formatARS(item.amount)} por cuota</p>
           {cuotasRestantes > 1 && (
             <p className="text-xs text-amber-600 mt-1">Se compartiran las {cuotasRestantes} cuotas del plan</p>
           )}
           {item.item_type === "recurring" && (
-            <p className="text-xs text-blue-600 mt-1">Solo se comparte el mes actual</p>
+            <p className="text-xs text-primary mt-1">Solo se comparte el mes actual</p>
           )}
         </div>
 
@@ -192,7 +195,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
           <div className="flex gap-2">
             {(["equal", "custom"] as const).map(t => (
               <button key={t} type="button" onClick={() => setSplitType(t)}
-                className={"flex-1 py-1.5 text-xs rounded-lg border transition-colors " + (splitType === t ? "bg-primary text-white border-primary" : "text-gray-600 hover:bg-gray-50")}>
+                className={"flex-1 py-1.5 text-xs rounded-full border-2 font-medium transition-colors " + (splitType === t ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent")}>
                 {t === "equal" ? "Division igual" : "Personalizado"}
               </button>
             ))}
@@ -200,7 +203,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-medium text-gray-600">Participantes</p>
+              <p className="text-xs font-medium text-muted-foreground">Participantes</p>
               <button type="button" onClick={addParticipant}
                 className="text-xs text-primary hover:underline flex items-center gap-1">
                 <Plus className="w-3 h-3" /> Agregar
@@ -209,10 +212,10 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
 
             <div className="space-y-2">
               {participants.map((p, idx) => (
-                <div key={idx} className="border rounded-lg p-2.5 bg-gray-50 space-y-2">
+                <div key={idx} className="border rounded-lg p-2.5 bg-muted space-y-2">
                   <div className="flex items-center gap-2">
                     {p.type === "self" ? (
-                      <span className="border rounded-lg px-2 py-1.5 text-xs bg-white text-gray-600 shrink-0">Vos</span>
+                      <span className="border rounded-lg px-2 py-1.5 text-xs bg-card text-muted-foreground shrink-0">Vos</span>
                     ) : (
                       <select
                         value={p.type}
@@ -220,7 +223,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                           const t = e.target.value as "member" | "external";
                           updateParticipant(idx, { type: t, user_id: null, member_name: "", contact: "" });
                         }}
-                        className="border rounded-lg px-2 py-1.5 text-xs bg-white shrink-0"
+                        className="border rounded-lg px-2 py-1.5 text-xs bg-card shrink-0"
                       >
                         <option value="member">Del hogar</option>
                         <option value="external">Externo</option>
@@ -228,12 +231,12 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                     )}
                     {p.type !== "self" && (
                       <button type="button" onClick={() => removeParticipant(idx)}
-                        className="ml-auto text-gray-400 hover:text-red-500 px-1 text-base leading-none">x</button>
+                        className="ml-auto text-muted-foreground hover:text-destructive px-1 text-base leading-none">x</button>
                     )}
                   </div>
 
                   {p.type === "self" ? (
-                    <p className="text-sm text-gray-700 px-1">{p.member_name}</p>
+                    <p className="text-sm text-foreground px-1">{p.member_name}</p>
                   ) : p.type === "member" ? (
                     <select
                       required
@@ -243,7 +246,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                         const mem = otherMembers.find(m => m.id === id);
                         updateParticipant(idx, { user_id: id, member_name: mem?.display_name || mem?.email || "" });
                       }}
-                      className="w-full border rounded-lg px-2 py-2 text-sm bg-white text-gray-900"
+                      className="w-full border rounded-lg px-2 py-2 text-sm bg-card text-foreground"
                     >
                       <option value="">Seleccionar miembro...</option>
                       {otherMembers.map(m => (
@@ -260,7 +263,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                             if (!c) return;
                             updateParticipant(idx, { member_name: c.contact_name, contact: c.contact_phone });
                           }}
-                          className="w-full border rounded-lg px-2 py-1.5 text-xs bg-violet-50 border-violet-200 text-violet-700"
+                          className="w-full border rounded-lg px-2 py-1.5 text-xs bg-accent border-primary/20 text-primary"
                         >
                           <option value="">📇 Elegir de la agenda...</option>
                           {agendaContacts.map(c => (
@@ -274,7 +277,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                         placeholder="Alias (ej: Maria)"
                         value={p.member_name}
                         onChange={e => updateParticipant(idx, { member_name: e.target.value })}
-                        className="w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+                        className="w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
                       />
                       <div className="flex gap-2">
                         <input
@@ -283,19 +286,19 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                           placeholder="WhatsApp o email (opcional)"
                           value={p.contact}
                           onChange={e => updateParticipant(idx, { contact: e.target.value })}
-                          className="flex-1 border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+                          className="flex-1 border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
                         />
                         <button
                           type="button"
                           onClick={() => pickContact(idx)}
                           title={hasContactsApi ? "Elegir de contactos" : "Selector de contactos no disponible en este navegador"}
-                          className="px-3 py-2 rounded-lg shrink-0 bg-gray-100 hover:bg-gray-200 text-gray-600"
+                          className="px-3 py-2 rounded-lg shrink-0 bg-muted hover:bg-accent text-muted-foreground"
                         >
                           <Phone className="w-4 h-4" />
                         </button>
                       </div>
                       {p.contact && (
-                        <p className="text-xs text-violet-600">
+                        <p className="text-xs text-primary">
                           {p.contact.includes("@")
                             ? "Se generara un link de invitacion para copiar"
                             : "Se enviara una invitacion por WhatsApp"
@@ -307,7 +310,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
 
                   {splitType === "custom" ? (
                     <div>
-                      <label className="text-xs text-gray-500">Monto</label>
+                      <label className="text-xs text-muted-foreground">Monto</label>
                       <input
                         required
                         type="text"
@@ -316,13 +319,13 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                         placeholder="0,00"
                         value={p.amount}
                         onChange={e => updateParticipant(idx, { amount: e.target.value })}
-                        className="mt-0.5 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+                        className="mt-0.5 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
                       />
                     </div>
                   ) : (
                     <div className="flex items-center justify-between px-1">
-                      <span className="text-xs text-gray-500">Monto</span>
-                      <span className="text-sm font-medium text-gray-700">
+                      <span className="text-xs text-muted-foreground">Monto</span>
+                      <span className="text-sm font-medium text-foreground">
                         {totalAmount > 0 ? formatARS(equalShare) : "-"}
                       </span>
                     </div>
@@ -332,13 +335,13 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
             </div>
 
             {splitType === "equal" && totalAmount > 0 && participants.length > 1 && (
-              <p className="text-xs text-gray-500 mt-1.5">
+              <p className="text-xs text-muted-foreground mt-1.5">
                 {formatARS(totalAmount)} / {participants.length} = {formatARS(equalShare)} por persona
               </p>
             )}
 
             {splitType === "custom" && totalAmount > 0 && (
-              <div className={"mt-2 text-xs rounded-lg px-3 py-2 " + (overBudget ? "bg-red-50 text-red-600 font-medium" : "bg-blue-50 text-blue-700")}>
+              <div className={"mt-2 text-xs rounded-lg px-3 py-2 " + (overBudget ? "bg-destructive/10 text-destructive font-medium" : "bg-accent text-primary")}>
                 {overBudget
                   ? "La division supera el total: " + formatARS(customTotal) + " de " + formatARS(totalAmount)
                   : "Distribuido: " + formatARS(customTotal) + " | Restante: " + formatARS(totalAmount - customTotal)
@@ -347,17 +350,16 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
             )}
           </div>
 
-          {error && <p className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+          {error && <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
 
           <div className="flex gap-2 pt-1">
-            <button type="button" onClick={onClose} className="flex-1 border py-2 rounded-lg text-sm">Cancelar</button>
-            <button type="submit" disabled={sharing || participants.length < 2 || overBudget}
-              className="flex-1 bg-primary text-white py-2 rounded-lg text-sm disabled:opacity-50">
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancelar</Button>
+            <Button type="submit" disabled={sharing || participants.length < 2 || overBudget} className="flex-1">
               {sharing ? "Compartiendo..." : "Compartir"}
-            </button>
+            </Button>
           </div>
         </form>
-      </div>
+      </UiCard>
     </div>
   );
 }
@@ -376,26 +378,26 @@ function DeleteItemModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+      <UiCard className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Eliminar {isInstallment ? "cuotas" : "item"}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X className="w-5 h-5" /></button>
+          <h3 className="font-semibold text-foreground">Eliminar {isInstallment ? "cuotas" : "item"}</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
         {isInstallment ? (
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-muted-foreground">
             Se eliminarán <strong>todas las {item.installment_count} cuotas</strong> de &quot;{item.description}&quot; y sus gastos en todos los resumenes.
           </p>
         ) : (
-          <p className="text-sm text-gray-600">Se eliminara <strong>{item.description}</strong> y su gasto en Egresos.</p>
+          <p className="text-sm text-muted-foreground">Se eliminara <strong>{item.description}</strong> y su gasto en Egresos.</p>
         )}
         <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 border px-4 py-2.5 rounded-xl text-sm">Cancelar</button>
-          <button onClick={async () => { setDeleting(true); await onConfirm(isInstallment); setDeleting(false); }}
-            disabled={deleting} className="flex-1 bg-red-500 text-white px-4 py-2.5 rounded-xl text-sm disabled:opacity-50">
+          <Button variant="outline" onClick={onClose} className="flex-1">Cancelar</Button>
+          <Button variant="destructive" onClick={async () => { setDeleting(true); await onConfirm(isInstallment); setDeleting(false); }}
+            disabled={deleting} className="flex-1">
             {deleting ? "Eliminando..." : "Eliminar"}
-          </button>
+          </Button>
         </div>
-      </div>
+      </UiCard>
     </div>
   );
 }
@@ -435,76 +437,77 @@ function EditItemModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+      <UiCard className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Editar item</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X className="w-5 h-5" /></button>
+          <h3 className="font-semibold text-foreground">Editar item</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-gray-600">Descripción</label>
+              <label className="text-xs font-medium text-muted-foreground">Descripción</label>
               <input className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
                 value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} required />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600">Categoría</label>
+              <label className="text-xs font-medium text-muted-foreground">Categoría</label>
               <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
                 value={form.category_id} onChange={(e) => setForm((p) => ({ ...p, category_id: e.target.value }))}>
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600">Fecha</label>
+              <label className="text-xs font-medium text-muted-foreground">Fecha</label>
               <input type="date" className={INPUT}
                 value={form.item_date} onChange={(e) => setForm((p) => ({ ...p, item_date: e.target.value }))} required />
             </div>
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-gray-600">Monto ($)</label>
+              <label className="text-xs font-medium text-muted-foreground">Monto ($)</label>
               <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={INPUT}
                 value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} required />
             </div>
           </div>
           <div className="flex justify-between gap-2 pt-1">
             <button type="button" onClick={() => { onClose(); onDelete(item); }}
-              className="px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 border border-red-200">
+              className="px-3 py-2 rounded-lg text-sm text-destructive hover:bg-destructive/10 border border-destructive/30">
               Eliminar
             </button>
             <div className="flex gap-2">
-              <button type="button" onClick={onClose} className="border px-4 py-2 rounded-lg text-sm">Cancelar</button>
-              <button type="submit" disabled={saving} className="bg-primary text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50">
+              <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+              <Button type="submit" disabled={saving}>
                 {saving ? "Guardando..." : "Guardar"}
-              </button>
+              </Button>
             </div>
           </div>
         </form>
-      </div>
+      </UiCard>
     </div>
   );
 }
 
-const INPUT = "mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900";
+const INPUT = "mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground";
 
-function NewCategoryModal({ onSave, onClose }: {
+function NewCategoryModal({ existingColors, onSave, onClose }: {
+  existingColors: (string | null | undefined)[];
   onSave: (cat: { name: string; color: string; is_fixed: boolean }) => Promise<void>; onClose: () => void;
 }) {
-  const [form, setForm] = useState({ name: "", color: "#6366f1", is_fixed: false });
+  const [form, setForm] = useState({ name: "", color: pickCategoryColor(existingColors), is_fixed: false });
   const [saving, setSaving] = useState(false);
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" style={{background:"rgba(0,0,0,0.4)"}} onClick={onClose}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+      <UiCard className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Nueva categoría</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X className="w-5 h-5" /></button>
+          <h3 className="font-semibold text-foreground">Nueva categoría</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={async (e) => { e.preventDefault(); setSaving(true); await onSave(form); setSaving(false); }} className="space-y-3">
           <div>
-            <label className="text-xs font-medium text-gray-600">Nombre</label>
+            <label className="text-xs font-medium text-muted-foreground">Nombre</label>
             <input className={INPUT} placeholder="Supermercado" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required />
           </div>
           <div className="flex items-end gap-4">
             <div>
-              <label className="text-xs font-medium text-gray-600">Color</label>
+              <label className="text-xs font-medium text-muted-foreground">Color</label>
               <input type="color" className="mt-1 block h-9 w-12 border rounded-lg cursor-pointer"
                 value={form.color} onChange={(e) => setForm((p) => ({ ...p, color: e.target.value }))} />
             </div>
@@ -514,13 +517,13 @@ function NewCategoryModal({ onSave, onClose }: {
             </label>
           </div>
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="border px-4 py-2 rounded-lg text-sm">Cancelar</button>
-            <button type="submit" disabled={saving} className="bg-primary text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50">
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button type="submit" disabled={saving}>
               {saving ? "Guardando..." : "Crear"}
-            </button>
+            </Button>
           </div>
         </form>
-      </div>
+      </UiCard>
     </div>
   );
 }
@@ -635,7 +638,7 @@ export default function StatementDetailPage() {
     setFinalizing(false);
   };
 
-  if (!card || !statement) return <div className="p-6 text-sm text-gray-500">Cargando...</div>;
+  if (!card || !statement) return <div className="p-6 text-sm text-muted-foreground">Cargando...</div>;
 
   const totalByCategory = statement.items.reduce<Record<number, { name: string; color?: string; total: number }>>((acc, item) => {
     const cid = item.category.id;
@@ -646,71 +649,69 @@ export default function StatementDetailPage() {
 
   return (
     <div className="max-w-4xl space-y-4 md:space-y-6">
-      <div className="sticky top-0 z-10 bg-gray-50 pt-2 pb-3 -mx-4 px-4 md:-mx-8 md:px-8">
+      <div className="sticky top-0 z-10 bg-background pt-2 pb-3 -mx-4 px-4 md:-mx-8 md:px-8">
         <div className="flex items-center gap-3">
-        <button onClick={() => router.push(`/tarjetas/${cardId}`)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+        <button onClick={() => router.push(`/tarjetas/${cardId}`)} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">
           <ChevronLeft className="w-5 h-5" />
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-xl md:text-2xl font-bold text-gray-900">
+            <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">
               {MONTH_NAMES[statement.month - 1]} {statement.year}
             </h2>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-              statement.status === "closed" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
-            }`}>
+            <Chip tone={statement.status === "closed" ? "emerald" : "amber"}>
               {statement.status === "closed" ? "Cerrado" : "Abierto"}
-            </span>
+            </Chip>
           </div>
-          <p className="text-sm text-gray-500">{card.alias} - {card.bank}</p>
+          <p className="text-sm text-muted-foreground">{card.alias} - {card.bank}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {statement.status === "open" && (
             <button onClick={handleFinalize} disabled={finalizing}
-              className="flex items-center gap-1.5 text-sm bg-green-600 text-white px-3 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-50">
+              className="flex items-center gap-1.5 text-sm bg-emerald-600 text-white px-3 py-1.5 rounded-full border-2 border-ink shadow-chip hover:opacity-90 disabled:opacity-50">
               <CheckCircle className="w-4 h-4" />
               <span className="hidden sm:inline">{finalizing ? "Finalizando..." : "Finalizar"}</span>
             </button>
           )}
-          <button onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-1 bg-primary text-white text-sm px-3 py-1.5 rounded-lg hover:opacity-90">
+          <Button onClick={() => setShowAddForm(true)}>
             <Plus className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Agregar</span>
-          </button>
+          </Button>
         </div>
         </div>
       </div>
 
       {/* Add item form */}
       {showAddForm && (
-        <form onSubmit={handleAddItem} className="bg-white rounded-xl border p-4 space-y-3">
-          <p className="text-sm font-medium text-gray-700">Nuevo item</p>
+        <UiCard className="p-4">
+          <form onSubmit={handleAddItem} className="space-y-3">
+          <p className="text-sm font-medium text-foreground">Nuevo item</p>
 
           {/* Currency toggle — always at top */}
           <div className="flex gap-2">
             {(["ARS", "USD"] as const).map(cur => (
               <button key={cur} type="button"
                 onClick={() => setForm(p => ({ ...p, currency: cur, category_id: cur === "USD" ? "" : p.category_id, item_type: cur === "USD" ? "single" : p.item_type }))}
-                className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${form.currency === cur ? "bg-primary text-white border-primary" : "text-gray-600 hover:bg-gray-50"}`}>
+                className={`flex-1 py-1.5 text-xs rounded-full border-2 font-medium transition-colors ${form.currency === cur ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent"}`}>
                 {cur === "ARS" ? "$ ARS" : "U$D"}
               </button>
             ))}
           </div>
           {form.currency === "USD" && (
-            <p className="text-xs text-gray-500 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
+            <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
               Se agrega automáticamente a la categoría <strong>Consumo en dólares</strong>
             </p>
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-gray-600">Descripción</label>
+              <label className="text-xs font-medium text-muted-foreground">Descripción</label>
               <input className={INPUT} placeholder="TV Samsung"
                 value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} required />
             </div>
             {form.currency !== "USD" && (
             <div>
-              <label className="text-xs font-medium text-gray-600">Categoría</label>
+              <label className="text-xs font-medium text-muted-foreground">Categoría</label>
               <div className="flex gap-1.5">
                 <select className={INPUT}
                   value={form.category_id} onChange={(e) => setForm((p) => ({ ...p, category_id: e.target.value }))} required={form.currency === "ARS"}>
@@ -718,24 +719,24 @@ export default function StatementDetailPage() {
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
                 <button type="button" onClick={() => setShowNewCat(true)}
-                  className="mt-1 px-2.5 border rounded-lg text-gray-500 hover:bg-gray-50 shrink-0 text-lg leading-none">+</button>
+                  className="mt-1 px-2.5 border rounded-lg text-muted-foreground hover:bg-accent shrink-0 text-lg leading-none">+</button>
               </div>
             </div>
             )}
             <div>
-              <label className="text-xs font-medium text-gray-600">Fecha</label>
+              <label className="text-xs font-medium text-muted-foreground">Fecha</label>
               <input type="date" className={INPUT}
                 value={form.item_date} onChange={(e) => setForm((p) => ({ ...p, item_date: e.target.value }))} required />
             </div>
             {form.currency !== "USD" && (
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-gray-600">Tipo</label>
+              <label className="text-xs font-medium text-muted-foreground">Tipo</label>
               <div className="mt-1 flex gap-2">
                 {(["single","installment","recurring"] as ItemType[]).map((t) => (
                   <button key={t} type="button"
                     onClick={() => setForm((p) => ({ ...p, item_type: t }))}
-                    className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${
-                      form.item_type === t ? "bg-primary text-white border-primary" : "text-gray-600 hover:bg-gray-50"
+                    className={`flex-1 py-1.5 text-xs rounded-full border-2 font-medium transition-colors ${
+                      form.item_type === t ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent"
                     }`}>
                     {t === "single" ? "Unico" : t === "installment" ? "Cuotas" : "Recurrente"}
                   </button>
@@ -747,42 +748,42 @@ export default function StatementDetailPage() {
             {form.item_type === "installment" ? (
               <>
                 <div>
-                  <label className="text-xs font-medium text-gray-600">Cant. cuotas</label>
+                  <label className="text-xs font-medium text-muted-foreground">Cant. cuotas</label>
                   <input type="number" min="2" className={INPUT}
                     value={form.installment_count} onChange={(e) => handleInstallmentCountChange(e.target.value)} required />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600">Monto por cuota ($)</label>
+                  <label className="text-xs font-medium text-muted-foreground">Monto por cuota ($)</label>
                   <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={INPUT}
                     value={form.amount} onChange={(e) => handleAmountChange("amount", e.target.value)} required />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600">Monto total ($)</label>
+                  <label className="text-xs font-medium text-muted-foreground">Monto total ($)</label>
                   <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={INPUT}
                     value={form.purchase_total} onChange={(e) => handleAmountChange("purchase_total", e.target.value)} />
-                  <p className="text-xs text-gray-400 mt-0.5">Modificar uno auto-calcula el otro</p>
+                  <p className="text-xs text-muted-foreground/70 mt-0.5">Modificar uno auto-calcula el otro</p>
                 </div>
               </>
             ) : (
               <div>
-                <label className="text-xs font-medium text-gray-600">Monto ($)</label>
+                <label className="text-xs font-medium text-muted-foreground">Monto ($)</label>
                 <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={INPUT}
                   value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} required />
               </div>
             )}
           </div>
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={() => { setShowAddForm(false); setForm(EMPTY_ITEM); }}
-              className="border px-4 py-2 rounded-lg text-sm">Cancelar</button>
-            <button type="submit" disabled={adding} className="bg-primary text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50">
+            <Button type="button" variant="outline" onClick={() => { setShowAddForm(false); setForm(EMPTY_ITEM); }}>Cancelar</Button>
+            <Button type="submit" disabled={adding}>
               {adding ? "Agregando..." : "Agregar"}
-            </button>
+            </Button>
           </div>
-        </form>
+          </form>
+        </UiCard>
       )}
 
       {/* Items list */}
-      <div className="bg-white rounded-xl border divide-y">
+      <UiCard className="p-0 md:p-0 divide-y">
         {statement.items.length === 0 ? (
           <p className="p-6 text-sm text-muted-foreground">No hay items en este resumen.</p>
         ) : (
@@ -798,31 +799,31 @@ export default function StatementDetailPage() {
                 <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.category.color || "#6366f1" }} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium text-gray-900 truncate">{item.description}</span>
+                    <span className="text-sm font-medium text-foreground truncate">{item.description}</span>
                     {itemTypeBadge(item)}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs text-gray-400">{item.category.name}</span>
-                    <span className="text-xs text-gray-300">|</span>
-                    <span className="text-xs text-gray-400">{formatDate(item.item_date)}</span>
+                    <span className="text-xs text-muted-foreground/70">{item.category.name}</span>
+                    <span className="text-xs text-muted-foreground/40">|</span>
+                    <span className="text-xs text-muted-foreground/70">{formatDate(item.item_date)}</span>
                   </div>
                 </div>
               </button>
-              <span className="text-sm font-semibold text-red-500 shrink-0">{item.currency === "USD" ? formatUSD(item.amount) : formatARS(item.amount)}</span>
+              <span className="w-[18ch] shrink-0 text-sm font-semibold text-rose-600 text-right truncate">{item.currency === "USD" ? formatUSD(item.amount) : formatARS(item.amount)}</span>
               {!item.installment_group_id && (
                 <button
                   onClick={() => !item.shared_expense_id && setShareItem(item)}
                   title={item.shared_expense_id ? "Ya compartido" : "Compartir gasto"}
                   className={`p-1.5 rounded-lg transition-colors shrink-0 ${
-                    item.shared_expense_id ? "text-blue-500 cursor-default" :
-                    "text-gray-300 hover:text-blue-500 hover:bg-blue-50"
+                    item.shared_expense_id ? "text-primary cursor-default" :
+                    "text-muted-foreground/40 hover:text-primary hover:bg-accent"
                   }`}
                 >
                   <Users2 className="w-4 h-4" />
                 </button>
               )}
               {item.installment_group_id && (
-                <span className="flex items-center gap-1 text-xs text-blue-500 shrink-0 px-1">
+                <span className="flex items-center gap-1 text-xs text-primary shrink-0 px-1">
                   <ExternalLink className="w-3 h-3" />
                   <span className="hidden sm:inline">Original</span>
                 </span>
@@ -834,31 +835,31 @@ export default function StatementDetailPage() {
           const arsTotal = statement.items.filter(i => i.currency !== "USD").reduce((s, i) => s + Number(i.amount), 0);
           const usdTotal = statement.items.filter(i => i.currency === "USD").reduce((s, i) => s + Number(i.amount), 0);
           return (
-            <div className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-b-xl flex-wrap gap-1">
-              <span className="text-sm font-medium text-gray-700">Total</span>
+            <div className="flex items-center justify-between px-4 py-3 bg-muted rounded-b-2xl flex-wrap gap-1">
+              <span className="text-sm font-medium text-foreground">Total</span>
               <div className="flex flex-col items-end gap-0.5">
-                {arsTotal > 0 && <span className="text-base font-bold text-red-500">{formatARS(arsTotal)}</span>}
-                {usdTotal > 0 && <span className="text-sm font-bold text-green-600">U$D {usdTotal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>}
+                {arsTotal > 0 && <span className="text-base font-bold text-rose-600">{formatARS(arsTotal)}</span>}
+                {usdTotal > 0 && <span className="text-sm font-bold text-emerald-600">U$D {usdTotal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>}
               </div>
             </div>
           );
         })()}
-      </div>
+      </UiCard>
 
       {/* Category summary */}
       {Object.keys(totalByCategory).length > 0 && (
-        <div className="bg-white rounded-xl border p-4">
-          <p className="text-sm font-medium text-gray-700 mb-3">Por categoría</p>
+        <UiCard className="p-4">
+          <p className="text-sm font-medium text-foreground mb-3">Por categoría</p>
           <div className="space-y-2">
             {Object.values(totalByCategory).sort((a, b) => b.total - a.total).map((cat) => (
               <div key={cat.name} className="flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color || "#6366f1" }} />
-                <span className="flex-1 text-sm text-gray-700 truncate">{cat.name}</span>
-                <span className="text-sm font-semibold text-gray-900">{formatARS(cat.total)}</span>
+                <span className="flex-1 text-sm text-foreground truncate">{cat.name}</span>
+                <span className="text-sm font-semibold text-foreground">{formatARS(cat.total)}</span>
               </div>
             ))}
           </div>
-        </div>
+        </UiCard>
       )}
 
       {deleteItem && (
@@ -867,7 +868,13 @@ export default function StatementDetailPage() {
       {editItem && (
         <EditItemModal item={editItem} categories={categories} onSave={handleEditItem} onDelete={setDeleteItem} onClose={() => setEditItem(null)} />
       )}
-      {showNewCat && <NewCategoryModal onSave={handleCreateCategory} onClose={() => setShowNewCat(false)} />}
+      {showNewCat && (
+        <NewCategoryModal
+          existingColors={categories.map(c => c.color)}
+          onSave={handleCreateCategory}
+          onClose={() => setShowNewCat(false)}
+        />
+      )}
       {shareItem && (
         <ShareItemModal item={shareItem} onClose={() => setShareItem(null)} onDone={() => { setShareItem(null); load(); }} currentUser={appUser} />
       )}

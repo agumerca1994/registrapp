@@ -4,15 +4,18 @@ import { useEffect, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import {
-  LineChart, Line,
+  LineChart, Line, BarChart, Bar,
   PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 import api from "@/lib/api";
 import { formatARS, formatUSD, formatPct } from "@/lib/utils";
-import { TrendingUp, TrendingDown, Wallet, Percent, DollarSign } from "lucide-react";
+import { TrendingUp, TrendingDown, Gauge, CircleDollarSign, Home, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import ProductTour from "@/components/ProductTour";
 import type { Step } from "react-joyride";
+import { Card } from "@/components/ui/card";
+import { Chip } from "@/components/ui/chip";
+import { Button } from "@/components/ui/button";
 
 const DASHBOARD_TOUR_STEPS: Step[] = [
   {
@@ -74,27 +77,96 @@ interface ExpenseCategory { id: number; name: string; color?: string; }
 interface IncomeEntry { id: number; source_id: number; amount: number; period_date: string; }
 interface IncomeSource { id: number; name: string; }
 
-const PIE_COLORS = ["#ef4444","#f97316","#eab308","#22c55e","#14b8a6","#3b82f6","#8b5cf6","#ec4899","#f43f5e","#06b6d4"];
+interface MortgageLoan { id: number; is_active: boolean; total_cuotas: number; }
+interface MortgageSummary {
+  loan: MortgageLoan;
+  cuota_numero: number;
+  pct_completado: number;
+  cuota_pesos_calculado: number | null;
+  next_payment_date: string;
+}
+
+// Brand-derived categorical palette (violet primary first, then a set of
+// distinct accents already used elsewhere in the app for chips/statuses).
+const PIE_COLORS = ["#5B4FE9","#10b981","#f59e0b","#f43f5e","#0ea5e9","#14b8a6","#f97316","#ec4899","#8b5cf6","#64748b"];
 
 function fmtPeriod(p: string): string {
   try { return format(parseISO(`${p}-01`), "MMM yy", { locale: es }); }
   catch { return p; }
 }
 
-function StatCard({ label, value, icon: Icon, positive }: {
-  label: string; value: string; icon: React.ElementType; positive?: boolean;
-}) {
+const STAT_TONES = {
+  positive: "bg-emerald-50 text-emerald-600",
+  negative: "bg-rose-50 text-rose-600",
+  usd: "bg-amber-50 text-amber-600",
+  neutral: "bg-accent text-primary",
+} as const;
 
+// Balance now lives in its own hero panel above this row, so every stat
+// here is a secondary/flat tile — borderless, just icon + text, per the v3
+// mockup (no card around secondary stats).
+function StatCard({ label, value, icon: Icon, tone = "neutral" }: {
+  label: string; value: string; icon: React.ElementType; tone?: keyof typeof STAT_TONES;
+}) {
   return (
-    <div className="bg-white rounded-xl border p-3 md:p-5 flex items-center gap-3">
-      <div className={`p-2 md:p-3 rounded-lg shrink-0 ${positive === false ? "bg-red-50 text-red-500" : positive ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"}`}>
+    <div className="p-3 md:p-5 flex items-center gap-3">
+      <div className={`p-2 md:p-3 rounded-xl shrink-0 ${STAT_TONES[tone]}`}>
         <Icon className="w-4 h-4 md:w-5 md:h-5" />
       </div>
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-sm md:text-base font-bold text-gray-900 break-words">{value}</p>
+        <p className="text-sm md:text-base font-bold text-foreground break-words">{value}</p>
       </div>
     </div>
+  );
+}
+
+function compactAmount(n: number): string {
+  return new Intl.NumberFormat("es-AR", { notation: "compact", maximumFractionDigits: 1 }).format(n);
+}
+
+interface DonutDatum { name: string; value: number; color: string; pct: number }
+
+// Donut with the total centered inside the ring + a custom side legend,
+// replacing Recharts' default below-chart legend — matches the v3 mockup's
+// "Distribución de Gastos" / "Fuentes de Ingreso" treatment.
+function DonutChartCard({ title, subtitle, data, centerLabel, formatValue = formatARS, currencyPrefix = "$" }: {
+  title: string; subtitle: string; data: DonutDatum[]; centerLabel: string;
+  formatValue?: (n: number) => string; currencyPrefix?: string;
+}) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  return (
+    <Card className="p-4 md:p-5">
+      <h3 className="font-semibold text-foreground mb-4 text-sm md:text-base">
+        {title} — {subtitle}
+      </h3>
+      <div className="flex flex-col sm:flex-row items-center gap-6">
+        <div className="relative shrink-0 w-full sm:w-[220px] h-[220px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                innerRadius={68} outerRadius={100} paddingAngle={2} stroke="none">
+                {data.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+              </Pie>
+              <Tooltip content={<PieCustomTooltip formatValue={formatValue} />} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none px-6 text-center">
+            <span className="text-xs text-muted-foreground">{centerLabel}</span>
+            <span className="text-lg font-display font-bold text-foreground">{currencyPrefix}{compactAmount(total)}</span>
+          </div>
+        </div>
+        <div className="flex-1 w-full min-w-0 space-y-2">
+          {data.map((d, i) => (
+            <div key={i} className="flex items-center gap-2 text-sm">
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+              <span className="flex-1 text-foreground truncate">{d.name}</span>
+              <span className="text-muted-foreground shrink-0">{d.pct}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -102,8 +174,8 @@ function StatCard({ label, value, icon: Icon, positive }: {
 function PctTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border rounded-lg shadow-lg p-3 text-xs">
-      <p className="font-medium text-gray-700 mb-1.5">{label}</p>
+    <div className="bg-card border rounded-lg shadow-lg p-3 text-xs">
+      <p className="font-medium text-foreground mb-1.5">{label}</p>
       {payload.map((p: { name: string; value: number; color: string }) => (
         <p key={p.name} style={{ color: p.color }}>
           {p.name}: <strong>{Number(p.value).toFixed(1)}%</strong>
@@ -118,9 +190,9 @@ function PieCustomTooltip({ active, payload, formatValue = formatARS }: any) {
   if (!active || !payload?.length) return null;
   const d = payload[0];
   return (
-    <div className="bg-white border rounded-lg shadow-lg p-3 text-xs">
+    <div className="bg-card border rounded-lg shadow-lg p-3 text-xs">
       <p className="font-medium" style={{ color: d.payload.color }}>{d.name}</p>
-      <p className="text-gray-700">{formatValue(d.value)}</p>
+      <p className="text-foreground">{formatValue(d.value)}</p>
       <p className="text-muted-foreground">{d.payload.pct}%</p>
     </div>
   );
@@ -140,15 +212,32 @@ export default function DashboardPage() {
   const [incSources, setIncSources] = useState<IncomeSource[]>([]);
   const [chartsLoading, setChartsLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [prevBalance, setPrevBalance] = useState<number | null>(null);
+  const [mortgageSummary, setMortgageSummary] = useState<MortgageSummary | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     setLoading(true);
-    api.get(`/dashboard/summary/${year}/${month}`)
-      .then(r => setData(r.data))
-      .finally(() => setLoading(false));
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const prevYear = month === 1 ? year - 1 : year;
+    Promise.all([
+      api.get(`/dashboard/summary/${year}/${month}`),
+      api.get(`/dashboard/summary/${prevYear}/${prevMonth}`).catch(() => null),
+    ]).then(([curr, prev]) => {
+      setData(curr.data);
+      setPrevBalance(prev?.data?.balance != null ? Number(prev.data.balance) : null);
+    }).finally(() => setLoading(false));
   }, [year, month]);
+
+  useEffect(() => {
+    api.get("/mortgage/loans").then(async (res) => {
+      const active = (res.data as MortgageLoan[]).find(l => l.is_active);
+      if (!active) return;
+      const sumRes = await api.get(`/mortgage/loans/${active.id}/summary`);
+      setMortgageSummary(sumRes.data);
+    }).catch(() => {});
+  }, []);
 
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
@@ -201,6 +290,14 @@ export default function DashboardPage() {
 
   const currentMonthLabel = format(new Date(currentYear, currentMonth - 1, 1), "MMMM yyyy", { locale: es });
 
+  const balanceChangePct = data && prevBalance != null && prevBalance !== 0
+    ? ((Number(data.balance) - prevBalance) / Math.abs(prevBalance)) * 100
+    : null;
+
+  // Last few points of the already-fetched income history — a real (if
+  // modest) sparkline instead of a decorative placeholder.
+  const quarterlyTrend = historyData.slice(-4);
+
   const pieData = (() => {
     const arsEntries = expEntries.filter(e => e.currency !== "USD");
     const total = arsEntries.reduce((s, e) => s + Number(e.amount), 0);
@@ -251,74 +348,147 @@ export default function DashboardPage() {
     <div className="max-w-6xl space-y-4 md:space-y-6">
       <ProductTour tourId="dashboard-intro" steps={DASHBOARD_TOUR_STEPS} requireDesktop />
 
-      <div className="flex items-center justify-end gap-2">
-        <button onClick={prev} className="p-2 rounded-lg border hover:bg-gray-50 text-gray-600 text-sm font-bold leading-none">&#8249;</button>
-        <span className="text-sm md:text-base font-semibold text-gray-800 capitalize min-w-[130px] text-center">{periodLabel}</span>
-        <button onClick={next} className="p-2 rounded-lg border hover:bg-gray-50 text-gray-600 text-sm font-bold leading-none">&#8250;</button>
+      <div className="flex justify-end">
+        <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
+          <CalendarDays className="w-4 h-4 text-primary shrink-0" />
+          <button onClick={prev} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
+          <button onClick={next} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[1,2,3,4].map(i => <div key={i} className="bg-white rounded-xl border p-4 h-20 animate-pulse" />)}
+        <div className="space-y-4">
+          <Card variant="hero" className="h-40 animate-pulse" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[1,2,3,4].map(i => <div key={i} className="h-14 rounded-xl bg-muted animate-pulse" />)}
+          </div>
         </div>
       ) : data ? (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard label="Ingresos" value={formatARS(data.total_income)} icon={TrendingUp} positive={true} />
-            <StatCard label="Egresos" value={formatARS(data.total_expenses)} icon={TrendingDown} positive={false} />
-            <StatCard label="Balance" value={formatARS(data.balance)} icon={Wallet} positive={data.balance >= 0} />
-            {data.total_expenses_usd > 0 && (
-              <StatCard label="Egresos USD" value={formatUSD(data.total_expenses_usd)} icon={DollarSign} positive={false} />
-            )}
-            {data.inflation_pct !== null && (
-              <StatCard label="Inflación" value={formatPct(data.inflation_pct)} icon={Percent} />
-            )}
-          </div>
-
-          {data.mortgage_payment && (
-            <div className="bg-white rounded-xl border p-4 md:p-5 flex items-center justify-between gap-4">
+          {/* Hero — the screen's one 3D element: this month's balance */}
+          <Card variant="hero" className="p-5 md:p-8">
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6 items-center">
               <div>
-                <p className="text-sm font-medium text-gray-700">
-                  Cuota hipotecaria
-                  {data.mortgage_is_projected && (
-                    <span className="ml-1.5 text-xs font-normal text-muted-foreground">(estimado)</span>
-                  )}
+                <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  Balance de {periodLabel}
                 </p>
-                {data.total_income > 0 && (
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {formatPct((data.mortgage_payment / data.total_income) * 100)} del ingreso
+                <p className="text-4xl md:text-5xl font-display font-bold text-foreground mt-1">
+                  {formatARS(data.balance)}
+                </p>
+                {balanceChangePct !== null && (
+                  <p className={`mt-2 text-sm font-medium flex items-center gap-1 ${balanceChangePct >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                    {balanceChangePct >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                    {balanceChangePct >= 0 ? "+" : ""}{balanceChangePct.toFixed(1)}% vs mes anterior
                   </p>
                 )}
               </div>
-              <p className="text-xl md:text-2xl font-bold text-primary shrink-0">{formatARS(data.mortgage_payment)}</p>
+              {quarterlyTrend.length > 1 && (
+                <div className="w-full md:w-64 rounded-2xl bg-accent p-4 flex flex-col">
+                  <p className="text-xs font-medium text-primary mb-2">Ingresos — últimos meses</p>
+                  <div className="h-20">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={quarterlyTrend} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+                        <Bar dataKey="total_income" fill="#5B4FE9" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </Card>
 
-          {data.expenses_by_category.length > 0 && (
-            <div className="bg-white rounded-xl border p-4 md:p-5">
-              <h3 className="font-semibold text-gray-900 mb-3 text-sm md:text-base">
-                {"Egresos por categoría"} — {periodLabel}
-              </h3>
-              <div className="space-y-2.5">
-                {data.expenses_by_category.map(cat => (
-                  <div key={cat.category_name}>
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color || "#6366f1" }} />
-                        <span className="text-sm text-gray-700 truncate">{cat.category_name}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                        <span className="text-sm font-medium">{formatARS(cat.total)}</span>
-                        <span className="text-xs text-muted-foreground">({formatPct((cat.total / data.total_expenses) * 100)})</span>
-                      </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard label="Ingresos" value={formatARS(data.total_income)} icon={TrendingUp} tone="positive" />
+            <StatCard label="Egresos" value={formatARS(data.total_expenses)} icon={TrendingDown} tone="negative" />
+            {data.total_expenses_usd > 0 && (
+              <StatCard label="Egresos USD" value={formatUSD(data.total_expenses_usd)} icon={CircleDollarSign} tone="usd" />
+            )}
+            {data.inflation_pct !== null && (
+              <StatCard label="Inflación" value={formatPct(data.inflation_pct)} icon={Gauge} />
+            )}
+          </div>
+
+          {(mortgageSummary || data.expenses_by_category.length > 0 || data.total_expenses_usd > 0) && (
+            <div className={mortgageSummary && (data.expenses_by_category.length > 0 || data.total_expenses_usd > 0) ? "grid grid-cols-1 lg:grid-cols-2 gap-4" : ""}>
+              {mortgageSummary && (
+                <Card className="p-4 md:p-5 space-y-4">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Home className="w-4 h-4 text-primary shrink-0" />
+                    <h3 className="font-semibold text-foreground text-sm md:text-base">Hipoteca</h3>
+                    <Chip tone="neutral">
+                      Próximo vencimiento: {(() => {
+                        try { return format(parseISO(mortgageSummary.next_payment_date), "d MMM", { locale: es }); }
+                        catch { return mortgageSummary.next_payment_date; }
+                      })()}
+                    </Chip>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5 text-sm">
+                      <span className="text-muted-foreground">Progreso del crédito</span>
+                      <span className="font-medium text-foreground">{mortgageSummary.pct_completado}% completado</span>
                     </div>
-                    <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full"
-                        style={{ width: `${(cat.total / data.total_expenses) * 100}%`, backgroundColor: cat.color || "#6366f1" }} />
+                    <div className="w-full bg-muted rounded-full h-2">
+                      <div className="bg-primary h-2 rounded-full transition-all"
+                        style={{ width: `${Math.min(mortgageSummary.pct_completado, 100)}%` }} />
                     </div>
                   </div>
-                ))}
-              </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      Cuota {mortgageSummary.cuota_numero} de {mortgageSummary.loan.total_cuotas}
+                    </p>
+                    {mortgageSummary.cuota_pesos_calculado != null && (
+                      <p className="text-lg font-bold text-foreground">{formatARS(mortgageSummary.cuota_pesos_calculado)}</p>
+                    )}
+                  </div>
+                  <Button asChild variant="outline" className="w-full">
+                    <a href="/mortgage">Ver detalles de hipoteca</a>
+                  </Button>
+                </Card>
+              )}
+
+              {(data.expenses_by_category.length > 0 || data.total_expenses_usd > 0) && (
+                <Card className="p-4 md:p-5">
+                  <h3 className="font-semibold text-foreground mb-3 text-sm md:text-base">
+                    {"Egresos por categoría"} — {periodLabel}
+                  </h3>
+                  <div className="space-y-2.5">
+                    {data.expenses_by_category.map(cat => (
+                      <div key={cat.category_name}>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color || "#6366f1" }} />
+                            <span className="text-sm text-foreground truncate">{cat.category_name}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                            <span className="text-sm font-medium">{formatARS(cat.total)}</span>
+                            <span className="text-xs text-muted-foreground">({formatPct((cat.total / data.total_expenses) * 100)})</span>
+                          </div>
+                        </div>
+                        <div className="h-1 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full rounded-full"
+                            style={{ width: `${(cat.total / data.total_expenses) * 100}%`, backgroundColor: cat.color || "#6366f1" }} />
+                        </div>
+                      </div>
+                    ))}
+                    {data.total_expenses_usd > 0 && (
+                      <div className={data.expenses_by_category.length > 0 ? "pt-2.5 border-t" : ""}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: "#22c55e" }} />
+                            <span className="text-sm text-foreground truncate">Consumo en dólares</span>
+                          </div>
+                          <span className="text-sm font-medium shrink-0 ml-2">{formatUSD(data.total_expenses_usd)}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              )}
             </div>
           )}
         </>
@@ -329,8 +499,8 @@ export default function DashboardPage() {
       {mounted && !chartsLoading && (
         <div className="space-y-4">
           {false && incomeTrendData.length > 0 && (
-            <div className="bg-white rounded-xl border p-4 md:p-5">
-              <h3 className="font-semibold text-gray-900 mb-4 text-sm md:text-base">
+            <Card className="p-4 md:p-5">
+              <h3 className="font-semibold text-foreground mb-4 text-sm md:text-base">
                 {"Variación mensual: Ingreso / Inflación / Dólar"}
               </h3>
               <ResponsiveContainer width="100%" height={260}>
@@ -345,66 +515,42 @@ export default function DashboardPage() {
                   <Line type="monotone" dataKey="Dolar" stroke="#f59e0b" strokeWidth={2} strokeDasharray="4 2" dot={false} connectNulls />
                 </LineChart>
               </ResponsiveContainer>
-            </div>
+            </Card>
           )}
 
-          {pieData.length > 0 && (
-            <div className="bg-white rounded-xl border p-4 md:p-5">
-              <h3 className="font-semibold text-gray-900 mb-4 text-sm md:text-base">
-                {"Distribución de egresos por categoría"} — {currentMonthLabel}
-              </h3>
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%"
-                    innerRadius={55} outerRadius={90} paddingAngle={2}>
-                    {pieData.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<PieCustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+          {(pieData.length > 0 || incomePieData.length > 0 || usdPieData.length > 0) && (
+            // Uniform grid for every donut card — each cell is the same fixed
+            // size whether it has 1, 2 or 3 items; a lone chart never
+            // stretches to fill the row, the leftover cell just stays empty.
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {pieData.length > 0 && (
+                <DonutChartCard
+                  title="Distribución de egresos por categoría"
+                  subtitle={currentMonthLabel}
+                  data={pieData}
+                  centerLabel="Total"
+                />
+              )}
 
-          {incomePieData.length > 0 && (
-            <div className="bg-white rounded-xl border p-4 md:p-5">
-              <h3 className="font-semibold text-gray-900 mb-4 text-sm md:text-base">
-                {"Distribución de ingresos por fuente"} — {currentMonthLabel}
-              </h3>
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie data={incomePieData} dataKey="value" nameKey="name" cx="50%" cy="50%"
-                    innerRadius={55} outerRadius={90} paddingAngle={2}>
-                    {incomePieData.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<PieCustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+              {incomePieData.length > 0 && (
+                <DonutChartCard
+                  title="Distribución de ingresos por fuente"
+                  subtitle={currentMonthLabel}
+                  data={incomePieData}
+                  centerLabel="Ingresos"
+                />
+              )}
 
-          {usdPieData.length > 0 && (
-            <div className="bg-white rounded-xl border p-4 md:p-5">
-              <h3 className="font-semibold text-gray-900 mb-4 text-sm md:text-base">
-                {"Gastos en dólares por descripción"} — {currentMonthLabel}
-              </h3>
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie data={usdPieData} dataKey="value" nameKey="name" cx="50%" cy="50%"
-                    innerRadius={55} outerRadius={90} paddingAngle={2}>
-                    {usdPieData.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<PieCustomTooltip formatValue={formatUSD} />} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
+              {usdPieData.length > 0 && (
+                <DonutChartCard
+                  title="Gastos en dólares por descripción"
+                  subtitle={currentMonthLabel}
+                  data={usdPieData}
+                  centerLabel="Total USD"
+                  formatValue={formatUSD}
+                  currencyPrefix="U$D "
+                />
+              )}
             </div>
           )}
         </div>

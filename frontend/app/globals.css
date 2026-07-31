@@ -4,23 +4,28 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* RegistrApp brand v3: violet/indigo primary, warm off-white background.
+       Emerald/amber accents (positive amounts, warnings) are applied directly
+       via Tailwind's built-in emerald and amber color utilities per element,
+       not through these semantic slots - keeps "brand accent color" separate
+       from "shadcn UI semantic color" (secondary/accent below stay neutral). */
+    --background: 240 33.3% 97.6%;
+    --foreground: 248.9 31.8% 16.7%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --card-foreground: 248.9 31.8% 16.7%;
+    --primary: 244.7 77.8% 61.2%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 250.9 52.4% 95.9%;
+    --secondary-foreground: 248.9 31.8% 16.7%;
+    --muted: 250.9 52.4% 95.9%;
+    --muted-foreground: 255.6 11.9% 44.5%;
+    --accent: 247.1 73.9% 95.5%;
+    --accent-foreground: 248.9 31.8% 16.7%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --border: 253.3 47.4% 92.5%;
+    --input: 253.3 47.4% 92.5%;
+    --ring: 244.7 77.8% 61.2%;
     --radius: 0.5rem;
   }
 

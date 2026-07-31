@@ -7,6 +7,8 @@ import { getErrorMessage } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import WhatsAppVerifyForm from "@/components/WhatsAppVerifyForm";
 import { MessageCircle } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -55,36 +57,36 @@ export default function OnboardingPage() {
 
   if (step === "whatsapp") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="bg-white rounded-2xl shadow-lg p-10 w-full max-w-md flex flex-col gap-6">
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Card variant="hero" className="w-full max-w-md flex flex-col gap-6 p-10">
           <div className="flex items-center gap-2">
-            <MessageCircle className="w-6 h-6 text-green-600" />
-            <h1 className="text-2xl font-bold text-gray-900">Vinculá tu WhatsApp</h1>
+            <MessageCircle className="w-6 h-6 text-emerald-600" />
+            <h1 className="text-2xl font-display font-bold text-foreground">Vinculá tu WhatsApp</h1>
           </div>
           <p className="text-sm text-muted-foreground">
             Para terminar de configurar tu cuenta, necesitamos vincular y verificar tu número de WhatsApp. Este paso es obligatorio para poder recibir invitaciones y recordatorios.
           </p>
           <WhatsAppVerifyForm onVerified={handleWhatsAppVerified} onSkip={handleWhatsAppVerified} />
-        </div>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="bg-white rounded-2xl shadow-lg p-10 w-full max-w-md flex flex-col gap-6">
-        <h1 className="text-2xl font-bold text-gray-900">Configurar cuenta</h1>
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <Card variant="hero" className="w-full max-w-md flex flex-col gap-6 p-10">
+        <h1 className="text-2xl font-display font-bold text-foreground">Configurar cuenta</h1>
 
         <div className="flex gap-2">
           <button
             onClick={() => setMode("create")}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${mode === "create" ? "bg-primary text-white" : "border text-gray-600 hover:bg-gray-50"}`}
+            className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors border-2 ${mode === "create" ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent"}`}
           >
             Crear hogar nuevo
           </button>
           <button
             onClick={() => setMode("join")}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${mode === "join" ? "bg-primary text-white" : "border text-gray-600 hover:bg-gray-50"}`}
+            className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors border-2 ${mode === "join" ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent"}`}
           >
             Unirme a un hogar
           </button>
@@ -130,15 +132,11 @@ export default function OnboardingPage() {
 
           {error && <p className="text-destructive text-sm">{error}</p>}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="bg-primary text-white rounded-lg py-2.5 text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
+          <Button type="submit" disabled={loading}>
             {loading ? "Configurando..." : mode === "create" ? "Crear hogar" : "Unirme"}
-          </button>
+          </Button>
         </form>
-      </div>
+      </Card>
     </div>
   );
 }
