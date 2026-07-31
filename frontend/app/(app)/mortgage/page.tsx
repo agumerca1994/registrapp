@@ -4,8 +4,11 @@ import { useEffect, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "@/lib/api";
-import { formatARS, formatDate, getErrorMessage } from "@/lib/utils";
-import { Settings2, X, Loader2, Home, Trash2, CalendarDays } from "lucide-react";
+import { formatARS, getErrorMessage } from "@/lib/utils";
+import { Pencil, X, Loader2, Home, Trash2, CalendarDays } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Chip } from "@/components/ui/chip";
+import { Button } from "@/components/ui/button";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -161,7 +164,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
       }
       onSaved();
       onClose();
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(getErrorMessage(e, "Error al guardar"));
     } finally {
       setSaving(false);
@@ -173,16 +176,16 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
       {/* Modal: flex-col with fixed header + scrollable body + fixed footer */}
-      <div
-        className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md flex flex-col max-h-[90dvh] overflow-hidden"
+      <Card
+        className="p-0 md:p-0 w-full sm:max-w-md flex flex-col max-h-[90dvh] overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Header — fijo */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b shrink-0">
-          <h3 className="font-semibold text-gray-900">
+          <h3 className="font-semibold text-foreground">
             {editLoan ? "Editar hipoteca" : step === 1 ? "Tipo de hipoteca" : "Configurar hipoteca"}
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1">
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -195,9 +198,9 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                 <button
                   key={type}
                   onClick={() => { setForm(p => ({ ...p, loan_type: type })); setStep(2); }}
-                  className="w-full text-left border rounded-xl p-3.5 hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                  className="w-full text-left border rounded-xl p-3.5 hover:border-primary/40 hover:bg-accent transition-colors"
                 >
-                  <p className="text-sm font-medium text-gray-900">{label}</p>
+                  <p className="text-sm font-medium text-foreground">{label}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{LOAN_TYPE_DESC[type]}</p>
                 </button>
               ))}
@@ -208,10 +211,10 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
             <div className="space-y-4">
               {!editLoan && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">
+                  <Chip tone="neutral">
                     {LOAN_TYPE_LABELS[form.loan_type]}
-                  </span>
-                  <button onClick={() => setStep(1)} className="text-xs text-blue-600 hover:underline">
+                  </Chip>
+                  <button onClick={() => setStep(1)} className="text-xs text-primary hover:underline">
                     Cambiar
                   </button>
                 </div>
@@ -221,18 +224,18 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                 {!editLoan && (
                   <>
                     <div>
-                      <label className="text-xs font-medium text-gray-600">Primera cuota *</label>
+                      <label className="text-xs font-medium text-muted-foreground">Primera cuota *</label>
                       <div className="relative mt-1">
-                        <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                        <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60 pointer-events-none" />
                         <input
                           type="month" required
                           value={form.first_payment_date} onChange={f("first_payment_date")}
-                          className="w-full border rounded-lg pl-9 pr-3 py-2 text-[16px] sm:text-sm bg-white text-gray-900"
+                          className="w-full border rounded-lg pl-9 pr-3 py-2 text-[16px] sm:text-sm bg-card text-foreground"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-gray-600">Cantidad de cuotas *</label>
+                      <label className="text-xs font-medium text-muted-foreground">Cantidad de cuotas *</label>
                       <input
                         type="number" min={1} required
                         value={form.total_cuotas} onChange={f("total_cuotas")}
@@ -243,19 +246,19 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                 )}
 
                 <div className="sm:col-span-2">
-                  <label className="text-xs font-medium text-gray-600">Fecha de pago de la cuota</label>
+                  <label className="text-xs font-medium text-muted-foreground">Fecha de pago de la cuota</label>
                   <div className="mt-1 flex gap-2">
                     <button
                       type="button"
                       onClick={() => setForm(p => ({ ...p, payment_day_mode: "biz", payment_day: "" }))}
-                      className={`flex-1 py-2 rounded-lg text-xs border transition-colors ${form.payment_day_mode === "biz" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-700 hover:bg-gray-50"}`}
+                      className={`flex-1 py-2 rounded-full text-xs border-2 font-medium transition-colors ${form.payment_day_mode === "biz" ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent"}`}
                     >
                       Primer día hábil
                     </button>
                     <button
                       type="button"
                       onClick={() => setForm(p => ({ ...p, payment_day_mode: "fixed" }))}
-                      className={`flex-1 py-2 rounded-lg text-xs border transition-colors ${form.payment_day_mode === "fixed" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-700 hover:bg-gray-50"}`}
+                      className={`flex-1 py-2 rounded-full text-xs border-2 font-medium transition-colors ${form.payment_day_mode === "fixed" ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent"}`}
                     >
                       Día específico
                     </button>
@@ -276,7 +279,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
 
                 {isUva && (
                   <div>
-                    <label className="text-xs font-medium text-gray-600">Cuota en UVAs *</label>
+                    <label className="text-xs font-medium text-muted-foreground">Cuota en UVAs *</label>
                     <input
                       type="text" inputMode="decimal" required
                       placeholder="ej: 750,74"
@@ -288,7 +291,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
 
                 {form.loan_type === "tasa_fija" && (
                   <div>
-                    <label className="text-xs font-medium text-gray-600">Cuota mensual ($) *</label>
+                    <label className="text-xs font-medium text-muted-foreground">Cuota mensual ($) *</label>
                     <input
                       type="text" inputMode="decimal" required
                       placeholder="ej: 150.000,00"
@@ -301,7 +304,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                 {isUva && (
                   <>
                     <div>
-                      <label className="text-xs font-medium text-gray-600">TNA % (opcional)</label>
+                      <label className="text-xs font-medium text-muted-foreground">TNA % (opcional)</label>
                       <input
                         type="text" inputMode="decimal"
                         placeholder="ej: 8,50"
@@ -310,7 +313,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-gray-600">Capital original en UVAs (opcional)</label>
+                      <label className="text-xs font-medium text-muted-foreground">Capital original en UVAs (opcional)</label>
                       <input
                         type="text" inputMode="decimal"
                         placeholder="para desglose capital/interés"
@@ -322,7 +325,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                 )}
 
                 <div className={isUva ? "sm:col-span-2" : ""}>
-                  <label className="text-xs font-medium text-gray-600">Banco (opcional)</label>
+                  <label className="text-xs font-medium text-muted-foreground">Banco (opcional)</label>
                   <input
                     type="text"
                     placeholder="ej: Banco Nación"
@@ -332,7 +335,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-gray-600">N° de préstamo (opcional)</label>
+                  <label className="text-xs font-medium text-muted-foreground">N° de préstamo (opcional)</label>
                   <input
                     type="text"
                     value={form.loan_number} onChange={f("loan_number")}
@@ -341,20 +344,16 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                 </div>
               </div>
 
-              {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+              {error && <p className="text-xs text-destructive mt-1">{error}</p>}
 
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="w-full mt-2 bg-gray-900 text-white px-4 py-3 rounded-xl text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-1.5"
-              >
+              <Button onClick={handleSave} disabled={saving} className="w-full mt-2">
                 {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 {editLoan ? "Guardar cambios" : "Activar hipoteca"}
-              </button>
+              </Button>
             </div>
           )}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -381,21 +380,21 @@ function DeleteLoanModal({ loanId, onClose, onDeleted }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
+      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Eliminar hipoteca</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1">
+          <h3 className="font-semibold text-foreground">Eliminar hipoteca</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <p className="text-sm text-gray-600">¿Qué querés hacer con el historial de cuotas pagadas?</p>
+        <p className="text-sm text-muted-foreground">¿Qué querés hacer con el historial de cuotas pagadas?</p>
         <div className="space-y-2">
           <button
             disabled={deleting}
             onClick={() => handleDelete(true)}
-            className="w-full text-left border rounded-xl p-3.5 hover:border-gray-400 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            className="w-full text-left border rounded-xl p-3.5 hover:border-primary/40 hover:bg-accent disabled:opacity-50 transition-colors"
           >
-            <p className="text-sm font-medium text-gray-900">Mantener el historial</p>
+            <p className="text-sm font-medium text-foreground">Mantener el historial</p>
             <p className="text-xs text-muted-foreground mt-0.5">
               Se eliminan los datos de la hipoteca pero se conservan los egresos y el historial de pagos.
             </p>
@@ -403,10 +402,10 @@ function DeleteLoanModal({ loanId, onClose, onDeleted }: {
           <button
             disabled={deleting}
             onClick={() => handleDelete(false)}
-            className="w-full text-left border border-red-200 rounded-xl p-3.5 hover:border-red-400 hover:bg-red-50 disabled:opacity-50 transition-colors"
+            className="w-full text-left border border-destructive/30 rounded-xl p-3.5 hover:border-destructive/60 hover:bg-destructive/5 disabled:opacity-50 transition-colors"
           >
-            <p className="text-sm font-medium text-red-700">Eliminar todo</p>
-            <p className="text-xs text-red-500 mt-0.5">
+            <p className="text-sm font-medium text-destructive">Eliminar todo</p>
+            <p className="text-xs text-destructive/80 mt-0.5">
               Se eliminan la hipoteca, todos los registros de cuotas y los egresos generados automáticamente.
             </p>
           </button>
@@ -417,7 +416,7 @@ function DeleteLoanModal({ loanId, onClose, onDeleted }: {
             Eliminando...
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -471,7 +470,7 @@ export default function MortgagePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold text-gray-900">Hipoteca</h2>
+          <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Hipoteca</h2>
           {activeLoan?.description && (
             <p className="text-xs text-muted-foreground mt-0.5">{activeLoan.description}</p>
           )}
@@ -480,17 +479,17 @@ export default function MortgagePage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowDelete(true)}
-              className="border p-1.5 rounded-lg hover:bg-red-50 hover:border-red-200 transition-colors"
+              className="border p-1.5 rounded-lg hover:bg-destructive/10 hover:border-destructive/30 transition-colors"
               title="Eliminar hipoteca"
             >
-              <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-500" />
+              <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
             </button>
             <button
               onClick={() => { setEditLoan(activeLoan); setShowConfig(true); }}
-              className="border p-1.5 rounded-lg hover:bg-gray-50 transition-colors"
-              title="Editar configuración"
+              className="border p-1.5 rounded-lg hover:bg-accent transition-colors"
+              title="Editar hipoteca"
             >
-              <Settings2 className="w-4 h-4 text-gray-600" />
+              <Pencil className="w-4 h-4 text-muted-foreground" />
             </button>
           </div>
         )}
@@ -498,41 +497,38 @@ export default function MortgagePage() {
 
       {/* Empty state */}
       {!activeLoan && (
-        <div className="bg-white rounded-xl border p-8 flex flex-col items-center text-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
-            <Home className="w-6 h-6 text-gray-400" />
+        <Card className="p-8 flex flex-col items-center text-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+            <Home className="w-6 h-6 text-muted-foreground" />
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-900">No tenés ninguna hipoteca configurada</p>
+            <p className="text-sm font-medium text-foreground">No tenés ninguna hipoteca configurada</p>
             <p className="text-xs text-muted-foreground mt-1">
               Configurá tu hipoteca y el sistema registrará las cuotas automáticamente cada mes.
             </p>
           </div>
-          <button
-            onClick={() => { setEditLoan(null); setShowConfig(true); }}
-            className="bg-gray-900 text-white text-sm px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-          >
+          <Button onClick={() => { setEditLoan(null); setShowConfig(true); }}>
             Configurar hipoteca
-          </button>
-        </div>
+          </Button>
+        </Card>
       )}
 
-      {/* Active loan hero card */}
+      {/* Active loan hero card — the one 3D element on this screen */}
       {summary && (
-        <div className="bg-white rounded-xl border p-5 space-y-4">
+        <Card variant="hero" className="p-5 space-y-4">
           {/* Progress */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold text-gray-900">
+              <span className="text-sm font-semibold text-foreground">
                 Cuota {summary.cuota_numero} de {summary.loan.total_cuotas}
               </span>
               <span className="text-xs text-muted-foreground">
                 {summary.cuotas_restantes} restantes · {summary.pct_completado}%
               </span>
             </div>
-            <div className="w-full bg-gray-100 rounded-full h-2">
+            <div className="w-full bg-muted rounded-full h-2">
               <div
-                className="bg-gray-900 h-2 rounded-full transition-all"
+                className="bg-primary h-2 rounded-full transition-all"
                 style={{ width: `${Math.min(summary.pct_completado, 100)}%` }}
               />
             </div>
@@ -541,12 +537,12 @@ export default function MortgagePage() {
           {/* Amount */}
           <div>
             {summary.cuota_uva != null && (
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-display font-bold text-foreground">
                 {Number(summary.cuota_uva).toFixed(2)} UVAs
               </p>
             )}
             {summary.cuota_pesos_calculado ? (
-              <p className="text-base text-gray-600 mt-0.5">
+              <p className="text-base text-muted-foreground mt-0.5">
                 = {formatARS(summary.cuota_pesos_calculado)}
                 {summary.latest_uva_value && summary.latest_uva_date && (
                   <span className="text-xs text-muted-foreground ml-1.5">
@@ -561,50 +557,42 @@ export default function MortgagePage() {
 
           {/* Chips */}
           <div className="flex flex-wrap gap-1.5">
-            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
-              {LOAN_TYPE_LABELS[summary.loan.loan_type] ?? summary.loan.loan_type}
-            </span>
-            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
-              {summary.loan.total_cuotas} cuotas
-            </span>
-            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
-              desde {fmtDate(summary.loan.first_payment_date)}
-            </span>
+            <Chip tone="neutral">{LOAN_TYPE_LABELS[summary.loan.loan_type] ?? summary.loan.loan_type}</Chip>
+            <Chip tone="neutral">{summary.loan.total_cuotas} cuotas</Chip>
+            <Chip tone="neutral">desde {fmtDate(summary.loan.first_payment_date)}</Chip>
             {summary.loan.tna != null && (
-              <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
-                TNA {Number(summary.loan.tna).toFixed(2)}%
-              </span>
+              <Chip tone="neutral">TNA {Number(summary.loan.tna).toFixed(2)}%</Chip>
             )}
-            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
+            <Chip tone="neutral">
               Pago: {summary.loan.payment_day != null ? `día ${summary.loan.payment_day}` : "1er día hábil"}
-            </span>
+            </Chip>
           </div>
 
           {/* Next payment status */}
-          <div className={`rounded-lg p-3 text-sm ${summary.paid_this_month ? "bg-green-50 text-green-700" : "bg-blue-50 text-blue-700"}`}>
+          <div className={`rounded-lg p-3 text-sm ${summary.paid_this_month ? "bg-emerald-50 text-emerald-700" : "bg-accent text-primary"}`}>
             {summary.paid_this_month ? (
               <p className="font-medium">✓ Cuota de {format(new Date(), "MMMM yyyy", { locale: es })} registrada</p>
             ) : (
               <p>Próxima cuota: <strong>{fmtDate(summary.next_payment_date)}</strong> — se registrará automáticamente</p>
             )}
             {summary.paid_this_month && (
-              <p className="text-xs mt-0.5 text-green-600">
+              <p className="text-xs mt-0.5 text-emerald-600">
                 Próxima: {fmtDate(summary.next_payment_date)}
               </p>
             )}
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* Payment history */}
+      {/* Payment history — flat, secondary to the hero summary above */}
       {records.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Historial de cuotas</p>
-          <div className="bg-white rounded-xl border divide-y">
+          <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Historial de cuotas</p>
+          <Card className="p-0 md:p-0 divide-y">
             {records.map(r => (
               <div key={r.id} className="flex items-center justify-between px-4 py-3">
                 <div>
-                  <p className="text-sm font-medium text-gray-900">
+                  <p className="text-sm font-medium text-foreground">
                     {format(parseISO(r.period_date), "MMMM yyyy", { locale: es })}
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -615,17 +603,17 @@ export default function MortgagePage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-sm font-semibold text-gray-900">{formatARS(r.payment_amount)}</span>
+                  <span className="w-[16ch] shrink-0 text-sm font-semibold text-foreground text-right truncate">{formatARS(r.payment_amount)}</span>
                   <button
                     onClick={() => handleDeleteRecord(r.id)}
-                    className="text-xs text-gray-300 hover:text-red-500 transition-colors"
+                    className="text-xs text-muted-foreground/40 hover:text-destructive transition-colors"
                   >
                     ✕
                   </button>
                 </div>
               </div>
             ))}
-          </div>
+          </Card>
         </div>
       )}
 

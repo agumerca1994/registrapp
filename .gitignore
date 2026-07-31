@@ -4,16 +4,32 @@ backend/firebase-credentials.json
 **/firebase-credentials.json
 **/*.json.secret
 
+# Archivos de contexto locales (PDFs de resúmenes, datos personales, etc.)
+/context/
+backend/scripts/_staging/
+backend/scripts/_staging_bbva_mastercard/
+backend/scripts/_staging_naranjax/
+backend/scripts/_staging_banconacion/
+backend/scripts/_staging_banconacion_mc/
+
 # Python
 __pycache__/
 *.py[cod]
 .venv/
+.venv-import/
 *.egg-info/
 
 # Node
 node_modules/
 .next/
 *.local
+*.tsbuildinfo
+next-env.d.ts
+
+# Playwright — ephemeral run output, NOT the committed snapshot baselines
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
 
 # Docker
 .docker/
@@ -21,3 +37,4 @@ node_modules/
 # OS
 .DS_Store
 Thumbs.db
+firebase-debug.log

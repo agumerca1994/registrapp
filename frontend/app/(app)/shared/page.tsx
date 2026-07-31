@@ -6,9 +6,12 @@ import { es } from "date-fns/locale";
 import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone, Layers } from "lucide-react";
 
 import api from "@/lib/api";
-import { formatARS, normalizePhoneNumber, getErrorMessage } from "@/lib/utils";
+import { formatARS, normalizePhoneNumber, getErrorMessage, pickCategoryColor } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { COUNTRIES } from "@/lib/countries";
+import { Card } from "@/components/ui/card";
+import { Chip } from "@/components/ui/chip";
+import { Button } from "@/components/ui/button";
 
 function buildPhone(prefix: string, local: string): string {
   const digits = local.replace(/\D/g, "");
@@ -117,24 +120,16 @@ function redistAuto(parts: ParticipantRow[], total: number): ParticipantRow[] {
 
 function StatusChip({ status, hasToken }: { status: string; hasToken?: boolean }) {
   if (status === "accepted") return (
-    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-      <CheckCircle className="w-3 h-3" /> Aceptado
-    </span>
+    <Chip tone="emerald"><CheckCircle className="w-3 h-3" /> Aceptado</Chip>
   );
   if (status === "rejected") return (
-    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">
-      <XCircle className="w-3 h-3" /> Rechazado
-    </span>
+    <Chip tone="rose"><XCircle className="w-3 h-3" /> Rechazado</Chip>
   );
   if (hasToken) return (
-    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">
-      <Link className="w-3 h-3" /> Invitado
-    </span>
+    <Chip tone="violet"><Link className="w-3 h-3" /> Invitado</Chip>
   );
   return (
-    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
-      <Clock className="w-3 h-3" /> Pendiente
-    </span>
+    <Chip tone="amber"><Clock className="w-3 h-3" /> Pendiente</Chip>
   );
 }
 
@@ -358,29 +353,27 @@ export default function SharedExpensesPage() {
   return (
     <div className="max-w-4xl space-y-4 md:space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg md:text-2xl font-bold text-gray-900">Gastos compartidos</h1>
-        <button
-          onClick={() => { setShowForm(v => !v); resetForm(); }}
-          className="flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-primary/90"
-        >
+        <h1 className="text-lg md:text-2xl font-display font-bold text-foreground">Gastos compartidos</h1>
+        <Button onClick={() => { setShowForm(v => !v); resetForm(); }}>
           <Plus className="w-4 h-4" /> Nuevo gasto
-        </button>
+        </Button>
       </div>
 
       {showForm && (
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-4 md:p-5 space-y-4">
-          <p className="text-sm font-medium text-gray-700">Nuevo gasto compartido</p>
+        <Card className="p-4 md:p-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
+          <p className="text-sm font-medium text-foreground">Nuevo gasto compartido</p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-gray-600">Descripción *</label>
+              <label className="text-xs font-medium text-muted-foreground">Descripción *</label>
               <input required value={title} onChange={e => setTitle(e.target.value)}
                 className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
                 placeholder="ej: Supermercado del fin de semana" />
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-600">Monto ($) *</label>
+              <label className="text-xs font-medium text-muted-foreground">Monto ($) *</label>
               <input
                 required
                 type="text"
@@ -393,7 +386,7 @@ export default function SharedExpensesPage() {
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-600">Fecha *</label>
+              <label className="text-xs font-medium text-muted-foreground">Fecha *</label>
               <input required type="date" value={expenseDate}
                 onChange={e => setExpenseDate(e.target.value)}
                 className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
@@ -401,14 +394,17 @@ export default function SharedExpensesPage() {
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-medium text-gray-600">Categoría *</label>
-                <button type="button" onClick={() => setShowCatForm(v => !v)}
+                <label className="text-xs font-medium text-muted-foreground">Categoría *</label>
+                <button type="button" onClick={() => setShowCatForm(v => {
+                  if (!v) setCatColor(pickCategoryColor(categories.map(c => c.color)));
+                  return !v;
+                })}
                   className="text-xs text-primary hover:underline">
                   + Crear
                 </button>
               </div>
               {showCatForm && (
-                <div className="mb-1 border rounded-lg p-2 bg-gray-50 space-y-2">
+                <div className="mb-1 border rounded-lg p-2 bg-muted space-y-2">
                   <div className="flex gap-2">
                     <input
                       value={catName}
@@ -422,16 +418,16 @@ export default function SharedExpensesPage() {
                   </div>
                   <div className="flex gap-2 justify-end">
                     <button type="button" onClick={() => setShowCatForm(false)}
-                      className="text-xs border px-2 py-1 rounded-lg hover:bg-white">Cancelar</button>
+                      className="text-xs border px-2 py-1 rounded-lg hover:bg-card">Cancelar</button>
                     <button type="button" disabled={savingCat || !catName.trim()} onClick={saveCat}
-                      className="text-xs bg-primary text-white px-2 py-1 rounded-lg disabled:opacity-60">
+                      className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded-lg disabled:opacity-60">
                       Guardar
                     </button>
                   </div>
                 </div>
               )}
               <select required value={categoryId} onChange={e => setCategoryId(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm bg-white">
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-card">
                 <option value="">Seleccionar...</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -443,9 +439,9 @@ export default function SharedExpensesPage() {
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-600">Division *</label>
+              <label className="text-xs font-medium text-muted-foreground">Division *</label>
               <select value={splitType} onChange={e => handleSplitTypeChange(e.target.value as "equal" | "custom")}
-                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white">
+                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card">
                 <option value="equal">Equitativa</option>
                 <option value="custom">Personalizada</option>
               </select>
@@ -454,7 +450,7 @@ export default function SharedExpensesPage() {
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-medium text-gray-600">Participantes *</label>
+              <label className="text-xs font-medium text-muted-foreground">Participantes *</label>
               <button type="button" onClick={addParticipant}
                 className="text-xs text-primary hover:underline flex items-center gap-1">
                 <Plus className="w-3 h-3" /> Agregar
@@ -465,10 +461,10 @@ export default function SharedExpensesPage() {
               {participants.map((p, idx) => {
                 const isCreator = idx === 0;
                 return (
-                  <div key={idx} className="border rounded-lg p-2.5 bg-gray-50 space-y-2">
+                  <div key={idx} className="border rounded-lg p-2.5 bg-muted space-y-2">
                     <div className="flex items-center gap-2">
                       {isCreator ? (
-                        <span className="border rounded-lg px-2 py-1.5 text-xs bg-white text-gray-600 shrink-0">
+                        <span className="border rounded-lg px-2 py-1.5 text-xs bg-card text-muted-foreground shrink-0">
                           Del hogar
                         </span>
                       ) : (
@@ -477,21 +473,21 @@ export default function SharedExpensesPage() {
                             const t = e.target.value as "member" | "external";
                             updateParticipant(idx, { type: t, user_id: null, member_name: "" });
                           }}
-                          className="border rounded-lg px-2 py-1.5 text-xs bg-white shrink-0">
+                          className="border rounded-lg px-2 py-1.5 text-xs bg-card shrink-0">
                           <option value="member">Del hogar</option>
                           <option value="external">Externo</option>
                         </select>
                       )}
                       {!isCreator && (
                         <button type="button" onClick={() => removeParticipant(idx)}
-                          className="ml-auto text-gray-400 hover:text-red-500 px-1 text-base leading-none">
+                          className="ml-auto text-muted-foreground hover:text-destructive px-1 text-base leading-none">
                           x
                         </button>
                       )}
                     </div>
 
                     {isCreator ? (
-                      <p className="text-sm text-gray-700 px-1">
+                      <p className="text-sm text-foreground px-1">
                         {p.member_name}
                       </p>
                     ) : p.type === "member" ? (
@@ -501,7 +497,7 @@ export default function SharedExpensesPage() {
                           const mem = members.find(m => m.id === id);
                           updateParticipant(idx, { user_id: id, member_name: mem?.display_name || mem?.email || "" });
                         }}
-                        className="w-full border rounded-lg px-2 py-2 text-sm bg-white">
+                        className="w-full border rounded-lg px-2 py-2 text-sm bg-card">
                         <option value="">Seleccionar miembro...</option>
                         {members.filter(m => m.id !== appUser?.id).map(m => (
                           <option key={m.id} value={m.id}>{m.display_name || m.email}</option>
@@ -524,7 +520,7 @@ export default function SharedExpensesPage() {
                                 invite_method: "whatsapp",
                               });
                             }}
-                            className="w-full border rounded-lg px-2 py-1.5 text-xs bg-violet-50 border-violet-200 text-violet-700"
+                            className="w-full border rounded-lg px-2 py-1.5 text-xs bg-accent border-primary/20 text-primary"
                           >
                             <option value="">📇 Elegir de la agenda...</option>
                             {agendaContacts.map(c => (
@@ -551,28 +547,28 @@ export default function SharedExpensesPage() {
                               }
                             }}
                             title="Seleccionar contacto del dispositivo"
-                            className="px-3 py-2 text-sm border rounded-lg bg-white hover:bg-gray-50 text-gray-600 hover:text-gray-900 transition-colors flex items-center gap-1 shrink-0"
+                            className="px-3 py-2 text-sm border rounded-lg bg-card hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 shrink-0"
                           >
                             <Smartphone className="w-4 h-4" />
                           </button>
                         </div>
 
                         <div>
-                          <p className="text-xs font-medium text-gray-500 mb-1.5">Enviar invitacion</p>
+                          <p className="text-xs font-medium text-muted-foreground mb-1.5">Enviar invitacion</p>
                           <div className="flex gap-1.5 flex-wrap">
                             <button type="button"
                               onClick={() => updateParticipant(idx, { invite_method: "none" })}
-                              className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${p.invite_method === "none" ? "bg-gray-100 border-gray-300 text-gray-700 font-medium" : "bg-white border-gray-200 text-gray-400 hover:border-gray-300"}`}>
+                              className={`px-2.5 py-1 text-xs rounded-full border-2 transition-colors ${p.invite_method === "none" ? "border-ink bg-muted text-foreground font-medium" : "border-transparent text-muted-foreground/60 hover:bg-accent"}`}>
                               Sin invitacion
                             </button>
                             <button type="button"
                               onClick={() => updateParticipant(idx, { invite_method: "email" })}
-                              className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${p.invite_method === "email" ? "bg-violet-100 border-violet-400 text-violet-700 font-medium" : "bg-white border-gray-200 text-gray-400 hover:border-gray-300"}`}>
+                              className={`px-2.5 py-1 text-xs rounded-full border-2 transition-colors ${p.invite_method === "email" ? "border-ink bg-accent text-primary font-medium" : "border-transparent text-muted-foreground/60 hover:bg-accent"}`}>
                               Email
                             </button>
                             <button type="button"
                               onClick={() => updateParticipant(idx, { invite_method: "whatsapp" })}
-                              className={`px-2.5 py-1 text-xs rounded-lg border transition-colors flex items-center gap-1 ${p.invite_method === "whatsapp" ? "bg-green-100 border-green-500 text-green-700 font-medium" : "bg-white border-gray-200 text-gray-400 hover:border-gray-300"}`}>
+                              className={`px-2.5 py-1 text-xs rounded-full border-2 transition-colors flex items-center gap-1 ${p.invite_method === "whatsapp" ? "border-ink bg-emerald-100 text-emerald-700 font-medium" : "border-transparent text-muted-foreground/60 hover:bg-accent"}`}>
                               <MessageCircle className="w-3 h-3" /> WhatsApp
                             </button>
                           </div>
@@ -584,7 +580,7 @@ export default function SharedExpensesPage() {
                               value={p.invite_email}
                               onChange={e => updateParticipant(idx, { invite_email: e.target.value })}
                               className="w-full border rounded-lg px-3 py-2 text-sm" />
-                            <p className="text-xs text-violet-600">Se generara un link para copiar y compartir manualmente</p>
+                            <p className="text-xs text-primary">Se generara un link para copiar y compartir manualmente</p>
                           </div>
                         )}
 
@@ -594,7 +590,7 @@ export default function SharedExpensesPage() {
                               <select
                                 value={p.invite_phone_prefix}
                                 onChange={e => updateParticipant(idx, { invite_phone_prefix: e.target.value, invite_phone_local: "" })}
-                                className="border rounded-lg px-2 py-2 text-sm bg-white shrink-0">
+                                className="border rounded-lg px-2 py-2 text-sm bg-card shrink-0">
                                 {COUNTRIES.map(c => (
                                   <option key={c.prefix} value={c.prefix}>{c.flag} +{c.prefix}</option>
                                 ))}
@@ -607,11 +603,11 @@ export default function SharedExpensesPage() {
                                 className="flex-1 border rounded-lg px-3 py-2 text-sm min-w-0" />
                             </div>
                             {p.invite_phone_local.trim() && (
-                              <p className="text-xs text-gray-400">
+                              <p className="text-xs text-muted-foreground/70">
                                 Número a enviar: +{buildPhone(p.invite_phone_prefix, p.invite_phone_local)}
                               </p>
                             )}
-                            <p className="text-xs text-green-700">Se enviara una invitacion automaticamente por WhatsApp al crear el gasto</p>
+                            <p className="text-xs text-emerald-700">Se enviara una invitacion automaticamente por WhatsApp al crear el gasto</p>
                           </div>
                         )}
                       </div>
@@ -619,23 +615,23 @@ export default function SharedExpensesPage() {
 
                     {splitType === "custom" ? (
                       <div>
-                        <label className="text-xs text-gray-500">Monto ($)</label>
+                        <label className="text-xs text-muted-foreground">Monto ($)</label>
                         <input
                           type="text"
                           inputMode="decimal"
                           placeholder="0,00"
                           value={p.amount}
                           onChange={e => setManualAmount(idx, e.target.value)}
-                          className={`mt-0.5 w-full border rounded-lg px-3 py-2 text-sm ${!p.manual ? "text-gray-400 italic" : ""}`}
+                          className={`mt-0.5 w-full border rounded-lg px-3 py-2 text-sm ${!p.manual ? "text-muted-foreground italic" : ""}`}
                         />
                         {!p.manual && parseAmt(p.amount) > 0 && (
-                          <p className="text-xs text-blue-500 mt-0.5">sugerencia</p>
+                          <p className="text-xs text-primary mt-0.5">sugerencia</p>
                         )}
                       </div>
                     ) : (
                       <div className="flex items-center justify-between px-1">
-                        <span className="text-xs text-gray-500">Monto</span>
-                        <span className="text-sm font-medium text-gray-700">
+                        <span className="text-xs text-muted-foreground">Monto</span>
+                        <span className="text-sm font-medium text-foreground">
                           {total > 0 ? formatARS(parseFloat(equalShare)) : "-"}
                         </span>
                       </div>
@@ -652,7 +648,7 @@ export default function SharedExpensesPage() {
             )}
 
             {splitType === "custom" && total > 0 && (
-              <div className={`mt-2 text-xs rounded-lg px-3 py-2 ${overBudget ? "bg-red-50 text-red-600 font-medium" : "bg-blue-50 text-blue-700"}`}>
+              <div className={`mt-2 text-xs rounded-lg px-3 py-2 ${overBudget ? "bg-destructive/10 text-destructive font-medium" : "bg-accent text-primary"}`}>
                 {overBudget
                   ? `La division supera el total: asignaste ${formatARS(manualSum)} de ${formatARS(total)}`
                   : `Distribuido: ${formatARS(assignedSum)} | Restante: ${formatARS(total - assignedSum)}`
@@ -662,28 +658,27 @@ export default function SharedExpensesPage() {
           </div>
 
           {formError && (
-            <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{formError}</p>
+            <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{formError}</p>
           )}
           <div className="flex gap-2 justify-end">
-            <button type="button" onClick={() => setShowForm(false)}
-              className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">Cancelar</button>
-            <button type="submit" disabled={saving || overBudget}
-              className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-60">
+            <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
+            <Button type="submit" disabled={saving || overBudget}>
               {saving ? "Generando..." : "Generar gasto"}
-            </button>
+            </Button>
           </div>
-        </form>
+          </form>
+        </Card>
       )}
 
       {loading ? (
         <div className="space-y-3">
-          {[1, 2].map(i => <div key={i} className="bg-white rounded-xl border p-4 h-28 animate-pulse" />)}
+          {[1, 2].map(i => <Card key={i} className="h-28 animate-pulse" />)}
         </div>
       ) : expenses.length === 0 ? (
-        <div className="bg-white rounded-xl border p-8 text-center text-muted-foreground text-sm">
+        <Card className="p-8 text-center text-muted-foreground text-sm">
           <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
           No hay gastos compartidos registrados.
-        </div>
+        </Card>
       ) : (
         <div className="space-y-3">
           {(() => {
@@ -698,7 +693,7 @@ export default function SharedExpensesPage() {
                 root: members.find(m => m.id === rootId) ?? members[0],
                 cuotas: [...members].sort((a, b) => a.expense_date.localeCompare(b.expense_date)),
               }))
-              .sort((a, b) => b.root.created_at.localeCompare(a.root.created_at));
+              .sort((a, b) => b.root.expense_date.localeCompare(a.root.expense_date));
 
             return displayGroups.map(({ root: exp, cuotas }) => {
               const isGrouped = cuotas.length > 1;
@@ -708,35 +703,35 @@ export default function SharedExpensesPage() {
               const isCreator = exp.created_by_user_id === currentUserId;
               const isCrossTenant = exp.tenant_id !== appUser?.tenant_id;
               return (
-                <div key={exp.id} className="bg-white rounded-xl border p-4 space-y-3">
+                <Card key={exp.id} className="space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-semibold text-gray-900 truncate flex items-center gap-1.5">
+                      <p className="font-semibold text-foreground truncate flex items-center gap-1.5">
                         {exp.title}
                         {isGrouped && (
-                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 font-medium shrink-0">
+                          <Chip tone="violet" className="shrink-0">
                             <Layers className="w-3 h-3" /> {cuotas.length} cuotas
-                          </span>
+                          </Chip>
                         )}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {isGrouped
-                          ? `${fmtDate(cuotas[0].expense_date)} — ${fmtDate(cuotas[cuotas.length - 1].expense_date)}`
-                          : fmtDate(exp.expense_date)}
-                        {" "}&middot; {exp.splits.length} participantes
-                        {exp.locked && (
-                          <span className="ml-2 text-orange-500 font-medium">&middot; bloqueado</span>
-                        )}
+                      <p className="text-xs text-muted-foreground mt-0.5 flex items-center flex-wrap gap-x-1.5 gap-y-1">
+                        <span>
+                          {isGrouped
+                            ? `${fmtDate(cuotas[0].expense_date)} — ${fmtDate(cuotas[cuotas.length - 1].expense_date)}`
+                            : fmtDate(exp.expense_date)}
+                          {" "}&middot; {exp.splits.length} participantes
+                        </span>
+                        {exp.locked && <Chip locked>Bloqueado</Chip>}
                         {isCrossTenant && (
-                          <span className="ml-2 text-violet-500 font-medium">&middot; otro hogar</span>
+                          <span className="text-primary font-medium">&middot; otro hogar</span>
                         )}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <p className="text-lg font-bold text-gray-900">{formatARS(groupTotal)}</p>
+                      <p className="text-lg font-bold text-foreground">{formatARS(groupTotal)}</p>
                       {isCreator && (
                         <button onClick={() => handleDelete(exp.id, isGrouped)}
-                          className="p-1.5 text-gray-400 hover:text-red-500 transition-colors">
+                          className="p-1.5 text-muted-foreground hover:text-destructive transition-colors">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       )}
@@ -745,14 +740,14 @@ export default function SharedExpensesPage() {
 
                   {isGrouped && (
                     <details className="text-xs">
-                      <summary className="cursor-pointer text-violet-600 hover:text-violet-700 select-none">
+                      <summary className="cursor-pointer text-primary hover:opacity-80 select-none">
                         Ver detalle de las {cuotas.length} cuotas
                       </summary>
-                      <div className="mt-1.5 space-y-1 border-l-2 border-violet-100 pl-2.5">
+                      <div className="mt-1.5 space-y-1 border-l-2 border-primary/20 pl-2.5">
                         {cuotas.map((c, i) => (
-                          <div key={c.id} className="flex items-center justify-between text-gray-500">
+                          <div key={c.id} className="flex items-center justify-between text-muted-foreground">
                             <span>Cuota {i + 1}/{cuotas.length} &middot; {fmtDate(c.expense_date)}</span>
-                            <span className="font-medium text-gray-600">{formatARS(c.total_amount)}</span>
+                            <span className="font-medium text-muted-foreground">{formatARS(c.total_amount)}</span>
                           </div>
                         ))}
                       </div>
@@ -763,17 +758,17 @@ export default function SharedExpensesPage() {
                     {exp.splits.map(split => (
                       <div key={split.id} className="flex items-center justify-between gap-x-2 gap-y-1 text-sm flex-wrap">
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-gray-700 truncate">{split.member_name}</span>
+                          <span className="text-foreground truncate">{split.member_name}</span>
                           {split.invite_email && (
-                            <span className="text-xs text-gray-400 shrink-0 truncate max-w-[100px]">({split.invite_email})</span>
+                            <span className="text-xs text-muted-foreground/70 shrink-0 truncate max-w-[100px]">({split.invite_email})</span>
                           )}
                           {split.user_id === null && !split.invite_token && !split.invite_email && (
-                            <span className="text-xs text-gray-400 shrink-0">(ext)</span>
+                            <span className="text-xs text-muted-foreground/70 shrink-0">(ext)</span>
                           )}
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-                          <span className="text-gray-600">
-                            {formatARS(split.amount)}{isGrouped && <span className="text-gray-400"> /cuota</span>}
+                          <span className="text-muted-foreground">
+                            {formatARS(split.amount)}{isGrouped && <span className="text-muted-foreground/60"> /cuota</span>}
                           </span>
                           <StatusChip
                             status={split.user_id === null && !split.invite_token ? "accepted" : split.status}
@@ -783,7 +778,7 @@ export default function SharedExpensesPage() {
                             <button
                               onClick={() => copyInviteLink(split.invite_token!)}
                               title="Copiar link de invitacion"
-                              className={`p-1 rounded transition-colors ${copiedToken === split.invite_token ? "text-green-600" : "text-gray-400 hover:text-violet-600"}`}
+                              className={`p-1 rounded transition-colors ${copiedToken === split.invite_token ? "text-emerald-600" : "text-muted-foreground hover:text-primary"}`}
                             >
                               {copiedToken === split.invite_token
                                 ? <CheckCircle className="w-4 h-4" />
@@ -798,15 +793,15 @@ export default function SharedExpensesPage() {
 
                   {myMemberSplit?.status === "pending" && !myMemberSplit?.invite_token && (
                     <div className="flex items-center gap-2 pt-2 border-t">
-                      <p className="text-sm text-gray-600 flex-1">
+                      <p className="text-sm text-muted-foreground flex-1">
                         Te corresponden <strong>{formatARS(myMemberSplit.amount)}</strong>{isGrouped && ` por cuota (${cuotas.length} cuotas)`}
                       </p>
                       <button onClick={() => handleAccept(exp.id)}
-                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700">
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded-full border-2 border-ink shadow-chip hover:opacity-90">
                         <CheckCircle className="w-3.5 h-3.5" /> {isGrouped ? "Aceptar todas" : "Aceptar"}
                       </button>
                       <button onClick={() => handleReject(exp.id)}
-                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium border text-gray-600 rounded-lg hover:bg-gray-50">
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium border text-muted-foreground rounded-full hover:bg-accent">
                         <XCircle className="w-3.5 h-3.5" /> Rechazar
                       </button>
                     </div>
@@ -816,7 +811,7 @@ export default function SharedExpensesPage() {
                       {pendingCount} participante{pendingCount > 1 ? "s" : ""} aun no acepto
                     </p>
                   )}
-                </div>
+                </Card>
               );
             });
           })()}

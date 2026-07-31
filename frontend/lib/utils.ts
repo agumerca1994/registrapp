@@ -83,3 +83,32 @@ export function normalizePhoneNumber(rawPhone: string, availablePrefixes: string
   // No recognized prefix found — return all digits as local (user will need to fix)
   return { prefix: "54", local: digits, isValid: digits.length >= 7 };
 }
+
+// Curated, visually-distinct palette for new expense categories — brand
+// violet first, then a spread of hues that stay legible on light bg.
+const CATEGORY_COLOR_PALETTE = [
+  "#5B4FE9", "#10b981", "#f59e0b", "#f43f5e", "#0ea5e9",
+  "#14b8a6", "#f97316", "#ec4899", "#8b5cf6", "#64748b",
+  "#22c55e", "#eab308", "#ef4444", "#06b6d4", "#a855f7", "#84cc16",
+];
+
+function hslToHex(h: number, s: number, l: number): string {
+  s /= 100; l /= 100;
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  const toHex = (x: number) => Math.round(255 * x).toString(16).padStart(2, "0");
+  return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`;
+}
+
+// Suggests a random color not already used by any of the tenant's existing
+// categories — still just a default, the color input stays fully editable.
+export function pickCategoryColor(existingColors: (string | null | undefined)[]): string {
+  const used = new Set(existingColors.filter(Boolean).map(c => c!.toLowerCase()));
+  const available = CATEGORY_COLOR_PALETTE.filter(c => !used.has(c.toLowerCase()));
+  if (available.length > 0) {
+    return available[Math.floor(Math.random() * available.length)];
+  }
+  // Palette exhausted (lots of categories) — fall back to a random hue.
+  return hslToHex(Math.floor(Math.random() * 360), 65, 55);
+}

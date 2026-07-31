@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { formatARS, formatPct, formatDate } from "@/lib/utils";
 import { X, Settings2, ChevronRight, Loader2 } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Chip } from "@/components/ui/chip";
+import { Button } from "@/components/ui/button";
 
 const MACRO_VAR_DEFS = [
   { key: "uva_value",                label: "UVA" },
@@ -74,15 +77,15 @@ function MacroDetailModal({ record, visibleVars, onClose }: {
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
+      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between">
           <div>
-            <h3 className="font-semibold text-gray-900">{formatDate(record.period_date)}</h3>
-            <span className="text-xs px-2 py-0.5 rounded-full mt-1.5 inline-block font-medium bg-green-50 text-green-700">
+            <h3 className="font-semibold text-foreground">{formatDate(record.period_date)}</h3>
+            <Chip tone="emerald" className="mt-1.5">
               Automático
-            </span>
+            </Chip>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1">
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -94,7 +97,7 @@ function MacroDetailModal({ record, visibleVars, onClose }: {
             </div>
           ))}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -173,23 +176,23 @@ export default function MacroPage() {
     <div className="max-w-4xl space-y-4 md:space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold text-gray-900">Variables macro</h2>
+          <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Variables macro</h2>
           <p className="text-xs text-muted-foreground mt-0.5">Actualización automática diaria</p>
         </div>
         <button
           onClick={() => setShowConfig(v => !v)}
-          className={`border p-1.5 rounded-lg hover:bg-gray-50 transition-colors ${showConfig ? "bg-gray-100 border-gray-300" : ""}`}
+          className={`border p-1.5 rounded-lg hover:bg-accent transition-colors ${showConfig ? "bg-muted border-primary/40" : ""}`}
           title="Configurar variables"
         >
-          <Settings2 className="w-4 h-4 text-gray-600" />
+          <Settings2 className="w-4 h-4 text-muted-foreground" />
         </button>
       </div>
 
       {showConfig && (
-        <div className="bg-gray-50 border rounded-xl p-4 space-y-4">
+        <Card className="p-4 space-y-4">
           {/* Variable visibility */}
           <div>
-            <p className="text-xs font-medium text-gray-500 mb-3">Variables a mostrar</p>
+            <p className="text-xs font-medium text-muted-foreground mb-3">Variables a mostrar</p>
             <div className="grid grid-cols-2 gap-2">
               {MACRO_VAR_DEFS.map(({ key, label }) => (
                 <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
@@ -199,7 +202,7 @@ export default function MacroPage() {
                     onChange={() => toggleVar(key)}
                     className="w-4 h-4 rounded accent-primary"
                   />
-                  <span className="text-sm text-gray-700">{label}</span>
+                  <span className="text-sm text-foreground">{label}</span>
                 </label>
               ))}
             </div>
@@ -207,8 +210,8 @@ export default function MacroPage() {
 
           {/* Backfill by date */}
           <div className="border-t pt-3 space-y-2">
-            <p className="text-xs font-medium text-gray-500">Cargar datos históricos</p>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs font-medium text-muted-foreground">Cargar datos históricos</p>
+            <p className="text-xs text-muted-foreground/70">
               Carga un registro por día desde la fecha elegida hasta hoy (acumulativo).
             </p>
             <div className="flex items-center gap-2">
@@ -219,18 +222,18 @@ export default function MacroPage() {
                 max={TODAY_MONTH}
                 onChange={e => setBackfillFrom(e.target.value)}
                 disabled={backfilling}
-                className="text-sm border rounded-lg px-2.5 py-1.5 bg-white flex-1 disabled:opacity-50"
+                className="text-sm border rounded-lg px-2.5 py-1.5 bg-card flex-1 disabled:opacity-50"
               />
-              <button
+              <Button
                 onClick={runBackfill}
                 disabled={backfilling || !backfillFrom}
-                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                className="whitespace-nowrap"
               >
                 {backfilling ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando...</> : "Cargar"}
-              </button>
+              </Button>
             </div>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Display range chips */}
@@ -239,10 +242,10 @@ export default function MacroPage() {
           <button
             key={opt.value}
             onClick={() => changeRange(opt.value)}
-            className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+            className={`text-xs px-3 py-1 rounded-full border-2 font-medium transition-colors ${
               range === opt.value
-                ? "bg-gray-900 text-white border-gray-900"
-                : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                ? "border-ink bg-primary text-primary-foreground shadow-chip"
+                : "border-transparent bg-card text-muted-foreground hover:bg-accent"
             }`}
           >
             {opt.label}
@@ -250,7 +253,7 @@ export default function MacroPage() {
         ))}
       </div>
 
-      <div className="bg-white rounded-xl border divide-y">
+      <Card className="p-0 md:p-0 divide-y">
         {backfilling ? (
           <div className="p-6 flex items-center gap-2 text-muted-foreground text-sm">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -266,14 +269,14 @@ export default function MacroPage() {
         ) : records.map(r => (
           <button
             key={r.id}
-            className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100 transition-colors"
+            className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-accent active:bg-accent/80 transition-colors"
             onClick={() => setDetailRecord(r)}
           >
-            <span className="text-sm font-medium text-gray-900">{formatDate(r.period_date)}</span>
-            <ChevronRight className="w-4 h-4 text-gray-300" />
+            <span className="text-sm font-medium text-foreground">{formatDate(r.period_date)}</span>
+            <ChevronRight className="w-4 h-4 text-muted-foreground/50" />
           </button>
         ))}
-      </div>
+      </Card>
 
       {detailRecord && (
         <MacroDetailModal

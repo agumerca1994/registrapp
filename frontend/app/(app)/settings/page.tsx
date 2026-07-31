@@ -9,6 +9,9 @@ import { Copy, Check, MessageCircle, CheckCircle2, Unlink, Mail, UserPlus, Trash
 import { COUNTRIES } from "@/lib/countries";
 import WhatsAppVerifyForm from "@/components/WhatsAppVerifyForm";
 import { resetAllTours } from "@/components/ProductTour";
+import { Card } from "@/components/ui/card";
+import { Chip } from "@/components/ui/chip";
+import { Button } from "@/components/ui/button";
 
 interface Member {
   id: number;
@@ -69,11 +72,11 @@ function InviteFriendSection() {
   };
 
   return (
-    <div className="bg-white rounded-xl border p-6 space-y-4">
+    <Card className="p-6 space-y-4">
       <div>
         <div className="flex items-center gap-2 mb-1">
           <UserPlus className="w-5 h-5 text-primary" />
-          <h3 className="font-semibold text-gray-900">Invitar amigo</h3>
+          <h3 className="font-semibold text-foreground">Invitar amigo</h3>
         </div>
         <p className="text-sm text-muted-foreground">
           Invitá a alguien a probar RegistrApp. Va a crear su propia cuenta y hogar, sin relación con el tuyo.
@@ -81,13 +84,13 @@ function InviteFriendSection() {
       </div>
       <div className="flex gap-2">
         <button onClick={() => setMethod(method === "email" ? "none" : "email")}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border border-gray-200 text-gray-600 hover:bg-gray-50 aria-pressed:bg-violet-50 aria-pressed:border-violet-300 aria-pressed:text-violet-700 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-full text-sm border-2 border-transparent text-muted-foreground hover:bg-accent aria-pressed:bg-accent aria-pressed:border-primary aria-pressed:text-primary transition-colors"
           aria-pressed={method === "email"}
         >
           <Mail className="w-4 h-4" /> Email
         </button>
         <button onClick={() => setMethod(method === "whatsapp" ? "none" : "whatsapp")}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border border-gray-200 text-gray-600 hover:bg-gray-50 aria-pressed:bg-green-50 aria-pressed:border-green-300 aria-pressed:text-green-700 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-full text-sm border-2 border-transparent text-muted-foreground hover:bg-accent aria-pressed:bg-emerald-50 aria-pressed:border-emerald-300 aria-pressed:text-emerald-700 transition-colors"
           aria-pressed={method === "whatsapp"}
         >
           <MessageCircle className="w-4 h-4" /> WhatsApp
@@ -97,10 +100,9 @@ function InviteFriendSection() {
         <div className="space-y-3">
           <input type="email" value={email} onChange={e => setEmail(e.target.value)}
             placeholder="correo@ejemplo.com" className="w-full border rounded-lg px-3 py-2 text-sm" />
-          <button onClick={sendEmail} disabled={!email.trim()}
-            className="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50 hover:bg-violet-700">
+          <Button onClick={sendEmail} disabled={!email.trim()}>
             Enviar invitacion
-          </button>
+          </Button>
           <p className="text-xs text-muted-foreground">Abre tu cliente de correo con el mensaje listo.</p>
         </div>
       )}
@@ -108,7 +110,7 @@ function InviteFriendSection() {
         <div className="space-y-3">
           <div className="flex gap-2">
             <select value={prefix} onChange={e => { setPrefix(e.target.value); setLocalPhone(""); }}
-              className="border rounded-lg px-2 py-2 text-sm bg-white shrink-0">
+              className="border rounded-lg px-2 py-2 text-sm bg-card shrink-0">
               {COUNTRIES.map(c => (
                 <option key={c.prefix} value={c.prefix}>{c.flag} +{c.prefix}</option>
               ))}
@@ -118,14 +120,13 @@ function InviteFriendSection() {
               placeholder={country.placeholder} inputMode="numeric"
               className="flex-1 border rounded-lg px-3 py-2 text-sm min-w-0" />
           </div>
-          <button onClick={sendWhatsApp} disabled={!localPhone.trim()}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50 hover:bg-green-700">
+          <Button onClick={sendWhatsApp} disabled={!localPhone.trim()}>
             Enviar invitacion
-          </button>
+          </Button>
           <p className="text-xs text-muted-foreground">Para Argentina: sin 0 inicial ni 15.</p>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -141,7 +142,7 @@ function WhatsAppSection() {
     try {
       await api.delete("/auth/me/whatsapp");
       await refreshUser();
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(getErrorMessage(e, "Error al desvincular"));
     } finally {
       setLoading(false);
@@ -149,35 +150,35 @@ function WhatsAppSection() {
   };
 
   return (
-    <div className="bg-white rounded-xl border p-6 space-y-4">
+    <Card className="p-6 space-y-4">
       <div className="flex items-center gap-2">
-        <MessageCircle className="w-5 h-5 text-green-600" />
-        <h3 className="font-semibold text-gray-900">WhatsApp</h3>
+        <MessageCircle className="w-5 h-5 text-emerald-600" />
+        <h3 className="font-semibold text-foreground">WhatsApp</h3>
       </div>
 
       {isLinked ? (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-green-600" />
-            <span className="text-sm text-gray-700">Vinculado: <span className="font-medium">+{appUser.whatsapp_phone}</span></span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <span className="text-sm text-foreground">Vinculado: <span className="font-medium">+{appUser.whatsapp_phone}</span></span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Enviá mensajes al bot con el formato <span className="font-mono bg-gray-100 px-1 rounded">monto descripción</span> para registrar egresos. Ej: <span className="font-mono bg-gray-100 px-1 rounded">15000 supermercado</span>
+            Enviá mensajes al bot con el formato <span className="font-mono bg-muted px-1 rounded">monto descripción</span> para registrar egresos. Ej: <span className="font-mono bg-muted px-1 rounded">15000 supermercado</span>
           </p>
           <button
             onClick={unlink}
             disabled={loading}
-            className="flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 disabled:opacity-50"
+            className="flex items-center gap-1.5 text-sm text-destructive hover:opacity-80 disabled:opacity-50"
           >
             <Unlink className="w-3.5 h-3.5" />
             Desvincular
           </button>
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
       ) : (
         <WhatsAppVerifyForm onVerified={refreshUser} />
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -231,66 +232,64 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-3xl space-y-8">
-      <h2 className="text-2xl font-bold text-gray-900">{"Configuración"}</h2>
+      <h2 className="text-2xl font-display font-bold text-foreground">{"Configuración"}</h2>
 
-      <div className="bg-white rounded-xl border p-6 space-y-4">
-        <h3 className="font-semibold text-gray-900">{"Tu hogar"}</h3>
+      <Card className="p-6 space-y-4">
+        <h3 className="font-semibold text-foreground">{"Tu hogar"}</h3>
         <p className="text-sm text-muted-foreground">
           {"Comparte este código con quien quieras que se una a tu hogar."}
         </p>
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex-1 min-w-[140px] bg-gray-50 border rounded-lg px-4 py-3">
+          <div className="flex-1 min-w-[140px] bg-muted border rounded-lg px-4 py-3">
             <p className="text-xs text-muted-foreground mb-1">{"Código del hogar"}</p>
             <p className="text-2xl font-bold text-primary tracking-widest">{appUser?.tenant_code ?? appUser?.tenant_id}</p>
           </div>
           <div className="flex gap-2 shrink-0">
-            <button onClick={copyId}
-              className="flex items-center gap-2 border px-4 py-3 rounded-lg text-sm hover:bg-gray-50 transition-colors">
-              {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+            <Button variant="outline" onClick={copyId}>
+              {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
               {copied ? "Copiado!" : "Copiar"}
-            </button>
-            <button onClick={shareHouseholdCodeByWhatsApp}
-              className="flex items-center gap-2 border px-4 py-3 rounded-lg text-sm text-green-700 border-green-200 hover:bg-green-50 transition-colors">
+            </Button>
+            <Button variant="outline" onClick={shareHouseholdCodeByWhatsApp} className="text-emerald-700">
               <MessageCircle className="w-4 h-4" />
               WhatsApp
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
+      </Card>
 
       <InviteFriendSection />
 
-      <div className="bg-white rounded-xl border p-6 space-y-4">
-        <h3 className="font-semibold text-gray-900">Miembros ({members.length})</h3>
+      <Card className="p-6 space-y-4">
+        <h3 className="font-semibold text-foreground">Miembros ({members.length})</h3>
         <div className="divide-y">
           {members.map(m => (
             <div key={m.id} className="flex items-center justify-between py-3 gap-3">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-gray-900">
+                <p className="text-sm font-medium text-foreground">
                   {m.display_name || m.email}
                   {m.id === appUser?.id && <span className="ml-2 text-xs text-muted-foreground">(vos)</span>}
                 </p>
                 <p className="text-xs text-muted-foreground truncate">{m.email}</p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs px-2 py-1 rounded-full font-medium bg-gray-100 text-gray-600">
+                <Chip tone="neutral">
                   {ROLE_LABELS[m.role] ?? m.role}
-                </span>
+                </Chip>
                 {appUser?.role === "admin" && m.id !== appUser?.id && (
                   confirmKickId === m.id ? (
                     <div className="flex items-center gap-1">
                       <button onClick={() => kickMember(m.id)} disabled={actionLoading}
-                        className="text-xs bg-red-600 text-white px-2 py-1 rounded disabled:opacity-50">
+                        className="text-xs bg-destructive text-destructive-foreground px-2 py-1 rounded disabled:opacity-50">
                         {actionLoading ? "..." : "Confirmar"}
                       </button>
                       <button onClick={() => setConfirmKickId(null)}
-                        className="text-xs border px-2 py-1 rounded text-gray-600 hover:bg-gray-50">
+                        className="text-xs border px-2 py-1 rounded text-muted-foreground hover:bg-accent">
                         Cancelar
                       </button>
                     </div>
                   ) : (
                     <button onClick={() => setConfirmKickId(m.id)}
-                      className="text-red-400 hover:text-red-600 transition-colors" title="Eliminar del hogar">
+                      className="text-destructive/60 hover:text-destructive transition-colors" title="Eliminar del hogar">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   )
@@ -299,17 +298,17 @@ export default function SettingsPage() {
                   confirmLeave ? (
                     <div className="flex items-center gap-1">
                       <button onClick={leaveHousehold} disabled={actionLoading}
-                        className="text-xs bg-red-600 text-white px-2 py-1 rounded disabled:opacity-50">
+                        className="text-xs bg-destructive text-destructive-foreground px-2 py-1 rounded disabled:opacity-50">
                         {actionLoading ? "..." : "Confirmar"}
                       </button>
                       <button onClick={() => setConfirmLeave(false)}
-                        className="text-xs border px-2 py-1 rounded text-gray-600 hover:bg-gray-50">
+                        className="text-xs border px-2 py-1 rounded text-muted-foreground hover:bg-accent">
                         Cancelar
                       </button>
                     </div>
                   ) : (
                     <button onClick={() => setConfirmLeave(true)}
-                      className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-1 rounded">
+                      className="text-xs text-destructive hover:opacity-80 border border-destructive/30 px-2 py-1 rounded">
                       Salir
                     </button>
                   )
@@ -318,27 +317,27 @@ export default function SettingsPage() {
             </div>
           ))}
         </div>
-      </div>
+      </Card>
 
       <WhatsAppSection />
 
-      <div className="bg-white rounded-xl border p-6 space-y-2">
-        <h3 className="font-semibold text-gray-900">Guía de la app</h3>
+      <Card className="p-6 space-y-2">
+        <h3 className="font-semibold text-foreground">Guía de la app</h3>
         <p className="text-sm text-muted-foreground">Volvé a ver la guía introductoria de cada sección.</p>
-        <button
+        <Button
+          variant="outline"
           onClick={() => { resetAllTours(APP_TOUR_IDS); window.location.href = "/dashboard"; }}
-          className="text-sm border px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700"
         >
           Reiniciar guía
-        </button>
-      </div>
+        </Button>
+      </Card>
 
-      <div className="bg-white rounded-xl border p-6 space-y-2">
-        <h3 className="font-semibold text-gray-900">Tu cuenta</h3>
-        <p className="text-sm text-gray-700">{appUser?.display_name || "—"}</p>
+      <Card className="p-6 space-y-2">
+        <h3 className="font-semibold text-foreground">Tu cuenta</h3>
+        <p className="text-sm text-foreground">{appUser?.display_name || "—"}</p>
         <p className="text-sm text-muted-foreground">{appUser?.email}</p>
         <p className="text-xs text-muted-foreground">Rol: {ROLE_LABELS[appUser?.role ?? ""] ?? appUser?.role}</p>
-      </div>
+      </Card>
     </div>
   );
 }

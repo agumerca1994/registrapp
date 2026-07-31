@@ -56,9 +56,30 @@ export default function ProductTour({ tourId, steps, requireDesktop }: {
       options={{
         buttons: ["back", "close", "primary", "skip"],
         showProgress: true,
-        primaryColor: "hsl(221.2, 83.2%, 53.3%)",
-        textColor: "#111827",
+        primaryColor: "hsl(var(--primary))",
+        textColor: "hsl(var(--foreground))",
+        backgroundColor: "hsl(var(--card))",
+        arrowColor: "hsl(var(--card))",
+        overlayColor: "rgba(30, 26, 46, 0.5)",
         zIndex: 10000,
+      }}
+      styles={{
+        tooltip: { borderRadius: 16, fontSize: 14 },
+        tooltipContent: { padding: "8px 0" },
+        buttonPrimary: {
+          borderRadius: 9999,
+          border: "2px solid #1E1A2E",
+          boxShadow: "3px 3px 0 0 #1E1A2E",
+          padding: "8px 16px",
+        },
+        buttonBack: {
+          borderRadius: 9999,
+          border: "2px solid transparent",
+          color: "hsl(var(--muted-foreground))",
+        },
+        buttonSkip: {
+          color: "hsl(var(--muted-foreground))",
+        },
       }}
     />
   );
