@@ -3,9 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
-import { CreditCard, Plus, Pencil, Trash2, X, ChevronRight } from "lucide-react";
+import { CreditCard, Plus, X } from "lucide-react";
 import { Card as UiCard } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { CreditCardVisual } from "@/components/CreditCardVisual";
+import { ARGENTINE_BANKS } from "@/lib/banks";
+
+const OTRO = "__otro__";
 
 interface Card {
   id: number;
@@ -30,6 +34,7 @@ function CardModal({
   onSave: (data: typeof EMPTY_FORM) => Promise<void>;
   onClose: () => void;
 }) {
+  const initialIsKnownBank = !initial || ARGENTINE_BANKS.some((b) => b.name === initial.bank);
   const [form, setForm] = useState(
     initial
       ? {
@@ -40,6 +45,7 @@ function CardModal({
         }
       : EMPTY_FORM
   );
+  const [bankSelect, setBankSelect] = useState(initialIsKnownBank ? (initial?.bank ?? "") : OTRO);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -58,10 +64,33 @@ function CardModal({
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
+            <div className={bankSelect === OTRO ? "sm:col-span-2" : ""}>
               <label className="text-xs font-medium text-muted-foreground">Banco</label>
-              <input className={INPUT} placeholder="Galicia"
-                value={form.bank} onChange={(e) => setForm((p) => ({ ...p, bank: e.target.value }))} required />
+              <select
+                className={INPUT}
+                value={bankSelect}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setBankSelect(v);
+                  setForm((p) => ({ ...p, bank: v === OTRO ? "" : v }));
+                }}
+                required
+              >
+                <option value="" disabled>Seleccionar...</option>
+                {ARGENTINE_BANKS.map((b) => (
+                  <option key={b.name} value={b.name}>{b.name}</option>
+                ))}
+                <option value={OTRO}>Otro...</option>
+              </select>
+              {bankSelect === OTRO && (
+                <input
+                  className={`${INPUT} mt-2`}
+                  placeholder="Nombre del banco/entidad"
+                  value={form.bank}
+                  onChange={(e) => setForm((p) => ({ ...p, bank: e.target.value }))}
+                  required
+                />
+              )}
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Alias</label>
@@ -182,7 +211,7 @@ export default function TarjetasPage() {
   };
 
   return (
-    <div className="max-w-4xl space-y-4 md:space-y-6">
+    <div className="max-w-6xl space-y-4 md:space-y-6">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Tarjetas de crédito</h2>
         <Button onClick={() => { setEditCard(null); setShowModal(true); }}>
@@ -191,42 +220,25 @@ export default function TarjetasPage() {
         </Button>
       </div>
 
-      <UiCard className="p-0 md:p-0 divide-y">
-        {cards.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground">
-            <CreditCard className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p className="text-sm">No hay tarjetas registradas.</p>
-            <p className="text-xs mt-1">Agregá tu primera tarjeta para empezar.</p>
-          </div>
-        ) : (
-          cards.map((card) => (
-            <div key={card.id} className="flex items-center gap-3 px-4 py-4">
-              <button
-                className="flex-1 flex items-center gap-3 min-w-0 text-left hover:opacity-80 active:opacity-60"
-                onClick={() => router.push(`/tarjetas/${card.id}`)}
-              >
-                <div className="bg-primary/10 p-2 rounded-lg shrink-0">
-                  <CreditCard className="w-5 h-5 text-primary" />
-                </div>
-                <div className="min-w-0">
-                  <p className="font-semibold text-foreground truncate">{card.alias}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {card.bank}{card.last_4_digits ? ` •••• ${card.last_4_digits}` : ""}
-                  </p>
-                  {card.titular && <p className="text-xs text-muted-foreground/70 truncate">{card.titular}</p>}
-                </div>
-                <ChevronRight className="w-4 h-4 text-muted-foreground/50 shrink-0 ml-auto" />
-              </button>
-              <button onClick={() => { setEditCard(card); setShowModal(true); }} className="p-2 text-muted-foreground hover:text-foreground shrink-0">
-                <Pencil className="w-4 h-4" />
-              </button>
-              <button onClick={() => setDeleteCard(card)} className="p-2 text-muted-foreground hover:text-destructive shrink-0">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))
-        )}
-      </UiCard>
+      {cards.length === 0 ? (
+        <UiCard className="p-8 text-center text-muted-foreground">
+          <CreditCard className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No hay tarjetas registradas.</p>
+          <p className="text-xs mt-1">Agregá tu primera tarjeta para empezar.</p>
+        </UiCard>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {cards.map((card) => (
+            <CreditCardVisual
+              key={card.id}
+              card={card}
+              onClick={() => router.push(`/tarjetas/${card.id}`)}
+              onEdit={() => { setEditCard(card); setShowModal(true); }}
+              onDelete={() => setDeleteCard(card)}
+            />
+          ))}
+        </div>
+      )}
 
       {showModal && (
         <CardModal initial={editCard || undefined} onSave={handleSave} onClose={() => { setShowModal(false); setEditCard(null); }} />
