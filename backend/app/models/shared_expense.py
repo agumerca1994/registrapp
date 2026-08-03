@@ -17,6 +17,7 @@ class SharedExpense(Base):
     category_id: Mapped[int] = mapped_column(ForeignKey("expense_categories.id"))
     split_type: Mapped[str] = mapped_column(String(10))
     expense_date: Mapped[date] = mapped_column(Date, index=True)
+    payment_date: Mapped[date] = mapped_column(Date, index=True)
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
     credit_card_item_id: Mapped[int | None] = mapped_column(
         ForeignKey("credit_card_items.id", ondelete="SET NULL"), nullable=True

@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone, Layers, CalendarDays, ChevronLeft, ChevronRight, Share2, ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone, Layers, CalendarDays, ChevronLeft, ChevronRight, Share2, ArrowDownLeft, ArrowUpRight, Pencil, X } from "lucide-react";
 
 import api from "@/lib/api";
 import { formatARS, formatUSD, normalizePhoneNumber, getErrorMessage, pickCategoryColor } from "@/lib/utils";
@@ -64,6 +64,9 @@ interface SharedExpense {
   category_id: number;
   split_type: "equal" | "custom";
   expense_date: string;
+  payment_date: string;
+  locked: boolean;
+  credit_card_item_id: number | null;
   created_by_user_id: number;
   created_at: string;
   installment_group_id: number | null;
@@ -187,6 +190,153 @@ function StatusChip({ status, hasToken }: { status: string; hasToken?: boolean }
   );
 }
 
+// Field-level edit permissions mirror the backend (PATCH /shared-expenses/{id}):
+// not locked (nobody but the creator accepted yet) → everything editable,
+// locked → only title/dates, since another participant may already be
+// relying on the amounts they saw when they accepted.
+function EditExpenseModal({
+  expense, categories, onClose, onSaved,
+}: {
+  expense: SharedExpense;
+  categories: Category[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const unlocked = !expense.locked;
+  const [title, setTitle] = useState(expense.title);
+  const [totalAmount, setTotalAmount] = useState(String(expense.total_amount));
+  const [categoryId, setCategoryId] = useState(String(expense.category_id));
+  const [expenseDate, setExpenseDate] = useState(expense.expense_date);
+  const [paymentDate, setPaymentDate] = useState(expense.payment_date);
+  const [splitAmounts, setSplitAmounts] = useState<Record<number, string>>(
+    () => Object.fromEntries(expense.splits.map(s => [s.id, String(s.amount)]))
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const total = parseAmt(totalAmount);
+  const splitsSum = Object.values(splitAmounts).reduce((s, v) => s + parseAmt(v), 0);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    const body: Record<string, unknown> = {
+      title,
+      expense_date: expenseDate,
+      payment_date: paymentDate,
+    };
+    if (unlocked) {
+      if (Math.abs(splitsSum - total) > 0.02) {
+        setError(`La suma (${formatARS(splitsSum)}) no coincide con el total (${formatARS(total)})`);
+        return;
+      }
+      body.total_amount = total;
+      body.category_id = parseInt(categoryId);
+      body.splits = expense.splits.map(s => ({ split_id: s.id, amount: parseAmt(splitAmounts[s.id]) }));
+    }
+    setSaving(true);
+    try {
+      await api.patch(`/shared-expenses/${expense.id}`, body);
+      onSaved();
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Error al editar el gasto"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
+      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-foreground">Editar gasto</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {!unlocked && (
+          <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+            Ya fue aceptado por otro participante — solo se puede corregir el título y las fechas.
+          </p>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Descripción</label>
+            <input required value={title} onChange={e => setTitle(e.target.value)}
+              className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Fecha del gasto</label>
+              <input required type="date" value={expenseDate} onChange={e => setExpenseDate(e.target.value)}
+                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Fecha de pago</label>
+              <input required type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)}
+                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+            </div>
+          </div>
+
+          {unlocked ? (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Monto total</label>
+                  <input required type="text" inputMode="decimal" value={totalAmount}
+                    onChange={e => setTotalAmount(e.target.value)}
+                    className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Categoría</label>
+                  <select required value={categoryId} onChange={e => setCategoryId(e.target.value)}
+                    className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card">
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Participantes</label>
+                <div className="space-y-1.5">
+                  {expense.splits.map(s => (
+                    <div key={s.id} className="flex items-center gap-2">
+                      <span className="flex-1 text-sm text-foreground truncate">{s.member_name}</span>
+                      <input type="text" inputMode="decimal" value={splitAmounts[s.id] ?? ""}
+                        onChange={e => setSplitAmounts(prev => ({ ...prev, [s.id]: e.target.value }))}
+                        className="w-28 border rounded-lg px-2 py-1.5 text-sm text-right" />
+                    </div>
+                  ))}
+                </div>
+                <p className={`text-xs mt-1.5 ${Math.abs(splitsSum - total) > 0.02 ? "text-destructive" : "text-muted-foreground"}`}>
+                  Distribuido: {formatARS(splitsSum)} / Total: {formatARS(total)}
+                </p>
+              </div>
+            </>
+          ) : (
+            <div className="text-sm text-muted-foreground space-y-1 bg-muted rounded-lg px-3 py-2">
+              <p>Monto: <strong className="text-foreground">{fmtByCurrency(expense.total_amount, expense.currency)}</strong></p>
+              {expense.splits.map(s => (
+                <p key={s.id}>{s.member_name}: {fmtByCurrency(s.amount, expense.currency)}</p>
+              ))}
+            </div>
+          )}
+
+          {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
+
+          <div className="flex gap-2 justify-end pt-1">
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar"}</Button>
+          </div>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
 export default function SharedExpensesPage() {
   const { appUser } = useAuth();
   const [expenses, setExpenses] = useState<SharedExpense[]>([]);
@@ -200,11 +350,14 @@ export default function SharedExpensesPage() {
   const [catColor, setCatColor] = useState("#6366f1");
   const [savingCat, setSavingCat] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [editingExpense, setEditingExpense] = useState<SharedExpense | null>(null);
 
   const [title, setTitle] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [differentPaymentDate, setDifferentPaymentDate] = useState(false);
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [splitType, setSplitType] = useState<"equal" | "custom">("equal");
   const [participants, setParticipants] = useState<ParticipantRow[]>([
     { type: "member", user_id: null, member_name: "", amount: "", manual: false, invite_method: "none", invite_email: "", invite_phone_prefix: "54", invite_phone_local: "" },
@@ -318,6 +471,8 @@ export default function SharedExpensesPage() {
   function resetForm() {
     setTitle(""); setTotalAmount(""); setCategoryId("");
     setExpenseDate(new Date().toISOString().slice(0, 10));
+    setDifferentPaymentDate(false);
+    setPaymentDate(new Date().toISOString().slice(0, 10));
     setSplitType("equal");
     setParticipants([{
       type: "member",
@@ -372,7 +527,9 @@ export default function SharedExpensesPage() {
     try {
       await api.post("/shared-expenses", {
         title, total_amount: total, category_id: parseInt(categoryId),
-        split_type: splitType, expense_date: expenseDate, splits,
+        split_type: splitType, expense_date: expenseDate,
+        payment_date: differentPaymentDate ? paymentDate : expenseDate,
+        splits,
       });
       resetForm(); setShowForm(false); await load();
     } catch (err: unknown) {
@@ -429,18 +586,21 @@ export default function SharedExpensesPage() {
   const personNext = () => { if (personMonth === 12) { setPersonMonth(1); setPersonYear(y => y + 1); } else setPersonMonth(m => m + 1); };
   const personPeriodLabel = format(new Date(personYear, personMonth - 1, 1), "MMMM yyyy", { locale: es });
 
-  // Expenses where the selected person participates, in the selected month
-  // — each installment cuota is its own record with its own expense_date,
-  // so no cuota-grouping is needed here (unlike the "Todos" list below).
+  // Expenses where the selected person participates, in the selected month —
+  // bucketed by payment_date (when the money actually moves), not expense_date
+  // (the accounting date, which can land in a different month — e.g. a bill
+  // closed end-of-July but due August 10th). Each installment cuota is its
+  // own record with its own dates, so no cuota-grouping is needed here
+  // (unlike the "Todos" list below, which stays on expense_date).
   const personExpenses = useMemo(() => {
     if (!selectedPerson) return [];
     return expenses
       .filter(exp => {
-        const d = new Date(exp.expense_date + "T12:00:00");
+        const d = new Date(exp.payment_date + "T12:00:00");
         return d.getFullYear() === personYear && d.getMonth() + 1 === personMonth
           && exp.splits.some(s => personKey(s) === selectedPerson.key);
       })
-      .sort((a, b) => b.expense_date.localeCompare(a.expense_date));
+      .sort((a, b) => b.payment_date.localeCompare(a.payment_date));
   }, [expenses, selectedPerson, personYear, personMonth]);
 
   // Direction of debt per expense — derived from who created it (the creator fronts the
@@ -484,14 +644,14 @@ export default function SharedExpensesPage() {
       lines.push("", "Te debe:");
       for (const exp of owedToMeExpenses) {
         const theirs = exp.splits.find(s => personKey(s) === selectedPerson.key)?.amount ?? 0;
-        lines.push(`• ${fmtDate(exp.expense_date)} - ${exp.title}: ${fmtByCurrency(theirs, exp.currency)}`);
+        lines.push(`• ${fmtDate(exp.payment_date)} - ${exp.title}: ${fmtByCurrency(theirs, exp.currency)}`);
       }
     }
     if (iOweExpenses.length > 0) {
       lines.push("", "Debo:");
       for (const exp of iOweExpenses) {
         const mine = exp.splits.find(s => s.user_id === currentUserId)?.amount ?? 0;
-        lines.push(`• ${fmtDate(exp.expense_date)} - ${exp.title}: ${fmtByCurrency(mine, exp.currency)}`);
+        lines.push(`• ${fmtDate(exp.payment_date)} - ${exp.title}: ${fmtByCurrency(mine, exp.currency)}`);
       }
     }
 
@@ -542,7 +702,7 @@ export default function SharedExpensesPage() {
                 const isCreator = exp.created_by_user_id === currentUserId;
                 return (
                   <tr key={exp.id}>
-                    <td className="px-2 sm:px-4 py-2.5 whitespace-nowrap text-muted-foreground">{fmtDateShort(exp.expense_date)}</td>
+                    <td className="px-2 sm:px-4 py-2.5 whitespace-nowrap text-muted-foreground">{fmtDateShort(exp.payment_date)}</td>
                     <td className="px-2 sm:px-4 py-2.5 text-foreground truncate max-w-[140px] sm:max-w-[220px]">{exp.title}</td>
                     <td className="px-2 sm:px-4 py-2.5 text-right font-medium text-foreground whitespace-nowrap">{fmtByCurrency(amount, exp.currency)}</td>
                     <td className="px-1 sm:px-2 py-2.5 text-right">
@@ -636,6 +796,26 @@ export default function SharedExpensesPage() {
               <input required type="date" value={expenseDate}
                 onChange={e => setExpenseDate(e.target.value)}
                 className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <input type="checkbox" checked={differentPaymentDate}
+                  onChange={e => { setDifferentPaymentDate(e.target.checked); if (e.target.checked) setPaymentDate(expenseDate); }}
+                  className="rounded border-input" />
+                La fecha de pago real es distinta a la fecha del gasto
+              </label>
+              {differentPaymentDate && (
+                <div className="mt-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Fecha de pago *</label>
+                  <input required type="date" value={paymentDate}
+                    onChange={e => setPaymentDate(e.target.value)}
+                    className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+                  <p className="text-xs text-muted-foreground/70 mt-1">
+                    Se usa para saber en qué mes aparece este gasto en la vista por persona — no afecta tus Egresos.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div>
@@ -1040,6 +1220,12 @@ export default function SharedExpensesPage() {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <p className="text-lg font-bold text-foreground">{fmtByCurrency(groupTotal, exp.currency)}</p>
+                      {isCreator && !exp.credit_card_item_id && (
+                        <button onClick={() => setEditingExpense(exp)}
+                          className="p-1.5 text-muted-foreground hover:text-primary transition-colors">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
                       {isCreator && (
                         <button onClick={() => handleDelete(exp.id, isGrouped)}
                           className="p-1.5 text-muted-foreground hover:text-destructive transition-colors">
@@ -1121,6 +1307,15 @@ export default function SharedExpensesPage() {
             });
           })()}
         </div>
+      )}
+
+      {editingExpense && (
+        <EditExpenseModal
+          expense={editingExpense}
+          categories={categories}
+          onClose={() => setEditingExpense(null)}
+          onSaved={() => { setEditingExpense(null); load(); }}
+        />
       )}
     </div>
   );

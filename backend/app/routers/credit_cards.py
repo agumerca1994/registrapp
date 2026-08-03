@@ -750,6 +750,18 @@ async def share_item(
         )
         items_to_share.extend(children.all())
 
+    # Real payment date per item is its statement's due_date, not the item's
+    # own accounting/purchase date — fetch once for every statement involved
+    # instead of lazy-loading `.statement` per item (would MissingGreenlet on
+    # the children, which weren't eager-loaded with it).
+    statement_ids = {ti.statement_id for ti in items_to_share}
+    due_dates = dict(
+        (await db.execute(
+            select(CreditCardStatement.id, CreditCardStatement.due_date)
+            .where(CreditCardStatement.id.in_(statement_ids))
+        )).all()
+    )
+
     created_shared_ids = []
     creator_name = user.display_name or user.email
     cuotas_count = len(items_to_share)
@@ -771,6 +783,7 @@ async def share_item(
             category_id=target_item.category_id,
             split_type=body.split_type,
             expense_date=target_item.item_date,
+            payment_date=due_dates.get(target_item.statement_id) or target_item.item_date,
             credit_card_item_id=target_item.id,
             installment_group_id=None if is_root else root_shared_id,
         )

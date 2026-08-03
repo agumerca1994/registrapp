@@ -16,6 +16,11 @@ class SharedExpenseCreate(BaseModel):
     category_id: int
     split_type: str
     expense_date: date
+    # When None, defaults to expense_date (the common case: paid the same day).
+    # Set it explicitly when the real cash movement happens in a different
+    # month than the expense's accounting date — e.g. a bill closed at
+    # month-end but due the 10th of the next month.
+    payment_date: date | None = None
     splits: list[SplitIn]
 
     @model_validator(mode="after")
@@ -27,6 +32,37 @@ class SharedExpenseCreate(BaseModel):
             raise ValueError(
                 f"La suma de los montos ({total_splits}) no coincide con el total ({self.total_amount})"
             )
+        return self
+
+
+class SplitAmountUpdate(BaseModel):
+    split_id: int
+    amount: Decimal
+
+
+class SharedExpenseUpdate(BaseModel):
+    """Partial update. `splits` (if present) must include every existing
+    split's id — no adding/removing participants here, only re-amounting
+    the current ones. Field-level permissions (what's allowed once the
+    expense is locked) are enforced in the router, not here.
+    """
+    title: str | None = None
+    total_amount: Decimal | None = None
+    category_id: int | None = None
+    expense_date: date | None = None
+    payment_date: date | None = None
+    splits: list[SplitAmountUpdate] | None = None
+
+    @model_validator(mode="after")
+    def validate_splits(self) -> "SharedExpenseUpdate":
+        if self.splits is not None:
+            if self.total_amount is None:
+                raise ValueError("total_amount es requerido al editar los montos de los participantes")
+            total_splits = sum(s.amount for s in self.splits)
+            if abs(total_splits - self.total_amount) > Decimal("0.01"):
+                raise ValueError(
+                    f"La suma de los montos ({total_splits}) no coincide con el total ({self.total_amount})"
+                )
         return self
 
 
@@ -54,6 +90,7 @@ class SharedExpenseOut(BaseModel):
     category_id: int
     split_type: str
     expense_date: date
+    payment_date: date
     locked: bool
     created_by_user_id: int
     credit_card_item_id: int | None = None
