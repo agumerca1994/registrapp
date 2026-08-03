@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { CheckCircle, Users, AlertCircle, Loader2 } from "lucide-react";
 import api from "@/lib/api";
-import { formatARS, getErrorMessage } from "@/lib/utils";
+import { formatARS, formatUSD, getErrorMessage } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
@@ -14,6 +14,7 @@ interface InviteInfo {
   shared_expense_id: number;
   title: string;
   total_amount: number;
+  currency: "ARS" | "USD";
   split_amount: number;
   expense_date: string;
   creator_name: string;
@@ -118,18 +119,18 @@ export default function InvitePage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <p className="text-xs text-muted-foreground mb-0.5">{info.cuotas_count > 1 ? "Monto por cuota" : "Total del gasto"}</p>
-                <p className="font-semibold text-foreground">{formatARS(info.total_amount)}</p>
+                <p className="font-semibold text-foreground">{info.currency === "USD" ? formatUSD(info.total_amount) : formatARS(info.total_amount)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-0.5">{info.cuotas_count > 1 ? "Tu parte por cuota" : "Tu parte"}</p>
-                <p className="font-bold text-lg text-primary">{formatARS(info.split_amount)}</p>
+                <p className="font-bold text-lg text-primary">{info.currency === "USD" ? formatUSD(info.split_amount) : formatARS(info.split_amount)}</p>
               </div>
             </div>
             {info.cuotas_count > 1 && info.cuotas_total_amount !== null && (
               <div className="bg-accent rounded-lg px-3 py-2">
                 <p className="text-xs text-primary">
                   Se van a compartir las <strong>{info.cuotas_count} cuotas</strong> de esta compra, una por mes.
-                  Tu parte total sumando todas las cuotas es <strong>{formatARS(info.cuotas_total_amount)}</strong>.
+                  Tu parte total sumando todas las cuotas es <strong>{info.currency === "USD" ? formatUSD(info.cuotas_total_amount) : formatARS(info.cuotas_total_amount)}</strong>.
                 </p>
               </div>
             )}

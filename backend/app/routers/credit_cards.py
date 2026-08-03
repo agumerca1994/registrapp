@@ -767,6 +767,7 @@ async def share_item(
             created_by_user_id=user.id,
             title=item.description,
             total_amount=target_item.amount,
+            currency=target_item.currency,
             category_id=target_item.category_id,
             split_type=body.split_type,
             expense_date=target_item.item_date,

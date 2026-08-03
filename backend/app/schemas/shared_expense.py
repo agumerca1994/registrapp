@@ -50,6 +50,7 @@ class SharedExpenseOut(BaseModel):
     tenant_id: int
     title: str
     total_amount: Decimal
+    currency: str = "ARS"
     category_id: int
     split_type: str
     expense_date: date
@@ -65,6 +66,7 @@ class InviteInfoOut(BaseModel):
     shared_expense_id: int
     title: str
     total_amount: Decimal
+    currency: str = "ARS"
     split_amount: Decimal
     expense_date: date
     creator_name: str
