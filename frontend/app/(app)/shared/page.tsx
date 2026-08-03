@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone, Layers, CalendarDays, ChevronLeft, ChevronRight, Share2, ArrowDownLeft, ArrowUpRight } from "lucide-react";
@@ -64,7 +64,6 @@ interface SharedExpense {
   category_id: number;
   split_type: "equal" | "custom";
   expense_date: string;
-  locked: boolean;
   created_by_user_id: number;
   created_at: string;
   installment_group_id: number | null;
@@ -485,18 +484,18 @@ export default function SharedExpensesPage() {
       lines.push("", "Te debe:");
       for (const exp of owedToMeExpenses) {
         const theirs = exp.splits.find(s => personKey(s) === selectedPerson.key)?.amount ?? 0;
-        lines.push(`${fmtDate(exp.expense_date)} - ${exp.title}: ${fmtByCurrency(theirs, exp.currency)}`);
+        lines.push(`• ${fmtDate(exp.expense_date)} - ${exp.title}: ${fmtByCurrency(theirs, exp.currency)}`);
       }
     }
     if (iOweExpenses.length > 0) {
-      lines.push("", "Le debés:");
+      lines.push("", "Debo:");
       for (const exp of iOweExpenses) {
         const mine = exp.splits.find(s => s.user_id === currentUserId)?.amount ?? 0;
-        lines.push(`${fmtDate(exp.expense_date)} - ${exp.title}: ${fmtByCurrency(mine, exp.currency)}`);
+        lines.push(`• ${fmtDate(exp.expense_date)} - ${exp.title}: ${fmtByCurrency(mine, exp.currency)}`);
       }
     }
 
-    lines.push("");
+    lines.push("", "Balance:");
     for (const cur of ["ARS", "USD"] as const) {
       const owed = personTotals.owedToMe[cur];
       const owe = personTotals.iOwe[cur];
@@ -504,9 +503,9 @@ export default function SharedExpensesPage() {
       const net = owed - owe;
       const fmt = cur === "USD" ? formatUSD : formatARS;
       lines.push(
-        net === 0 ? `Están a mano en ${cur}`
-          : net > 0 ? `Balance ${cur}: te debe ${fmt(net)}`
-          : `Balance ${cur}: le debés ${fmt(-net)}`
+        net === 0 ? `• Están a mano (${cur})`
+          : net > 0 ? `• Te debe ${fmt(net)}`
+          : `• Debo ${fmt(-net)}`
       );
     }
 
@@ -938,22 +937,24 @@ export default function SharedExpensesPage() {
             </Card>
           ) : (
             <>
-              <Card className="p-3 md:p-4 flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                <span className="text-sm font-semibold text-foreground shrink-0">Balance con {selectedPerson.name}</span>
-                {(["ARS", "USD"] as const).map(cur => {
-                  const owed = personTotals.owedToMe[cur];
-                  const owe = personTotals.iOwe[cur];
-                  if (owed === 0 && owe === 0) return null;
-                  const net = owed - owe;
-                  const fmt = cur === "USD" ? formatUSD : formatARS;
-                  return (
-                    <span key={cur} className={`text-sm font-medium flex items-center gap-1 ${net > 0 ? "text-emerald-600" : net < 0 ? "text-rose-600" : "text-muted-foreground"}`}>
-                      {net > 0 && <ArrowDownLeft className="w-3.5 h-3.5" />}
-                      {net < 0 && <ArrowUpRight className="w-3.5 h-3.5" />}
-                      {net === 0 ? `Están a mano (${cur})` : net > 0 ? `Te debe ${fmt(net)}` : `Le debés ${fmt(-net)}`}
-                    </span>
-                  );
-                })}
+              <Card className="p-3 md:p-4 flex items-start justify-between gap-4">
+                <span className="text-sm font-semibold text-foreground shrink-0">Balance</span>
+                <div className="flex flex-col items-end gap-0.5">
+                  {(["ARS", "USD"] as const).map(cur => {
+                    const owed = personTotals.owedToMe[cur];
+                    const owe = personTotals.iOwe[cur];
+                    if (owed === 0 && owe === 0) return null;
+                    const net = owed - owe;
+                    const fmt = cur === "USD" ? formatUSD : formatARS;
+                    return (
+                      <span key={cur} className={`text-sm font-medium flex items-center gap-1 ${net > 0 ? "text-emerald-600" : net < 0 ? "text-rose-600" : "text-muted-foreground"}`}>
+                        {net > 0 && <ArrowDownLeft className="w-3.5 h-3.5" />}
+                        {net < 0 && <ArrowUpRight className="w-3.5 h-3.5" />}
+                        {net === 0 ? `Están a mano (${cur})` : net > 0 ? `Te debe ${fmt(net)}` : `Debo ${fmt(-net)}`}
+                      </span>
+                    );
+                  })}
+                </div>
               </Card>
 
               <div>
@@ -1019,7 +1020,6 @@ export default function SharedExpensesPage() {
               const myMemberSplit = exp.splits.find(s => s.user_id === currentUserId);
               const pendingCount = exp.splits.filter(s => s.user_id !== null && s.status === "pending" && !s.invite_token).length;
               const isCreator = exp.created_by_user_id === currentUserId;
-              const isCrossTenant = exp.tenant_id !== appUser?.tenant_id;
               return (
                 <Card key={exp.id} className="space-y-3">
                   <div className="flex items-start justify-between gap-3">
@@ -1032,17 +1032,10 @@ export default function SharedExpensesPage() {
                           </Chip>
                         )}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-0.5 flex items-center flex-wrap gap-x-1.5 gap-y-1">
-                        <span>
-                          {isGrouped
-                            ? `${fmtDate(cuotas[0].expense_date)} — ${fmtDate(cuotas[cuotas.length - 1].expense_date)}`
-                            : fmtDate(exp.expense_date)}
-                          {" "}&middot; {exp.splits.length} participantes
-                        </span>
-                        {exp.locked && <Chip locked>Bloqueado</Chip>}
-                        {isCrossTenant && (
-                          <span className="text-primary font-medium">&middot; otro hogar</span>
-                        )}
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {isGrouped
+                          ? `${fmtDate(cuotas[0].expense_date)} — ${fmtDate(cuotas[cuotas.length - 1].expense_date)}`
+                          : fmtDate(exp.expense_date)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -1072,22 +1065,16 @@ export default function SharedExpensesPage() {
                     </details>
                   )}
 
-                  <div className="space-y-1.5">
+                  <div className="border-t border-gray-200" />
+
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-1.5 text-sm">
                     {exp.splits.map(split => (
-                      <div key={split.id} className="flex items-center justify-between gap-x-2 gap-y-1 text-sm flex-wrap">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-foreground truncate">{split.member_name}</span>
-                          {split.invite_email && (
-                            <span className="text-xs text-muted-foreground/70 shrink-0 truncate max-w-[100px]">({split.invite_email})</span>
-                          )}
-                          {split.user_id === null && !split.invite_token && !split.invite_email && (
-                            <span className="text-xs text-muted-foreground/70 shrink-0">(ext)</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-                          <span className="text-muted-foreground">
-                            {fmtByCurrency(split.amount, exp.currency)}{isGrouped && <span className="text-muted-foreground/60"> /cuota</span>}
-                          </span>
+                      <Fragment key={split.id}>
+                        <span className="text-foreground truncate">{split.member_name}</span>
+                        <span className="text-muted-foreground text-right whitespace-nowrap">
+                          {fmtByCurrency(split.amount, exp.currency)}{isGrouped && <span className="text-muted-foreground/60"> /cuota</span>}
+                        </span>
+                        <span className="flex items-center gap-1 justify-self-end">
                           <StatusChip
                             status={split.user_id === null && !split.invite_token ? "accepted" : split.status}
                             hasToken={!!split.invite_token}
@@ -1104,8 +1091,8 @@ export default function SharedExpensesPage() {
                               }
                             </button>
                           )}
-                        </div>
-                      </div>
+                        </span>
+                      </Fragment>
                     ))}
                   </div>
 
