@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone, Layers } from "lucide-react";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone, Layers, CalendarDays, ChevronLeft, ChevronRight, Share2 } from "lucide-react";
 
 import api from "@/lib/api";
 import { formatARS, normalizePhoneNumber, getErrorMessage, pickCategoryColor } from "@/lib/utils";
@@ -109,6 +109,13 @@ function fmtDate(d: string) {
   catch { return d; }
 }
 
+// Compact "d MMM" (no year) — used in the per-person monthly table, where
+// the year is already shown once in the month selector above.
+function fmtDateShort(d: string) {
+  try { return format(new Date(d + "T12:00:00"), "d MMM", { locale: es }); }
+  catch { return d; }
+}
+
 function redistAuto(parts: ParticipantRow[], total: number): ParticipantRow[] {
   const manualSum = parts.filter(p => p.manual).reduce((s, p) => s + parseAmt(p.amount), 0);
   const remaining = Math.max(0, total - manualSum);
@@ -116,6 +123,49 @@ function redistAuto(parts: ParticipantRow[], total: number): ParticipantRow[] {
   if (autoCount === 0) return parts;
   const perAuto = (remaining / autoCount).toFixed(2);
   return parts.map(p => p.manual ? p : { ...p, amount: perAuto });
+}
+
+// Deterministic color per person (same name/key always gets the same tone),
+// distinct from pickCategoryColor which optimizes for "not already used".
+const PERSON_COLOR_PALETTE = [
+  "#5B4FE9", "#10b981", "#f59e0b", "#f43f5e", "#0ea5e9",
+  "#14b8a6", "#f97316", "#ec4899", "#8b5cf6", "#64748b",
+];
+function colorForKey(key: string): string {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
+  return PERSON_COLOR_PALETTE[Math.abs(hash) % PERSON_COLOR_PALETTE.length];
+}
+function getInitials(name: string): string {
+  const words = name.trim().split(/\s+/);
+  return (words.length > 1 ? words[0][0] + words[1][0] : name.trim().slice(0, 2)).toUpperCase();
+}
+// Stable identity for a split's participant across expenses: registered
+// members dedupe by user_id, external guests dedupe by name (no other
+// stable id available for them).
+function personKey(split: Split): string {
+  return split.user_id != null ? `u:${split.user_id}` : `n:${split.member_name.trim().toLowerCase()}`;
+}
+
+function PersonAvatar({ name, active, onClick }: { name: string; active: boolean; onClick: () => void }) {
+  const color = colorForKey(name);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex flex-col items-center gap-1 shrink-0 w-16"
+    >
+      <div
+        className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-white text-sm transition-all ${active ? "ring-2 ring-offset-2 ring-primary" : ""}`}
+        style={{ backgroundColor: color }}
+      >
+        {getInitials(name)}
+      </div>
+      <span className={`text-[11px] truncate w-full text-center ${active ? "text-primary font-medium" : "text-muted-foreground"}`}>
+        {name.trim().split(/\s+/)[0]}
+      </span>
+    </button>
+  );
 }
 
 function StatusChip({ status, hasToken }: { status: string; hasToken?: boolean }) {
@@ -157,6 +207,11 @@ export default function SharedExpensesPage() {
   ]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+
+  const now = new Date();
+  const [selectedPersonKey, setSelectedPersonKey] = useState<string | null>(null);
+  const [personYear, setPersonYear] = useState(now.getFullYear());
+  const [personMonth, setPersonMonth] = useState(now.getMonth() + 1);
 
   const total = parseAmt(totalAmount);
 
@@ -350,6 +405,70 @@ export default function SharedExpensesPage() {
 
   const currentUserId = appUser?.id;
 
+  // Distinct people I share expenses with (excluding myself), derived from
+  // every split across every expense I can see — not just ones I created.
+  const people = useMemo(() => {
+    const map = new Map<string, { key: string; name: string }>();
+    for (const exp of expenses) {
+      for (const split of exp.splits) {
+        if (split.user_id != null && split.user_id === currentUserId) continue;
+        const key = personKey(split);
+        if (!map.has(key)) map.set(key, { key, name: split.member_name });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [expenses, currentUserId]);
+
+  const selectedPerson = people.find(p => p.key === selectedPersonKey) ?? null;
+
+  const personPrev = () => { if (personMonth === 1) { setPersonMonth(12); setPersonYear(y => y - 1); } else setPersonMonth(m => m - 1); };
+  const personNext = () => { if (personMonth === 12) { setPersonMonth(1); setPersonYear(y => y + 1); } else setPersonMonth(m => m + 1); };
+  const personPeriodLabel = format(new Date(personYear, personMonth - 1, 1), "MMMM yyyy", { locale: es });
+
+  // Expenses where the selected person participates, in the selected month
+  // — each installment cuota is its own record with its own expense_date,
+  // so no cuota-grouping is needed here (unlike the "Todos" list below).
+  const personExpenses = useMemo(() => {
+    if (!selectedPerson) return [];
+    return expenses
+      .filter(exp => {
+        const d = new Date(exp.expense_date + "T12:00:00");
+        return d.getFullYear() === personYear && d.getMonth() + 1 === personMonth
+          && exp.splits.some(s => personKey(s) === selectedPerson.key);
+      })
+      .sort((a, b) => b.expense_date.localeCompare(a.expense_date));
+  }, [expenses, selectedPerson, personYear, personMonth]);
+
+  const personTotals = personExpenses.reduce(
+    (acc, exp) => {
+      const mine = exp.splits.find(s => s.user_id === currentUserId)?.amount ?? 0;
+      const theirs = exp.splits.find(s => selectedPerson && personKey(s) === selectedPerson.key)?.amount ?? 0;
+      acc.total += Number(exp.total_amount);
+      acc.mine += Number(mine);
+      acc.theirs += Number(theirs);
+      return acc;
+    },
+    { total: 0, mine: 0, theirs: 0 }
+  );
+
+  function shareByWhatsApp() {
+    if (!selectedPerson) return;
+    const lines = [
+      `📊 Gastos compartidos con ${selectedPerson.name} — ${personPeriodLabel}`,
+      "",
+      ...personExpenses.map(exp => {
+        const mine = exp.splits.find(s => s.user_id === currentUserId)?.amount ?? 0;
+        const theirs = exp.splits.find(s => personKey(s) === selectedPerson.key)?.amount ?? 0;
+        return `${fmtDate(exp.expense_date)} - ${exp.title}: ${formatARS(exp.total_amount)} (vos: ${formatARS(mine)}, ${selectedPerson.name}: ${formatARS(theirs)})`;
+      }),
+      "",
+      `Total: ${formatARS(personTotals.total)}`,
+      `Tu parte: ${formatARS(personTotals.mine)}`,
+      `${selectedPerson.name}: ${formatARS(personTotals.theirs)}`,
+    ];
+    window.open("https://wa.me/?text=" + encodeURIComponent(lines.join(String.fromCharCode(10))), "_blank");
+  }
+
   return (
     <div className="max-w-4xl space-y-4 md:space-y-6">
       <div className="flex items-center justify-between">
@@ -358,6 +477,24 @@ export default function SharedExpensesPage() {
           <Plus className="w-4 h-4" /> Nuevo gasto
         </Button>
       </div>
+
+      {people.length > 0 && (
+        <div className="flex items-start gap-3 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0">
+          <button
+            type="button"
+            onClick={() => setSelectedPersonKey(null)}
+            className="flex flex-col items-center gap-1 shrink-0 w-16"
+          >
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center bg-accent text-primary transition-all ${!selectedPerson ? "ring-2 ring-offset-2 ring-primary" : ""}`}>
+              <Users className="w-5 h-5" />
+            </div>
+            <span className={`text-[11px] ${!selectedPerson ? "text-primary font-medium" : "text-muted-foreground"}`}>Todos</span>
+          </button>
+          {people.map(p => (
+            <PersonAvatar key={p.key} name={p.name} active={selectedPersonKey === p.key} onClick={() => setSelectedPersonKey(p.key)} />
+          ))}
+        </div>
+      )}
 
       {showForm && (
         <Card className="p-4 md:p-5">
@@ -670,7 +807,85 @@ export default function SharedExpensesPage() {
         </Card>
       )}
 
-      {loading ? (
+      {selectedPerson ? (
+        <div className="space-y-3">
+          <div className="flex justify-end">
+            <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
+              <CalendarDays className="w-4 h-4 text-primary shrink-0" />
+              <button onClick={personPrev} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{personPeriodLabel}</span>
+              <button onClick={personNext} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {personExpenses.length === 0 ? (
+            <Card className="p-8 text-center text-muted-foreground text-sm">
+              No hay gastos compartidos con {selectedPerson.name} en {personPeriodLabel}.
+            </Card>
+          ) : (
+            <Card className="p-0 md:p-0 divide-y overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-muted-foreground border-b">
+                      <th className="px-1.5 sm:px-4 py-2.5 font-medium">Fecha</th>
+                      <th className="px-1.5 sm:px-4 py-2.5 font-medium">Descripción</th>
+                      <th className="hidden sm:table-cell px-4 py-2.5 font-medium text-right">Total</th>
+                      <th className="px-1.5 sm:px-4 py-2.5 font-medium text-right">Tu parte</th>
+                      <th className="px-1.5 sm:px-4 py-2.5 font-medium text-right">{selectedPerson.name.split(/\s+/)[0]}</th>
+                      <th className="px-1 sm:px-2 py-2.5"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {personExpenses.map(exp => {
+                      const mine = exp.splits.find(s => s.user_id === currentUserId)?.amount ?? 0;
+                      const theirs = exp.splits.find(s => personKey(s) === selectedPerson.key)?.amount ?? 0;
+                      const isCreator = exp.created_by_user_id === currentUserId;
+                      return (
+                        <tr key={exp.id}>
+                          <td className="px-1.5 sm:px-4 py-2.5 whitespace-nowrap text-muted-foreground">{fmtDateShort(exp.expense_date)}</td>
+                          <td className="px-1.5 sm:px-4 py-2.5 text-foreground truncate max-w-[80px] sm:max-w-[160px]">{exp.title}</td>
+                          <td className="hidden sm:table-cell px-4 py-2.5 text-right font-medium text-foreground whitespace-nowrap">{formatARS(exp.total_amount)}</td>
+                          <td className="px-1.5 sm:px-4 py-2.5 text-right text-muted-foreground whitespace-nowrap">{formatARS(mine)}</td>
+                          <td className="px-1.5 sm:px-4 py-2.5 text-right text-muted-foreground whitespace-nowrap">{formatARS(theirs)}</td>
+                          <td className="px-1 sm:px-2 py-2.5 text-right">
+                            {isCreator && (
+                              <button onClick={() => handleDelete(exp.id, false)} className="p-1 text-muted-foreground hover:text-destructive transition-colors">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t bg-muted font-semibold">
+                      <td className="px-1.5 sm:px-4 py-2.5 text-foreground" colSpan={2}>Total</td>
+                      <td className="hidden sm:table-cell px-4 py-2.5 text-right text-foreground whitespace-nowrap">{formatARS(personTotals.total)}</td>
+                      <td className="px-1.5 sm:px-4 py-2.5 text-right text-foreground whitespace-nowrap">{formatARS(personTotals.mine)}</td>
+                      <td className="px-1.5 sm:px-4 py-2.5 text-right text-foreground whitespace-nowrap">{formatARS(personTotals.theirs)}</td>
+                      <td className="px-1 sm:px-2 py-2.5" />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          {personExpenses.length > 0 && (
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={shareByWhatsApp} className="text-emerald-700">
+                <Share2 className="w-4 h-4" /> Compartir por WhatsApp
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : loading ? (
         <div className="space-y-3">
           {[1, 2].map(i => <Card key={i} className="h-28 animate-pulse" />)}
         </div>
