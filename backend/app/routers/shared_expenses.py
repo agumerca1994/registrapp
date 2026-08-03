@@ -21,6 +21,7 @@ from app.schemas.shared_expense import (
     InviteInfoOut,
     SharedExpenseCreate,
     SharedExpenseOut,
+    SharedExpenseUpdate,
 )
 
 router = APIRouter(prefix="/shared-expenses", tags=["shared-expenses"])
@@ -279,6 +280,7 @@ async def create_shared_expense(
         category_id=body.category_id,
         split_type=body.split_type,
         expense_date=body.expense_date,
+        payment_date=body.payment_date or body.expense_date,
     )
     db.add(shared)
     await db.flush()
@@ -377,6 +379,99 @@ async def create_shared_expense(
             await _send_whatsapp_member_notify(
                 notify_user.whatsapp_phone, creator_name, body.title, body.total_amount, split_amt
             )
+
+    result = await db.scalar(
+        _load_q(user.id, user.tenant_id).where(SharedExpense.id == shared.id)
+    )
+    return result
+
+
+@router.patch("/{shared_id}", response_model=SharedExpenseOut)
+async def update_shared_expense(
+    shared_id: int,
+    body: SharedExpenseUpdate,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Field-level permissions depend on `shared.locked` (set once any
+    participant besides the creator accepts their split, see _accept_split):
+    - Not locked: everything editable (title, amount, category, existing
+      participants' amounts, both dates). No adding/removing participants.
+    - Locked: only title/expense_date/payment_date — anything that would
+      change what someone already accepted is rejected outright rather than
+      silently applied, since another participant may already be relying on
+      the numbers they saw when they accepted.
+    Credit-card-linked shared expenses aren't editable here at all — their
+    payment_date is already correctly derived from the statement's due_date,
+    and their amount/date should be corrected from the card item itself so
+    the two stay in sync.
+    """
+    user = await _get_db_user(firebase_user, db)
+
+    shared = await db.scalar(
+        select(SharedExpense)
+        .where(SharedExpense.id == shared_id, SharedExpense.tenant_id == user.tenant_id)
+        .options(selectinload(SharedExpense.splits))
+    )
+    if not shared:
+        raise HTTPException(status_code=404, detail="Gasto compartido no encontrado")
+    if shared.created_by_user_id != user.id:
+        raise HTTPException(status_code=403, detail="Solo el creador puede editar este gasto")
+    if shared.credit_card_item_id is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Este gasto viene de un resumen de tarjeta — editalo desde Tarjetas",
+        )
+
+    touches_money = (
+        body.total_amount is not None or body.category_id is not None or body.splits is not None
+    )
+    if touches_money and shared.locked:
+        raise HTTPException(
+            status_code=400,
+            detail="Ya fue aceptado por otro participante — solo se puede editar el título y las fechas",
+        )
+
+    splits_by_id = {s.id: s for s in shared.splits}
+    if body.splits is not None:
+        if {s.split_id for s in body.splits} != set(splits_by_id.keys()):
+            raise HTTPException(
+                status_code=400,
+                detail="Deben incluirse todos los participantes existentes, sin agregar ni quitar",
+            )
+        for split_update in body.splits:
+            splits_by_id[split_update.split_id].amount = split_update.amount
+
+    if body.title is not None:
+        shared.title = body.title
+    if body.total_amount is not None:
+        shared.total_amount = body.total_amount
+    if body.category_id is not None:
+        shared.category_id = body.category_id
+    if body.expense_date is not None:
+        shared.expense_date = body.expense_date
+    if body.payment_date is not None:
+        shared.payment_date = body.payment_date
+
+    # Keep every already-accepted participant's mirrored ExpenseEntry in sync
+    # for what it actually copies from the shared expense — payment_date has
+    # no ExpenseEntry equivalent, so there's nothing to sync for it.
+    if touches_money or body.title is not None or body.expense_date is not None:
+        for split in shared.splits:
+            if split.expense_entry_id is None:
+                continue
+            entry = await db.get(ExpenseEntry, split.expense_entry_id)
+            if not entry:
+                continue
+            if body.title is not None:
+                entry.description = shared.title
+            if body.expense_date is not None:
+                entry.expense_date = shared.expense_date
+            if body.category_id is not None:
+                entry.category_id = shared.category_id
+            entry.amount = split.amount
+
+    await db.commit()
 
     result = await db.scalar(
         _load_q(user.id, user.tenant_id).where(SharedExpense.id == shared.id)
