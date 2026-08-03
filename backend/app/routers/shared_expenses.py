@@ -579,6 +579,7 @@ async def get_invite_info(
         shared_expense_id=shared.id,
         title=shared.title,
         total_amount=shared.total_amount,
+        currency=shared.currency,
         split_amount=split.amount,
         expense_date=shared.expense_date,
         creator_name=creator_name,

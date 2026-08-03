@@ -6,7 +6,7 @@ import { es } from "date-fns/locale";
 import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone, Layers, CalendarDays, ChevronLeft, ChevronRight, Share2 } from "lucide-react";
 
 import api from "@/lib/api";
-import { formatARS, normalizePhoneNumber, getErrorMessage, pickCategoryColor } from "@/lib/utils";
+import { formatARS, formatUSD, normalizePhoneNumber, getErrorMessage, pickCategoryColor } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { COUNTRIES } from "@/lib/countries";
 import { Card } from "@/components/ui/card";
@@ -60,6 +60,7 @@ interface SharedExpense {
   tenant_id: number;
   title: string;
   total_amount: number;
+  currency: "ARS" | "USD";
   category_id: number;
   split_type: "equal" | "custom";
   expense_date: string;
@@ -107,6 +108,10 @@ function parseAmt(s: string): number {
 function fmtDate(d: string) {
   try { return format(new Date(d + "T12:00:00"), "d MMM yyyy", { locale: es }); }
   catch { return d; }
+}
+
+function fmtByCurrency(amount: number | string, currency: string) {
+  return currency === "USD" ? formatUSD(amount) : formatARS(amount);
 }
 
 // Compact "d MMM" (no year) — used in the per-person monthly table, where
@@ -439,16 +444,18 @@ export default function SharedExpensesPage() {
       .sort((a, b) => b.expense_date.localeCompare(a.expense_date));
   }, [expenses, selectedPerson, personYear, personMonth]);
 
+  // Totals kept separate per currency — ARS and USD amounts can't be summed together.
   const personTotals = personExpenses.reduce(
     (acc, exp) => {
+      const bucket = exp.currency === "USD" ? acc.USD : acc.ARS;
       const mine = exp.splits.find(s => s.user_id === currentUserId)?.amount ?? 0;
       const theirs = exp.splits.find(s => selectedPerson && personKey(s) === selectedPerson.key)?.amount ?? 0;
-      acc.total += Number(exp.total_amount);
-      acc.mine += Number(mine);
-      acc.theirs += Number(theirs);
+      bucket.total += Number(exp.total_amount);
+      bucket.mine += Number(mine);
+      bucket.theirs += Number(theirs);
       return acc;
     },
-    { total: 0, mine: 0, theirs: 0 }
+    { ARS: { total: 0, mine: 0, theirs: 0 }, USD: { total: 0, mine: 0, theirs: 0 } }
   );
 
   function shareByWhatsApp() {
@@ -459,12 +466,19 @@ export default function SharedExpensesPage() {
       ...personExpenses.map(exp => {
         const mine = exp.splits.find(s => s.user_id === currentUserId)?.amount ?? 0;
         const theirs = exp.splits.find(s => personKey(s) === selectedPerson.key)?.amount ?? 0;
-        return `${fmtDate(exp.expense_date)} - ${exp.title}: ${formatARS(exp.total_amount)} (vos: ${formatARS(mine)}, ${selectedPerson.name}: ${formatARS(theirs)})`;
+        return `${fmtDate(exp.expense_date)} - ${exp.title}: ${fmtByCurrency(exp.total_amount, exp.currency)} (vos: ${fmtByCurrency(mine, exp.currency)}, ${selectedPerson.name}: ${fmtByCurrency(theirs, exp.currency)})`;
       }),
       "",
-      `Total: ${formatARS(personTotals.total)}`,
-      `Tu parte: ${formatARS(personTotals.mine)}`,
-      `${selectedPerson.name}: ${formatARS(personTotals.theirs)}`,
+      ...(personTotals.ARS.total > 0 ? [
+        `Total ARS: ${formatARS(personTotals.ARS.total)}`,
+        `Tu parte ARS: ${formatARS(personTotals.ARS.mine)}`,
+        `${selectedPerson.name} ARS: ${formatARS(personTotals.ARS.theirs)}`,
+      ] : []),
+      ...(personTotals.USD.total > 0 ? [
+        `Total USD: ${formatUSD(personTotals.USD.total)}`,
+        `Tu parte USD: ${formatUSD(personTotals.USD.mine)}`,
+        `${selectedPerson.name} USD: ${formatUSD(personTotals.USD.theirs)}`,
+      ] : []),
     ];
     window.open("https://wa.me/?text=" + encodeURIComponent(lines.join(String.fromCharCode(10))), "_blank");
   }
@@ -846,7 +860,7 @@ export default function SharedExpensesPage() {
                         <tr key={exp.id}>
                           <td className="px-2 sm:px-4 py-2.5 whitespace-nowrap text-muted-foreground">{fmtDateShort(exp.expense_date)}</td>
                           <td className="px-2 sm:px-4 py-2.5 text-foreground truncate max-w-[140px] sm:max-w-[220px]">{exp.title}</td>
-                          <td className="px-2 sm:px-4 py-2.5 text-right font-medium text-foreground whitespace-nowrap">{formatARS(theirs)}</td>
+                          <td className="px-2 sm:px-4 py-2.5 text-right font-medium text-foreground whitespace-nowrap">{fmtByCurrency(theirs, exp.currency)}</td>
                           <td className="px-1 sm:px-2 py-2.5 text-right">
                             {isCreator && (
                               <button onClick={() => handleDelete(exp.id, false)} className="p-1 text-muted-foreground hover:text-destructive transition-colors">
@@ -859,11 +873,20 @@ export default function SharedExpensesPage() {
                     })}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t bg-muted font-semibold">
-                      <td className="px-2 sm:px-4 py-2.5 text-foreground" colSpan={2}>Total</td>
-                      <td className="px-2 sm:px-4 py-2.5 text-right text-foreground whitespace-nowrap">{formatARS(personTotals.theirs)}</td>
-                      <td className="px-1 sm:px-2 py-2.5" />
-                    </tr>
+                    {personTotals.ARS.total > 0 && (
+                      <tr className="border-t bg-muted font-semibold">
+                        <td className="px-2 sm:px-4 py-2.5 text-foreground" colSpan={2}>Total ARS</td>
+                        <td className="px-2 sm:px-4 py-2.5 text-right text-foreground whitespace-nowrap">{formatARS(personTotals.ARS.theirs)}</td>
+                        <td className="px-1 sm:px-2 py-2.5" />
+                      </tr>
+                    )}
+                    {personTotals.USD.total > 0 && (
+                      <tr className="border-t bg-muted font-semibold">
+                        <td className="px-2 sm:px-4 py-2.5 text-foreground" colSpan={2}>Total USD</td>
+                        <td className="px-2 sm:px-4 py-2.5 text-right text-foreground whitespace-nowrap">{formatUSD(personTotals.USD.theirs)}</td>
+                        <td className="px-1 sm:px-2 py-2.5" />
+                      </tr>
+                    )}
                   </tfoot>
                 </table>
               </div>
@@ -936,7 +959,7 @@ export default function SharedExpensesPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <p className="text-lg font-bold text-foreground">{formatARS(groupTotal)}</p>
+                      <p className="text-lg font-bold text-foreground">{fmtByCurrency(groupTotal, exp.currency)}</p>
                       {isCreator && (
                         <button onClick={() => handleDelete(exp.id, isGrouped)}
                           className="p-1.5 text-muted-foreground hover:text-destructive transition-colors">
@@ -955,7 +978,7 @@ export default function SharedExpensesPage() {
                         {cuotas.map((c, i) => (
                           <div key={c.id} className="flex items-center justify-between text-muted-foreground">
                             <span>Cuota {i + 1}/{cuotas.length} &middot; {fmtDate(c.expense_date)}</span>
-                            <span className="font-medium text-muted-foreground">{formatARS(c.total_amount)}</span>
+                            <span className="font-medium text-muted-foreground">{fmtByCurrency(c.total_amount, c.currency)}</span>
                           </div>
                         ))}
                       </div>
@@ -976,7 +999,7 @@ export default function SharedExpensesPage() {
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                           <span className="text-muted-foreground">
-                            {formatARS(split.amount)}{isGrouped && <span className="text-muted-foreground/60"> /cuota</span>}
+                            {fmtByCurrency(split.amount, exp.currency)}{isGrouped && <span className="text-muted-foreground/60"> /cuota</span>}
                           </span>
                           <StatusChip
                             status={split.user_id === null && !split.invite_token ? "accepted" : split.status}
@@ -1002,7 +1025,7 @@ export default function SharedExpensesPage() {
                   {myMemberSplit?.status === "pending" && !myMemberSplit?.invite_token && (
                     <div className="flex items-center gap-2 pt-2 border-t">
                       <p className="text-sm text-muted-foreground flex-1">
-                        Te corresponden <strong>{formatARS(myMemberSplit.amount)}</strong>{isGrouped && ` por cuota (${cuotas.length} cuotas)`}
+                        Te corresponden <strong>{fmtByCurrency(myMemberSplit.amount, exp.currency)}</strong>{isGrouped && ` por cuota (${cuotas.length} cuotas)`}
                       </p>
                       <button onClick={() => handleAccept(exp.id)}
                         className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded-full border-2 border-ink shadow-chip hover:opacity-90">

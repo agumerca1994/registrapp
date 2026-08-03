@@ -13,6 +13,7 @@ class SharedExpense(Base):
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     title: Mapped[str] = mapped_column(String(255))
     total_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    currency: Mapped[str] = mapped_column(String(3), default="ARS", server_default="ARS")
     category_id: Mapped[int] = mapped_column(ForeignKey("expense_categories.id"))
     split_type: Mapped[str] = mapped_column(String(10))
     expense_date: Mapped[date] = mapped_column(Date, index=True)
