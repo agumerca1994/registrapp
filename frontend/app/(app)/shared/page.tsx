@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone, Layers, CalendarDays, ChevronLeft, ChevronRight, Share2 } from "lucide-react";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone, Layers, CalendarDays, ChevronLeft, ChevronRight, Share2, ArrowDownLeft, ArrowUpRight } from "lucide-react";
 
 import api from "@/lib/api";
 import { formatARS, formatUSD, normalizePhoneNumber, getErrorMessage, pickCategoryColor } from "@/lib/utils";
@@ -444,43 +444,139 @@ export default function SharedExpensesPage() {
       .sort((a, b) => b.expense_date.localeCompare(a.expense_date));
   }, [expenses, selectedPerson, personYear, personMonth]);
 
-  // Totals kept separate per currency — ARS and USD amounts can't be summed together.
-  const personTotals = personExpenses.reduce(
-    (acc, exp) => {
-      const bucket = exp.currency === "USD" ? acc.USD : acc.ARS;
-      const mine = exp.splits.find(s => s.user_id === currentUserId)?.amount ?? 0;
-      const theirs = exp.splits.find(s => selectedPerson && personKey(s) === selectedPerson.key)?.amount ?? 0;
-      bucket.total += Number(exp.total_amount);
-      bucket.mine += Number(mine);
-      bucket.theirs += Number(theirs);
-      return acc;
-    },
-    { ARS: { total: 0, mine: 0, theirs: 0 }, USD: { total: 0, mine: 0, theirs: 0 } }
+  // Direction of debt per expense — derived from who created it (the creator fronts the
+  // total, everyone else owes the creator their own split), never from mine/theirs amounts.
+  // Expenses created by a third household member (neither me nor the selected person) don't
+  // represent a direct debt between the two of us, so they're excluded from both buckets.
+  const owedToMeExpenses = useMemo(
+    () => personExpenses.filter(exp => exp.created_by_user_id === currentUserId),
+    [personExpenses, currentUserId]
   );
+
+  const iOweExpenses = useMemo(() => {
+    if (!selectedPerson) return [];
+    return personExpenses.filter(exp => {
+      if (exp.created_by_user_id === currentUserId) return false;
+      const theirSplit = exp.splits.find(s => personKey(s) === selectedPerson.key);
+      return theirSplit?.user_id != null && exp.created_by_user_id === theirSplit.user_id;
+    });
+  }, [personExpenses, selectedPerson, currentUserId]);
+
+  // Totals kept separate per currency — ARS and USD amounts can't be summed together.
+  const personTotals = useMemo(() => {
+    const owedToMe = { ARS: 0, USD: 0 };
+    for (const exp of owedToMeExpenses) {
+      const theirs = Number(exp.splits.find(s => selectedPerson && personKey(s) === selectedPerson.key)?.amount ?? 0);
+      owedToMe[exp.currency === "USD" ? "USD" : "ARS"] += theirs;
+    }
+    const iOwe = { ARS: 0, USD: 0 };
+    for (const exp of iOweExpenses) {
+      const mine = Number(exp.splits.find(s => s.user_id === currentUserId)?.amount ?? 0);
+      iOwe[exp.currency === "USD" ? "USD" : "ARS"] += mine;
+    }
+    return { owedToMe, iOwe };
+  }, [owedToMeExpenses, iOweExpenses, selectedPerson, currentUserId]);
 
   function shareByWhatsApp() {
     if (!selectedPerson) return;
-    const lines = [
-      `📊 Gastos compartidos con ${selectedPerson.name} — ${personPeriodLabel}`,
-      "",
-      ...personExpenses.map(exp => {
-        const mine = exp.splits.find(s => s.user_id === currentUserId)?.amount ?? 0;
+    const lines = [`📊 Gastos compartidos con ${selectedPerson.name} — ${personPeriodLabel}`];
+
+    if (owedToMeExpenses.length > 0) {
+      lines.push("", "Te debe:");
+      for (const exp of owedToMeExpenses) {
         const theirs = exp.splits.find(s => personKey(s) === selectedPerson.key)?.amount ?? 0;
-        return `${fmtDate(exp.expense_date)} - ${exp.title}: ${fmtByCurrency(exp.total_amount, exp.currency)} (vos: ${fmtByCurrency(mine, exp.currency)}, ${selectedPerson.name}: ${fmtByCurrency(theirs, exp.currency)})`;
-      }),
-      "",
-      ...(personTotals.ARS.total > 0 ? [
-        `Total ARS: ${formatARS(personTotals.ARS.total)}`,
-        `Tu parte ARS: ${formatARS(personTotals.ARS.mine)}`,
-        `${selectedPerson.name} ARS: ${formatARS(personTotals.ARS.theirs)}`,
-      ] : []),
-      ...(personTotals.USD.total > 0 ? [
-        `Total USD: ${formatUSD(personTotals.USD.total)}`,
-        `Tu parte USD: ${formatUSD(personTotals.USD.mine)}`,
-        `${selectedPerson.name} USD: ${formatUSD(personTotals.USD.theirs)}`,
-      ] : []),
-    ];
+        lines.push(`${fmtDate(exp.expense_date)} - ${exp.title}: ${fmtByCurrency(theirs, exp.currency)}`);
+      }
+    }
+    if (iOweExpenses.length > 0) {
+      lines.push("", "Le debés:");
+      for (const exp of iOweExpenses) {
+        const mine = exp.splits.find(s => s.user_id === currentUserId)?.amount ?? 0;
+        lines.push(`${fmtDate(exp.expense_date)} - ${exp.title}: ${fmtByCurrency(mine, exp.currency)}`);
+      }
+    }
+
+    lines.push("");
+    for (const cur of ["ARS", "USD"] as const) {
+      const owed = personTotals.owedToMe[cur];
+      const owe = personTotals.iOwe[cur];
+      if (owed === 0 && owe === 0) continue;
+      const net = owed - owe;
+      const fmt = cur === "USD" ? formatUSD : formatARS;
+      lines.push(
+        net === 0 ? `Están a mano en ${cur}`
+          : net > 0 ? `Balance ${cur}: te debe ${fmt(net)}`
+          : `Balance ${cur}: le debés ${fmt(-net)}`
+      );
+    }
+
     window.open("https://wa.me/?text=" + encodeURIComponent(lines.join(String.fromCharCode(10))), "_blank");
+  }
+
+  // Shared table renderer for both direction tables below (Fecha/Descripción/Monto/delete) —
+  // identical shape, differing only in which expenses, which split's amount, and the column label.
+  function renderDirectionTable(
+    exps: SharedExpense[],
+    amountFor: (exp: SharedExpense) => number,
+    columnLabel: string,
+    totals: { ARS: number; USD: number },
+    emptyLabel: string
+  ) {
+    if (exps.length === 0) {
+      return <Card className="p-4 text-center text-muted-foreground text-xs">{emptyLabel}</Card>;
+    }
+    return (
+      <Card className="p-0 md:p-0 divide-y overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-muted-foreground border-b">
+                <th className="px-2 sm:px-4 py-2.5 font-medium">Fecha</th>
+                <th className="px-2 sm:px-4 py-2.5 font-medium">Descripción</th>
+                <th className="px-2 sm:px-4 py-2.5 font-medium text-right">{columnLabel}</th>
+                <th className="px-1 sm:px-2 py-2.5"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {exps.map(exp => {
+                const amount = amountFor(exp);
+                const isCreator = exp.created_by_user_id === currentUserId;
+                return (
+                  <tr key={exp.id}>
+                    <td className="px-2 sm:px-4 py-2.5 whitespace-nowrap text-muted-foreground">{fmtDateShort(exp.expense_date)}</td>
+                    <td className="px-2 sm:px-4 py-2.5 text-foreground truncate max-w-[140px] sm:max-w-[220px]">{exp.title}</td>
+                    <td className="px-2 sm:px-4 py-2.5 text-right font-medium text-foreground whitespace-nowrap">{fmtByCurrency(amount, exp.currency)}</td>
+                    <td className="px-1 sm:px-2 py-2.5 text-right">
+                      {isCreator && (
+                        <button onClick={() => handleDelete(exp.id, false)} className="p-1 text-muted-foreground hover:text-destructive transition-colors">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              {totals.ARS > 0 && (
+                <tr className="border-t bg-muted font-semibold">
+                  <td className="px-2 sm:px-4 py-2.5 text-foreground" colSpan={2}>Total ARS</td>
+                  <td className="px-2 sm:px-4 py-2.5 text-right text-foreground whitespace-nowrap">{formatARS(totals.ARS)}</td>
+                  <td className="px-1 sm:px-2 py-2.5" />
+                </tr>
+              )}
+              {totals.USD > 0 && (
+                <tr className="border-t bg-muted font-semibold">
+                  <td className="px-2 sm:px-4 py-2.5 text-foreground" colSpan={2}>Total USD</td>
+                  <td className="px-2 sm:px-4 py-2.5 text-right text-foreground whitespace-nowrap">{formatUSD(totals.USD)}</td>
+                  <td className="px-1 sm:px-2 py-2.5" />
+                </tr>
+              )}
+            </tfoot>
+          </table>
+        </div>
+      </Card>
+    );
   }
 
   return (
@@ -841,56 +937,47 @@ export default function SharedExpensesPage() {
               No hay gastos compartidos con {selectedPerson.name} en {personPeriodLabel}.
             </Card>
           ) : (
-            <Card className="p-0 md:p-0 divide-y overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-xs text-muted-foreground border-b">
-                      <th className="px-2 sm:px-4 py-2.5 font-medium">Fecha</th>
-                      <th className="px-2 sm:px-4 py-2.5 font-medium">Descripción</th>
-                      <th className="px-2 sm:px-4 py-2.5 font-medium text-right">{selectedPerson.name.split(/\s+/)[0]}</th>
-                      <th className="px-1 sm:px-2 py-2.5"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {personExpenses.map(exp => {
-                      const theirs = exp.splits.find(s => personKey(s) === selectedPerson.key)?.amount ?? 0;
-                      const isCreator = exp.created_by_user_id === currentUserId;
-                      return (
-                        <tr key={exp.id}>
-                          <td className="px-2 sm:px-4 py-2.5 whitespace-nowrap text-muted-foreground">{fmtDateShort(exp.expense_date)}</td>
-                          <td className="px-2 sm:px-4 py-2.5 text-foreground truncate max-w-[140px] sm:max-w-[220px]">{exp.title}</td>
-                          <td className="px-2 sm:px-4 py-2.5 text-right font-medium text-foreground whitespace-nowrap">{fmtByCurrency(theirs, exp.currency)}</td>
-                          <td className="px-1 sm:px-2 py-2.5 text-right">
-                            {isCreator && (
-                              <button onClick={() => handleDelete(exp.id, false)} className="p-1 text-muted-foreground hover:text-destructive transition-colors">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    {personTotals.ARS.total > 0 && (
-                      <tr className="border-t bg-muted font-semibold">
-                        <td className="px-2 sm:px-4 py-2.5 text-foreground" colSpan={2}>Total ARS</td>
-                        <td className="px-2 sm:px-4 py-2.5 text-right text-foreground whitespace-nowrap">{formatARS(personTotals.ARS.theirs)}</td>
-                        <td className="px-1 sm:px-2 py-2.5" />
-                      </tr>
-                    )}
-                    {personTotals.USD.total > 0 && (
-                      <tr className="border-t bg-muted font-semibold">
-                        <td className="px-2 sm:px-4 py-2.5 text-foreground" colSpan={2}>Total USD</td>
-                        <td className="px-2 sm:px-4 py-2.5 text-right text-foreground whitespace-nowrap">{formatUSD(personTotals.USD.theirs)}</td>
-                        <td className="px-1 sm:px-2 py-2.5" />
-                      </tr>
-                    )}
-                  </tfoot>
-                </table>
+            <>
+              <Card className="p-3 md:p-4 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                <span className="text-sm font-semibold text-foreground shrink-0">Balance con {selectedPerson.name}</span>
+                {(["ARS", "USD"] as const).map(cur => {
+                  const owed = personTotals.owedToMe[cur];
+                  const owe = personTotals.iOwe[cur];
+                  if (owed === 0 && owe === 0) return null;
+                  const net = owed - owe;
+                  const fmt = cur === "USD" ? formatUSD : formatARS;
+                  return (
+                    <span key={cur} className={`text-sm font-medium flex items-center gap-1 ${net > 0 ? "text-emerald-600" : net < 0 ? "text-rose-600" : "text-muted-foreground"}`}>
+                      {net > 0 && <ArrowDownLeft className="w-3.5 h-3.5" />}
+                      {net < 0 && <ArrowUpRight className="w-3.5 h-3.5" />}
+                      {net === 0 ? `Están a mano (${cur})` : net > 0 ? `Te debe ${fmt(net)}` : `Le debés ${fmt(-net)}`}
+                    </span>
+                  );
+                })}
+              </Card>
+
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1.5 px-1">Te debe</p>
+                {renderDirectionTable(
+                  owedToMeExpenses,
+                  exp => Number(exp.splits.find(s => personKey(s) === selectedPerson.key)?.amount ?? 0),
+                  selectedPerson.name.split(/\s+/)[0],
+                  personTotals.owedToMe,
+                  `${selectedPerson.name} no te debe nada en ${personPeriodLabel}.`
+                )}
               </div>
-            </Card>
+
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1.5 px-1">Vos debés</p>
+                {renderDirectionTable(
+                  iOweExpenses,
+                  exp => Number(exp.splits.find(s => s.user_id === currentUserId)?.amount ?? 0),
+                  "Vos",
+                  personTotals.iOwe,
+                  `No le debés nada a ${selectedPerson.name} en ${personPeriodLabel}.`
+                )}
+              </div>
+            </>
           )}
 
           {personExpenses.length > 0 && (
