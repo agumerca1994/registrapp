@@ -1,9 +1,9 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
-import { CreditCard, Plus, X } from "lucide-react";
+import { CreditCard, Plus, X, Search, ArrowUp, ArrowDown, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { Card as UiCard } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CreditCardVisual } from "@/components/CreditCardVisual";
@@ -20,6 +20,12 @@ interface Card {
   created_at: string;
 }
 
+interface Member {
+  id: number;
+  display_name: string | null;
+  email: string;
+}
+
 const EMPTY_FORM = { bank: "", alias: "", titular: "", last_4_digits: "" };
 const INPUT = "mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground";
 
@@ -27,14 +33,18 @@ type DeleteMode = "keep" | "delete";
 
 function CardModal({
   initial,
+  members,
   onSave,
   onClose,
 }: {
   initial?: Card;
+  members: Member[];
   onSave: (data: typeof EMPTY_FORM) => Promise<void>;
   onClose: () => void;
 }) {
+  const memberNames = members.map((m) => m.display_name || m.email);
   const initialIsKnownBank = !initial || ARGENTINE_BANKS.some((b) => b.name === initial.bank);
+  const initialIsKnownMember = !initial?.titular || memberNames.includes(initial.titular);
   const [form, setForm] = useState(
     initial
       ? {
@@ -46,6 +56,9 @@ function CardModal({
       : EMPTY_FORM
   );
   const [bankSelect, setBankSelect] = useState(initialIsKnownBank ? (initial?.bank ?? "") : OTRO);
+  const [titularMode, setTitularMode] = useState<"hogar" | "personalizado">(
+    initial?.titular && !initialIsKnownMember ? "personalizado" : "hogar"
+  );
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -99,8 +112,41 @@ function CardModal({
             </div>
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-muted-foreground">Titular (opcional)</label>
-              <input className={INPUT} placeholder="Miguel Mercado"
-                value={form.titular} onChange={(e) => setForm((p) => ({ ...p, titular: e.target.value }))} />
+              <div className="mt-1 flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => { setTitularMode("hogar"); setForm((p) => ({ ...p, titular: "" })); }}
+                  className={`px-2.5 py-1 text-xs rounded-full border-2 transition-colors ${titularMode === "hogar" ? "border-ink bg-accent text-primary font-medium" : "border-transparent text-muted-foreground/60 hover:bg-accent"}`}
+                >
+                  Hogar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setTitularMode("personalizado"); setForm((p) => ({ ...p, titular: "" })); }}
+                  className={`px-2.5 py-1 text-xs rounded-full border-2 transition-colors ${titularMode === "personalizado" ? "border-ink bg-accent text-primary font-medium" : "border-transparent text-muted-foreground/60 hover:bg-accent"}`}
+                >
+                  Personalizado
+                </button>
+              </div>
+              {titularMode === "hogar" ? (
+                <select
+                  className={`${INPUT} mt-2`}
+                  value={form.titular}
+                  onChange={(e) => setForm((p) => ({ ...p, titular: e.target.value }))}
+                >
+                  <option value="">Sin especificar</option>
+                  {memberNames.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className={`${INPUT} mt-2`}
+                  placeholder="Nombre del titular"
+                  value={form.titular}
+                  onChange={(e) => setForm((p) => ({ ...p, titular: e.target.value }))}
+                />
+              )}
             </div>
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-muted-foreground">Últimos 4 dígitos (opcional)</label>
@@ -175,19 +221,61 @@ function DeleteCardModal({
   );
 }
 
+type SortField = "titular" | "bank" | null;
+
+function SortChip({ label, active, dir, onClick }: { label: string; active: boolean; dir: "asc" | "desc"; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border-2 transition-colors ${active ? "border-ink bg-accent text-primary font-medium" : "border-transparent text-muted-foreground/60 hover:bg-accent"}`}
+    >
+      {label}
+      {active && (dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}
+    </button>
+  );
+}
+
+function PillSelect({ value, onChange, children }: { value: string; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; children: React.ReactNode }) {
+  return (
+    <div className="relative flex-1">
+      <select
+        value={value}
+        onChange={onChange}
+        className="w-full appearance-none rounded-full border-2 border-ink bg-card pl-3 pr-8 py-1.5 text-xs font-medium text-foreground cursor-pointer"
+      >
+        {children}
+      </select>
+      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+    </div>
+  );
+}
+
 export default function TarjetasPage() {
   const router = useRouter();
   const [cards, setCards] = useState<Card[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editCard, setEditCard] = useState<Card | null>(null);
   const [deleteCard, setDeleteCard] = useState<Card | null>(null);
+
+  const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [sortField, setSortField] = useState<SortField>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [showCustomFilter, setShowCustomFilter] = useState(false);
+  const [filterTitular, setFilterTitular] = useState("");
+  const [filterBank, setFilterBank] = useState("");
 
   const load = async () => {
     const res = await api.get("/credit-cards");
     setCards(res.data);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    api.get("/auth/members").then((res) => setMembers(res.data)).catch(() => {});
+  }, []);
 
   const handleSave = async (form: typeof EMPTY_FORM) => {
     const payload = {
@@ -210,8 +298,43 @@ export default function TarjetasPage() {
     await load();
   };
 
+  const distinctTitulares = useMemo(
+    () => Array.from(new Set(cards.map((c) => c.titular).filter(Boolean))) as string[],
+    [cards]
+  );
+  const distinctBanks = useMemo(() => Array.from(new Set(cards.map((c) => c.bank))), [cards]);
+  const customFilterActive = filterTitular !== "" || filterBank !== "";
+
+  // Tap cycle: inactive -> A-Z -> Z-A -> inactive (clears the sort).
+  function toggleSort(field: "titular" | "bank") {
+    if (sortField !== field) { setSortField(field); setSortDir("asc"); return; }
+    if (sortDir === "asc") { setSortDir("desc"); return; }
+    setSortField(null);
+  }
+
+  const visibleCards = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return cards
+      .filter((c) => {
+        if (q) {
+          const hay = `${c.bank} ${c.alias} ${c.titular || ""} ${c.last_4_digits || ""}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        if (filterTitular && c.titular !== filterTitular) return false;
+        if (filterBank && c.bank !== filterBank) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        if (!sortField) return 0;
+        const av = (sortField === "titular" ? a.titular : a.bank) || "";
+        const bv = (sortField === "titular" ? b.titular : b.bank) || "";
+        const cmp = av.localeCompare(bv, "es");
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+  }, [cards, search, filterTitular, filterBank, sortField, sortDir]);
+
   return (
-    <div className="max-w-6xl space-y-4 md:space-y-6">
+    <div className="max-w-4xl space-y-4 md:space-y-6">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Tarjetas de crédito</h2>
         <Button onClick={() => { setEditCard(null); setShowModal(true); }}>
@@ -227,21 +350,97 @@ export default function TarjetasPage() {
           <p className="text-xs mt-1">Agregá tu primera tarjeta para empezar.</p>
         </UiCard>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {cards.map((card) => (
-            <CreditCardVisual
-              key={card.id}
-              card={card}
-              onClick={() => router.push(`/tarjetas/${card.id}`)}
-              onEdit={() => { setEditCard(card); setShowModal(true); }}
-              onDelete={() => setDeleteCard(card)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5 flex-wrap min-h-[30px]">
+              {!searchOpen ? (
+                <button
+                  type="button"
+                  onClick={() => setSearchOpen(true)}
+                  className="p-1.5 -ml-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
+                  title="Buscar"
+                >
+                  <Search className="w-4 h-4" />
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5 flex-1 min-w-[160px] border-b-2 border-ink pb-0.5">
+                  <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <input
+                    autoFocus
+                    className="flex-1 min-w-0 bg-transparent border-none outline-none text-sm text-foreground placeholder:text-muted-foreground/50"
+                    placeholder="Buscar por banco, alias o titular..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { setSearch(""); setSearchOpen(false); }}
+                    className="p-0.5 rounded-full text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+              {!searchOpen && (
+                <>
+                  <SortChip label="Titular" active={sortField === "titular"} dir={sortDir} onClick={() => toggleSort("titular")} />
+                  <SortChip label="Banco" active={sortField === "bank"} dir={sortDir} onClick={() => toggleSort("bank")} />
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomFilter((v) => !v)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border-2 transition-colors ${customFilterActive ? "border-ink bg-accent text-primary font-medium" : "border-transparent text-muted-foreground/60 hover:bg-accent"}`}
+                  >
+                    <SlidersHorizontal className="w-3 h-3" />
+                    Personalizado
+                  </button>
+                </>
+              )}
+            </div>
+            {showCustomFilter && !searchOpen && (
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <PillSelect value={filterTitular} onChange={(e) => setFilterTitular(e.target.value)}>
+                  <option value="">Todos los titulares</option>
+                  {distinctTitulares.map((t) => <option key={t} value={t}>{t}</option>)}
+                </PillSelect>
+                <PillSelect value={filterBank} onChange={(e) => setFilterBank(e.target.value)}>
+                  <option value="">Todos los bancos</option>
+                  {distinctBanks.map((b) => <option key={b} value={b}>{b}</option>)}
+                </PillSelect>
+                {customFilterActive && (
+                  <button
+                    type="button"
+                    onClick={() => { setFilterTitular(""); setFilterBank(""); }}
+                    className="text-xs text-muted-foreground hover:text-foreground px-2 shrink-0 self-center"
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {visibleCards.length === 0 ? (
+            <UiCard className="p-8 text-center text-muted-foreground">
+              <p className="text-sm">Ninguna tarjeta coincide con la búsqueda/filtro.</p>
+            </UiCard>
+          ) : (
+            <div className="space-y-3">
+              {visibleCards.map((card) => (
+                <CreditCardVisual
+                  key={card.id}
+                  card={card}
+                  onClick={() => router.push(`/tarjetas/${card.id}`)}
+                  onEdit={() => { setEditCard(card); setShowModal(true); }}
+                  onDelete={() => setDeleteCard(card)}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {showModal && (
-        <CardModal initial={editCard || undefined} onSave={handleSave} onClose={() => { setShowModal(false); setEditCard(null); }} />
+        <CardModal initial={editCard || undefined} members={members} onSave={handleSave} onClose={() => { setShowModal(false); setEditCard(null); }} />
       )}
       {deleteCard && (
         <DeleteCardModal card={deleteCard} onConfirm={handleDelete} onClose={() => setDeleteCard(null)} />

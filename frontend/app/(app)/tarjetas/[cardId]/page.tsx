@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
-import { formatARS, formatDate, getErrorMessage } from "@/lib/utils";
-import { Plus, Trash2, Pencil, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { getErrorMessage } from "@/lib/utils";
+import { Plus, ChevronLeft, X } from "lucide-react";
 import { Card as UiCard } from "@/components/ui/card";
-import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
+import { StatementPaper } from "@/components/StatementPaper";
+import { BankLogo } from "@/components/ui/bank-logo";
 
 const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const INPUT = "mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground";
@@ -19,7 +20,7 @@ interface StatementItem {
   category: { id: number; name: string; color?: string };
 }
 interface Statement {
-  id: number; card_id: number; year: number; month: number; status: string;
+  id: number; card_id: number; year: number; month: number;
   closing_date?: string; due_date?: string; total: number; items: StatementItem[];
 }
 type DeleteMode = "keep" | "delete";
@@ -238,6 +239,7 @@ export default function CardDetailPage() {
         <button onClick={() => router.push("/tarjetas")} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">
           <ChevronLeft className="w-5 h-5" />
         </button>
+        <BankLogo bankName={card.bank} size={36} className="shrink-0" />
         <div className="flex-1 min-w-0">
           <h2 className="text-xl md:text-2xl font-display font-bold text-foreground truncate">{card.alias}</h2>
           <p className="text-sm text-muted-foreground">{card.bank}{card.last_4_digits ? ` •••• ${card.last_4_digits}` : ""}</p>
@@ -248,45 +250,29 @@ export default function CardDetailPage() {
         </Button>
       </div>
 
-      <UiCard className="p-0 md:p-0 divide-y">
-        {statements.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground">
-            <p className="text-sm">No hay resúmenes para esta tarjeta.</p>
-            <p className="text-xs mt-1">Creá el primer resumen mensual.</p>
+      {statements.length === 0 ? (
+        <UiCard className="p-8 text-center text-muted-foreground">
+          <p className="text-sm">No hay resúmenes para esta tarjeta.</p>
+          <p className="text-xs mt-1">Creá el primer resumen mensual.</p>
+        </UiCard>
+      ) : (
+        <div className="space-y-3">
+          {statements.map((stmt) => (
+            <StatementPaper
+              key={stmt.id}
+              statement={stmt}
+              onClick={() => router.push(`/tarjetas/${cardId}/${stmt.id}`)}
+              onEdit={() => setEditStmt(stmt)}
+              onDelete={() => setDeleteStmt(stmt)}
+            />
+          ))}
+          <div className="flex items-center gap-3 pt-2">
+            <div className="flex-1 border-t border-dashed border-border" />
+            <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wide shrink-0">Fin del historial</p>
+            <div className="flex-1 border-t border-dashed border-border" />
           </div>
-        ) : (
-          statements.map((stmt) => (
-            <div key={stmt.id} className="flex items-center gap-3 px-4 py-4">
-              <button
-                className="flex-1 flex items-center gap-3 min-w-0 text-left hover:opacity-80"
-                onClick={() => router.push(`/tarjetas/${cardId}/${stmt.id}`)}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-semibold text-foreground">{MONTH_NAMES[stmt.month - 1]} {stmt.year}</p>
-                    <Chip tone={stmt.status === "closed" ? "emerald" : "amber"}>
-                      {stmt.status === "closed" ? "Cerrado" : "Abierto"}
-                    </Chip>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {stmt.items.length} ítems
-                    {stmt.closing_date && <> &middot; Cierre {formatDate(stmt.closing_date)}</>}
-                    {stmt.due_date && <> &middot; Vence {formatDate(stmt.due_date)}</>}
-                  </p>
-                </div>
-                <span className="text-sm font-bold text-rose-600 shrink-0">{formatARS(stmt.total)}</span>
-                <ChevronRight className="w-4 h-4 text-muted-foreground/50 shrink-0" />
-              </button>
-              <button onClick={() => setEditStmt(stmt)} className="p-2 text-muted-foreground hover:text-primary shrink-0">
-                <Pencil className="w-4 h-4" />
-              </button>
-              <button onClick={() => setDeleteStmt(stmt)} className="p-2 text-muted-foreground hover:text-destructive shrink-0">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))
-        )}
-      </UiCard>
+        </div>
+      )}
 
       {showNewStmt && <NewStatementModal onSave={handleCreateStatement} onClose={() => setShowNewStmt(false)} />}
       {deleteStmt && <DeleteStatementModal statement={deleteStmt} onConfirm={handleDeleteStatement} onClose={() => setDeleteStmt(null)} />}

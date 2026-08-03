@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { formatARS, formatDate, formatUSD, parseAmount, normalizePhoneNumber, getErrorMessage, pickCategoryColor } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, ChevronLeft, X, CheckCircle, ExternalLink, Users2, Phone } from "lucide-react";
+import { Plus, ChevronLeft, X, ExternalLink, Users2, Phone } from "lucide-react";
 import { Card as UiCard } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ interface CardItem {
   category: { id: number; name: string; color?: string };
 }
 interface Statement {
-  id: number; card_id: number; year: number; month: number; status: string;
+  id: number; card_id: number; year: number; month: number;
   total: number; items: CardItem[];
 }
 interface Member {
@@ -542,7 +542,6 @@ export default function StatementDetailPage() {
   const [showNewCat, setShowNewCat] = useState(false);
   const [form, setForm] = useState(EMPTY_ITEM);
   const [adding, setAdding] = useState(false);
-  const [finalizing, setFinalizing] = useState(false);
   const [deleteItem, setDeleteItem] = useState<CardItem | null>(null);
   const [shareItem, setShareItem] = useState<CardItem | null>(null);
   const [editItem, setEditItem] = useState<CardItem | null>(null);
@@ -630,14 +629,6 @@ export default function StatementDetailPage() {
     await load();
   };
 
-  const handleFinalize = async () => {
-    if (!confirm("Al finalizar se generaran las cuotas futuras y gastos recurrentes para el siguiente mes. Continuar?")) return;
-    setFinalizing(true);
-    await api.post(`/credit-cards/statements/${statementId}/finalize`);
-    await load();
-    setFinalizing(false);
-  };
-
   if (!card || !statement) return <div className="p-6 text-sm text-muted-foreground">Cargando...</div>;
 
   const totalByCategory = statement.items.reduce<Record<number, { name: string; color?: string; total: number }>>((acc, item) => {
@@ -655,24 +646,12 @@ export default function StatementDetailPage() {
           <ChevronLeft className="w-5 h-5" />
         </button>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">
-              {MONTH_NAMES[statement.month - 1]} {statement.year}
-            </h2>
-            <Chip tone={statement.status === "closed" ? "emerald" : "amber"}>
-              {statement.status === "closed" ? "Cerrado" : "Abierto"}
-            </Chip>
-          </div>
+          <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">
+            {MONTH_NAMES[statement.month - 1]} {statement.year}
+          </h2>
           <p className="text-sm text-muted-foreground">{card.alias} - {card.bank}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {statement.status === "open" && (
-            <button onClick={handleFinalize} disabled={finalizing}
-              className="flex items-center gap-1.5 text-sm bg-emerald-600 text-white px-3 py-1.5 rounded-full border-2 border-ink shadow-chip hover:opacity-90 disabled:opacity-50">
-              <CheckCircle className="w-4 h-4" />
-              <span className="hidden sm:inline">{finalizing ? "Finalizando..." : "Finalizar"}</span>
-            </button>
-          )}
           <Button onClick={() => setShowAddForm(true)}>
             <Plus className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Agregar</span>
