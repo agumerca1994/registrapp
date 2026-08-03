@@ -17,6 +17,7 @@ from app.core.firebase import get_current_user
 from app.models.shared_expense import SharedExpenseSplit
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
+from app.routers.shared_expenses import _normalize_phone
 from app.schemas.user import UserJoinTenant, UserOut, UserRegister
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -225,7 +226,7 @@ async def verify_whatsapp(
     ):
         raise HTTPException(status_code=400, detail="Codigo incorrecto o expirado")
 
-    user.whatsapp_phone = body.phone
+    user.whatsapp_phone = _normalize_phone(body.phone)
     user.whatsapp_verify_code = None
     user.whatsapp_verify_expires = None
     user.whatsapp_gate_pending = False
