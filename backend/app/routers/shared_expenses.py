@@ -160,6 +160,7 @@ async def _accept_split(user: User, shared: SharedExpense, split: SharedExpenseS
         user_id=user.id,
         category_id=category_id,
         amount=split.amount,
+        currency=shared.currency,
         description=shared.title,
         expense_date=shared.expense_date,
         notes=f"Gasto compartido #{shared.id}",
