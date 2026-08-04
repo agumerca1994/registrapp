@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone, Layers, CalendarDays, ChevronLeft, ChevronRight, Share2, ArrowDownLeft, ArrowUpRight, Pencil, X } from "lucide-react";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone, Layers, CalendarDays, ChevronLeft, ChevronRight, Share2, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Pencil, X } from "lucide-react";
 
 import api from "@/lib/api";
 import { formatARS, formatUSD, normalizePhoneNumber, getErrorMessage, pickCategoryColor } from "@/lib/utils";
@@ -53,6 +53,25 @@ interface Split {
   expense_entry_id: number | null;
   invite_email: string | null;
   invite_token: string | null;
+  converted_ars_amount: number | null;
+  converted_ars_rate: number | null;
+  converted_ars_rate_type: RateType | null;
+}
+
+const RATE_TYPES = ["blue", "oficial", "mayorista", "mep", "ccl"] as const;
+type RateType = (typeof RATE_TYPES)[number];
+const RATE_TYPE_LABELS: Record<RateType, string> = {
+  blue: "Blue", oficial: "Oficial", mayorista: "Mayorista", mep: "MEP", ccl: "CCL",
+};
+
+// Resolve what to actually show/balance for a split: its settlement-time ARS
+// conversion if one was set, otherwise its raw amount in the expense's own
+// currency. Never mixes converted (ARS) and unconverted (USD) amounts.
+function resolveDisplay(split: Split, expenseCurrency: "ARS" | "USD"): { amount: number; currency: "ARS" | "USD" } {
+  if (split.converted_ars_amount != null) {
+    return { amount: Number(split.converted_ars_amount), currency: "ARS" };
+  }
+  return { amount: Number(split.amount), currency: expenseCurrency };
 }
 
 interface SharedExpense {
@@ -337,6 +356,145 @@ function EditExpenseModal({
   );
 }
 
+// Settlement-time USD→ARS conversion — one split (per-person "Te debe" row)
+// or every split of the expense at once (bulk "convertir todo" from the
+// "Todos" card). Never touches `amount`, never blocked by `locked`.
+function ConvertToArsModal({
+  expense, splitIds, onClose, onSaved,
+}: {
+  expense: SharedExpense;
+  splitIds: number[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const targetSplits = expense.splits.filter(s => splitIds.includes(s.id));
+  const alreadyConverted = targetSplits.some(s => s.converted_ars_amount != null);
+  const [rateType, setRateType] = useState<RateType>(
+    (targetSplits[0]?.converted_ars_rate_type as RateType | null) ?? "blue"
+  );
+  const [rate, setRate] = useState<string>(
+    targetSplits[0]?.converted_ars_rate != null ? Number(targetSplits[0].converted_ars_rate).toFixed(2) : ""
+  );
+  const [suggested, setSuggested] = useState<Partial<Record<RateType, number>> | null>(null);
+  const [loadingRate, setLoadingRate] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const from = new Date();
+        from.setDate(from.getDate() - 14);
+        const res = await api.get("/macro", { params: { from_date: from.toISOString().slice(0, 10) } });
+        const latest = res.data?.[0]; // GET /macro is ordered by period_date desc
+        if (latest) {
+          // Decimal fields come back as JSON strings (Pydantic default), not
+          // numbers — coerce before any arithmetic/.toFixed.
+          const n = (v: unknown) => (v == null ? undefined : Number(v));
+          const map: Partial<Record<RateType, number>> = {
+            oficial: n(latest.usd_official), blue: n(latest.usd_blue), mayorista: n(latest.usd_mayorista),
+            mep: n(latest.usd_mep), ccl: n(latest.usd_ccl),
+          };
+          setSuggested(map);
+          setRate(prev => prev || (map[rateType] != null ? map[rateType]!.toFixed(2) : prev));
+        }
+      } catch { /* sin cotización sugerida, se completa a mano */ }
+      finally { setLoadingRate(false); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleRateTypeChange(t: RateType) {
+    setRateType(t);
+    if (suggested?.[t] != null) setRate(suggested[t]!.toFixed(2));
+  }
+
+  const rateNum = parseAmt(rate);
+
+  async function handleConfirm() {
+    setError("");
+    if (rateNum <= 0) { setError("Ingresá una cotización válida"); return; }
+    setSaving(true);
+    try {
+      await api.post(`/shared-expenses/${expense.id}/convert-to-ars`, {
+        split_ids: splitIds, rate: rateNum, rate_type: rateType,
+      });
+      onSaved();
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Error al convertir"));
+    } finally { setSaving(false); }
+  }
+
+  async function handleRevert() {
+    setSaving(true);
+    try {
+      await api.post(`/shared-expenses/${expense.id}/convert-to-ars`, {
+        split_ids: splitIds, rate: null, rate_type: null,
+      });
+      onSaved();
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Error al revertir"));
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
+      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-foreground">Convertir a pesos</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-muted-foreground">Cotización</label>
+          <select value={rateType} onChange={e => handleRateTypeChange(e.target.value as RateType)}
+            className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card">
+            {RATE_TYPES.map(t => (
+              <option key={t} value={t}>
+                {RATE_TYPE_LABELS[t]}{suggested?.[t] != null ? ` — $${suggested[t].toFixed(2)}` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-muted-foreground">Valor del dólar</label>
+          <input required type="text" inputMode="decimal" value={rate} onChange={e => setRate(e.target.value)}
+            placeholder={loadingRate ? "Cargando sugerencia..." : "0,00"}
+            className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+        </div>
+
+        <div className="space-y-1 border-t pt-3">
+          {targetSplits.map(s => (
+            <div key={s.id} className="flex items-center justify-between text-sm gap-2">
+              <span className="text-muted-foreground truncate">{s.member_name}</span>
+              <span className="font-medium text-foreground whitespace-nowrap">
+                {formatUSD(s.amount)} → {rateNum > 0 ? formatARS(Number(s.amount) * rateNum) : "—"}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
+
+        <div className="flex gap-2 justify-end pt-1">
+          {alreadyConverted && (
+            <Button type="button" variant="outline" onClick={handleRevert} disabled={saving} className="mr-auto text-muted-foreground">
+              Volver a dólares
+            </Button>
+          )}
+          <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button type="button" onClick={handleConfirm} disabled={saving || rateNum <= 0}>
+            {saving ? "Guardando..." : "Confirmar"}
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 export default function SharedExpensesPage() {
   const { appUser } = useAuth();
   const [expenses, setExpenses] = useState<SharedExpense[]>([]);
@@ -351,6 +509,7 @@ export default function SharedExpensesPage() {
   const [savingCat, setSavingCat] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [editingExpense, setEditingExpense] = useState<SharedExpense | null>(null);
+  const [converting, setConverting] = useState<{ expense: SharedExpense; splitIds: number[] } | null>(null);
 
   const [title, setTitle] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
@@ -622,16 +781,22 @@ export default function SharedExpensesPage() {
   }, [personExpenses, selectedPerson, currentUserId]);
 
   // Totals kept separate per currency — ARS and USD amounts can't be summed together.
+  // A split converted to ARS counts toward the ARS bucket, not USD, regardless
+  // of the expense's own currency.
   const personTotals = useMemo(() => {
     const owedToMe = { ARS: 0, USD: 0 };
     for (const exp of owedToMeExpenses) {
-      const theirs = Number(exp.splits.find(s => selectedPerson && personKey(s) === selectedPerson.key)?.amount ?? 0);
-      owedToMe[exp.currency === "USD" ? "USD" : "ARS"] += theirs;
+      const theirSplit = exp.splits.find(s => selectedPerson && personKey(s) === selectedPerson.key);
+      if (!theirSplit) continue;
+      const { amount, currency } = resolveDisplay(theirSplit, exp.currency);
+      owedToMe[currency] += amount;
     }
     const iOwe = { ARS: 0, USD: 0 };
     for (const exp of iOweExpenses) {
-      const mine = Number(exp.splits.find(s => s.user_id === currentUserId)?.amount ?? 0);
-      iOwe[exp.currency === "USD" ? "USD" : "ARS"] += mine;
+      const mySplit = exp.splits.find(s => s.user_id === currentUserId);
+      if (!mySplit) continue;
+      const { amount, currency } = resolveDisplay(mySplit, exp.currency);
+      iOwe[currency] += amount;
     }
     return { owedToMe, iOwe };
   }, [owedToMeExpenses, iOweExpenses, selectedPerson, currentUserId]);
@@ -643,15 +808,19 @@ export default function SharedExpensesPage() {
     if (owedToMeExpenses.length > 0) {
       lines.push("", "Te debe:");
       for (const exp of owedToMeExpenses) {
-        const theirs = exp.splits.find(s => personKey(s) === selectedPerson.key)?.amount ?? 0;
-        lines.push(`• ${fmtDate(exp.payment_date)} - ${exp.title}: ${fmtByCurrency(theirs, exp.currency)}`);
+        const theirSplit = exp.splits.find(s => personKey(s) === selectedPerson.key);
+        if (!theirSplit) continue;
+        const { amount, currency } = resolveDisplay(theirSplit, exp.currency);
+        lines.push(`• ${fmtDate(exp.payment_date)} - ${exp.title}: ${fmtByCurrency(amount, currency)}`);
       }
     }
     if (iOweExpenses.length > 0) {
       lines.push("", "Debo:");
       for (const exp of iOweExpenses) {
-        const mine = exp.splits.find(s => s.user_id === currentUserId)?.amount ?? 0;
-        lines.push(`• ${fmtDate(exp.payment_date)} - ${exp.title}: ${fmtByCurrency(mine, exp.currency)}`);
+        const mySplit = exp.splits.find(s => s.user_id === currentUserId);
+        if (!mySplit) continue;
+        const { amount, currency } = resolveDisplay(mySplit, exp.currency);
+        lines.push(`• ${fmtDate(exp.payment_date)} - ${exp.title}: ${fmtByCurrency(amount, currency)}`);
       }
     }
 
@@ -676,7 +845,7 @@ export default function SharedExpensesPage() {
   // identical shape, differing only in which expenses, which split's amount, and the column label.
   function renderDirectionTable(
     exps: SharedExpense[],
-    amountFor: (exp: SharedExpense) => number,
+    splitFor: (exp: SharedExpense) => Split | undefined,
     columnLabel: string,
     totals: { ARS: number; USD: number },
     emptyLabel: string
@@ -698,13 +867,36 @@ export default function SharedExpensesPage() {
             </thead>
             <tbody className="divide-y">
               {exps.map(exp => {
-                const amount = amountFor(exp);
+                const split = splitFor(exp);
+                if (!split) return null;
+                const { amount, currency } = resolveDisplay(split, exp.currency);
                 const isCreator = exp.created_by_user_id === currentUserId;
+                const canConvert = isCreator && exp.currency === "USD";
+                const isConverted = split.converted_ars_amount != null;
                 return (
                   <tr key={exp.id}>
                     <td className="w-[7ch] px-2 py-2.5 whitespace-nowrap text-muted-foreground">{fmtDateShort(exp.payment_date)}</td>
                     <td className="px-2 sm:px-4 py-2.5 text-foreground truncate">{exp.title}</td>
-                    <td className="w-[18ch] px-2 sm:px-4 py-2.5 text-right font-medium text-foreground whitespace-nowrap">{fmtByCurrency(amount, exp.currency)}</td>
+                    <td className="w-[18ch] px-2 sm:px-4 py-2.5 text-right font-medium text-foreground whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1">
+                        {canConvert ? (
+                          <button
+                            onClick={() => setConverting({ expense: exp, splitIds: [split.id] })}
+                            title={isConverted
+                              ? `Convertido a ${RATE_TYPE_LABELS[split.converted_ars_rate_type ?? "blue"]} — tocar para cambiar`
+                              : "Convertir a pesos"}
+                            className={`p-0.5 transition-colors ${isConverted ? "text-primary" : "text-muted-foreground/50 hover:text-primary"}`}
+                          >
+                            <ArrowLeftRight className="w-3 h-3" />
+                          </button>
+                        ) : isConverted ? (
+                          <span title={`Convertido a ${RATE_TYPE_LABELS[split.converted_ars_rate_type ?? "blue"]}`} className="text-primary">
+                            <ArrowLeftRight className="w-3 h-3" />
+                          </span>
+                        ) : null}
+                        {fmtByCurrency(amount, currency)}
+                      </div>
+                    </td>
                     <td className="w-9 px-1 py-2.5 text-right">
                       {isCreator && (
                         <button onClick={() => handleDelete(exp.id, false)} className="p-1 text-muted-foreground hover:text-destructive transition-colors">
@@ -1141,7 +1333,7 @@ export default function SharedExpensesPage() {
                 <p className="text-xs font-medium text-muted-foreground mb-1.5 px-1">Te debe</p>
                 {renderDirectionTable(
                   owedToMeExpenses,
-                  exp => Number(exp.splits.find(s => personKey(s) === selectedPerson.key)?.amount ?? 0),
+                  exp => exp.splits.find(s => personKey(s) === selectedPerson.key),
                   selectedPerson.name.split(/\s+/)[0],
                   personTotals.owedToMe,
                   `${selectedPerson.name} no te debe nada en ${personPeriodLabel}.`
@@ -1152,7 +1344,7 @@ export default function SharedExpensesPage() {
                 <p className="text-xs font-medium text-muted-foreground mb-1.5 px-1">Vos debés</p>
                 {renderDirectionTable(
                   iOweExpenses,
-                  exp => Number(exp.splits.find(s => s.user_id === currentUserId)?.amount ?? 0),
+                  exp => exp.splits.find(s => s.user_id === currentUserId),
                   "Vos",
                   personTotals.iOwe,
                   `No le debés nada a ${selectedPerson.name} en ${personPeriodLabel}.`
@@ -1200,6 +1392,14 @@ export default function SharedExpensesPage() {
               const myMemberSplit = exp.splits.find(s => s.user_id === currentUserId);
               const pendingCount = exp.splits.filter(s => s.user_id !== null && s.status === "pending" && !s.invite_token).length;
               const isCreator = exp.created_by_user_id === currentUserId;
+              // "Convertir todo" (header) only makes sense whole-expense — a cuota
+              // group is always ARS (USD only allowed for single-item purchases).
+              const canConvertAll = isCreator && exp.currency === "USD" && !isGrouped;
+              const allConverted = exp.splits.every(s => s.converted_ars_amount != null);
+              const headerAmount = allConverted
+                ? exp.splits.reduce((s, sp) => s + Number(sp.converted_ars_amount), 0)
+                : groupTotal;
+              const headerCurrency: "ARS" | "USD" = allConverted ? "ARS" : exp.currency;
               return (
                 <Card key={exp.id} className="space-y-3">
                   <div className="flex items-start justify-between gap-3">
@@ -1219,7 +1419,16 @@ export default function SharedExpensesPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <p className="text-lg font-bold text-foreground">{fmtByCurrency(groupTotal, exp.currency)}</p>
+                      <p className="text-lg font-bold text-foreground">{fmtByCurrency(headerAmount, headerCurrency)}</p>
+                      {canConvertAll && (
+                        <button
+                          onClick={() => setConverting({ expense: exp, splitIds: exp.splits.map(s => s.id) })}
+                          title={allConverted ? "Convertido a pesos — tocar para cambiar" : "Convertir todo a pesos"}
+                          className={`p-1.5 transition-colors ${allConverted ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
+                        >
+                          <ArrowLeftRight className="w-4 h-4" />
+                        </button>
+                      )}
                       {isCreator && !exp.credit_card_item_id && (
                         <button onClick={() => setEditingExpense(exp)}
                           className="p-1.5 text-muted-foreground hover:text-primary transition-colors">
@@ -1254,11 +1463,14 @@ export default function SharedExpensesPage() {
                   <div className="border-t border-gray-200" />
 
                   <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-1.5 text-sm">
-                    {exp.splits.map(split => (
+                    {exp.splits.map(split => {
+                      const { amount: splitAmount, currency: splitCurrency } = resolveDisplay(split, exp.currency);
+                      return (
                       <Fragment key={split.id}>
                         <span className="text-foreground truncate">{split.member_name}</span>
                         <span className="text-muted-foreground text-right whitespace-nowrap">
-                          {fmtByCurrency(split.amount, exp.currency)}{isGrouped && <span className="text-muted-foreground/60"> /cuota</span>}
+                          {split.converted_ars_amount != null && <ArrowLeftRight className="w-3 h-3 inline mr-0.5 text-primary" />}
+                          {fmtByCurrency(splitAmount, splitCurrency)}{isGrouped && <span className="text-muted-foreground/60"> /cuota</span>}
                         </span>
                         <span className="flex items-center gap-1 justify-self-end">
                           <StatusChip
@@ -1279,13 +1491,14 @@ export default function SharedExpensesPage() {
                           )}
                         </span>
                       </Fragment>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {myMemberSplit?.status === "pending" && !myMemberSplit?.invite_token && (
                     <div className="flex items-center gap-2 pt-2 border-t">
                       <p className="text-sm text-muted-foreground flex-1">
-                        Te corresponden <strong>{fmtByCurrency(myMemberSplit.amount, exp.currency)}</strong>{isGrouped && ` por cuota (${cuotas.length} cuotas)`}
+                        Te corresponden <strong>{fmtByCurrency(resolveDisplay(myMemberSplit, exp.currency).amount, resolveDisplay(myMemberSplit, exp.currency).currency)}</strong>{isGrouped && ` por cuota (${cuotas.length} cuotas)`}
                       </p>
                       <button onClick={() => handleAccept(exp.id)}
                         className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded-full border-2 border-ink shadow-chip hover:opacity-90">
@@ -1315,6 +1528,15 @@ export default function SharedExpensesPage() {
           categories={categories}
           onClose={() => setEditingExpense(null)}
           onSaved={() => { setEditingExpense(null); load(); }}
+        />
+      )}
+
+      {converting && (
+        <ConvertToArsModal
+          expense={converting.expense}
+          splitIds={converting.splitIds}
+          onClose={() => setConverting(null)}
+          onSaved={() => { setConverting(null); load(); }}
         />
       )}
     </div>

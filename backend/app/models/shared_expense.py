@@ -51,6 +51,13 @@ class SharedExpenseSplit(Base):
     invite_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     invite_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     invite_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Settlement-time ARS conversion for a USD split — doesn't change `amount`
+    # (still the real USD amount owed), just how it's shown/balanced when the
+    # creator and this participant agree to settle in pesos at some rate.
+    # NULL means "still tracked in USD".
+    converted_ars_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    converted_ars_rate: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    converted_ars_rate_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     shared_expense: Mapped["SharedExpense"] = relationship(back_populates="splits")

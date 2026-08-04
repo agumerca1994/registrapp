@@ -77,6 +77,9 @@ class SplitOut(BaseModel):
     expense_entry_id: int | None
     invite_email: str | None
     invite_token: str | None
+    converted_ars_amount: Decimal | None = None
+    converted_ars_rate: Decimal | None = None
+    converted_ars_rate_type: str | None = None
 
 
 class SharedExpenseOut(BaseModel):
@@ -114,3 +117,28 @@ class InviteInfoOut(BaseModel):
 class ShareCreditCardItemBody(BaseModel):
     splits: list[SplitIn]
     split_type: str
+
+
+RATE_TYPES = ("oficial", "blue", "mayorista", "mep", "ccl")
+
+
+class ConvertToArsBody(BaseModel):
+    """Settlement-time USD→ARS conversion for one or more splits of the same
+    USD shared expense — one split (per-person view) or every split
+    (bulk 'convertir todo' from the full history card) go through this same
+    endpoint. `rate=None` reverts the given splits back to USD.
+    """
+    split_ids: list[int]
+    rate: Decimal | None = None
+    rate_type: str | None = None
+
+    @model_validator(mode="after")
+    def validate_rate(self) -> "ConvertToArsBody":
+        if not self.split_ids:
+            raise ValueError("Debe indicarse al menos un participante")
+        if self.rate is not None:
+            if self.rate <= 0:
+                raise ValueError("La cotización debe ser mayor a 0")
+            if self.rate_type not in RATE_TYPES:
+                raise ValueError(f"rate_type debe ser uno de: {', '.join(RATE_TYPES)}")
+        return self
