@@ -1,6 +1,7 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { Pencil, Trash2, MoreVertical } from "lucide-react";
 import { formatARS, formatDate } from "@/lib/utils";
 
 const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -58,21 +59,30 @@ export function StatementPaper({
 
       <p className="shrink-0 text-sm font-bold text-rose-600">{formatARS(statement.total)}</p>
 
-      <div className="flex items-center gap-0.5 shrink-0">
-        <button
-          onClick={(e) => { e.stopPropagation(); onEdit(); }}
-          className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          title="Editar resumen"
-        >
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="p-1.5 rounded-full text-muted-foreground hover:text-destructive hover:bg-accent transition-colors"
-          title="Eliminar resumen"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+      <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors outline-none" title="Más acciones">
+              <MoreVertical className="w-4 h-4" />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content align="end" sideOffset={4} className="bg-card border rounded-xl shadow-lg p-1 w-40 z-50">
+              <DropdownMenu.Item asChild>
+                <button onClick={onEdit}
+                  className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full text-left outline-none cursor-pointer">
+                  <Pencil className="w-4 h-4 text-muted-foreground" /> Editar
+                </button>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item asChild>
+                <button onClick={onDelete}
+                  className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-destructive hover:bg-destructive/10 w-full text-left outline-none cursor-pointer">
+                  <Trash2 className="w-4 h-4" /> Eliminar
+                </button>
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
       </div>
     </div>
   );

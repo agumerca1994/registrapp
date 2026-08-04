@@ -3,7 +3,8 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone, Layers, CalendarDays, ChevronLeft, ChevronRight, Share2, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Pencil, X } from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone, Layers, CalendarDays, ChevronLeft, ChevronRight, Share2, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Pencil, X, MoreVertical } from "lucide-react";
 
 import api from "@/lib/api";
 import { formatARS, formatUSD, normalizePhoneNumber, getErrorMessage, pickCategoryColor } from "@/lib/utils";
@@ -58,10 +59,10 @@ interface Split {
   converted_ars_rate_type: RateType | null;
 }
 
-const RATE_TYPES = ["blue", "oficial", "mayorista", "mep", "ccl"] as const;
+const RATE_TYPES = ["blue", "oficial", "mayorista", "mep", "ccl", "personalizado"] as const;
 type RateType = (typeof RATE_TYPES)[number];
 const RATE_TYPE_LABELS: Record<RateType, string> = {
-  blue: "Blue", oficial: "Oficial", mayorista: "Mayorista", mep: "MEP", ccl: "CCL",
+  blue: "Blue", oficial: "Oficial", mayorista: "Mayorista", mep: "MEP", ccl: "CCL", personalizado: "Personalizado",
 };
 
 // Resolve what to actually show/balance for a split: its settlement-time ARS
@@ -406,7 +407,14 @@ function ConvertToArsModal({
 
   function handleRateTypeChange(t: RateType) {
     setRateType(t);
-    if (suggested?.[t] != null) setRate(suggested[t]!.toFixed(2));
+    if (t !== "personalizado" && suggested?.[t] != null) setRate(suggested[t]!.toFixed(2));
+  }
+
+  // Editing the rate by hand no longer matches whichever published quote was
+  // selected, so it stops being "Blue"/"Oficial"/etc. and becomes a custom one.
+  function handleRateInputChange(value: string) {
+    setRate(value);
+    setRateType("personalizado");
   }
 
   const rateNum = parseAmt(rate);
@@ -447,23 +455,23 @@ function ConvertToArsModal({
           </button>
         </div>
 
-        <div>
-          <label className="text-xs font-medium text-muted-foreground">Cotización</label>
-          <select value={rateType} onChange={e => handleRateTypeChange(e.target.value as RateType)}
-            className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card">
-            {RATE_TYPES.map(t => (
-              <option key={t} value={t}>
-                {RATE_TYPE_LABELS[t]}{suggested?.[t] != null ? ` — $${suggested[t].toFixed(2)}` : ""}
-              </option>
-            ))}
-          </select>
-        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Cotización</label>
+            <select value={rateType} onChange={e => handleRateTypeChange(e.target.value as RateType)}
+              className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card">
+              {RATE_TYPES.map(t => (
+                <option key={t} value={t}>{RATE_TYPE_LABELS[t]}</option>
+              ))}
+            </select>
+          </div>
 
-        <div>
-          <label className="text-xs font-medium text-muted-foreground">Valor del dólar</label>
-          <input required type="text" inputMode="decimal" value={rate} onChange={e => setRate(e.target.value)}
-            placeholder={loadingRate ? "Cargando sugerencia..." : "0,00"}
-            className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Valor del dólar</label>
+            <input required type="text" inputMode="decimal" value={rate} onChange={e => handleRateInputChange(e.target.value)}
+              placeholder={loadingRate ? "Cargando..." : "0,00"}
+              className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+          </div>
         </div>
 
         <div className="space-y-1 border-t pt-3">
@@ -879,29 +887,42 @@ export default function SharedExpensesPage() {
                     <td className="px-2 sm:px-4 py-2.5 text-foreground truncate">{exp.title}</td>
                     <td className="w-[18ch] px-2 sm:px-4 py-2.5 text-right font-medium text-foreground whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1">
-                        {canConvert ? (
-                          <button
-                            onClick={() => setConverting({ expense: exp, splitIds: [split.id] })}
-                            title={isConverted
-                              ? `Convertido a ${RATE_TYPE_LABELS[split.converted_ars_rate_type ?? "blue"]} — tocar para cambiar`
-                              : "Convertir a pesos"}
-                            className={`p-0.5 transition-colors ${isConverted ? "text-primary" : "text-muted-foreground/50 hover:text-primary"}`}
-                          >
-                            <ArrowLeftRight className="w-3 h-3" />
-                          </button>
-                        ) : isConverted ? (
+                        {isConverted && (
                           <span title={`Convertido a ${RATE_TYPE_LABELS[split.converted_ars_rate_type ?? "blue"]}`} className="text-primary">
                             <ArrowLeftRight className="w-3 h-3" />
                           </span>
-                        ) : null}
+                        )}
                         {fmtByCurrency(amount, currency)}
                       </div>
                     </td>
                     <td className="w-9 px-1 py-2.5 text-right">
                       {isCreator && (
-                        <button onClick={() => handleDelete(exp.id, false)} className="p-1 text-muted-foreground hover:text-destructive transition-colors">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <DropdownMenu.Root>
+                          <DropdownMenu.Trigger asChild>
+                            <button className="p-1 text-muted-foreground hover:text-foreground transition-colors outline-none" title="Más acciones">
+                              <MoreVertical className="w-3.5 h-3.5" />
+                            </button>
+                          </DropdownMenu.Trigger>
+                          <DropdownMenu.Portal>
+                            <DropdownMenu.Content align="end" sideOffset={4} className="bg-card border rounded-xl shadow-lg p-1 w-48 z-50">
+                              {canConvert && (
+                                <DropdownMenu.Item asChild>
+                                  <button onClick={() => setConverting({ expense: exp, splitIds: [split.id] })}
+                                    className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full text-left outline-none cursor-pointer">
+                                    <ArrowLeftRight className="w-4 h-4 text-muted-foreground" />
+                                    {isConverted ? "Cambiar cotización" : "Convertir a pesos"}
+                                  </button>
+                                </DropdownMenu.Item>
+                              )}
+                              <DropdownMenu.Item asChild>
+                                <button onClick={() => handleDelete(exp.id, false)}
+                                  className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-destructive hover:bg-destructive/10 w-full text-left outline-none cursor-pointer">
+                                  <Trash2 className="w-4 h-4" /> Eliminar
+                                </button>
+                              </DropdownMenu.Item>
+                            </DropdownMenu.Content>
+                          </DropdownMenu.Portal>
+                        </DropdownMenu.Root>
                       )}
                     </td>
                   </tr>
@@ -1420,26 +1441,41 @@ export default function SharedExpensesPage() {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <p className="text-lg font-bold text-foreground">{fmtByCurrency(headerAmount, headerCurrency)}</p>
-                      {canConvertAll && (
-                        <button
-                          onClick={() => setConverting({ expense: exp, splitIds: exp.splits.map(s => s.id) })}
-                          title={allConverted ? "Convertido a pesos — tocar para cambiar" : "Convertir todo a pesos"}
-                          className={`p-1.5 transition-colors ${allConverted ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
-                        >
-                          <ArrowLeftRight className="w-4 h-4" />
-                        </button>
-                      )}
-                      {isCreator && !exp.credit_card_item_id && (
-                        <button onClick={() => setEditingExpense(exp)}
-                          className="p-1.5 text-muted-foreground hover:text-primary transition-colors">
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                      )}
                       {isCreator && (
-                        <button onClick={() => handleDelete(exp.id, isGrouped)}
-                          className="p-1.5 text-muted-foreground hover:text-destructive transition-colors">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <DropdownMenu.Root>
+                          <DropdownMenu.Trigger asChild>
+                            <button className="p-1.5 text-muted-foreground hover:text-foreground transition-colors outline-none" title="Más acciones">
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+                          </DropdownMenu.Trigger>
+                          <DropdownMenu.Portal>
+                            <DropdownMenu.Content align="end" sideOffset={4} className="bg-card border rounded-xl shadow-lg p-1 w-48 z-50">
+                              {!exp.credit_card_item_id && (
+                                <DropdownMenu.Item asChild>
+                                  <button onClick={() => setEditingExpense(exp)}
+                                    className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full text-left outline-none cursor-pointer">
+                                    <Pencil className="w-4 h-4 text-muted-foreground" /> Editar
+                                  </button>
+                                </DropdownMenu.Item>
+                              )}
+                              {canConvertAll && (
+                                <DropdownMenu.Item asChild>
+                                  <button onClick={() => setConverting({ expense: exp, splitIds: exp.splits.map(s => s.id) })}
+                                    className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full text-left outline-none cursor-pointer">
+                                    <ArrowLeftRight className="w-4 h-4 text-muted-foreground" />
+                                    {allConverted ? "Cambiar cotización" : "Convertir a pesos"}
+                                  </button>
+                                </DropdownMenu.Item>
+                              )}
+                              <DropdownMenu.Item asChild>
+                                <button onClick={() => handleDelete(exp.id, isGrouped)}
+                                  className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-destructive hover:bg-destructive/10 w-full text-left outline-none cursor-pointer">
+                                  <Trash2 className="w-4 h-4" /> Eliminar
+                                </button>
+                              </DropdownMenu.Item>
+                            </DropdownMenu.Content>
+                          </DropdownMenu.Portal>
+                        </DropdownMenu.Root>
                       )}
                     </div>
                   </div>
