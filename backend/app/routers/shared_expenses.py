@@ -2,6 +2,7 @@ import logging
 import re
 import secrets
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,6 +19,7 @@ from app.models.expense import ExpenseCategory, ExpenseEntry
 from app.models.shared_expense import SharedExpense, SharedExpenseSplit
 from app.models.user import User
 from app.schemas.shared_expense import (
+    ConvertToArsBody,
     InviteInfoOut,
     SharedExpenseCreate,
     SharedExpenseOut,
@@ -470,6 +472,58 @@ async def update_shared_expense(
             if body.category_id is not None:
                 entry.category_id = shared.category_id
             entry.amount = split.amount
+
+    await db.commit()
+
+    result = await db.scalar(
+        _load_q(user.id, user.tenant_id).where(SharedExpense.id == shared.id)
+    )
+    return result
+
+
+@router.post("/{shared_id}/convert-to-ars", response_model=SharedExpenseOut)
+async def convert_to_ars(
+    shared_id: int,
+    body: ConvertToArsBody,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Settlement-time conversion, not an edit of what's owed: doesn't touch
+    `amount`, isn't gated by `locked`, and doesn't propagate to anyone's
+    ExpenseEntry — the underlying USD purchase is unchanged, this only
+    records what peso value the creator and a participant agreed to settle
+    at. Only the creator sets it (mirrors edit/delete), same as any other
+    split-level change here.
+    """
+    user = await _get_db_user(firebase_user, db)
+
+    shared = await db.scalar(
+        select(SharedExpense)
+        .where(SharedExpense.id == shared_id, SharedExpense.tenant_id == user.tenant_id)
+        .options(selectinload(SharedExpense.splits))
+    )
+    if not shared:
+        raise HTTPException(status_code=404, detail="Gasto compartido no encontrado")
+    if shared.created_by_user_id != user.id:
+        raise HTTPException(status_code=403, detail="Solo el creador puede convertir este gasto")
+    if shared.currency != "USD":
+        raise HTTPException(status_code=400, detail="Solo los gastos en dólares se pueden convertir a pesos")
+
+    splits_by_id = {s.id: s for s in shared.splits}
+    unknown_ids = set(body.split_ids) - set(splits_by_id.keys())
+    if unknown_ids:
+        raise HTTPException(status_code=400, detail="Alguno de los participantes no pertenece a este gasto")
+
+    for split_id in body.split_ids:
+        split = splits_by_id[split_id]
+        if body.rate is None:
+            split.converted_ars_amount = None
+            split.converted_ars_rate = None
+            split.converted_ars_rate_type = None
+        else:
+            split.converted_ars_amount = (split.amount * body.rate).quantize(Decimal("0.01"))
+            split.converted_ars_rate = body.rate
+            split.converted_ars_rate_type = body.rate_type
 
     await db.commit()
 
