@@ -119,7 +119,7 @@ class ShareCreditCardItemBody(BaseModel):
     split_type: str
 
 
-RATE_TYPES = ("oficial", "blue", "mayorista", "mep", "ccl")
+RATE_TYPES = ("oficial", "blue", "mayorista", "mep", "ccl", "personalizado")
 
 
 class ConvertToArsBody(BaseModel):
