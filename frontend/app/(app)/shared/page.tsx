@@ -687,13 +687,13 @@ export default function SharedExpensesPage() {
     return (
       <Card className="p-0 md:p-0 divide-y overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-fixed">
             <thead>
               <tr className="text-left text-xs text-muted-foreground border-b">
-                <th className="px-2 sm:px-4 py-2.5 font-medium">Fecha</th>
+                <th className="w-[7ch] px-2 py-2.5 font-medium">Fecha</th>
                 <th className="px-2 sm:px-4 py-2.5 font-medium">Descripción</th>
-                <th className="px-2 sm:px-4 py-2.5 font-medium text-right">{columnLabel}</th>
-                <th className="px-1 sm:px-2 py-2.5"></th>
+                <th className="w-[18ch] px-2 sm:px-4 py-2.5 font-medium text-right">{columnLabel}</th>
+                <th className="w-9 px-1 py-2.5"></th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -702,10 +702,10 @@ export default function SharedExpensesPage() {
                 const isCreator = exp.created_by_user_id === currentUserId;
                 return (
                   <tr key={exp.id}>
-                    <td className="px-2 sm:px-4 py-2.5 whitespace-nowrap text-muted-foreground">{fmtDateShort(exp.payment_date)}</td>
-                    <td className="px-2 sm:px-4 py-2.5 text-foreground truncate max-w-[140px] sm:max-w-[220px]">{exp.title}</td>
-                    <td className="px-2 sm:px-4 py-2.5 text-right font-medium text-foreground whitespace-nowrap">{fmtByCurrency(amount, exp.currency)}</td>
-                    <td className="px-1 sm:px-2 py-2.5 text-right">
+                    <td className="w-[7ch] px-2 py-2.5 whitespace-nowrap text-muted-foreground">{fmtDateShort(exp.payment_date)}</td>
+                    <td className="px-2 sm:px-4 py-2.5 text-foreground truncate">{exp.title}</td>
+                    <td className="w-[18ch] px-2 sm:px-4 py-2.5 text-right font-medium text-foreground whitespace-nowrap">{fmtByCurrency(amount, exp.currency)}</td>
+                    <td className="w-9 px-1 py-2.5 text-right">
                       {isCreator && (
                         <button onClick={() => handleDelete(exp.id, false)} className="p-1 text-muted-foreground hover:text-destructive transition-colors">
                           <Trash2 className="w-3.5 h-3.5" />
@@ -720,15 +720,15 @@ export default function SharedExpensesPage() {
               {totals.ARS > 0 && (
                 <tr className="border-t bg-muted font-semibold">
                   <td className="px-2 sm:px-4 py-2.5 text-foreground" colSpan={2}>Total ARS</td>
-                  <td className="px-2 sm:px-4 py-2.5 text-right text-foreground whitespace-nowrap">{formatARS(totals.ARS)}</td>
-                  <td className="px-1 sm:px-2 py-2.5" />
+                  <td className="w-[18ch] px-2 sm:px-4 py-2.5 text-right text-foreground whitespace-nowrap">{formatARS(totals.ARS)}</td>
+                  <td className="w-9 px-1 py-2.5" />
                 </tr>
               )}
               {totals.USD > 0 && (
                 <tr className="border-t bg-muted font-semibold">
                   <td className="px-2 sm:px-4 py-2.5 text-foreground" colSpan={2}>Total USD</td>
-                  <td className="px-2 sm:px-4 py-2.5 text-right text-foreground whitespace-nowrap">{formatUSD(totals.USD)}</td>
-                  <td className="px-1 sm:px-2 py-2.5" />
+                  <td className="w-[18ch] px-2 sm:px-4 py-2.5 text-right text-foreground whitespace-nowrap">{formatUSD(totals.USD)}</td>
+                  <td className="w-9 px-1 py-2.5" />
                 </tr>
               )}
             </tfoot>
