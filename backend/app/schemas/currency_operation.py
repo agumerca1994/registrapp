@@ -129,11 +129,17 @@ class CurrencySummaryOut(BaseModel):
     currency: str
     period: str
 
-    # Stock
+    # Stock, plus the all-time flows that add up to it. Without these the
+    # holding is an unexplainable number: the month tiles below only cover the
+    # selected month, but the holding accumulates since `start_date`.
     holding: Decimal
     holding_start: Decimal
     initial: Decimal
     start_date: date | None
+    total_bought: Decimal
+    total_sold: Decimal
+    total_spent: Decimal
+    total_adjustments: Decimal
 
     # Flow for the selected month
     bought_usd: Decimal
