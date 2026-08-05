@@ -1,62 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, text
-from decimal import Decimal
-from datetime import date
+from sqlalchemy import select
 
 from app.core.database import get_db
 from app.core.firebase import get_current_user
 from app.models.user import User
-from app.models.income import IncomeEntry
-from app.models.expense import ExpenseEntry, ExpenseCategory
-from app.models.macro_variable import MacroVariable
-from app.models.mortgage import MortgageRecord, MortgageLoan
-from app.services.currency import (
-    get_fx_ars_flow, get_latest_rate, get_tenant_rate_type, get_usd_holding,
-)
-from pydantic import BaseModel
-from datetime import timedelta
+from app.services import analytics
+# Re-exported so `from app.routers.dashboard import MonthSummary` keeps working;
+# the real definitions live in services/analytics.py alongside the queries.
+from app.services.analytics import CategorySummary, HistoryPoint, MonthSummary  # noqa: F401
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
-
-
-class CategorySummary(BaseModel):
-    category_name: str
-    total: Decimal
-    color: str | None = None
-
-
-class MonthSummary(BaseModel):
-    period: str
-    total_income: Decimal
-    total_expenses: Decimal
-    total_expenses_usd: Decimal
-    balance: Decimal
-    # Buying foreign currency is neither income nor expense — it's a transfer
-    # between pockets — so it stays out of `balance`. But it does move real
-    # pesos, which is why `ars_available` exists: without it the dashboard shows
-    # more pesos than the household actually has left.
-    fx_bought_ars: Decimal
-    fx_sold_ars: Decimal
-    ars_available: Decimal
-    usd_holding: Decimal
-    usd_holding_ars: Decimal | None
-    usd_rate: Decimal | None
-    usd_rate_type: str
-    mortgage_payment: Decimal | None
-    mortgage_is_projected: bool
-    uva_value: Decimal | None
-    inflation_pct: Decimal | None
-    expenses_by_category: list[CategorySummary]
-
-
-class HistoryPoint(BaseModel):
-    period: str
-    total_income: Decimal
-    total_expenses: Decimal
-    mortgage_payment: Decimal | None
-    uva_value: Decimal | None
-    inflation_pct: Decimal | None
 
 
 async def _get_db_user(firebase_user: dict, db: AsyncSession) -> User:
@@ -74,120 +28,7 @@ async def monthly_summary(
     db: AsyncSession = Depends(get_db),
 ):
     user = await _get_db_user(firebase_user, db)
-    tid = user.tenant_id
-    start = date(year, month, 1)
-    end = date(year, month + 1, 1) if month < 12 else date(year + 1, 1, 1)
-
-    total_income = await db.scalar(
-        select(func.coalesce(func.sum(IncomeEntry.amount), 0))
-        .where(IncomeEntry.tenant_id == tid, IncomeEntry.period_date >= start, IncomeEntry.period_date < end)
-    )
-
-    total_expenses = await db.scalar(
-        select(func.coalesce(func.sum(ExpenseEntry.amount), 0))
-        .where(
-            ExpenseEntry.tenant_id == tid, ExpenseEntry.expense_date >= start, ExpenseEntry.expense_date < end,
-            ExpenseEntry.currency == "ARS",
-        )
-    )
-
-    total_expenses_usd = await db.scalar(
-        select(func.coalesce(func.sum(ExpenseEntry.amount), 0))
-        .where(
-            ExpenseEntry.tenant_id == tid, ExpenseEntry.expense_date >= start, ExpenseEntry.expense_date < end,
-            ExpenseEntry.currency == "USD",
-        )
-    )
-
-    rows = await db.execute(
-        select(ExpenseCategory.name, ExpenseCategory.color, func.sum(ExpenseEntry.amount).label("total"))
-        .join(ExpenseEntry, ExpenseEntry.category_id == ExpenseCategory.id)
-        .where(
-            ExpenseEntry.tenant_id == tid, ExpenseEntry.expense_date >= start, ExpenseEntry.expense_date < end,
-            ExpenseEntry.currency == "ARS",
-        )
-        .group_by(ExpenseCategory.name, ExpenseCategory.color)
-        .order_by(func.sum(ExpenseEntry.amount).desc())
-    )
-    by_category = [
-        CategorySummary(category_name=r.name, total=r.total, color=r.color)
-        for r in rows
-    ]
-
-    mortgage = await db.scalar(
-        select(MortgageRecord).where(
-            MortgageRecord.tenant_id == tid,
-            MortgageRecord.period_date >= start,
-            MortgageRecord.period_date < end,
-        )
-    )
-
-    macro = await db.scalar(
-        select(MacroVariable).where(
-            MacroVariable.period_date >= start,
-            MacroVariable.period_date < end,
-        )
-    )
-
-    # Determine mortgage payment (recorded or projected from active loan)
-    mortgage_payment: Decimal | None = None
-    mortgage_is_projected = False
-    if mortgage:
-        mortgage_payment = mortgage.payment_amount
-    else:
-        active_loan = await db.scalar(
-            select(MortgageLoan).where(
-                MortgageLoan.tenant_id == tid,
-                MortgageLoan.is_active == True,
-            ).limit(1)
-        )
-        if active_loan:
-            if active_loan.loan_type in ("uva_frances", "uva_aleman") and active_loan.cuota_uva:
-                latest_macro = await db.scalar(
-                    select(MacroVariable)
-                    .where(MacroVariable.uva_value.is_not(None), MacroVariable.period_date <= end)
-                    .order_by(MacroVariable.period_date.desc())
-                    .limit(1)
-                )
-                if latest_macro and latest_macro.uva_value:
-                    mortgage_payment = active_loan.cuota_uva * latest_macro.uva_value
-                    mortgage_is_projected = True
-            elif active_loan.loan_type == "tasa_fija" and active_loan.cuota_pesos:
-                mortgage_payment = active_loan.cuota_pesos
-                mortgage_is_projected = True
-
-    # Foreign-currency side: pesos moved by conversions this month, plus the
-    # holding at the close of the month (a stock, so it carries across months —
-    # dollars bought in one month to pay the next month's card statement).
-    fx_bought_ars, fx_sold_ars = await get_fx_ars_flow(db, tid, start, end)
-    holding = await get_usd_holding(db, tid, as_of=end - timedelta(days=1))
-    rate_type = await get_tenant_rate_type(db, tid)
-    usd_rate = await get_latest_rate(db, rate_type)
-    usd_holding_ars = (
-        (holding.holding * usd_rate).quantize(Decimal("0.01")) if usd_rate is not None else None
-    )
-
-    balance = total_income - total_expenses
-
-    return MonthSummary(
-        period=f"{year}-{month:02d}",
-        total_income=total_income,
-        total_expenses=total_expenses,
-        total_expenses_usd=total_expenses_usd,
-        balance=balance,
-        fx_bought_ars=fx_bought_ars,
-        fx_sold_ars=fx_sold_ars,
-        ars_available=balance - fx_bought_ars + fx_sold_ars,
-        usd_holding=holding.holding,
-        usd_holding_ars=usd_holding_ars,
-        usd_rate=usd_rate,
-        usd_rate_type=rate_type,
-        mortgage_payment=mortgage_payment,
-        mortgage_is_projected=mortgage_is_projected,
-        uva_value=macro.uva_value if macro else None,
-        inflation_pct=macro.inflation_monthly_pct if macro else None,
-        expenses_by_category=by_category,
-    )
+    return await analytics.month_summary(db, user.tenant_id, year, month)
 
 
 @router.get("/history", response_model=list[HistoryPoint])
@@ -196,81 +37,4 @@ async def history(
     db: AsyncSession = Depends(get_db),
 ):
     user = await _get_db_user(firebase_user, db)
-    tid = user.tenant_id
-
-    data: dict[str, dict] = {}
-
-    def ensure(p: str) -> None:
-        if p not in data:
-            data[p] = dict(
-                total_income=Decimal(0),
-                total_expenses=Decimal(0),
-                mortgage_payment=None,
-                uva_value=None,
-                inflation_pct=None,
-            )
-
-    rows = await db.execute(
-        select(
-            func.date_trunc("month", IncomeEntry.period_date).label("p"),
-            func.sum(IncomeEntry.amount).label("total"),
-        )
-        .where(IncomeEntry.tenant_id == tid)
-        .group_by(text("1"))
-    )
-    for r in rows:
-        k = str(r.p)[:7]
-        ensure(k)
-        data[k]["total_income"] = r.total
-
-    rows = await db.execute(
-        select(
-            func.date_trunc("month", ExpenseEntry.expense_date).label("p"),
-            func.sum(ExpenseEntry.amount).label("total"),
-        )
-        # ARS only, matching monthly_summary — without this filter USD amounts
-        # get added to the peso series as if they were pesos.
-        .where(ExpenseEntry.tenant_id == tid, ExpenseEntry.currency == "ARS")
-        .group_by(text("1"))
-    )
-    for r in rows:
-        k = str(r.p)[:7]
-        ensure(k)
-        data[k]["total_expenses"] = r.total
-
-    rows = await db.execute(
-        select(
-            func.date_trunc("month", MortgageRecord.period_date).label("p"),
-            func.sum(MortgageRecord.payment_amount).label("total"),
-        )
-        .where(MortgageRecord.tenant_id == tid)
-        .group_by(text("1"))
-    )
-    for r in rows:
-        k = str(r.p)[:7]
-        ensure(k)
-        data[k]["mortgage_payment"] = r.total
-
-    rows = await db.execute(
-        select(
-            func.date_trunc("month", MacroVariable.period_date).label("p"),
-            func.max(MacroVariable.uva_value).label("uva"),
-            func.max(MacroVariable.inflation_monthly_pct).label("inflation"),
-        )
-        .group_by(text("1"))
-    )
-    for r in rows:
-        k = str(r.p)[:7]
-        # Macro data is global (no tenant_id) and can span years of history —
-        # unlike the income/expense/mortgage loops above, it must only
-        # enrich months where the tenant already has activity, never
-        # fabricate a new all-zero month on its own (that pollutes the tail
-        # of the sorted history with phantom recent months, breaking the
-        # dashboard's "last 4 months" income trend when the tenant hasn't
-        # logged the current month yet but macro already synced it).
-        if k in data:
-            data[k]["uva_value"] = r.uva
-            data[k]["inflation_pct"] = r.inflation
-
-    return [HistoryPoint(period=k, **data[k]) for k in sorted(data.keys())]
-
+    return await analytics.history_series(db, user.tenant_id)
