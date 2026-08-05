@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.expense import ExpenseCategory, ExpenseEntry
 from app.models.macro_variable import MacroVariable
 from app.models.tenant import Tenant
+from app.models.credit_card import CreditCardItem, CreditCardStatement
 from app.models.currency_operation import CurrencyOperation
 
 # Exchange-rate vocabulary shared by shared-expense settlement conversion and
@@ -49,8 +50,32 @@ class HoldingBreakdown:
     bought: Decimal           # USD in via `buy`
     sold: Decimal             # USD out via `sell` (positive number)
     adjustments: Decimal      # net manual corrections (signed)
-    spent: Decimal            # USD out via expense entries (positive number)
-    start_date: date | None   # cutoff — expenses before it are ignored
+    spent: Decimal            # USD that has actually left (positive number)
+    start_date: date | None   # cutoff — outflows before it are ignored
+    pending: Decimal          # billed to a card but not due yet (positive)
+    next_due_date: date | None  # when the next card statement takes its dollars
+
+
+def cash_out_date():
+    """When a USD expense actually takes dollars out of the holding.
+
+    A card purchase doesn't move money on the purchase date — the dollars leave
+    when the statement is paid, a month later ("las tarjetas se pagan a mes
+    vencido"). So a card-linked expense cashes out on its statement's due date;
+    anything else (cash, immediate purchase) cashes out on its own date.
+
+    Requires the outer joins in `_with_statement()`.
+    """
+    return func.coalesce(CreditCardStatement.due_date, ExpenseEntry.expense_date)
+
+
+def _with_statement(q):
+    """Attach each expense entry to its card statement, if it came from one."""
+    return (
+        q.select_from(ExpenseEntry)
+        .outerjoin(CreditCardItem, CreditCardItem.expense_entry_id == ExpenseEntry.id)
+        .outerjoin(CreditCardStatement, CreditCardStatement.id == CreditCardItem.statement_id)
+    )
 
 
 async def get_or_create_usd_category(tenant_id: int, db: AsyncSession) -> int:
@@ -138,34 +163,53 @@ async def get_usd_holding(
     from before the user ever declared a starting balance, and that declared
     number already reflects them. Without the cutoff they'd be subtracted twice.
 
-    `as_of` (inclusive) yields the holding at the close of a past date.
+    Outflows are counted on their `cash_out_date()`, not their purchase date —
+    a card purchase takes its dollars when the statement comes due.
+
+    `as_of` (inclusive) yields the holding at the close of a past date. It is
+    capped at today: money that hasn't left yet isn't spent, so a future date
+    would report a projection as if it were the current balance.
     """
     start_date = await get_fx_start_date(db, tenant_id, currency)
 
+    today = date.today()
+    cutoff = min(as_of, today) if as_of is not None else today
+
     def _op_sum(*extra):
-        q = select(func.coalesce(func.sum(CurrencyOperation.foreign_amount), ZERO)).where(
+        return select(func.coalesce(func.sum(CurrencyOperation.foreign_amount), ZERO)).where(
             CurrencyOperation.tenant_id == tenant_id,
             CurrencyOperation.currency == currency,
+            CurrencyOperation.operation_date <= cutoff,
             *extra,
         )
-        if as_of is not None:
-            q = q.where(CurrencyOperation.operation_date <= as_of)
-        return q
 
     initial = await db.scalar(_op_sum(CurrencyOperation.op_type == "initial"))
     bought = await db.scalar(_op_sum(CurrencyOperation.op_type == "buy"))
     sold = await db.scalar(_op_sum(CurrencyOperation.op_type == "sell"))
     adjustments = await db.scalar(_op_sum(CurrencyOperation.op_type == "adjustment"))
 
-    spent_q = select(func.coalesce(func.sum(ExpenseEntry.amount), ZERO)).where(
-        ExpenseEntry.tenant_id == tenant_id,
-        ExpenseEntry.currency == currency,
+    cash_out = cash_out_date()
+
+    def _spent_q(*extra):
+        q = _with_statement(select(func.coalesce(func.sum(ExpenseEntry.amount), ZERO))).where(
+            ExpenseEntry.tenant_id == tenant_id,
+            ExpenseEntry.currency == currency,
+            *extra,
+        )
+        if start_date is not None:
+            q = q.where(cash_out >= start_date)
+        return q
+
+    spent = await db.scalar(_spent_q(cash_out <= cutoff))
+    # Already billed, dollars not gone yet — what the next statement will take.
+    pending = await db.scalar(_spent_q(cash_out > cutoff))
+    next_due = await db.scalar(
+        _with_statement(select(func.min(cash_out))).where(
+            ExpenseEntry.tenant_id == tenant_id,
+            ExpenseEntry.currency == currency,
+            cash_out > cutoff,
+        )
     )
-    if start_date is not None:
-        spent_q = spent_q.where(ExpenseEntry.expense_date >= start_date)
-    if as_of is not None:
-        spent_q = spent_q.where(ExpenseEntry.expense_date <= as_of)
-    spent = await db.scalar(spent_q)
 
     # `sold` is stored negative (currency leaving), so this is a plain sum.
     holding = initial + bought + sold + adjustments - spent
@@ -178,6 +222,8 @@ async def get_usd_holding(
         adjustments=adjustments,
         spent=spent,
         start_date=start_date,
+        pending=pending,
+        next_due_date=next_due,
     )
 
 

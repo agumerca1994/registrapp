@@ -16,7 +16,8 @@ from app.schemas.currency_operation import (
     CurrencySummaryOut, CurrencySettingsOut, CurrencySettingsUpdate,
 )
 from app.services.currency import (
-    ZERO, get_latest_rate, get_tenant_rate_type, get_usd_holding,
+    ZERO, _with_statement, cash_out_date, get_latest_rate,
+    get_tenant_rate_type, get_usd_holding,
 )
 
 router = APIRouter(prefix="/currency", tags=["currency"])
@@ -244,14 +245,17 @@ async def currency_summary(
     bought_ars = await _ars_sum("buy")
     sold_ars = await _ars_sum("sell")
 
-    spent_q = select(func.coalesce(func.sum(ExpenseEntry.amount), ZERO)).where(
+    # Dollars that left during the month — by statement due date for card
+    # purchases, so July's card spending lands in the month it's actually paid.
+    cash_out = cash_out_date()
+    spent_q = _with_statement(select(func.coalesce(func.sum(ExpenseEntry.amount), ZERO))).where(
         ExpenseEntry.tenant_id == tid,
         ExpenseEntry.currency == currency,
-        ExpenseEntry.expense_date >= start,
-        ExpenseEntry.expense_date < end,
+        cash_out >= start,
+        cash_out < end,
     )
     if closing.start_date is not None:
-        spent_q = spent_q.where(ExpenseEntry.expense_date >= closing.start_date)
+        spent_q = spent_q.where(cash_out >= closing.start_date)
     spent_usd = await db.scalar(spent_q)
 
     rate_type = await get_tenant_rate_type(db, tid)
@@ -269,6 +273,8 @@ async def currency_summary(
         total_sold=closing.sold,
         total_spent=closing.spent,
         total_adjustments=closing.adjustments,
+        pending_usd=closing.pending,
+        next_due_date=closing.next_due_date,
         bought_usd=bought_usd,
         bought_ars=bought_ars,
         sold_usd=-sold_usd,

@@ -60,6 +60,8 @@ interface Summary {
   total_sold: string;
   total_spent: string;
   total_adjustments: string;
+  pending_usd: string;
+  next_due_date: string | null;
   bought_usd: string;
   bought_ars: string;
   sold_usd: string;
@@ -347,7 +349,7 @@ export default function DivisasPage() {
                   { label: "Tenencia inicial", value: Number(summary.initial), sign: "" },
                   { label: "Comprado", value: Number(summary.total_bought), sign: "+" },
                   { label: "Vendido", value: Number(summary.total_sold), sign: "−" },
-                  { label: "Gastado en USD", value: Number(summary.total_spent), sign: "−" },
+                  { label: "Pagado en USD", value: Number(summary.total_spent), sign: "−" },
                   { label: "Ajustes", value: Number(summary.total_adjustments), sign: "" },
                 ]
                   .filter(r => r.value !== 0 || r.label === "Tenencia inicial")
@@ -360,6 +362,20 @@ export default function DivisasPage() {
                 <p className="flex justify-between gap-4 font-semibold text-foreground pt-1">
                   <span>= Tenencia actual</span>
                   <span className="tabular-nums">{formatUSD(holding)}</span>
+                </p>
+              </div>
+            )}
+
+            {/* Card purchases already billed but not yet due. The dollars are
+                still held, so they're not subtracted above — but they're
+                already committed, which is exactly when the user needs to buy. */}
+            {summary && Number(summary.pending_usd) > 0 && (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                <p className="text-xs text-amber-800">
+                  <strong>{formatUSD(Number(summary.pending_usd))} comprometidos</strong> en
+                  consumos con tarjeta ya facturados
+                  {summary.next_due_date && <> · vencen el {formatDate(summary.next_due_date)}</>}.
+                  Todavía no salieron de tu tenencia.
                 </p>
               </div>
             )}
@@ -399,9 +415,9 @@ export default function DivisasPage() {
                   hint={Number(summary.sold_ars) > 0 ? `por ${formatARS(Number(summary.sold_ars))}` : undefined}
                 />
                 <StatTile
-                  label="Gasté" tone="rose"
+                  label="Pagué" tone="rose"
                   value={formatUSD(Number(summary.spent_usd))}
-                  hint="consumos en USD"
+                  hint="resúmenes vencidos + contado"
                 />
                 <StatTile
                   label="Neto del mes"
