@@ -9,6 +9,7 @@ from app.models.user import User
 from app.models.expense import ExpenseCategory, ExpenseEntry
 from app.models.mortgage import MortgageRecord
 from app.models.shared_expense import SharedExpenseSplit
+from app.services.currency import get_or_create_usd_category
 from app.schemas.expense import (
     ExpenseCategoryCreate, ExpenseCategoryOut,
     ExpenseEntryCreate, ExpenseEntryUpdate, ExpenseEntryOut,
@@ -22,25 +23,6 @@ async def _get_db_user(firebase_user: dict, db: AsyncSession) -> User:
     if not user:
         raise HTTPException(status_code=401, detail="Usuario no registrado")
     return user
-
-
-async def _get_or_create_usd_category(tenant_id: int, db: AsyncSession) -> int:
-    cat = await db.scalar(
-        select(ExpenseCategory).where(
-            ExpenseCategory.tenant_id == tenant_id,
-            ExpenseCategory.name == "Consumo en dólares",
-        )
-    )
-    if not cat:
-        cat = ExpenseCategory(
-            tenant_id=tenant_id,
-            name="Consumo en dólares",
-            color="#22c55e",
-            is_fixed=False,
-        )
-        db.add(cat)
-        await db.flush()
-    return cat.id
 
 
 # ── Categories ────────────────────────────────────────────────────────────────
@@ -104,7 +86,7 @@ async def create_entry(
     user = await _get_db_user(firebase_user, db)
     data = body.model_dump()
     if data.get("currency") == "USD":
-        data["category_id"] = await _get_or_create_usd_category(user.tenant_id, db)
+        data["category_id"] = await get_or_create_usd_category(user.tenant_id, db)
     elif data.get("category_id") is None:
         raise HTTPException(status_code=422, detail="category_id es requerido para gastos en ARS")
     entry = ExpenseEntry(**data, tenant_id=user.tenant_id, user_id=user.id)

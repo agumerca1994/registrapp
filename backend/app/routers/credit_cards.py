@@ -20,6 +20,7 @@ from app.schemas.credit_card import (
 )
 from app.models.shared_expense import SharedExpense, SharedExpenseSplit
 from app.schemas.shared_expense import SharedExpenseOut, ShareCreditCardItemBody
+from app.services.currency import get_or_create_usd_category
 
 router = APIRouter(prefix="/credit-cards", tags=["credit-cards"])
 
@@ -29,25 +30,6 @@ async def _get_db_user(firebase_user: dict, db: AsyncSession) -> User:
     if not user:
         raise HTTPException(status_code=401, detail="Usuario no registrado")
     return user
-
-
-async def _get_or_create_usd_category(tenant_id: int, db: AsyncSession) -> int:
-    cat = await db.scalar(
-        select(ExpenseCategory).where(
-            ExpenseCategory.tenant_id == tenant_id,
-            ExpenseCategory.name == "Consumo en dólares",
-        )
-    )
-    if not cat:
-        cat = ExpenseCategory(
-            tenant_id=tenant_id,
-            name="Consumo en dólares",
-            color="#22c55e",
-            is_fixed=False,
-        )
-        db.add(cat)
-        await db.flush()
-    return cat.id
 
 
 def _items_query(stmt_id: int):
@@ -548,7 +530,7 @@ async def create_item(
 
     category_id = body.category_id
     if body.currency == "USD":
-        category_id = await _get_or_create_usd_category(user.tenant_id, db)
+        category_id = await get_or_create_usd_category(user.tenant_id, db)
     elif category_id is None:
         from fastapi import HTTPException as _HTTPException
         raise _HTTPException(status_code=422, detail="category_id es requerido para gastos en ARS")

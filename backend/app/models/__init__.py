@@ -9,6 +9,7 @@ from app.models.credit_card import CreditCard, CreditCardStatement, CreditCardIt
 from app.models.contact import TenantContact
 from app.models.app_log import AppLog
 from app.models.payment_reminder import PaymentReminder
+from app.models.currency_operation import CurrencyOperation
 
 __all__ = [
     "Tenant", "User",
@@ -20,4 +21,5 @@ __all__ = [
     "TenantContact",
     "AppLog",
     "PaymentReminder",
+    "CurrencyOperation",
 ]

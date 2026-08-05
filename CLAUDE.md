@@ -28,7 +28,7 @@ cd backend && alembic revision --autogenerate -m "describe_change"
 cd backend && alembic upgrade head
 ```
 
-There are no automated tests (no pytest, no jest setup).
+There are no backend or unit tests (no pytest, no jest). The only automated suite is Playwright E2E in `frontend/e2e/` — `npm run test:e2e` from `/frontend`, which needs `npm run emulator` (Firebase Auth emulator) and `docker compose up` running in separate terminals. Adding a route means adding it to the `ROUTES` arrays in `e2e/smoke.spec.ts` and `e2e/visual.spec.ts`, and any new `tourId` to `e2e/auth.setup.ts`.
 
 ## Deployment
 
@@ -59,11 +59,12 @@ backend/app/
   models/     # SQLAlchemy ORM — Tenant, User, IncomeSource, IncomeEntry, ExpenseCategory,
               #   ExpenseEntry, MacroVariable, MortgageRecord, MortgageLoan, CreditCard,
               #   CreditCardStatement, CreditCardItem, SharedExpense, SharedExpenseSplit,
-              #   TenantContact, PaymentReminder, AppLog
+              #   TenantContact, PaymentReminder, AppLog, CurrencyOperation
   schemas/    # Pydantic request/response models
   routers/    # FastAPI routers — auth, income, expenses, macro, mortgage, dashboard,
-              #   credit_cards, shared_expenses, contacts, reminders, whatsapp, internal_logs
-  services/   # (currently unused)
+              #   credit_cards, shared_expenses, contacts, reminders, whatsapp, currency,
+              #   internal_logs
+  services/   # currency.py — RATE_TYPES, USD holding formula, USD category helper
 ```
 
 All routers follow the pattern: `Depends(get_current_user)` + `Depends(get_db)` → `_get_db_user()` → query with `tenant_id`. Dashboard schemas (`MonthSummary`, `HistoryPoint`) are defined inline in `routers/dashboard.py`.
@@ -97,7 +98,41 @@ Frontend routes: `/tarjetas` → `/tarjetas/[cardId]` (statements list) → `/ta
 
 **Currency (ARS/USD)**: `CreditCardItem` and `ExpenseEntry` both have a `currency VARCHAR(3)` field (default `"ARS"`). USD items are only allowed for `item_type="single"` (validated in schema). The backend auto-assigns the category via `_get_or_create_usd_category(tenant_id, db)` which lazily creates a "Consumo en dólares" category (color `#22c55e`) per tenant on first USD expense — callers don't pass `category_id` for USD. The frontend form shows the ARS/USD toggle at the **top** of the form; selecting USD hides the category selector and (in tarjetas) the tipo selector. Totals in list pages show `arsTotal` and `usdTotal` on separate lines. Use `formatUSD(n)` from `lib/utils.ts` for USD display (`"U$D X,XX"` format).
 
-**Dashboard totals never mix currencies**: `GET /dashboard/summary/{year}/{month}` filters `total_expenses` and `expenses_by_category` to `currency == "ARS"` only, with USD tracked separately in `total_expenses_usd`. `balance` (`total_income - total_expenses`) is therefore ARS-only too. Since every USD entry lands in the single "Consumo en dólares" category, a currency-mixed category breakdown would otherwise double-count it against ARS categories — the dashboard's USD pie chart groups those entries by `description` instead of category (categories would all be identical), folding anything past the top 8 into an "Otros" slice.
+**Dashboard totals never mix currencies**: `GET /dashboard/summary/{year}/{month}` filters `total_expenses` and `expenses_by_category` to `currency == "ARS"` only, with USD tracked separately in `total_expenses_usd`. `balance` (`total_income - total_expenses`) is therefore ARS-only too. `GET /dashboard/history` applies the same ARS filter (it didn't until the Divisas work — USD amounts were being added to the peso series as if they were pesos). Since every USD entry lands in the single "Consumo en dólares" category, a currency-mixed category breakdown would otherwise double-count it against ARS categories — the dashboard's USD pie chart groups those entries by `description` instead of category (categories would all be identical), folding anything past the top 8 into an "Otros" slice.
+
+### One-off bulk statement imports (`backend/scripts/`)
+Historical credit-card statement PDFs (per bank) get imported into production for a specific tenant via standalone scripts run manually — not through the API or any UI. One script per bank (`import_bbva_statements.py`, `import_naranjax_statements.py`, ...), intentionally **not** sharing code between banks even though the DB-writing plumbing is nearly identical: each bank's statement layout needs its own from-scratch parser, and each script must keep working standalone since more statements get imported for a given bank long after the next bank's script is written.
+
+Each script exposes the same four subcommands:
+- `extract <pdf...>` — parses PDFs into JSON under `backend/scripts/_staging_<bank>/` (gitignored), no DB access. Splits a single PDF into one entry per physical cardholder, since a bank's resumen can consolidate multiple cards/titulares into one document.
+- `cards` / `categories --email <email>` — read-only listing of the tenant's existing `CreditCard`/`ExpenseCategory` rows, to fill into the JSON by hand.
+- `import <json> --email <email> --dry-run|--commit [--force-import stmt_idx:item_idx,...]` — resolves the card (`existing_card_id` or `create_new`+`new_alias`) and statement (year/month, auto-created if missing), then inserts each item plus its mirrored `ExpenseEntry`, reusing the same currency/category/cuota-propagation rules as `POST /credit-cards/statements/{id}/items`. Flags a duplicate whenever an item's amount matches an existing item already in the same statement — a deliberately blunt heuristic, since same-amount-different-merchant collisions are common (recurring subscriptions, two people on the same flight, etc); these are skipped by default and need `--force-import` after manually confirming they aren't real dupes.
+
+The staged JSON needs manual editing before `import` will accept it: `category_id` per ARS item (USD auto-resolves to "Consumo en dólares"), and `existing_card_id`/`create_new` per card block. `is_latest_statement: true` on exactly one (the most recent) statement per card enables forward cuota-propagation for still-open installment plans, mirroring what the live `create_item` endpoint does — required here because these scripts bypass that endpoint entirely.
+
+These scripts need Python 3.10+ to run locally — they import the real `app.models`, whose `Mapped[X | None]` column annotations are evaluated eagerly and crash under the system's Python 3.9. There's a dedicated `backend/.venv-import/` for this (gitignored, separate from the app's own container image). Production Postgres has no exposed port, so running `import --commit` against prod means copying the script + staged JSON into the running `registrapp-backend` container (which already has `DATABASE_URL` wired to `registrapp-db` internally) and executing there via `docker exec`, not from a local machine over a tunnel.
+
+### Divisas (tenencia en dólares)
+`CurrencyOperation` (`routers/currency.py`, `services/currency.py`) tracks the household's foreign-currency holding. **The rule that drives the whole design: buying dollars is not an expense.** Net worth doesn't change, the money just moves between pockets. So an FX operation never enters `total_income`/`total_expenses`/`expenses_by_category` — but it does move real pesos, which is what `ars_available` on the dashboard reports.
+
+Two different magnitudes are surfaced, deliberately kept apart:
+- **Stock** (`holding`) — how many dollars are held right now. Carries across months, which is what makes "buy in August to pay September's card statement" work without distorting either month.
+- **Flow** (`bought_usd`/`sold_usd`/`spent_usd`/`net_usd`) — what happened inside the selected month.
+
+`foreign_amount` is **signed** (positive = currency in, negative = out) so the holding is a flat `SUM()` instead of a `CASE` per type, and an adjustment can go either way without a fifth op type. The sign is validated against `op_type` in `schemas/currency_operation.py` (`buy`/`initial` → positive, `sell` → negative, `adjustment` → either); `ars_amount` is required for `buy`/`sell` and **must be NULL** for `initial`/`adjustment` (those never moved pesos, so letting one through would corrupt `ars_available`). A partial unique index `uq_currency_op_initial` allows at most one `initial` per tenant+currency; `POST` returns 409 on a second one.
+
+**The holding formula and its cutoff** (`services/currency.get_usd_holding`):
+```
+holding = SUM(currency_operations.foreign_amount)
+        − SUM(expense_entries WHERE currency='USD' AND expense_date >= fx_start_date)
+```
+`fx_start_date` is the `operation_date` of the `initial` row (NULL → all USD expenses count). **This cutoff is load-bearing**: the DB already holds USD expenses predating the declared starting balance, and that declared number already reflects them — without the cutoff they'd be subtracted twice. USD expenses are picked up wherever they come from (manual, card items, accepted shared-expense splits), since they're all just `ExpenseEntry.currency == "USD"`.
+
+**Valuation** reuses the `MacroVariable` USD columns already synced daily — no new API. `Tenant.fx_rate_type` (default `"blue"`) picks which; it's read via `get_tenant_rate_type()` with an explicit query rather than `user.tenant.fx_rate_type`, and exposed on `GET/PATCH /currency/settings` rather than folded into `UserOut` (whose tenant relationship is lazy — see the `selectinload` trap above). `"personalizado"` is valid per-operation but rejected as a household setting: no macro column backs it.
+
+Timing caveat: USD card items date their `ExpenseEntry` at *purchase*, not at statement due date, so the holding drops up to a month before the dollars really leave. Totals are correct; only the timing is early.
+
+`services/currency.py` is also the single home for `RATE_TYPES` (re-exported from `schemas/shared_expense.py` for back-compat) and `get_or_create_usd_category()`, which used to be copy-pasted in `routers/expenses.py` and `routers/credit_cards.py`. The `backend/scripts/` importers keep their own copies on purpose — they're standalone.
 
 ### Shared expenses (Gastos compartidos)
 `SharedExpense` has a `split_type` ("equal" or "custom") and links to `SharedExpenseSplit` rows (one per participant). Splits track `user_id` (nullable — may be an external guest), `member_name`, `amount`, and `status` ("pending"/"accepted"/"rejected").
@@ -141,6 +176,7 @@ frontend/app/
                     #   month selector used for the summary cards
     income/         # Income entries with bruto/deducciones/neto + bulk import from Excel/CSV
     expenses/       # Expense entries; credit card entries show badge + "Ver en resumen" only
+    divisas/        # USD holding (hero) + monthly buy/sell/spend flow + operations list
     mortgage/       # UVA mortgage payment records
     macro/          # Macro variables (UVA value, inflation, USD)
     settings/       # User/tenant settings

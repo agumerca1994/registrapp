@@ -8,6 +8,7 @@ const ROUTES = [
   "/dashboard",
   "/income",
   "/expenses",
+  "/divisas",
   "/mortgage",
   "/macro",
   "/settings",

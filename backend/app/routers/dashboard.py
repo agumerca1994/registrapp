@@ -11,7 +11,11 @@ from app.models.income import IncomeEntry
 from app.models.expense import ExpenseEntry, ExpenseCategory
 from app.models.macro_variable import MacroVariable
 from app.models.mortgage import MortgageRecord, MortgageLoan
+from app.services.currency import (
+    get_fx_ars_flow, get_latest_rate, get_tenant_rate_type, get_usd_holding,
+)
 from pydantic import BaseModel
+from datetime import timedelta
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -28,6 +32,17 @@ class MonthSummary(BaseModel):
     total_expenses: Decimal
     total_expenses_usd: Decimal
     balance: Decimal
+    # Buying foreign currency is neither income nor expense — it's a transfer
+    # between pockets — so it stays out of `balance`. But it does move real
+    # pesos, which is why `ars_available` exists: without it the dashboard shows
+    # more pesos than the household actually has left.
+    fx_bought_ars: Decimal
+    fx_sold_ars: Decimal
+    ars_available: Decimal
+    usd_holding: Decimal
+    usd_holding_ars: Decimal | None
+    usd_rate: Decimal | None
+    usd_rate_type: str
     mortgage_payment: Decimal | None
     mortgage_is_projected: bool
     uva_value: Decimal | None
@@ -141,12 +156,32 @@ async def monthly_summary(
                 mortgage_payment = active_loan.cuota_pesos
                 mortgage_is_projected = True
 
+    # Foreign-currency side: pesos moved by conversions this month, plus the
+    # holding at the close of the month (a stock, so it carries across months —
+    # dollars bought in one month to pay the next month's card statement).
+    fx_bought_ars, fx_sold_ars = await get_fx_ars_flow(db, tid, start, end)
+    holding = await get_usd_holding(db, tid, as_of=end - timedelta(days=1))
+    rate_type = await get_tenant_rate_type(db, tid)
+    usd_rate = await get_latest_rate(db, rate_type)
+    usd_holding_ars = (
+        (holding.holding * usd_rate).quantize(Decimal("0.01")) if usd_rate is not None else None
+    )
+
+    balance = total_income - total_expenses
+
     return MonthSummary(
         period=f"{year}-{month:02d}",
         total_income=total_income,
         total_expenses=total_expenses,
         total_expenses_usd=total_expenses_usd,
-        balance=total_income - total_expenses,
+        balance=balance,
+        fx_bought_ars=fx_bought_ars,
+        fx_sold_ars=fx_sold_ars,
+        ars_available=balance - fx_bought_ars + fx_sold_ars,
+        usd_holding=holding.holding,
+        usd_holding_ars=usd_holding_ars,
+        usd_rate=usd_rate,
+        usd_rate_type=rate_type,
         mortgage_payment=mortgage_payment,
         mortgage_is_projected=mortgage_is_projected,
         uva_value=macro.uva_value if macro else None,
@@ -193,7 +228,9 @@ async def history(
             func.date_trunc("month", ExpenseEntry.expense_date).label("p"),
             func.sum(ExpenseEntry.amount).label("total"),
         )
-        .where(ExpenseEntry.tenant_id == tid)
+        # ARS only, matching monthly_summary — without this filter USD amounts
+        # get added to the peso series as if they were pesos.
+        .where(ExpenseEntry.tenant_id == tid, ExpenseEntry.currency == "ARS")
         .group_by(text("1"))
     )
     for r in rows:

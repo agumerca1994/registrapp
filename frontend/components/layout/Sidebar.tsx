@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, TrendingUp, TrendingDown, BarChart3,
   Home, LogOut, Settings, MoreHorizontal, Users2, CreditCard, CalendarDays,
-  CircleUserRound,
+  CircleUserRound, ArrowLeftRight,
 } from "lucide-react";
 import pkg from "../../package.json";
 
@@ -18,6 +18,7 @@ const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, tour: "nav-dashboard" },
   { href: "/income", label: "Ingresos", icon: TrendingUp, tour: "nav-income" },
   { href: "/expenses", label: "Egresos", icon: TrendingDown, tour: "nav-expenses" },
+  { href: "/divisas", label: "Divisas", icon: ArrowLeftRight, tour: "nav-divisas" },
   { href: "/shared", label: "Gastos compartidos", icon: Users2, tour: "nav-shared" },
   { href: "/tarjetas", label: "Tarjetas", icon: CreditCard, tour: "nav-tarjetas" },
   { href: "/calendario", label: "Calendario de pagos", icon: CalendarDays, tour: "nav-calendario" },
