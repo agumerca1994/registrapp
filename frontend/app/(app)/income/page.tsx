@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import api from "@/lib/api";
 import { formatARS, formatDate, parseAmount, getErrorMessage } from "@/lib/utils";
-import { Plus, Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle, ChevronRight, CalendarDays, ChevronLeft } from "lucide-react";
 import ProductTour from "@/components/ProductTour";
 import type { Step } from "react-joyride";
 import { Card } from "@/components/ui/card";
@@ -361,16 +363,23 @@ export default function IncomePage() {
   const [detailEntry, setDetailEntry] = useState<IncomeEntry | null>(null);
   const netoManual = useRef(false);
 
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const prev = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
+  const next = () => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
+  const periodLabel = format(new Date(year, month - 1, 1), "MMMM yyyy", { locale: es });
+
   const load = async () => {
     const [e, s] = await Promise.all([
-      api.get("/income/entries"),
+      api.get("/income/entries", { params: { year, month } }),
       api.get("/income/sources"),
     ]);
     setEntries(e.data);
     setSources(s.data);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [year, month]);
   const updateBrutoOrDed = (key: "bruto" | "deducciones", value: string) => {
     setForm(prev => {
       const next = { ...prev, [key]: value };
@@ -555,6 +564,19 @@ export default function IncomePage() {
         </Card>
       )}
 
+      <div className="flex justify-end">
+        <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
+          <CalendarDays className="w-4 h-4 text-primary shrink-0" />
+          <button onClick={prev} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
+          <button onClick={next} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
       {/* List */}
       <Card className="p-0 md:p-0 divide-y">
         {entries.length > 0 && (
@@ -585,7 +607,7 @@ export default function IncomePage() {
         )}
 
         {entries.length === 0 ? (
-          <p className="p-6 text-muted-foreground text-sm">No hay ingresos registrados aún.</p>
+          <p className="p-6 text-muted-foreground text-sm">No hay ingresos registrados en {periodLabel}.</p>
         ) : entries.map(entry => (
           <div key={entry.id} className="flex items-center gap-2 px-3 md:px-4 py-3">
             <input

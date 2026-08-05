@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import api from "@/lib/api";
 import { formatARS, formatDate, formatUSD, parseAmount, pickCategoryColor } from "@/lib/utils";
-import { Plus, Trash2, Pencil, X, ChevronRight, CreditCard, ExternalLink } from "lucide-react";
+import { Plus, Trash2, Pencil, X, ChevronRight, CreditCard, ExternalLink, CalendarDays, ChevronLeft } from "lucide-react";
 import ProductTour from "@/components/ProductTour";
 import type { Step } from "react-joyride";
 import { Card } from "@/components/ui/card";
@@ -119,13 +121,23 @@ export default function ExpensesPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [detailEntry, setDetailEntry] = useState<ExpenseEntry | null>(null);
 
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const prev = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
+  const next = () => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
+  const periodLabel = format(new Date(year, month - 1, 1), "MMMM yyyy", { locale: es });
+
   const load = async () => {
-    const [e, c] = await Promise.all([api.get("/expenses/entries"), api.get("/expenses/categories")]);
+    const [e, c] = await Promise.all([
+      api.get("/expenses/entries", { params: { year, month } }),
+      api.get("/expenses/categories"),
+    ]);
     setEntries(e.data);
     setCategories(c.data);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [year, month]);
 
   const openEdit = (entry: ExpenseEntry) => {
     setEditId(entry.id);
@@ -312,6 +324,19 @@ export default function ExpensesPage() {
         </Card>
       )}
 
+      <div className="flex justify-end">
+        <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
+          <CalendarDays className="w-4 h-4 text-primary shrink-0" />
+          <button onClick={prev} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
+          <button onClick={next} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
       <Card className="p-0 md:p-0 divide-y">
         {entries.length > 0 && (
           <div className="flex items-center gap-3 px-3 md:px-5 py-2 bg-muted rounded-t-2xl">
@@ -341,7 +366,7 @@ export default function ExpensesPage() {
         )}
 
         {entries.length === 0 ? (
-          <p className="p-6 text-muted-foreground text-sm">No hay egresos registrados.</p>
+          <p className="p-6 text-muted-foreground text-sm">No hay egresos registrados en {periodLabel}.</p>
         ) : entries.map(entry => (
           <div key={entry.id} className="flex items-center gap-2 px-3 md:px-4 py-3">
             {entry.payment_method === "tarjeta_credito" ? (
