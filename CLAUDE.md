@@ -121,16 +121,19 @@ Two different magnitudes are surfaced, deliberately kept apart:
 
 `foreign_amount` is **signed** (positive = currency in, negative = out) so the holding is a flat `SUM()` instead of a `CASE` per type, and an adjustment can go either way without a fifth op type. The sign is validated against `op_type` in `schemas/currency_operation.py` (`buy`/`initial` → positive, `sell` → negative, `adjustment` → either); `ars_amount` is required for `buy`/`sell` and **must be NULL** for `initial`/`adjustment` (those never moved pesos, so letting one through would corrupt `ars_available`). A partial unique index `uq_currency_op_initial` allows at most one `initial` per tenant+currency; `POST` returns 409 on a second one.
 
-**The holding formula and its cutoff** (`services/currency.get_usd_holding`):
+**Outflows are counted on their cash-out date, not their purchase date.** Argentine cards are paid a month in arrears, so a USD card purchase doesn't move dollars when you buy — it moves them when the statement comes due. `cash_out_date()` is `COALESCE(credit_card_statements.due_date, expense_entries.expense_date)`, reached through the outer joins in `_with_statement()`; a manual/cash USD expense keeps its own date. Dating by purchase was the original implementation and it was wrong: a July trip charged to a card showed as gone in July while the dollars were still sitting there until the August 7 statement. What's billed but not yet due is reported separately as `pending_usd` + `next_due_date` — those dollars are still held, and that number is precisely what the user needs to buy before the due date.
+
+**The holding formula and its cutoffs** (`services/currency.get_usd_holding`):
 ```
 holding = SUM(currency_operations.foreign_amount)
-        − SUM(expense_entries WHERE currency='USD' AND expense_date >= fx_start_date)
+        − SUM(expense_entries WHERE currency='USD' AND cash_out_date >= fx_start_date)
 ```
+Both sides are additionally capped at **today** (`as_of` is clamped): money that hasn't left yet isn't spent, so a future date would report a projection as a current balance. This is why the month tiles and the holding can legitimately disagree — browsing to August shows "Pagué U$D 5.497,92" (the statement due Aug 7) while the holding on Aug 5 still includes those dollars.
 `fx_start_date` is the `operation_date` of the `initial` row (NULL → all USD expenses count). **This cutoff is load-bearing**: the DB already holds USD expenses predating the declared starting balance, and that declared number already reflects them — without the cutoff they'd be subtracted twice. USD expenses are picked up wherever they come from (manual, card items, accepted shared-expense splits), since they're all just `ExpenseEntry.currency == "USD"`.
 
 **Valuation** reuses the `MacroVariable` USD columns already synced daily — no new API. `Tenant.fx_rate_type` (default `"blue"`) picks which; it's read via `get_tenant_rate_type()` with an explicit query rather than `user.tenant.fx_rate_type`, and exposed on `GET/PATCH /currency/settings` rather than folded into `UserOut` (whose tenant relationship is lazy — see the `selectinload` trap above). `"personalizado"` is valid per-operation but rejected as a household setting: no macro column backs it.
 
-Timing caveat: USD card items date their `ExpenseEntry` at *purchase*, not at statement due date, so the holding drops up to a month before the dollars really leave. Totals are correct; only the timing is early.
+Note the asymmetry still present: outflows before `fx_start_date` are excluded, but `currency_operations` before it are not. A buy dated before the declared starting balance would be double-counted (those dollars are already inside the declared number). Not hit in practice yet — the fix is to apply the same cutoff to non-`initial` operations.
 
 `services/currency.py` is also the single home for `RATE_TYPES` (re-exported from `schemas/shared_expense.py` for back-compat) and `get_or_create_usd_category()`, which used to be copy-pasted in `routers/expenses.py` and `routers/credit_cards.py`. The `backend/scripts/` importers keep their own copies on purpose — they're standalone.
 
