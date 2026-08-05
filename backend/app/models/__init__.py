@@ -10,6 +10,9 @@ from app.models.contact import TenantContact
 from app.models.app_log import AppLog
 from app.models.payment_reminder import PaymentReminder
 from app.models.currency_operation import CurrencyOperation
+from app.models.mcp_auth import (
+    McpAuthCode, McpOAuthAuthorization, McpOAuthClient, McpToken,
+)
 
 __all__ = [
     "Tenant", "User",
@@ -22,4 +25,5 @@ __all__ = [
     "AppLog",
     "PaymentReminder",
     "CurrencyOperation",
+    "McpOAuthClient", "McpOAuthAuthorization", "McpAuthCode", "McpToken",
 ]

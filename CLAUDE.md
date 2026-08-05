@@ -63,11 +63,14 @@ backend/app/
   schemas/    # Pydantic request/response models
   routers/    # FastAPI routers — auth, income, expenses, macro, mortgage, dashboard,
               #   credit_cards, shared_expenses, contacts, reminders, whatsapp, currency,
-              #   internal_logs
-  services/   # currency.py — RATE_TYPES, USD holding formula, USD category helper
+              #   internal_logs, oauth (MCP connector)
+  services/   # currency.py  — RATE_TYPES, USD holding formula, USD category helper
+              # analytics.py — tenant-scoped aggregations, auth-free (dashboard + MCP)
+              # oauth_provider.py, mcp_tokens.py, rate_limit.py — MCP connector auth
+  mcp_server/ # Read-only MCP connector served at /mcp (see "Conector MCP" below)
 ```
 
-All routers follow the pattern: `Depends(get_current_user)` + `Depends(get_db)` → `_get_db_user()` → query with `tenant_id`. Dashboard schemas (`MonthSummary`, `HistoryPoint`) are defined inline in `routers/dashboard.py`.
+All routers follow the pattern: `Depends(get_current_user)` + `Depends(get_db)` → `_get_db_user()` → query with `tenant_id`. `routers/dashboard.py` is now a thin shell: its schemas (`MonthSummary`, `HistoryPoint`, re-exported for back-compat) and all its queries live in `services/analytics.py` as plain `(db, tenant_id, ...)` functions, so the MCP connector can reuse them without a Firebase token. Put new aggregations there, not in a router.
 
 **Scheduled jobs**: APScheduler runs inside the FastAPI lifespan (each also fires once via `asyncio.create_task` at startup, not just on the cron schedule). Three daily jobs, all UTC: `_daily_sync` at 09:00 (macro BCRA sync), `_daily_mortgage_sync` at 09:01 (updates active mortgage records), `_daily_reminder_check` at 09:02 (sends WhatsApp for due `PaymentReminder`s — see Calendario de pagos below).
 
@@ -166,7 +169,39 @@ Note the asymmetry still present: outflows before `fx_start_date` are excluded, 
 - `POST /internal/resend-shared-invite/{split_id}` — re-sends the original WhatsApp invite for a split whose `invite_token` was already minted but never delivered (e.g. Evolution API was down at the time); reuses the existing token rather than minting a new one, so a link the recipient may have already opened keeps working.
 - `GET /internal/credit-card-item-raw/{shared_expense_id}` — dumps the raw `CreditCardItem` behind a shared installment expense (`amount` per cuota, `purchase_total`, sibling cuotas) to tell apart a genuine per-cuota amount from a user data-entry mistake (typing the total into "monto por cuota" or vice versa).
 
-The root `mcp/server.py` (a FastMCP stdio server registered in `.mcp.json` as `registrapp-logs`) wraps the `/internal/logs*` endpoints as Claude Code tools (`recent_errors`, `search_logs`, `logs_by_module`, `log_summary`), authenticating with `MCP_INTERNAL_KEY` against the same `INTERNAL_LOG_KEY`. It only covers the log endpoints — the other `/internal/*` diagnostics above are called directly with `curl` + the same key.
+The root `mcp/server.py` (a FastMCP stdio server registered in `.mcp.json` as `registrapp-logs`) wraps the `/internal/logs*` endpoints as Claude Code tools (`recent_errors`, `search_logs`, `logs_by_module`, `log_summary`), authenticating with `MCP_INTERNAL_KEY` against the same `INTERNAL_LOG_KEY`. It only covers the log endpoints — the other `/internal/*` diagnostics above are called directly with `curl` + the same key. **It is an ops tool and has nothing to do with the user-facing MCP connector below** — different server, different auth, different audience.
+
+### Conector MCP (`/mcp`) — la app como fuente de datos para una IA
+End users connect their household to Claude (web, Desktop, Code) and ask about their own finances. **Read-only by design: no tool in `backend/app/mcp_server/` writes anything.** Scope is the whole household (`tenant_id`), like the rest of the app.
+
+**Transport** (`app/mcp_server/instance.py` + `transport.py`): a stateless `FastMCP` served at the exact route `/mcp`, `mcp==1.29.0` pinned (later releases rename `FastMCP` → `MCPServer` and change `streamable_http_app()`'s signature). Three things break it if touched:
+- It's registered as `Route("/mcp", endpoint=<asgi app>)`, **not** `app.mount("/mcp", ...)` — mounting answers `POST /mcp` with a 307 to `/mcp/`, which gives the RFC 8707 canonical resource two spellings.
+- The lifespan in `main.py` wraps its `yield` in `async with mcp.session_manager.run()`. A mounted sub-app's lifespan never runs and without this the first request dies with `RuntimeError: Task group is not initialized` — including in stateless mode. It can only be entered once per process (fine: uvicorn runs a single worker).
+- `transport_security=` is mandatory. With the default `host="127.0.0.1"`, FastMCP builds its own anti-DNS-rebinding settings that only allow localhost, so behind Traefik **every production request returns a bare 421** before auth even runs. That's the first thing to check if "it works locally but not in prod".
+
+`mcp` pulls in starlette and sse-starlette; both are pinned (`starlette==0.41.3`, `sse-starlette==2.1.3`) because the unconstrained resolve installs starlette 1.x, which breaks FastAPI 0.115 (`Router.__init__() got an unexpected keyword argument 'on_startup'`) and takes down every router in the app.
+
+**Auth** — two credential types, one table (`mcp_tokens`, `kind` = `pat` | `oauth_access` | `oauth_refresh`), only sha256 hashes stored, readable prefixes `rap_pat_` / `rap_at_` / `rap_rt_`:
+- **PATs**, created in Settings, for clients that send their own header (`claude mcp add --transport http registrapp https://…/mcp --header "Authorization: Bearer rap_pat_…"`).
+- **OAuth 2.1**, for claude.ai / Claude Desktop custom connectors, which accept nothing else. `services/oauth_provider.py` implements the SDK's `OAuthAuthorizationServerProvider`; the SDK's own handlers (registration, authorize, token, revoke) are wired in `routers/oauth.py` under `/oauth/*`, with the RFC 9728 / RFC 8414 discovery documents at the domain root. The metadata is hand-built as plain dicts because the SDK's `OAuthMetadata` model has no `authorization_response_iss_parameter_supported`, which Claude looks for.
+
+The login is delegated: `authorize()` doesn't render anything, it stores a consent transaction and redirects to `{FRONTEND_URL}/oauth/authorize?txn=…`. That page (`frontend/app/oauth/authorize/page.tsx`, deliberately **outside** the `(app)` group — that layout would bounce a logged-out visitor to `/login` and lose the `?txn=`) signs the user in with Google and calls `POST /oauth/authorize/consent`, which mints the code and returns the redirect URI including `iss` (RFC 9207).
+
+What the SDK does *not* do and lives in our code: validating the `resource` indicator (enforced three times — `authorize`, code exchange, and `verify_token` — it's the confused-deputy defence), emitting `iss`, and adding `scope=` to the `WWW-Authenticate` challenge. Refresh tokens rotate on every use and a replayed one revokes the entire `grant_id` (`reuse_detected`). `grant_id` is also what makes "Desconectar" in Settings kill access + refresh + every rotation in one UPDATE.
+
+`_daily_mcp_cleanup` (09:03 UTC) drops expired codes/transactions, tokens revoked or expired over 30 days ago, and dynamically registered clients with nothing left pointing at them.
+
+**Two traps in `main.py` that are easy to undo:**
+- `mcp_cors_middleware` handles CORS for `/mcp`, `/oauth/*` and `/.well-known/*` separately, because the global `CORSMiddleware` sends `allow_credentials=True` and a browser refuses to pair that with `*` — while claude.ai probes discovery from arbitrary origins with no cookies. This is why `ALLOWED_ORIGINS` does **not** need `claude.ai` added.
+- `_is_expected_auth_noise` keeps `AppLog` from filling up: an unauthenticated 401 on `/mcp` **is** the normal first step of OAuth discovery, so every client that connects would otherwise log one.
+
+**Tools** (`app/mcp_server/tools_*.py`, all read-only, built on `services/analytics.py`): `get_taxonomy`, `get_month_summary`, `list_expenses`, `list_income`, `compare_periods`, `get_series`, `get_upcoming_commitments`, `get_budget_baseline`, `simulate_purchase`, `get_usd_position`, `get_macro`. Plus two resources (`registrapp://schema`, `registrapp://taxonomy`) and three prompts (`analisis_mensual`, `armar_presupuesto`, `evaluar_compra`).
+
+Two rules the tools encode and that any new tool must respect:
+- **Aggregate by default.** `list_expenses` groups by category unless asked otherwise (~1 KB instead of ~28 KB of raw rows). `serialize.guard()` is the backstop: past ~48 KB it drops detail arrays, keeps the aggregates, and explains how to re-query. Amounts serialize as `float`, never `Decimal` (which produces an `anyOf: [number, string]` output schema and a stringified value).
+- **Never double-count instalments.** Every `CreditCardItem` mirrors into `expense_entries` dated at the *purchase*, so all 12 cuotas of a plan land in one past month. `analytics.baseline_run_rate` therefore excludes instalment- and mortgage-mirrored entries from the monthly average, and `simulate_purchase` adds them back per month as explicit commitments. Averaging them *and* adding future commitments inflates the projection badly.
+
+`compare_periods` and `get_series(deflate=...)` exist because nominal comparisons are misleading here: they report `delta_real_pct` against a chained CPI index built from `macro_variables.inflation_monthly_pct`, flagging months INDEC hasn't published yet as `estimated` instead of inventing a number.
 
 ### Frontend structure
 ```
