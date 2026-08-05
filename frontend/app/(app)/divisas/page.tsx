@@ -56,6 +56,10 @@ interface Summary {
   holding_start: string;
   initial: string;
   start_date: string | null;
+  total_bought: string;
+  total_sold: string;
+  total_spent: string;
+  total_adjustments: string;
   bought_usd: string;
   bought_ars: string;
   sold_usd: string;
@@ -331,10 +335,33 @@ export default function DivisasPage() {
                 </span>
               </p>
             )}
-            {summary?.start_date && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Desde tu tenencia inicial del {formatDate(summary.start_date)}
-              </p>
+            {/* Where the number comes from. The month tiles below only cover the
+                selected month, but the holding accumulates since start_date —
+                without this the total is impossible to reconcile from screen. */}
+            {summary && hasInitial && (
+              <div className="mt-4 pt-3 border-t border-border/60 text-sm space-y-1">
+                <p className="text-xs text-muted-foreground mb-1.5">
+                  Desde tu tenencia inicial del {formatDate(summary.start_date!)}
+                </p>
+                {[
+                  { label: "Tenencia inicial", value: Number(summary.initial), sign: "" },
+                  { label: "Comprado", value: Number(summary.total_bought), sign: "+" },
+                  { label: "Vendido", value: Number(summary.total_sold), sign: "−" },
+                  { label: "Gastado en USD", value: Number(summary.total_spent), sign: "−" },
+                  { label: "Ajustes", value: Number(summary.total_adjustments), sign: "" },
+                ]
+                  .filter(r => r.value !== 0 || r.label === "Tenencia inicial")
+                  .map(r => (
+                    <p key={r.label} className="flex justify-between gap-4 text-muted-foreground">
+                      <span>{r.sign} {r.label}</span>
+                      <span className="font-medium tabular-nums">{formatUSD(Math.abs(r.value))}</span>
+                    </p>
+                  ))}
+                <p className="flex justify-between gap-4 font-semibold text-foreground pt-1">
+                  <span>= Tenencia actual</span>
+                  <span className="tabular-nums">{formatUSD(holding)}</span>
+                </p>
+              </div>
             )}
             {!hasInitial && (
               <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
