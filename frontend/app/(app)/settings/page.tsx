@@ -8,6 +8,7 @@ import { formatARS, getErrorMessage } from "@/lib/utils";
 import { Copy, Check, MessageCircle, CheckCircle2, Unlink, Mail, UserPlus, Trash2 } from "lucide-react";
 import { COUNTRIES } from "@/lib/countries";
 import WhatsAppVerifyForm from "@/components/WhatsAppVerifyForm";
+import McpConnectorSection from "@/components/McpConnectorSection";
 import { resetAllTours } from "@/components/ProductTour";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
@@ -391,6 +392,8 @@ export default function SettingsPage() {
       </Card>
 
       <WhatsAppSection />
+
+      <McpConnectorSection />
 
       <Card className="p-6 space-y-2">
         <h3 className="font-semibold text-foreground">Guía de la app</h3>

@@ -30,8 +30,23 @@
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-}
       WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET:-}
       APP_DOMAIN: ${APP_DOMAIN:-}
+      # Already used by the Traefik labels below; the backend needs it too, to
+      # derive the OAuth issuer and the canonical /mcp resource URL.
+      API_DOMAIN: ${API_DOMAIN:-}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       INTERNAL_LOG_KEY: ${INTERNAL_LOG_KEY:-}
+      # MCP connector. It does NOT need ALLOWED_ORIGINS touched: /mcp, /oauth/*
+      # and /.well-known/* get their own wildcard CORS in main.py, because the
+      # global middleware sends allow_credentials and a browser refuses to pair
+      # that with `*`.
+      MCP_ENABLED: ${MCP_ENABLED:-true}
+      MCP_DCR_ENABLED: ${MCP_DCR_ENABLED:-true}
+      MCP_ACCESS_TOKEN_TTL_SECONDS: ${MCP_ACCESS_TOKEN_TTL_SECONDS:-3600}
+      MCP_REFRESH_TOKEN_TTL_DAYS: ${MCP_REFRESH_TOKEN_TTL_DAYS:-30}
+      # Escape hatches for a client rejected by the transport's Host/Origin
+      # check (421/403 on /mcp). Comma-separated, normally empty.
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-}
+      MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
     restart: unless-stopped
     depends_on:
       registrapp-db:
