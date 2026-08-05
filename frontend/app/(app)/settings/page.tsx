@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
-import { getErrorMessage } from "@/lib/utils";
+import { formatARS, getErrorMessage } from "@/lib/utils";
 import { Copy, Check, MessageCircle, CheckCircle2, Unlink, Mail, UserPlus, Trash2 } from "lucide-react";
 import { COUNTRIES } from "@/lib/countries";
 import WhatsAppVerifyForm from "@/components/WhatsAppVerifyForm";
@@ -42,6 +42,75 @@ function buildFriendInviteMessage(name: string, appUrl: string): string {
     "",
     "Entra a " + appUrl + " e inicia sesión con Google para crear tu cuenta.",
   ].join(String.fromCharCode(10));
+}
+
+// Which USD quote values the household's foreign-currency holding. Kept on the
+// /currency router rather than on UserOut, whose tenant relationship is lazy.
+const FX_RATE_TYPES = [
+  { value: "blue", label: "Blue" },
+  { value: "oficial", label: "Oficial" },
+  { value: "mayorista", label: "Mayorista" },
+  { value: "mep", label: "MEP" },
+  { value: "ccl", label: "CCL" },
+];
+
+function CurrencySettingsSection() {
+  const [rateType, setRateType] = useState<string | null>(null);
+  const [rate, setRate] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get<{ fx_rate_type: string; rate: string | null }>("/currency/settings")
+      .then(res => {
+        setRateType(res.data.fx_rate_type);
+        setRate(res.data.rate !== null ? Number(res.data.rate) : null);
+      })
+      .catch(() => setRateType("blue"));
+  }, []);
+
+  const save = async (value: string) => {
+    const previous = rateType;
+    setRateType(value);
+    setSaving(true);
+    try {
+      const res = await api.patch<{ fx_rate_type: string; rate: string | null }>(
+        "/currency/settings", { fx_rate_type: value }
+      );
+      setRate(res.data.rate !== null ? Number(res.data.rate) : null);
+      setError(null);
+    } catch (e) {
+      setRateType(previous);
+      setError(getErrorMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="p-6 space-y-4">
+      <h3 className="font-semibold text-foreground">Cotización del dólar</h3>
+      <p className="text-sm text-muted-foreground">
+        Con qué cotización se valúa en pesos tu tenencia en dólares. Cambia solo cómo se
+        muestra: no afecta ninguna operación ya registrada.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {FX_RATE_TYPES.map(t => (
+          <button key={t.value} type="button" disabled={saving || rateType === null}
+            onClick={() => save(t.value)}
+            className={`px-3 py-1.5 text-sm rounded-full border-2 font-medium transition-colors disabled:opacity-50 ${rateType === t.value ? "border-ink bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-accent"}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {rate !== null && (
+        <p className="text-sm text-muted-foreground">
+          Última cotización: <strong className="text-foreground">{formatARS(rate)}</strong>
+        </p>
+      )}
+      {error && <p className="text-sm text-rose-600">{error}</p>}
+    </Card>
+  );
 }
 
 function InviteFriendSection() {
@@ -256,6 +325,8 @@ export default function SettingsPage() {
           </div>
         </div>
       </Card>
+
+      <CurrencySettingsSection />
 
       <InviteFriendSection />
 

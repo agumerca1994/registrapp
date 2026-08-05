@@ -10,6 +10,9 @@ class Tenant(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     code: Mapped[str | None] = mapped_column(String(8), unique=True, index=True, nullable=True)
     name: Mapped[str] = mapped_column(String(120))
+    # Which USD quote to value the household's foreign-currency holding with.
+    # One of app.services.currency.RATE_TYPES (minus "personalizado").
+    fx_rate_type: Mapped[str] = mapped_column(String(20), default="blue", server_default="blue")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     users: Mapped[list["User"]] = relationship(back_populates="tenant")

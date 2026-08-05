@@ -119,7 +119,9 @@ class ShareCreditCardItemBody(BaseModel):
     split_type: str
 
 
-RATE_TYPES = ("oficial", "blue", "mayorista", "mep", "ccl", "personalizado")
+# Single source of truth lives in the currency service — re-exported here so
+# existing imports of `schemas.shared_expense.RATE_TYPES` keep working.
+from app.services.currency import RATE_TYPES  # noqa: E402,F401
 
 
 class ConvertToArsBody(BaseModel):

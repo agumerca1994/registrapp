@@ -10,7 +10,8 @@ import {
 } from "recharts";
 import api from "@/lib/api";
 import { formatARS, formatUSD, formatPct } from "@/lib/utils";
-import { TrendingUp, TrendingDown, Gauge, CircleDollarSign, Home, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import Link from "next/link";
+import { TrendingUp, TrendingDown, Gauge, CircleDollarSign, Home, CalendarDays, ChevronLeft, ChevronRight, Wallet } from "lucide-react";
 import ProductTour from "@/components/ProductTour";
 import type { Step } from "react-joyride";
 import { Card } from "@/components/ui/card";
@@ -57,6 +58,13 @@ interface MonthSummary {
   total_expenses: number;
   total_expenses_usd: number;
   balance: number;
+  fx_bought_ars: number;
+  fx_sold_ars: number;
+  ars_available: number;
+  usd_holding: number;
+  usd_holding_ars: number | null;
+  usd_rate: number | null;
+  usd_rate_type: string;
   mortgage_payment: number | null;
   mortgage_is_projected: boolean;
   uva_value: number | null;
@@ -105,8 +113,8 @@ const STAT_TONES = {
 // Balance now lives in its own hero panel above this row, so every stat
 // here is a secondary/flat tile — borderless, just icon + text, per the v3
 // mockup (no card around secondary stats).
-function StatCard({ label, value, icon: Icon, tone = "neutral" }: {
-  label: string; value: string; icon: React.ElementType; tone?: keyof typeof STAT_TONES;
+function StatCard({ label, value, sub, icon: Icon, tone = "neutral" }: {
+  label: string; value: string; sub?: string; icon: React.ElementType; tone?: keyof typeof STAT_TONES;
 }) {
   return (
     <div className="p-3 md:p-5 flex items-center gap-3">
@@ -116,6 +124,7 @@ function StatCard({ label, value, icon: Icon, tone = "neutral" }: {
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground">{label}</p>
         <p className="text-sm md:text-base font-bold text-foreground break-words">{value}</p>
+        {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
       </div>
     </div>
   );
@@ -388,6 +397,29 @@ export default function DashboardPage() {
                     {balanceChangePct >= 0 ? "+" : ""}{balanceChangePct.toFixed(1)}% vs mes anterior
                   </p>
                 )}
+                {/* Buying dollars isn't an expense, so it stays out of `balance`
+                    — but it does move real pesos. Without this line the balance
+                    reads as more pesos than are actually left. */}
+                {(data.fx_bought_ars > 0 || data.fx_sold_ars > 0) && (
+                  <div className="mt-3 pt-3 border-t border-border/60 space-y-1 text-sm">
+                    {data.fx_bought_ars > 0 && (
+                      <p className="flex justify-between gap-4 text-muted-foreground">
+                        <span>− Compra de dólares</span>
+                        <span className="font-medium tabular-nums">{formatARS(data.fx_bought_ars)}</span>
+                      </p>
+                    )}
+                    {data.fx_sold_ars > 0 && (
+                      <p className="flex justify-between gap-4 text-muted-foreground">
+                        <span>+ Venta de dólares</span>
+                        <span className="font-medium tabular-nums">{formatARS(data.fx_sold_ars)}</span>
+                      </p>
+                    )}
+                    <p className="flex justify-between gap-4 font-semibold text-foreground">
+                      <span>= Pesos disponibles</span>
+                      <span className="tabular-nums">{formatARS(data.ars_available)}</span>
+                    </p>
+                  </div>
+                )}
               </div>
               {mounted && quarterlyTrend.length > 1 && (
                 <div className="w-full md:w-64 rounded-2xl bg-accent p-4 flex flex-col">
@@ -409,6 +441,17 @@ export default function DashboardPage() {
             <StatCard label="Egresos" value={formatARS(data.total_expenses)} icon={TrendingDown} tone="negative" />
             {data.total_expenses_usd > 0 && (
               <StatCard label="Egresos USD" value={formatUSD(data.total_expenses_usd)} icon={CircleDollarSign} tone="usd" />
+            )}
+            {data.usd_holding !== 0 && (
+              <Link href="/divisas" className="rounded-xl hover:bg-accent/50 transition-colors">
+                <StatCard
+                  label="Tenencia USD"
+                  value={formatUSD(data.usd_holding)}
+                  sub={data.usd_holding_ars !== null ? `≈ ${formatARS(data.usd_holding_ars)}` : undefined}
+                  icon={Wallet}
+                  tone="usd"
+                />
+              </Link>
             )}
             {data.inflation_pct !== null && (
               <StatCard label="Inflación" value={formatPct(data.inflation_pct)} icon={Gauge} />

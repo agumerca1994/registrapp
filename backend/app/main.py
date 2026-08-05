@@ -11,7 +11,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.routers import (
     auth, income, expenses, macro, dashboard, mortgage,
-    shared_expenses, whatsapp, credit_cards, contacts, reminders,
+    shared_expenses, whatsapp, credit_cards, contacts, reminders, currency,
 )
 from app.routers.internal_logs import router as internal_logs_router
 from app.core.logging_config import setup_logging, log_queue_consumer, log_http_error
@@ -125,6 +125,7 @@ app.include_router(credit_cards.router)
 app.include_router(whatsapp.router)
 app.include_router(contacts.router)
 app.include_router(reminders.router)
+app.include_router(currency.router)
 app.include_router(internal_logs_router)
 
 
