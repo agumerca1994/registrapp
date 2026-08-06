@@ -61,6 +61,11 @@ async def list_expenses(
     compacto que la lista de movimientos. Pedí group_by="none" sólo si
     necesitás ver los movimientos uno por uno.
 
+    Un gasto cuenta en el mes en que sale la plata, no en el que se compró: los
+    consumos con tarjeta caen en el mes que vence el resumen. Es el mismo
+    criterio que muestra la app, así que los números coinciden. Con
+    group_by="none" cada movimiento trae `date` (compra) y `paid_on` (pago).
+
     Args:
         date_from: Fecha inicial inclusive, YYYY-MM-DD.
         date_to: Fecha final inclusive, YYYY-MM-DD.

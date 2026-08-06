@@ -30,6 +30,11 @@ async def get_upcoming_commitments(months_ahead: int = 6) -> dict[str, Any]:
     cierres y vencimientos de cada tarjeta, la cuota de hipoteca proyectada y los
     recordatorios de pago. Las cuotas no son una estimación: ya están registradas.
 
+    Cada mes agrupa lo que se **paga** en ese mes, no lo que se consumió: el
+    resumen de julio aparece en agosto, que es cuando vence. Es el mismo criterio
+    que usa la app. `statement_period` dice de qué mes es el resumen, y
+    `due_date_is_estimated` marca los vencimientos que el banco todavía no envió.
+
     Args:
         months_ahead: Cuántos meses hacia adelante mirar (1 a 24).
     """
@@ -70,8 +75,10 @@ async def get_upcoming_commitments(months_ahead: int = 6) -> dict[str, Any]:
                 "cards": [
                     {
                         "card": c["card"],
+                        "statement_period": c["statement_period"],
                         "closing_date": c["closing_date"],
-                        "due_date": c["due_date"],
+                        "due_date": c["due_date_effective"],
+                        "due_date_is_estimated": c["due_date_is_estimated"],
                         "total_ars": f0(c["total_ars"]),
                         "total_usd": f0(c["total_usd"]),
                         "items": c["items"],
@@ -106,6 +113,11 @@ async def get_upcoming_commitments(months_ahead: int = 6) -> dict[str, Any]:
         "notes": [
             "Las cuotas ya están materializadas en los resúmenes futuros: son "
             "compromisos ciertos, no proyecciones.",
+            "Cada mes agrupa lo que se paga en ese mes, no lo consumido: un "
+            "resumen de julio cae en agosto. statement_period indica de qué mes "
+            "es el resumen.",
+            "due_date_is_estimated=true significa que el banco todavía no envió "
+            "el vencimiento y se estimó con el día habitual de esa tarjeta.",
             "total_committed_ars = total de resúmenes de tarjeta + hipoteca. Las "
             "cuotas ya están dentro del total de tarjeta.",
             "La cuota de hipoteca con projected=true se calcula con el último "

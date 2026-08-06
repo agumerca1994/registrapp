@@ -33,7 +33,7 @@ from app.models.mortgage import MortgageLoan, MortgageRecord
 from app.models.payment_reminder import PaymentReminder
 from app.services.currency import (
     RATE_TYPE_COLUMN, cash_out_date, get_fx_ars_flow, get_latest_rate,
-    get_tenant_rate_type, get_usd_holding, with_statement,
+    get_tenant_rate_type, get_usd_holding, statement_due_date, with_statement,
 )
 
 
@@ -393,10 +393,13 @@ async def expense_aggregate(
 
     Never mixes currencies: the caller asks for one and gets one.
     """
+    # By cash-out date, same as the dashboard — otherwise the MCP connector
+    # answers "cuánto gasté en agosto" with a different number than the screen.
+    cash_out = cash_out_date()
     filters = [
         ExpenseEntry.tenant_id == tenant_id,
-        ExpenseEntry.expense_date >= start,
-        ExpenseEntry.expense_date < end,
+        cash_out >= start,
+        cash_out < end,
         ExpenseEntry.currency == currency,
     ]
     if payment_method == "tarjeta_credito":
@@ -421,20 +424,22 @@ async def expense_aggregate(
         ))
 
     total = await db.scalar(
-        select(func.coalesce(func.sum(ExpenseEntry.amount), 0)).where(*filters)
+        with_statement(select(func.coalesce(func.sum(ExpenseEntry.amount), 0))).where(*filters)
     )
-    count = await db.scalar(select(func.count(ExpenseEntry.id)).where(*filters))
+    count = await db.scalar(
+        with_statement(select(func.count(ExpenseEntry.id))).where(*filters)
+    )
 
     groups: list[dict] = []
     entries: list[dict] | None = None
 
     if group_by == "category":
         rows = await db.execute(
-            select(
+            with_statement(select(
                 ExpenseCategory.name.label("k"),
                 func.sum(ExpenseEntry.amount).label("total"),
                 func.count(ExpenseEntry.id).label("n"),
-            )
+            ))
             .join(ExpenseCategory, ExpenseEntry.category_id == ExpenseCategory.id)
             .where(*filters)
             .group_by(ExpenseCategory.name)
@@ -444,11 +449,11 @@ async def expense_aggregate(
 
     elif group_by == "month":
         rows = await db.execute(
-            select(
-                func.date_trunc("month", ExpenseEntry.expense_date).label("k"),
+            with_statement(select(
+                func.date_trunc("month", cash_out).label("k"),
                 func.sum(ExpenseEntry.amount).label("total"),
                 func.count(ExpenseEntry.id).label("n"),
-            )
+            ))
             .where(*filters)
             # Positional grouping: asyncpg gives the repeated date_trunc a
             # different placeholder index in SELECT vs GROUP BY and Postgres
@@ -461,8 +466,9 @@ async def expense_aggregate(
     elif group_by in ("description", "entity"):
         col = ExpenseEntry.description if group_by == "description" else ExpenseEntry.entity
         rows = await db.execute(
-            select(col.label("k"), func.sum(ExpenseEntry.amount).label("total"),
-                   func.count(ExpenseEntry.id).label("n"))
+            with_statement(select(
+                col.label("k"), func.sum(ExpenseEntry.amount).label("total"),
+                func.count(ExpenseEntry.id).label("n")))
             .where(*filters)
             .group_by(col)
             .order_by(func.sum(ExpenseEntry.amount).desc())
@@ -472,22 +478,25 @@ async def expense_aggregate(
 
     else:  # "none" — raw rows, capped
         rows = await db.execute(
-            select(ExpenseEntry, ExpenseCategory.name)
+            with_statement(select(ExpenseEntry, ExpenseCategory.name, cash_out.label("paid_on")))
             .join(ExpenseCategory, ExpenseEntry.category_id == ExpenseCategory.id)
             .where(*filters)
-            .order_by(ExpenseEntry.expense_date.desc(), ExpenseEntry.id.desc())
+            .order_by(cash_out.desc(), ExpenseEntry.id.desc())
             .limit(limit)
         )
         entries = [
             {
                 "date": e.expense_date.isoformat(),
+                # When the money actually left — differs from `date` for card
+                # purchases, which are paid with the following statement.
+                "paid_on": paid_on.isoformat() if paid_on else None,
                 "amount": e.amount,
                 "description": e.description,
                 "category": cat_name,
                 "payment_method": e.payment_method,
                 "entity": e.entity,
             }
-            for e, cat_name in rows
+            for e, cat_name, paid_on in rows
         ]
 
     return {
@@ -505,16 +514,22 @@ async def income_aggregate(
     start: date,
     end: date,
     *,
+    currency: str = "ARS",
     source: str | None = None,
     income_type: str | None = None,
     group_by: str = "month",
     limit: int = 50,
 ) -> dict:
-    """Income in `[start, end)`. Income has no currency column — it is always ARS."""
+    """Income in `[start, end)` for one currency.
+
+    The currency filter is not optional: since `IncomeEntry` gained a currency,
+    summing without it adds dollars to pesos as if they were the same unit.
+    """
     filters = [
         IncomeEntry.tenant_id == tenant_id,
         IncomeEntry.period_date >= start,
         IncomeEntry.period_date < end,
+        IncomeEntry.currency == currency,
     ]
     if source or income_type:
         src = [IncomeSource.tenant_id == tenant_id]
@@ -584,6 +599,7 @@ async def income_aggregate(
         ]
 
     return {
+        "currency": currency,
         "total_neto": totals[0],
         "total_bruto": totals[1],
         "total_deducciones": totals[2],
@@ -668,20 +684,35 @@ async def inflation_index(db: AsyncSession, periods: list[str]) -> dict[str, dic
     return {p: {"index": lvl / base * 100, "estimated": est} for p, (lvl, est) in raw.items()}
 
 
+def _period_range(periods: list[str]) -> tuple[date, date]:
+    """Half-open date range covering a contiguous list of "YYYY-MM" periods."""
+    first = date(int(periods[0][:4]), int(periods[0][5:7]), 1)
+    ly, lm = int(periods[-1][:4]), int(periods[-1][5:7])
+    ny, nm = add_months(ly, lm, 1)
+    return first, date(ny, nm, 1)
+
+
 async def committed_installments_by_period(
     db: AsyncSession, tenant_id: int, periods: list[str], currency: str = "ARS"
 ) -> dict[str, list[dict]]:
-    """Instalments already booked into each future statement, by billing month.
+    """Instalments already booked into future statements, by **payment** month.
+
+    Keyed by when the statement comes due, not by the statement's own period —
+    a July statement is paid in August, and bucketing it under July would put a
+    commitment in a month where no money actually moves. Same rule the dashboard
+    uses, so "what do I owe in October" means the same thing in both places.
 
     These are certainties, not forecasts: every cuota of a plan is written into
     its statement the moment the purchase is loaded.
     """
     if not periods:
         return {}
-    pairs = [(int(p[:4]), int(p[5:7])) for p in periods]
+    range_start, range_end = _period_range(periods)
+    due = statement_due_date()
 
     rows = await db.execute(
         select(
+            due.label("due"),
             CreditCardStatement.year,
             CreditCardStatement.month,
             CreditCardItem.description,
@@ -696,17 +727,18 @@ async def committed_installments_by_period(
             CreditCardStatement.tenant_id == tenant_id,
             CreditCardItem.item_type == "installment",
             CreditCardItem.currency == currency,
-            or_(*[
-                and_(CreditCardStatement.year == y, CreditCardStatement.month == m)
-                for y, m in pairs
-            ]),
+            due >= range_start,
+            due < range_end,
         )
         .order_by(CreditCardItem.amount.desc())
     )
 
     out: dict[str, list[dict]] = {p: [] for p in periods}
     for r in rows:
-        out[f"{r.year}-{r.month:02d}"].append({
+        key = period_key(r.due)
+        if key not in out:
+            continue
+        out[key].append({
             "description": r.description,
             "amount": r.amount,
             "cuota": (
@@ -714,6 +746,7 @@ async def committed_installments_by_period(
                 if r.installment_number and r.installment_count else None
             ),
             "card": r.alias,
+            "statement_period": f"{r.year}-{r.month:02d}",
         })
     return out
 
@@ -721,13 +754,20 @@ async def committed_installments_by_period(
 async def statement_totals_by_period(
     db: AsyncSession, tenant_id: int, periods: list[str]
 ) -> dict[str, list[dict]]:
-    """Per-card statement totals (ARS and USD kept apart) for the given months."""
+    """Per-card statement totals (ARS and USD apart), by **payment** month.
+
+    Keyed by due date rather than statement period, for the same reason as
+    `committed_installments_by_period`: the month you pay is the month the
+    commitment lands.
+    """
     if not periods:
         return {}
-    pairs = [(int(p[:4]), int(p[5:7])) for p in periods]
+    range_start, range_end = _period_range(periods)
+    due = statement_due_date()
 
     rows = await db.execute(
         select(
+            due.label("due"),
             CreditCardStatement.year,
             CreditCardStatement.month,
             CreditCard.alias,
@@ -741,13 +781,11 @@ async def statement_totals_by_period(
         .join(CreditCardItem, CreditCardItem.statement_id == CreditCardStatement.id)
         .where(
             CreditCardStatement.tenant_id == tenant_id,
-            or_(*[
-                and_(CreditCardStatement.year == y, CreditCardStatement.month == m)
-                for y, m in pairs
-            ]),
+            due >= range_start,
+            due < range_end,
         )
         .group_by(
-            CreditCardStatement.year, CreditCardStatement.month, CreditCard.alias,
+            due, CreditCardStatement.year, CreditCardStatement.month, CreditCard.alias,
             CreditCardStatement.closing_date, CreditCardStatement.due_date,
             CreditCardItem.currency,
         )
@@ -755,11 +793,16 @@ async def statement_totals_by_period(
 
     out: dict[str, dict[str, dict]] = {p: {} for p in periods}
     for r in rows:
-        period = f"{r.year}-{r.month:02d}"
+        period = period_key(r.due)
+        if period not in out:
+            continue
         card = out[period].setdefault(r.alias, {
             "card": r.alias,
+            "statement_period": f"{r.year}-{r.month:02d}",
             "closing_date": r.closing_date.isoformat() if r.closing_date else None,
             "due_date": r.due_date.isoformat() if r.due_date else None,
+            "due_date_effective": r.due.isoformat(),
+            "due_date_is_estimated": r.due_date is None,
             "total_ars": Decimal(0),
             "total_usd": Decimal(0),
             "items": 0,
@@ -808,20 +851,22 @@ async def baseline_run_rate(
             IncomeEntry.tenant_id == tenant_id,
             IncomeEntry.period_date >= start,
             IncomeEntry.period_date < until,
+            IncomeEntry.currency == "ARS",
         )
     )
 
+    cash_out = cash_out_date()
     expense_filters = [
         ExpenseEntry.tenant_id == tenant_id,
-        ExpenseEntry.expense_date >= start,
-        ExpenseEntry.expense_date < until,
+        cash_out >= start,
+        cash_out < until,
         ExpenseEntry.currency == "ARS",
     ]
     gross = await db.scalar(
-        select(func.coalesce(func.sum(ExpenseEntry.amount), 0)).where(*expense_filters)
+        with_statement(select(func.coalesce(func.sum(ExpenseEntry.amount), 0))).where(*expense_filters)
     )
     ordinary = await db.scalar(
-        select(func.coalesce(func.sum(ExpenseEntry.amount), 0)).where(
+        with_statement(select(func.coalesce(func.sum(ExpenseEntry.amount), 0))).where(
             *expense_filters,
             ExpenseEntry.id.not_in(_installment_entry_ids()),
             ExpenseEntry.id.not_in(_mortgage_entry_ids()),

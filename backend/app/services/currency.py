@@ -93,6 +93,16 @@ def estimate_due_date_py(year: int, month: int, due_day: int | None) -> date:
     return date(y, m, min(day, last))
 
 
+def statement_due_date():
+    """When a statement is paid — real date if known, estimate otherwise.
+
+    Same rule `cash_out_date()` applies to expenses, but usable on queries that
+    start from the statement instead of the expense entry. Requires
+    `credit_card_statements` joined to `credit_cards`.
+    """
+    return func.coalesce(CreditCardStatement.due_date, estimated_due_date())
+
+
 def cash_out_date():
     """When an expense actually takes money out.
 
