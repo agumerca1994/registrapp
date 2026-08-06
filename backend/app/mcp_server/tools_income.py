@@ -32,6 +32,7 @@ _USD_COLUMN_BY_RATE = {
 async def list_income(
     date_from: str,
     date_to: str,
+    currency: str = "ARS",
     source: str | None = None,
     income_type: str | None = None,
     group_by: str = "month",
@@ -39,12 +40,13 @@ async def list_income(
 ) -> dict[str, Any]:
     """Ingresos del hogar en un rango de fechas.
 
-    Devuelve neto, bruto y deducciones. Los ingresos siempre están en pesos
-    (no tienen moneda: la app no registra ingresos en dólares).
+    Devuelve neto, bruto y deducciones de una sola moneda: los montos en pesos
+    y en dólares nunca se suman entre sí.
 
     Args:
         date_from: Fecha inicial inclusive, YYYY-MM-DD.
         date_to: Fecha final inclusive, YYYY-MM-DD.
+        currency: "ARS" o "USD". La mayoría de los hogares sólo tiene ARS.
         source: Nombre (o parte) de la fuente de ingreso.
         income_type: "salary", "bonus", "aguinaldo", "investment" u "other".
         group_by: "month", "source" o "none".
@@ -55,14 +57,14 @@ async def list_income(
     async with tool_session() as db:
         caller = await current_caller(db)
         r = await analytics.income_aggregate(
-            db, caller.tenant_id, start, end,
+            db, caller.tenant_id, start, end, currency=currency,
             source=source, income_type=income_type,
             group_by=group_by, limit=clamp(limit, 1, MAX_LIMIT),
         )
 
     return guard({
         "range": {"from": date_from, "to": date_to},
-        "currency": "ARS",
+        "currency": currency,
         "total_neto": f0(r["total_neto"]),
         "total_bruto": f0(r["total_bruto"]),
         "total_deducciones": f0(r["total_deducciones"]),
@@ -88,18 +90,27 @@ async def list_income(
     })
 
 
-async def _metric_for_month(db, tenant_id: int, year: int, month: int, metric: str) -> Decimal:
+async def _metric_for_month(
+    db, tenant_id: int, year: int, month: int, metric: str, currency: str = "ARS"
+) -> Decimal:
+    """One month's figure for `metric`, in `currency`.
+
+    `currency` used to be accepted by compare_periods and silently ignored here,
+    so a USD comparison quietly returned peso numbers.
+    """
     start, end = analytics.month_bounds(year, month)
     if metric == "income":
-        r = await analytics.income_aggregate(db, tenant_id, start, end, group_by="month")
+        r = await analytics.income_aggregate(
+            db, tenant_id, start, end, currency=currency, group_by="month"
+        )
         return Decimal(r["total_neto"])
     if metric == "expenses":
         r = await analytics.expense_aggregate(
-            db, tenant_id, start, end, currency="ARS", group_by="month"
+            db, tenant_id, start, end, currency=currency, group_by="month"
         )
         return Decimal(r["total"])
     summary = await analytics.month_summary(db, tenant_id, year, month)
-    return summary.balance
+    return summary.balance_usd if currency == "USD" else summary.balance
 
 
 @mcp.tool()
@@ -133,11 +144,11 @@ async def compare_periods(
     async with tool_session() as db:
         caller = await current_caller(db)
         tid = caller.tenant_id
-        value = await _metric_for_month(db, tid, year, month, metric)
+        value = await _metric_for_month(db, tid, year, month, metric, currency)
 
         out: dict[str, Any] = {
             "metric": metric,
-            "currency": "ARS",
+            "currency": currency,
             "period": period,
             "value": f0(value),
         }
@@ -149,7 +160,7 @@ async def compare_periods(
             targets.append(("yoy", (year - 1, month)))
 
         for label, (py, pm) in targets:
-            past = await _metric_for_month(db, tid, py, pm, metric)
+            past = await _metric_for_month(db, tid, py, pm, metric, currency)
             past_period = f"{py}-{pm:02d}"
 
             # Inflation over (past, now]: the index is chained across the months
