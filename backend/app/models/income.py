@@ -39,6 +39,7 @@ class IncomeEntry(Base):
     bruto: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
     deducciones: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    currency: Mapped[str] = mapped_column(String(3), default="ARS", server_default="ARS")
     period_date: Mapped[date] = mapped_column(Date, index=True)
     notes: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

@@ -11,12 +11,18 @@ Domain rules encoded here (they are load-bearing, not stylistic):
 - Buying foreign currency is a transfer between pockets, not an expense, so it
   stays out of income/expense totals — but it does move real pesos, which is
   what `ars_available` reports.
+- **Expenses count in the month the money leaves, not the month it was spent.**
+  Argentine cards are paid a month in arrears, so a card purchase cashes out on
+  its statement's due date (`cash_out_date()`). Dating by purchase overstated a
+  month's outflow by everything charged to a card and not yet billed — for a
+  card-heavy household that ran ~50% high — and made `ars_available` claim
+  pesos that were already committed to next month's statement.
 """
 from datetime import date, timedelta
 from decimal import Decimal
 
 from pydantic import BaseModel
-from sqlalchemy import and_, func, or_, select, text
+from sqlalchemy import and_, case, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.credit_card import CreditCard, CreditCardItem, CreditCardStatement
@@ -26,23 +32,29 @@ from app.models.macro_variable import MacroVariable
 from app.models.mortgage import MortgageLoan, MortgageRecord
 from app.models.payment_reminder import PaymentReminder
 from app.services.currency import (
-    RATE_TYPE_COLUMN, get_fx_ars_flow, get_latest_rate, get_tenant_rate_type,
-    get_usd_holding,
+    RATE_TYPE_COLUMN, cash_out_date, get_fx_ars_flow, get_latest_rate,
+    get_tenant_rate_type, get_usd_holding, with_statement,
 )
 
 
 class CategorySummary(BaseModel):
     category_name: str
-    total: Decimal
+    total: Decimal                 # ARS actually paid
+    total_usd: Decimal = Decimal(0)  # USD actually paid, kept unmixed
+    ars_equivalent: Decimal = Decimal(0)  # total + total_usd × rate, for ranking
     color: str | None = None
 
 
 class MonthSummary(BaseModel):
     period: str
     total_income: Decimal
+    total_income_usd: Decimal
     total_expenses: Decimal
     total_expenses_usd: Decimal
     balance: Decimal
+    # Dollars in minus dollars out for the month. A flow, unlike `usd_holding`,
+    # which is the stock that carries across months.
+    balance_usd: Decimal
     # Buying foreign currency is neither income nor expense — it's a transfer
     # between pockets — so it stays out of `balance`. But it does move real
     # pesos, which is why `ars_available` exists: without it the dashboard shows
@@ -131,51 +143,56 @@ async def month_summary(
     """Everything the dashboard shows for a single calendar month."""
     start, end = month_bounds(year, month)
 
-    total_income = await db.scalar(
-        select(func.coalesce(func.sum(IncomeEntry.amount), 0))
-        .where(
+    def _income_sum(currency: str):
+        return select(func.coalesce(func.sum(IncomeEntry.amount), 0)).where(
             IncomeEntry.tenant_id == tenant_id,
             IncomeEntry.period_date >= start,
             IncomeEntry.period_date < end,
+            IncomeEntry.currency == currency,
         )
-    )
 
-    total_expenses = await db.scalar(
-        select(func.coalesce(func.sum(ExpenseEntry.amount), 0))
-        .where(
+    total_income = await db.scalar(_income_sum("ARS"))
+    total_income_usd = await db.scalar(_income_sum("USD"))
+
+    cash_out = cash_out_date()
+
+    def _expense_sum(currency: str):
+        return with_statement(
+            select(func.coalesce(func.sum(ExpenseEntry.amount), 0))
+        ).where(
             ExpenseEntry.tenant_id == tenant_id,
-            ExpenseEntry.expense_date >= start,
-            ExpenseEntry.expense_date < end,
-            ExpenseEntry.currency == "ARS",
+            ExpenseEntry.currency == currency,
+            cash_out >= start,
+            cash_out < end,
         )
-    )
 
-    total_expenses_usd = await db.scalar(
-        select(func.coalesce(func.sum(ExpenseEntry.amount), 0))
-        .where(
-            ExpenseEntry.tenant_id == tenant_id,
-            ExpenseEntry.expense_date >= start,
-            ExpenseEntry.expense_date < end,
-            ExpenseEntry.currency == "USD",
-        )
-    )
+    total_expenses = await db.scalar(_expense_sum("ARS"))
+    total_expenses_usd = await db.scalar(_expense_sum("USD"))
 
+    # One row per category with both currencies side by side. Kept apart rather
+    # than summed: mixing them would hide which part of a category was actually
+    # paid in dollars. `ars_equivalent` is only for ordering and for the "total
+    # spent on this" reading the user asked for.
     rows = await db.execute(
-        select(ExpenseCategory.name, ExpenseCategory.color, func.sum(ExpenseEntry.amount).label("total"))
-        .join(ExpenseEntry, ExpenseEntry.category_id == ExpenseCategory.id)
+        with_statement(select(
+            ExpenseCategory.name,
+            ExpenseCategory.color,
+            func.coalesce(func.sum(
+                case((ExpenseEntry.currency == "ARS", ExpenseEntry.amount), else_=0)
+            ), 0).label("total"),
+            func.coalesce(func.sum(
+                case((ExpenseEntry.currency == "USD", ExpenseEntry.amount), else_=0)
+            ), 0).label("total_usd"),
+        ))
+        .join(ExpenseCategory, ExpenseEntry.category_id == ExpenseCategory.id)
         .where(
             ExpenseEntry.tenant_id == tenant_id,
-            ExpenseEntry.expense_date >= start,
-            ExpenseEntry.expense_date < end,
-            ExpenseEntry.currency == "ARS",
+            cash_out >= start,
+            cash_out < end,
         )
         .group_by(ExpenseCategory.name, ExpenseCategory.color)
-        .order_by(func.sum(ExpenseEntry.amount).desc())
     )
-    by_category = [
-        CategorySummary(category_name=r.name, total=r.total, color=r.color)
-        for r in rows
-    ]
+    cat_rows = list(rows)
 
     mortgage_payment, mortgage_is_projected = await mortgage_payment_for_month(
         db, tenant_id, start, end
@@ -201,12 +218,30 @@ async def month_summary(
 
     balance = total_income - total_expenses
 
+    rate_for_mix = usd_rate or Decimal(0)
+    by_category = sorted(
+        (
+            CategorySummary(
+                category_name=r.name,
+                total=r.total,
+                total_usd=r.total_usd,
+                ars_equivalent=r.total + r.total_usd * rate_for_mix,
+                color=r.color,
+            )
+            for r in cat_rows
+        ),
+        key=lambda c: c.ars_equivalent,
+        reverse=True,
+    )
+
     return MonthSummary(
         period=f"{year}-{month:02d}",
         total_income=total_income,
+        total_income_usd=total_income_usd,
         total_expenses=total_expenses,
         total_expenses_usd=total_expenses_usd,
         balance=balance,
+        balance_usd=total_income_usd - total_expenses_usd,
         fx_bought_ars=fx_bought_ars,
         fx_sold_ars=fx_sold_ars,
         ars_available=balance - fx_bought_ars + fx_sold_ars,
@@ -250,12 +285,12 @@ async def history_series(db: AsyncSession, tenant_id: int) -> list[HistoryPoint]
         data[k]["total_income"] = r.total
 
     rows = await db.execute(
-        select(
-            func.date_trunc("month", ExpenseEntry.expense_date).label("p"),
+        # ARS only and by cash-out month, matching month_summary — otherwise the
+        # trend chart tells a different story than the balance above it.
+        with_statement(select(
+            func.date_trunc("month", cash_out_date()).label("p"),
             func.sum(ExpenseEntry.amount).label("total"),
-        )
-        # ARS only, matching month_summary — without this filter USD amounts
-        # get added to the peso series as if they were pesos.
+        ))
         .where(ExpenseEntry.tenant_id == tenant_id, ExpenseEntry.currency == "ARS")
         .group_by(text("1"))
     )

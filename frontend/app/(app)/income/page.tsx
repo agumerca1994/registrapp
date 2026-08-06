@@ -29,7 +29,7 @@ interface IncomeSource { id: number; name: string; income_type: string; }
 interface IncomeEntry {
   id: number; source_id: number;
   bruto: number | null; deducciones: number | null; amount: number;
-  period_date: string; notes?: string;
+  period_date: string; notes?: string; currency?: string;
   source: IncomeSource;
 }
 
@@ -40,7 +40,7 @@ const INCOME_TYPE_LABELS: Record<string, string> = {
 
 const EMPTY_FORM = {
   source_id: "", bruto: "", deducciones: "", amount: "",
-  period_date: "", notes: "",
+  period_date: "", notes: "", currency: "ARS" as "ARS" | "USD",
 };
 
 // ── Entry detail modal ─────────────────────────────────────────────────────────
@@ -402,6 +402,7 @@ export default function IncomePage() {
       amount: String(entry.amount),
       period_date: entry.period_date,
       notes: entry.notes || "",
+      currency: (entry.currency as "ARS" | "USD") || "ARS",
     });
     setShowForm(true);
   };
@@ -421,6 +422,7 @@ export default function IncomePage() {
       bruto: form.bruto ? parseAmount(form.bruto) : null,
       deducciones: form.deducciones ? parseAmount(form.deducciones) : null,
       amount: parseAmount(form.amount),
+      currency: form.currency,
       period_date: form.period_date,
       notes: form.notes || null,
     };
@@ -511,6 +513,22 @@ export default function IncomePage() {
         <Card className="p-4 md:p-5">
           <form onSubmit={handleSubmit} className="space-y-3">
           <p className="text-sm font-medium text-foreground">{editId ? "Editar ingreso" : "Nuevo ingreso"}</p>
+          {/* Same ARS/USD toggle position as the expense form. A USD income
+              also adds to the dollar holding, not just to the USD balance. */}
+          <div className="flex gap-2 mb-1">
+            {(["ARS", "USD"] as const).map(cur => (
+              <button key={cur} type="button"
+                onClick={() => setForm(p => ({ ...p, currency: cur }))}
+                className={`flex-1 py-1.5 text-xs rounded-full border-2 font-medium transition-colors ${form.currency === cur ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent"}`}>
+                {cur === "ARS" ? "$ ARS" : "U$D"}
+              </button>
+            ))}
+          </div>
+          {form.currency === "USD" && (
+            <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+              Se suma a tu <strong>tenencia en dólares</strong> y al balance en USD, no al balance en pesos.
+            </p>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-muted-foreground">Fuente</label>

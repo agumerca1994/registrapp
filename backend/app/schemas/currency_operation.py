@@ -140,6 +140,7 @@ class CurrencySummaryOut(BaseModel):
     total_sold: Decimal
     total_spent: Decimal
     total_adjustments: Decimal
+    total_earned: Decimal
     # Billed to a card but not paid yet — the dollars are still held, and this
     # is what the next statement will take.
     pending_usd: Decimal

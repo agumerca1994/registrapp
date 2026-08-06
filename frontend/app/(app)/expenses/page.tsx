@@ -161,7 +161,7 @@ export default function ExpensesPage() {
       notes: form.notes,
       currency: form.currency,
     };
-    if (form.currency === "ARS") payload.category_id = parseInt(form.category_id);
+    if (form.category_id) payload.category_id = parseInt(form.category_id);
     if (editId) await api.patch(`/expenses/entries/${editId}`, payload);
     else await api.post("/expenses/entries", payload);
     closeForm();
@@ -275,29 +275,31 @@ export default function ExpensesPage() {
           <div className="flex gap-2 mb-1">
             {(["ARS", "USD"] as const).map(cur => (
               <button key={cur} type="button"
-                onClick={() => setForm(p => ({ ...p, currency: cur, category_id: cur === "USD" ? "" : p.category_id }))}
+                onClick={() => setForm(p => ({ ...p, currency: cur }))}
                 className={`flex-1 py-1.5 text-xs rounded-full border-2 font-medium transition-colors ${form.currency === cur ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent"}`}>
                 {cur === "ARS" ? "$ ARS" : "U$D"}
               </button>
             ))}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {form.currency === "USD" ? (
-              <div className="sm:col-span-2">
-                <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                  Se agrega automáticamente a la categoría <strong>Consumo en dólares</strong>
-                </p>
-              </div>
-            ) : (
+            {/* USD expenses get a real category too — a trip paid in dollars
+                belongs in "Viajes", not in a currency bucket. Leaving it empty
+                falls back to "Consumo en dólares". */}
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Categoría</label>
+              <label className="text-xs font-medium text-muted-foreground">
+                Categoría
+                {form.currency === "USD" && (
+                  <span className="font-normal text-muted-foreground/80"> — opcional</span>
+                )}
+              </label>
               <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
                 value={form.category_id} onChange={e => setForm(p => ({ ...p, category_id: e.target.value }))} required={form.currency === "ARS"}>
-                <option value="">Selecciona una categoría</option>
+                <option value="">
+                  {form.currency === "USD" ? "Consumo en dólares" : "Selecciona una categoría"}
+                </option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-            )}
             <div>
               <label className="text-xs font-medium text-muted-foreground">Fecha</label>
               <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"

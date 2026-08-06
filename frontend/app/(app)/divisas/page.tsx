@@ -60,6 +60,7 @@ interface Summary {
   total_sold: string;
   total_spent: string;
   total_adjustments: string;
+  total_earned: string;
   pending_usd: string;
   next_due_date: string | null;
   bought_usd: string;
@@ -348,6 +349,7 @@ export default function DivisasPage() {
                 {[
                   { label: "Tenencia inicial", value: Number(summary.initial), sign: "" },
                   { label: "Comprado", value: Number(summary.total_bought), sign: "+" },
+                  { label: "Ingresado en USD", value: Number(summary.total_earned), sign: "+" },
                   { label: "Vendido", value: Number(summary.total_sold), sign: "−" },
                   { label: "Pagado en USD", value: Number(summary.total_spent), sign: "−" },
                   { label: "Ajustes", value: Number(summary.total_adjustments), sign: "" },

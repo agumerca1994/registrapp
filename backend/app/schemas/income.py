@@ -25,6 +25,7 @@ class IncomeEntryCreate(BaseModel):
     bruto: Decimal | None = None
     deducciones: Decimal | None = None
     amount: Decimal
+    currency: str = "ARS"
     period_date: date
     notes: str | None = None
 
@@ -34,6 +35,7 @@ class IncomeEntryUpdate(BaseModel):
     bruto: Decimal | None = None
     deducciones: Decimal | None = None
     amount: Decimal | None = None
+    currency: str | None = None
     period_date: date | None = None
     notes: str | None = None
 
@@ -46,6 +48,7 @@ class IncomeEntryOut(BaseModel):
     bruto: Decimal | None
     deducciones: Decimal | None
     amount: Decimal
+    currency: str = "ARS"
     period_date: date
     notes: str | None
     created_at: datetime
