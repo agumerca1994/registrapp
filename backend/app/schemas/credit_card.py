@@ -8,6 +8,9 @@ class CreditCardCreate(BaseModel):
     alias: str
     titular: str | None = None
     last_4_digits: str | None = None
+    # Used to estimate a statement's cash-out month while the bank hasn't sent
+    # the real due date yet. See services/currency.estimated_due_date().
+    due_day: int | None = None
 
 
 class CreditCardUpdate(BaseModel):
@@ -15,6 +18,7 @@ class CreditCardUpdate(BaseModel):
     alias: str | None = None
     titular: str | None = None
     last_4_digits: str | None = None
+    due_day: int | None = None
 
 
 class CreditCardOut(BaseModel):
@@ -25,6 +29,7 @@ class CreditCardOut(BaseModel):
     alias: str
     titular: str | None
     last_4_digits: str | None
+    due_day: int | None = None
     created_at: datetime
 
 
@@ -126,10 +131,20 @@ class StatementOut(BaseModel):
     created_at: datetime
     items: list[CreditCardItemOut] = []
     total: Decimal = Decimal("0")
+    # The date the money is expected to leave: the real one when the bank has
+    # sent it, otherwise the estimate the dashboard is actually using.
+    due_date_effective: date | None = None
+    due_date_is_estimated: bool = False
 
     @classmethod
-    def from_orm_with_total(cls, stmt) -> "StatementOut":
+    def from_orm_with_total(cls, stmt, due_day: int | None = None) -> "StatementOut":
+        from app.services.currency import estimate_due_date_py
+
         obj = cls.model_validate(stmt)
+        obj.due_date_is_estimated = stmt.due_date is None
+        obj.due_date_effective = stmt.due_date or estimate_due_date_py(
+            stmt.year, stmt.month, due_day
+        )
         obj.total = sum(i.amount for i in obj.items)
         for pydantic_item, orm_item in zip(obj.items, stmt.items):
             if orm_item.installment_group_id and orm_item.installment_group:

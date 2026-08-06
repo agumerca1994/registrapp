@@ -15,6 +15,11 @@ class CreditCard(Base):
     alias: Mapped[str] = mapped_column(String(100))
     titular: Mapped[str | None] = mapped_column(String(100), nullable=True)
     last_4_digits: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    # Day of the month this card's statements usually fall due. Only used to
+    # estimate a cash-out date while the real `due_date` is still unknown —
+    # the bank sends it at the end of the period, but the statement and its
+    # instalments already exist and have to land in the right month.
+    due_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     statements: Mapped[list["CreditCardStatement"]] = relationship(

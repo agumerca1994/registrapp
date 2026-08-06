@@ -12,6 +12,8 @@ interface StatementData {
   month: number;
   closing_date?: string;
   due_date?: string;
+  due_date_effective?: string;
+  due_date_is_estimated?: boolean;
   total: number;
   items: { id: number }[];
 }
@@ -49,10 +51,18 @@ export function StatementPaper({
             {formatDate(statement.closing_date)}
           </p>
         )}
-        {statement.due_date && (
+        {/* Show the date the dashboard actually accounts with. While the bank
+            hasn't sent the real one it's an estimate from the card's due day,
+            and it has to say so rather than pass as fact. */}
+        {(statement.due_date || statement.due_date_effective) && (
           <p className="text-xs text-muted-foreground">
             <span className="text-[10px] font-medium uppercase tracking-wide">Vence </span>
-            {formatDate(statement.due_date)}
+            {formatDate(statement.due_date || statement.due_date_effective!)}
+            {statement.due_date_is_estimated && (
+              <span className="ml-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1 py-px">
+                estimado
+              </span>
+            )}
           </p>
         )}
       </div>
