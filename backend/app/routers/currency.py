@@ -16,7 +16,7 @@ from app.schemas.currency_operation import (
     CurrencySummaryOut, CurrencySettingsOut, CurrencySettingsUpdate,
 )
 from app.services.currency import (
-    ZERO, _with_statement, cash_out_date, get_latest_rate,
+    ZERO, with_statement, cash_out_date, get_latest_rate,
     get_tenant_rate_type, get_usd_holding,
 )
 
@@ -248,7 +248,7 @@ async def currency_summary(
     # Dollars that left during the month — by statement due date for card
     # purchases, so July's card spending lands in the month it's actually paid.
     cash_out = cash_out_date()
-    spent_q = _with_statement(select(func.coalesce(func.sum(ExpenseEntry.amount), ZERO))).where(
+    spent_q = with_statement(select(func.coalesce(func.sum(ExpenseEntry.amount), ZERO))).where(
         ExpenseEntry.tenant_id == tid,
         ExpenseEntry.currency == currency,
         cash_out >= start,
@@ -273,6 +273,7 @@ async def currency_summary(
         total_sold=closing.sold,
         total_spent=closing.spent,
         total_adjustments=closing.adjustments,
+        total_earned=closing.earned,
         pending_usd=closing.pending,
         next_due_date=closing.next_due_date,
         bought_usd=bought_usd,

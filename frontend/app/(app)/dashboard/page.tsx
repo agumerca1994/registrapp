@@ -55,9 +55,11 @@ const DASHBOARD_TOUR_STEPS: Step[] = [
 interface MonthSummary {
   period: string;
   total_income: number;
+  total_income_usd: number;
   total_expenses: number;
   total_expenses_usd: number;
   balance: number;
+  balance_usd: number;
   fx_bought_ars: number;
   fx_sold_ars: number;
   ars_available: number;
@@ -69,7 +71,10 @@ interface MonthSummary {
   mortgage_is_projected: boolean;
   uva_value: number | null;
   inflation_pct: number | null;
-  expenses_by_category: { category_name: string; total: number; color?: string }[];
+  expenses_by_category: {
+    category_name: string; total: number; total_usd: number;
+    ars_equivalent: number; color?: string;
+  }[];
 }
 
 interface HistoryPoint { period: string; total_income: number; }
@@ -309,6 +314,12 @@ export default function DashboardPage() {
   // never crowd out the tenant's actual income trend.
   const quarterlyTrend = historyData.filter(h => Number(h.total_income) > 0).slice(-4);
 
+  // Denominator for the category bars: peso-equivalent, since categories can
+  // now hold both currencies. `total_expenses` is ARS-only and would push the
+  // percentages over 100% as soon as a category has any USD in it.
+  const categoryTotal = (data?.expenses_by_category ?? [])
+    .reduce((s, c) => s + Number(c.ars_equivalent), 0);
+
   const pieData = (() => {
     const arsEntries = expEntries.filter(e => e.currency !== "USD");
     const total = arsEntries.reduce((s, e) => s + Number(e.amount), 0);
@@ -438,9 +449,19 @@ export default function DashboardPage() {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatCard label="Ingresos" value={formatARS(data.total_income)} icon={TrendingUp} tone="positive" />
-            <StatCard label="Egresos" value={formatARS(data.total_expenses)} icon={TrendingDown} tone="negative" />
-            {data.total_expenses_usd > 0 && (
-              <StatCard label="Egresos USD" value={formatUSD(data.total_expenses_usd)} icon={CircleDollarSign} tone="usd" />
+            <StatCard
+              label="Egresos" value={formatARS(data.total_expenses)}
+              sub="pagado este mes" icon={TrendingDown} tone="negative"
+            />
+            {(data.total_expenses_usd > 0 || data.total_income_usd > 0) && (
+              <StatCard
+                label="Balance USD"
+                value={`${data.balance_usd >= 0 ? "+" : "−"}${formatUSD(Math.abs(data.balance_usd))}`}
+                sub={data.total_income_usd > 0
+                  ? `${formatUSD(data.total_income_usd)} − ${formatUSD(data.total_expenses_usd)}`
+                  : `pagado: ${formatUSD(data.total_expenses_usd)}`}
+                icon={CircleDollarSign} tone="usd"
+              />
             )}
             {data.usd_holding !== 0 && (
               <Link href="/divisas" className="rounded-xl hover:bg-accent/50 transition-colors">
@@ -502,36 +523,42 @@ export default function DashboardPage() {
                     {"Egresos por categoría"} — {periodLabel}
                   </h3>
                   <div className="space-y-2.5">
-                    {data.expenses_by_category.map(cat => (
-                      <div key={cat.category_name}>
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color || "#6366f1" }} />
-                            <span className="text-sm text-foreground truncate">{cat.category_name}</span>
+                    {/* Bars are sized by the peso equivalent so a category paid
+                        in dollars is comparable to one paid in pesos — but the
+                        amounts stay unmixed, so it's clear what was paid in what. */}
+                    {data.expenses_by_category.map(cat => {
+                      const share = categoryTotal > 0 ? (cat.ars_equivalent / categoryTotal) * 100 : 0;
+                      return (
+                        <div key={cat.category_name}>
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color || "#6366f1" }} />
+                              <span className="text-sm text-foreground truncate">{cat.category_name}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                              <span className="text-sm font-medium">
+                                {cat.total > 0 && formatARS(cat.total)}
+                                {cat.total > 0 && cat.total_usd > 0 && " + "}
+                                {cat.total_usd > 0 && (
+                                  <span className="text-emerald-600">{formatUSD(cat.total_usd)}</span>
+                                )}
+                              </span>
+                              <span className="text-xs text-muted-foreground">({formatPct(share)})</span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                            <span className="text-sm font-medium">{formatARS(cat.total)}</span>
-                            <span className="text-xs text-muted-foreground">({formatPct((cat.total / data.total_expenses) * 100)})</span>
+                          <div className="h-1 bg-muted rounded-full overflow-hidden">
+                            <div className="h-full rounded-full"
+                              style={{ width: `${share}%`, backgroundColor: cat.color || "#6366f1" }} />
                           </div>
                         </div>
-                        <div className="h-1 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full rounded-full"
-                            style={{ width: `${(cat.total / data.total_expenses) * 100}%`, backgroundColor: cat.color || "#6366f1" }} />
-                        </div>
-                      </div>
-                    ))}
-                    {data.total_expenses_usd > 0 && (
-                      <div className={data.expenses_by_category.length > 0 ? "pt-2.5 border-t" : ""}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: "#22c55e" }} />
-                            <span className="text-sm text-foreground truncate">Consumo en dólares</span>
-                          </div>
-                          <span className="text-sm font-medium shrink-0 ml-2">{formatUSD(data.total_expenses_usd)}</span>
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
+                  {data.total_expenses_usd > 0 && data.usd_rate && (
+                    <p className="text-[11px] text-muted-foreground mt-3 pt-2.5 border-t">
+                      Los porcentajes valúan los dólares a {formatARS(data.usd_rate)} ({data.usd_rate_type}).
+                    </p>
+                  )}
                 </Card>
               )}
             </div>

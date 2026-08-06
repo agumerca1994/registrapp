@@ -85,10 +85,14 @@ async def create_entry(
 ):
     user = await _get_db_user(firebase_user, db)
     data = body.model_dump()
-    if data.get("currency") == "USD":
-        data["category_id"] = await get_or_create_usd_category(user.tenant_id, db)
-    elif data.get("category_id") is None:
-        raise HTTPException(status_code=422, detail="category_id es requerido para gastos en ARS")
+    # USD expenses can be categorised like any other now — a trip paid in
+    # dollars belongs in "Viajes", not in a currency bucket. "Consumo en
+    # dólares" stays as the fallback when the user doesn't pick one.
+    if data.get("category_id") is None:
+        if data.get("currency") == "USD":
+            data["category_id"] = await get_or_create_usd_category(user.tenant_id, db)
+        else:
+            raise HTTPException(status_code=422, detail="category_id es requerido para gastos en ARS")
     entry = ExpenseEntry(**data, tenant_id=user.tenant_id, user_id=user.id)
     db.add(entry)
     await db.commit()
