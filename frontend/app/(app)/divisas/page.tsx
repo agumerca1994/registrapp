@@ -62,6 +62,8 @@ interface Summary {
   total_adjustments: string;
   total_earned: string;
   pending_usd: string;
+  pending_own_usd: string;
+  pending_others_usd: string;
   next_due_date: string | null;
   bought_usd: string;
   bought_ars: string;
@@ -368,19 +370,46 @@ export default function DivisasPage() {
               </div>
             )}
 
-            {/* Card purchases already billed but not yet due. The dollars are
-                still held, so they're not subtracted above — but they're
-                already committed, which is exactly when the user needs to buy. */}
-            {summary && Number(summary.pending_usd) > 0 && (
-              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                <p className="text-xs text-amber-800">
-                  <strong>{formatUSD(Number(summary.pending_usd))} comprometidos</strong> en
-                  consumos con tarjeta ya facturados
-                  {summary.next_due_date && <> · vencen el {formatDate(summary.next_due_date)}</>}.
-                  Todavía no salieron de tu tenencia.
-                </p>
-              </div>
-            )}
+            {/* What the bank will actually debit — gross, including the share
+                of shared expenses that belongs to other participants. The
+                shortfall below is a cash-timing warning, not a net-worth one:
+                the holding above already assumes participants reimburse. */}
+            {summary && Number(summary.pending_usd) > 0 && (() => {
+              const total = Number(summary.pending_usd);
+              const own = Number(summary.pending_own_usd);
+              const others = Number(summary.pending_others_usd);
+              const shortfall = total - holding;
+              return (
+                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs">
+                  <p className="font-semibold text-amber-900">
+                    Vence {summary.next_due_date ? `el ${formatDate(summary.next_due_date)}` : "próximamente"}: {formatUSD(total)}
+                  </p>
+                  {others > 0 && (
+                    <div className="mt-1.5 space-y-0.5 text-amber-800">
+                      <p className="flex justify-between gap-4">
+                        <span>tuyo</span>
+                        <span className="tabular-nums">{formatUSD(own)}</span>
+                      </p>
+                      <p className="flex justify-between gap-4">
+                        <span>de participantes</span>
+                        <span className="tabular-nums">{formatUSD(others)}</span>
+                      </p>
+                    </div>
+                  )}
+                  <p className={`mt-1.5 pt-1.5 border-t border-amber-200 font-semibold ${shortfall > 0 ? "text-rose-700" : "text-emerald-700"}`}>
+                    {shortfall > 0
+                      ? `Faltan ${formatUSD(shortfall)} si nadie te transfirió todavía`
+                      : `Te alcanza — te quedarían ${formatUSD(-shortfall)} en la cuenta`}
+                  </p>
+                  {others > 0 && (
+                    <p className="mt-1 text-[11px] text-amber-700/90">
+                      Tuyo una vez liquidado: {formatUSD(holding - own)}. El banco debita
+                      el total y los participantes te reintegran su parte.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
             {!hasInitial && (
               <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                 Cargá tu <strong>tenencia inicial</strong> para que este número refleje los dólares

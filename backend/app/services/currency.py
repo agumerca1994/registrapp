@@ -55,7 +55,8 @@ class HoldingBreakdown:
     spent: Decimal            # USD that has actually left (positive number)
     earned: Decimal           # USD in via income entries
     start_date: date | None   # cutoff — outflows before it are ignored
-    pending: Decimal          # billed to a card but not due yet (positive)
+    pending: Decimal          # gross: what the bank will debit, incl. others' share
+    pending_own: Decimal      # the part of `pending` that is the user's own expense
     next_due_date: date | None  # when the next card statement takes its dollars
 
 
@@ -267,9 +268,31 @@ async def get_usd_holding(
         earned_q = earned_q.where(IncomeEntry.period_date >= start_date)
     earned = await db.scalar(earned_q)
 
+    # `spent` stays NET (the user's own share) on purpose. The bank debits the
+    # gross amount, but the other participants reimburse it, and reimbursements
+    # aren't recorded anywhere. Gross out + reimbursement in ≈ net out, so
+    # subtracting net is what keeps the holding equal to the real account:
+    #   9940 − 11436 (bank) + 5938 (reimbursed) = 4442 = 9940 − 5497 (net)
     spent = await db.scalar(_spent_q(cash_out <= cutoff))
-    # Already billed, dollars not gone yet — what the next statement will take.
-    pending = await db.scalar(_spent_q(cash_out > cutoff))
+
+    # Pending, on the other hand, must be GROSS: on the due date the bank takes
+    # the whole statement, including the participants' share, whether or not
+    # they've transferred yet. That's a cash-timing question, not a net-worth
+    # one — `pending_own` is the part that is actually the user's expense.
+    billed_amount = func.coalesce(CreditCardItem.amount, ExpenseEntry.amount)
+
+    def _pending_q(amount_col):
+        q = with_statement(select(func.coalesce(func.sum(amount_col), ZERO))).where(
+            ExpenseEntry.tenant_id == tenant_id,
+            ExpenseEntry.currency == currency,
+            cash_out > cutoff,
+        )
+        if start_date is not None:
+            q = q.where(cash_out >= start_date)
+        return q
+
+    pending = await db.scalar(_pending_q(billed_amount))
+    pending_own = await db.scalar(_pending_q(ExpenseEntry.amount))
     next_due = await db.scalar(
         with_statement(select(func.min(cash_out))).where(
             ExpenseEntry.tenant_id == tenant_id,
@@ -291,6 +314,7 @@ async def get_usd_holding(
         spent=spent,
         start_date=start_date,
         pending=pending,
+        pending_own=pending_own,
         next_due_date=next_due,
     )
 
