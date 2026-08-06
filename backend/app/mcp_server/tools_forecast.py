@@ -118,6 +118,10 @@ async def get_upcoming_commitments(months_ahead: int = 6) -> dict[str, Any]:
             "es el resumen.",
             "due_date_is_estimated=true significa que el banco todavía no envió "
             "el vencimiento y se estimó con el día habitual de esa tarjeta.",
+            "Los totales de tarjeta son BRUTOS: es lo que el banco debita, "
+            "incluida la parte de los gastos compartidos que corresponde a "
+            "otros participantes y que después reintegran. Los gastos del "
+            "dashboard, en cambio, son netos (sólo la parte del hogar).",
             "total_committed_ars = total de resúmenes de tarjeta + hipoteca. Las "
             "cuotas ya están dentro del total de tarjeta.",
             "La cuota de hipoteca con projected=true se calcula con el último "

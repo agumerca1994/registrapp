@@ -141,9 +141,13 @@ class CurrencySummaryOut(BaseModel):
     total_spent: Decimal
     total_adjustments: Decimal
     total_earned: Decimal
-    # Billed to a card but not paid yet — the dollars are still held, and this
-    # is what the next statement will take.
+    # Billed to a card but not paid yet. `pending_usd` is GROSS — what the bank
+    # will actually debit, including the share of shared expenses that belongs
+    # to other participants. `pending_own_usd` is the part that is really the
+    # user's expense; the difference is money they front and get reimbursed.
     pending_usd: Decimal
+    pending_own_usd: Decimal
+    pending_others_usd: Decimal
     next_due_date: date | None
 
     # Flow for the selected month

@@ -275,6 +275,8 @@ async def currency_summary(
         total_adjustments=closing.adjustments,
         total_earned=closing.earned,
         pending_usd=closing.pending,
+        pending_own_usd=closing.pending_own,
+        pending_others_usd=closing.pending - closing.pending_own,
         next_due_date=closing.next_due_date,
         bought_usd=bought_usd,
         bought_ars=bought_ars,
