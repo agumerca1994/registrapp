@@ -22,6 +22,7 @@ interface StatementItem {
 interface Statement {
   id: number; card_id: number; year: number; month: number;
   closing_date?: string; due_date?: string; total: number; items: StatementItem[];
+  due_date_effective?: string; due_date_is_estimated?: boolean;
 }
 type DeleteMode = "keep" | "delete";
 

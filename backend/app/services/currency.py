@@ -8,18 +8,19 @@ The mental model this module encodes: buying foreign currency is a **transfer
 between pockets**, not an expense. It never touches income/expense totals, but
 it does move the holding and the available pesos.
 """
+import calendar
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import select, func
+from sqlalchemy import Date, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.expense import ExpenseCategory, ExpenseEntry
 from app.models.income import IncomeEntry
 from app.models.macro_variable import MacroVariable
 from app.models.tenant import Tenant
-from app.models.credit_card import CreditCardItem, CreditCardStatement
+from app.models.credit_card import CreditCard, CreditCardItem, CreditCardStatement
 from app.models.currency_operation import CurrencyOperation
 
 # Exchange-rate vocabulary shared by shared-expense settlement conversion and
@@ -58,25 +59,68 @@ class HoldingBreakdown:
     next_due_date: date | None  # when the next card statement takes its dollars
 
 
-def cash_out_date():
-    """When a USD expense actually takes dollars out of the holding.
+DEFAULT_DUE_DAY = 10
 
-    A card purchase doesn't move money on the purchase date — the dollars leave
-    when the statement is paid, a month later ("las tarjetas se pagan a mes
-    vencido"). So a card-linked expense cashes out on its statement's due date;
-    anything else (cash, immediate purchase) cashes out on its own date.
+
+def estimated_due_date():
+    """Where a statement's due date lands when the bank hasn't sent it yet.
+
+    Statements are built up by hand during the month and future ones are created
+    outright by instalment propagation, so `due_date` is NULL for a large share
+    of them — that's the normal state, not an edge case. But the *month* is never
+    in doubt: a period-M statement is paid in M+1. Only the day is unknown, and
+    the day barely matters because everything aggregates monthly.
+
+    So: day `credit_cards.due_day` (seeded from that card's last real due date)
+    of the month after the statement period.
+    """
+    return func.cast(
+        func.make_date(CreditCardStatement.year, CreditCardStatement.month, 1)
+        + func.make_interval(0, 1, 0, func.coalesce(CreditCard.due_day, DEFAULT_DUE_DAY) - 1),
+        Date,
+    )
+
+
+def estimate_due_date_py(year: int, month: int, due_day: int | None) -> date:
+    """Python mirror of `estimated_due_date()` — same rule, for API responses.
+
+    Kept next to the SQL version on purpose: if the two ever drift, the number
+    the dashboard aggregates and the date shown on the statement stop matching.
+    """
+    y, m = (year + 1, 1) if month == 12 else (year, month + 1)
+    day = due_day or DEFAULT_DUE_DAY
+    last = calendar.monthrange(y, m)[1]
+    return date(y, m, min(day, last))
+
+
+def cash_out_date():
+    """When an expense actually takes money out.
+
+    A card purchase doesn't move money on the purchase date — it moves when the
+    statement is paid, a month later ("las tarjetas se pagan a mes vencido").
+    So a card-linked expense cashes out on its statement's due date, real or
+    estimated; anything else (cash, immediate purchase) on its own date.
+
+    Falling back straight to `expense_date` for a statement without a due date
+    would silently revert to purchase-date accounting for exactly the rows that
+    need this most — every future instalment.
 
     Requires the outer joins in `with_statement()`.
     """
-    return func.coalesce(CreditCardStatement.due_date, ExpenseEntry.expense_date)
+    return func.coalesce(
+        CreditCardStatement.due_date,
+        estimated_due_date(),
+        ExpenseEntry.expense_date,
+    )
 
 
 def with_statement(q):
-    """Attach each expense entry to its card statement, if it came from one."""
+    """Attach each expense entry to its card statement and card, if any."""
     return (
         q.select_from(ExpenseEntry)
         .outerjoin(CreditCardItem, CreditCardItem.expense_entry_id == ExpenseEntry.id)
         .outerjoin(CreditCardStatement, CreditCardStatement.id == CreditCardItem.statement_id)
+        .outerjoin(CreditCard, CreditCard.id == CreditCardStatement.card_id)
     )
 
 

@@ -216,7 +216,8 @@ async def list_statements(
         )
         .order_by(CreditCardStatement.year.desc(), CreditCardStatement.month.desc())
     )
-    return [StatementOut.from_orm_with_total(s) for s in stmts.all()]
+    due_day = await db.scalar(select(CreditCard.due_day).where(CreditCard.id == card_id))
+    return [StatementOut.from_orm_with_total(s, due_day) for s in stmts.all()]
 
 
 @router.post("/{card_id}/statements", response_model=StatementOut, status_code=status.HTTP_201_CREATED)
@@ -253,7 +254,8 @@ async def create_statement(
     db.add(stmt)
     await db.commit()
     result = await db.scalar(_statement_query(stmt.id))
-    return StatementOut.from_orm_with_total(result)
+    due_day = await db.scalar(select(CreditCard.due_day).where(CreditCard.id == result.card_id))
+    return StatementOut.from_orm_with_total(result, due_day)
 
 
 @router.get("/statements/calendar", response_model=list[StatementCalendarOut])
@@ -313,7 +315,8 @@ async def update_statement(
 
     await db.commit()
     result = await db.scalar(_statement_query(stmt.id))
-    return StatementOut.from_orm_with_total(result)
+    due_day = await db.scalar(select(CreditCard.due_day).where(CreditCard.id == result.card_id))
+    return StatementOut.from_orm_with_total(result, due_day)
 
 
 @router.delete("/statements/{stmt_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -437,7 +440,8 @@ async def finalize_statement(
     stmt.status = "closed"
     await db.commit()
     result = await db.scalar(_statement_query(stmt_id))
-    return StatementOut.from_orm_with_total(result)
+    due_day = await db.scalar(select(CreditCard.due_day).where(CreditCard.id == result.card_id))
+    return StatementOut.from_orm_with_total(result, due_day)
 
 
 
