@@ -6,11 +6,10 @@ backend/firebase-credentials.json
 
 # Archivos de contexto locales (PDFs de resúmenes, datos personales, etc.)
 /context/
-backend/scripts/_staging/
-backend/scripts/_staging_bbva_mastercard/
-backend/scripts/_staging_naranjax/
-backend/scripts/_staging_banconacion/
-backend/scripts/_staging_banconacion_mc/
+# Un patrón, no una carpeta por banco: cada importador nuevo crea su propio
+# _staging_<banco>/ con resúmenes reales adentro, y listarlas de a una hizo que
+# tres quedaran expuestas en un repo público hasta que alguien las mirara.
+backend/scripts/_staging*/
 
 # Python
 __pycache__/
