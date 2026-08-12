@@ -102,6 +102,11 @@ async def get_month_summary(year: int, month: int) -> dict[str, Any]:
         },
         "usd": {
             "total_expenses_usd": f0(s.total_expenses_usd),
+            "holding_start": f0(s.usd_holding_start),
+            "bought": f0(s.usd_bought),
+            "sold": f0(s.usd_sold),
+            "earned": f0(s.usd_earned),
+            "paid": f0(s.usd_paid),
             "holding": f0(s.usd_holding),
             "holding_ars": f(s.usd_holding_ars),
             "rate": f(s.usd_rate, 4),
@@ -124,5 +129,9 @@ async def get_month_summary(year: int, month: int) -> dict[str, Any]:
             "van en el bloque 'usd'.",
             "ars_available = balance − fx_bought_ars + fx_sold_ars: comprar dólares "
             "no es gasto, pero mueve pesos.",
+            "El mes cierra en dos bolsillos y hay que informar los dos: en pesos "
+            "queda ars_available, y en dólares queda holding = holding_start + "
+            "bought + earned − sold − paid. Un balance alto con la tenencia "
+            "cayendo a cero no es un mes con sobrante: se consumieron ahorros.",
         ],
     })
