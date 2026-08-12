@@ -66,18 +66,23 @@ class MonthSummary(BaseModel):
     usd_holding_ars: Decimal | None
     # The dollar pocket as a chain that closes, so the dashboard can end the
     # month on both pockets instead of only on pesos:
-    #   usd_holding_start + usd_bought + usd_earned − usd_sold − usd_paid
-    #     == usd_holding
-    # (any remainder is an `initial`/`adjustment` operation dated inside the
-    # month). These are the month's flows measured with the same as-of clamp as
-    # the holding, which is what makes them reconcile — `total_expenses_usd` is
-    # the whole month by cash-out date and legitimately differs from `usd_paid`
-    # in the current month, where part of it hasn't been debited yet.
+    #   usd_holding_start + usd_initial + usd_bought + usd_earned
+    #     − usd_sold − usd_paid + usd_adjustments == usd_holding
+    # `usd_initial` is its own term rather than folded into the adjustments:
+    # the month a household declares its starting balance is a month where the
+    # whole holding appears out of nowhere, and calling that an "adjustment"
+    # reads as a correction of something that never happened.
+    # These are the month's flows measured with the same as-of clamp as the
+    # holding, which is what makes them reconcile — `total_expenses_usd` is the
+    # whole month by cash-out date and legitimately differs from `usd_paid` in
+    # the current month, where part of it hasn't been debited yet.
     usd_holding_start: Decimal
+    usd_initial: Decimal
     usd_bought: Decimal
     usd_sold: Decimal
     usd_earned: Decimal
     usd_paid: Decimal
+    usd_adjustments: Decimal
     usd_rate: Decimal | None
     usd_rate_type: str
     mortgage_payment: Decimal | None
@@ -268,10 +273,12 @@ async def month_summary(
         usd_holding=holding.holding,
         usd_holding_ars=usd_holding_ars,
         usd_holding_start=opening.holding,
+        usd_initial=holding.initial - opening.initial,
         usd_bought=holding.bought - opening.bought,
         usd_sold=holding.sold - opening.sold,
         usd_earned=holding.earned - opening.earned,
         usd_paid=holding.spent - opening.spent,
+        usd_adjustments=holding.adjustments - opening.adjustments,
         usd_rate=usd_rate,
         usd_rate_type=rate_type,
         mortgage_payment=mortgage_payment,

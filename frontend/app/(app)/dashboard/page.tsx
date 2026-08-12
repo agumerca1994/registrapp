@@ -65,10 +65,12 @@ interface MonthSummary {
   ars_available: number;
   usd_holding: number;
   usd_holding_start: number;
+  usd_initial: number;
   usd_bought: number;
   usd_sold: number;
   usd_earned: number;
   usd_paid: number;
+  usd_adjustments: number;
   usd_holding_ars: number | null;
   usd_rate: number | null;
   usd_rate_type: string;
@@ -337,16 +339,17 @@ export default function DashboardPage() {
     if (!data) return null;
     const start = Number(data.usd_holding_start);
     const end = Number(data.usd_holding);
+    const initial = Number(data.usd_initial);
     const bought = Number(data.usd_bought);
     const sold = Number(data.usd_sold);
     const earned = Number(data.usd_earned);
     const paid = Number(data.usd_paid);
-    if (!start && !end && !bought && !sold && !earned && !paid) return null;
-    // `initial`/`adjustment` operations dated inside the month move the holding
-    // without being a buy, a sale or a payment. Folding them in as a residual
-    // keeps the chain adding up instead of silently missing a line.
-    const other = end - (start + bought + earned - sold - paid);
-    return { start, end, bought, sold, earned, paid, other, net: end - start };
+    const adjustments = Number(data.usd_adjustments);
+    if (!start && !end && !initial && !bought && !sold && !earned && !paid && !adjustments) return null;
+    // Backstop, not a term: the chain above is exhaustive, so this is 0 unless
+    // a new operation type ever lands without a row of its own here.
+    const other = end - (start + initial + bought + earned - sold - paid + adjustments);
+    return { start, end, initial, bought, sold, earned, paid, adjustments, other, net: end - start };
   })();
 
   // Last 4 months with real income — filtered before slicing so future
@@ -501,6 +504,9 @@ export default function DashboardPage() {
                     {usdPocket && (
                       <div className={`space-y-1 ${data.fx_bought_ars > 0 || data.fx_sold_ars > 0 ? "sm:border-l sm:border-border/60 sm:pl-4" : ""}`}>
                         <ChainRow label="Tenía al inicio" value={formatUSD(usdPocket.start)} />
+                        {usdPocket.initial !== 0 && (
+                          <ChainRow op="+" label="Saldo inicial declarado" value={formatUSD(usdPocket.initial)} />
+                        )}
                         {usdPocket.bought > 0 && (
                           <ChainRow op="+" label="Compré" value={formatUSD(usdPocket.bought)} />
                         )}
@@ -513,12 +519,12 @@ export default function DashboardPage() {
                         {usdPocket.paid > 0 && (
                           <ChainRow op="−" label="Pagué" value={formatUSD(usdPocket.paid)} />
                         )}
-                        {Math.abs(usdPocket.other) >= 0.005 && (
-                          <ChainRow
-                            op={usdPocket.other >= 0 ? "+" : "−"} label="Ajustes"
-                            value={formatUSD(Math.abs(usdPocket.other))}
-                          />
-                        )}
+                        {[usdPocket.adjustments, usdPocket.other]
+                          .filter(v => Math.abs(v) >= 0.005)
+                          .map((v, i) => (
+                            <ChainRow key={i} op={v >= 0 ? "+" : "−"} label="Ajustes"
+                              value={formatUSD(Math.abs(v))} />
+                          ))}
                         <ChainRow op="=" strong label="Quedan en dólares" value={formatUSD(usdPocket.end)} />
                       </div>
                     )}
