@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "@/lib/api";
 import { formatARS, formatDate, parseAmount, getErrorMessage } from "@/lib/utils";
-import { Plus, Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle, ChevronRight, CalendarDays, ChevronLeft } from "lucide-react";
+import { Plus, Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle, ChevronRight, CalendarDays, ChevronLeft, Search, ArrowUp, ArrowDown } from "lucide-react";
 import ProductTour from "@/components/ProductTour";
 import type { Step } from "react-joyride";
 import { Card } from "@/components/ui/card";
@@ -41,6 +41,13 @@ const INCOME_TYPE_LABELS: Record<string, string> = {
 const EMPTY_FORM = {
   source_id: "", bruto: "", deducciones: "", amount: "",
   period_date: "", notes: "", currency: "ARS" as "ARS" | "USD",
+};
+
+const FILTER_INPUT = "w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground";
+
+type SortKey = "date" | "source" | "amount";
+const SORT_LABELS: Record<SortKey, string> = {
+  date: "Fecha", source: "Fuente", amount: "Monto",
 };
 
 // ── Entry detail modal ─────────────────────────────────────────────────────────
@@ -370,16 +377,58 @@ export default function IncomePage() {
   const next = () => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
   const periodLabel = format(new Date(year, month - 1, 1), "MMMM yyyy", { locale: es });
 
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [sort, setSort] = useState<SortKey>("date");
+  const [order, setOrder] = useState<"asc" | "desc">("desc");
+
+  // One request when the user stops typing, not one per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Any active filter takes the list out of the month view and into the whole
+  // history: a search that only looks inside the month currently on screen
+  // would miss what the user is looking for and give no hint that it did.
+  const filtering = !!(debouncedSearch || sourceFilter || dateFrom || dateTo);
+
+  const clearFilters = () => {
+    setSearch(""); setDebouncedSearch(""); setSourceFilter("");
+    setDateFrom(""); setDateTo("");
+  };
+
   const load = async () => {
+    const params = filtering
+      ? {
+          q: debouncedSearch || undefined,
+          source_id: sourceFilter || undefined,
+          date_from: dateFrom || undefined,
+          date_to: dateTo || undefined,
+          sort, order,
+        }
+      : { year, month, sort, order };
     const [e, s] = await Promise.all([
-      api.get("/income/entries", { params: { year, month } }),
+      api.get("/income/entries", { params }),
       api.get("/income/sources"),
     ]);
     setEntries(e.data);
     setSources(s.data);
+    setSelected(new Set());
   };
 
-  useEffect(() => { load(); }, [year, month]);
+  useEffect(() => { load(); },
+    [year, month, debouncedSearch, sourceFilter, dateFrom, dateTo, sort, order]);
+
+  // Clicking the column you're already sorting by flips the direction; a new
+  // column starts on the direction that reads as "most useful first".
+  const toggleSort = (key: SortKey) => {
+    if (sort === key) setOrder(o => (o === "asc" ? "desc" : "asc"));
+    else { setSort(key); setOrder(key === "source" ? "asc" : "desc"); }
+  };
   const updateBrutoOrDed = (key: "bruto" | "deducciones", value: string) => {
     setForm(prev => {
       const next = { ...prev, [key]: value };
@@ -582,17 +631,89 @@ export default function IncomePage() {
         </Card>
       )}
 
-      <div className="flex justify-end">
-        <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
-          <CalendarDays className="w-4 h-4 text-primary shrink-0" />
-          <button onClick={prev} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
-          <button onClick={next} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-            <ChevronRight className="w-4 h-4" />
-          </button>
+      {/* Search + filters. Fuente and notas are searched with one box: income
+          has no "categoría"/"descripción" column, and which of the two the
+          user means depends on how they filled the entry in. */}
+      <Card className="p-3 md:p-4 space-y-3">
+        <div className="relative">
+          <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            className={`${FILTER_INPUT} pl-9`}
+            placeholder="Buscar por fuente o notas..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
         </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Fuente</label>
+            <select className={`mt-1 ${FILTER_INPUT}`} value={sourceFilter}
+              onChange={e => setSourceFilter(e.target.value)}>
+              <option value="">Todas</option>
+              {sources.map(s => (
+                <option key={s.id} value={s.id}>{s.name} ({INCOME_TYPE_LABELS[s.income_type]})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Desde</label>
+            <input type="date" className={`mt-1 ${FILTER_INPUT}`} value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Hasta</label>
+            <input type="date" className={`mt-1 ${FILTER_INPUT}`} value={dateTo}
+              onChange={e => setDateTo(e.target.value)} />
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-muted-foreground">Ordenar por</span>
+          {(Object.keys(SORT_LABELS) as SortKey[]).map(key => (
+            <button key={key} onClick={() => toggleSort(key)}
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium border-2 transition-colors ${
+                sort === key
+                  ? "border-ink bg-primary text-primary-foreground"
+                  : "border-transparent bg-muted text-muted-foreground hover:bg-accent"
+              }`}>
+              {SORT_LABELS[key]}
+              {sort === key && (order === "asc"
+                ? <ArrowUp className="w-3 h-3" />
+                : <ArrowDown className="w-3 h-3" />)}
+            </button>
+          ))}
+          {filtering && (
+            <button onClick={clearFilters}
+              className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+              <X className="w-3.5 h-3.5" /> Limpiar filtros
+            </button>
+          )}
+        </div>
+      </Card>
+
+      {/* While a filter is on, the month selector is gone rather than merely
+          ignored — leaving it visible but inert is what makes a user think the
+          search is scoped to the month it shows. */}
+      <div className="flex justify-end">
+        {filtering ? (
+          <div className="inline-flex items-center gap-2 rounded-full border-2 border-ink bg-card shadow-chip px-3 py-1.5">
+            <Search className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-sm font-bold text-foreground">
+              {entries.length} resultado{entries.length !== 1 ? "s" : ""}
+              <span className="hidden sm:inline"> en todo el historial</span>
+            </span>
+          </div>
+        ) : (
+          <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
+            <CalendarDays className="w-4 h-4 text-primary shrink-0" />
+            <button onClick={prev} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
+            <button onClick={next} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* List */}
@@ -625,7 +746,11 @@ export default function IncomePage() {
         )}
 
         {entries.length === 0 ? (
-          <p className="p-6 text-muted-foreground text-sm">No hay ingresos registrados en {periodLabel}.</p>
+          <p className="p-6 text-muted-foreground text-sm">
+            {filtering
+              ? "Ningún ingreso coincide con la búsqueda."
+              : `No hay ingresos registrados en ${periodLabel}.`}
+          </p>
         ) : entries.map(entry => (
           <div key={entry.id} className="flex items-center gap-2 px-3 md:px-4 py-3">
             <input
@@ -640,6 +765,12 @@ export default function IncomePage() {
             >
               <div className="flex-1 min-w-0">
                 <span className="block text-sm font-medium text-foreground truncate">{entry.source.name}</span>
+                {/* Only while searching: a hit on the notes is otherwise
+                    invisible in the row, so the result looks unrelated to
+                    what was typed. */}
+                {filtering && entry.notes && (
+                  <span className="block text-xs text-muted-foreground truncate">{entry.notes}</span>
+                )}
                 <span className="block sm:hidden text-xs text-muted-foreground">{formatDate(entry.period_date)}</span>
               </div>
               <span className="hidden sm:block w-[10ch] shrink-0 text-xs text-muted-foreground text-right truncate">{formatDate(entry.period_date)}</span>

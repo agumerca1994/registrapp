@@ -82,6 +82,10 @@ All routers follow the pattern: `Depends(get_current_user)` + `Depends(get_db)` 
 
 **Entry filtering by month**: `GET /income/entries` and `GET /expenses/entries` accept optional `?year=&month=` query params, filtering with SQLAlchemy `extract()`. The dashboard fetches entries pre-filtered to the current calendar month for pie charts.
 
+**Searching income (`GET /income/entries`)** also takes `q`, `source_id`, `date_from`, `date_to`, `sort` (`date`/`source`/`amount`) and `order`. Two things about it are deliberate and easy to undo by accident:
+- `q` is matched against **both the source name and `notes`**. Income has no "categoría" or "descripción" column — the source is what plays the first role and the free-text notes the second — and which one the user means depends on how they filled the entry in, so one box searches both. Matching is accent-insensitive via `translate()` on both sides rather than `unaccent()`, which would need the extension installed by a migration.
+- **A filter takes the list out of the month view entirely.** The frontend drops `year`/`month` as soon as any filter is set and hides the month selector rather than leaving it visible but inert — a search scoped to the month that happens to be on screen misses what the user is looking for and gives no sign that it did. The endpoint doesn't enforce this; passing both just intersects.
+
 **Macro sync**: `POST /macro/sync-bcra` fetches UVA, inflation, and USD official rates from `api.argentinadatos.com` using `ESTADISTICAS_BCRA_TOKEN` from env, then upserts into `MacroVariable`. Fallback strategy: exact date match → last record of same month → last record before target date.
 
 **Bulk income import**: `POST /income/import` accepts CSV or Excel. Flexible date parsing handles MM-YYYY, DD/MM/YYYY, YYYY-MM-DD, and others. Duplicate rows (same tenant + source + date + amount) are silently skipped. Response: `{"imported": N, "skipped": N, "errors": []}` with per-row error messages.

@@ -4,9 +4,11 @@ import csv as _csv
 from datetime import date as _date
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, extract
+from sqlalchemy import select, extract, func, or_
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
@@ -128,25 +130,79 @@ async def create_source(
 
 # ── Entries ────────────────────────────────────────────────────────────────────
 
+# Postgres' ILIKE is accent-sensitive, and nobody types "Inversión" with the
+# accent into a search box. `unaccent()` would need an extension (and a
+# migration to install it), so both sides of the comparison get folded with
+# translate() instead — same result, no extension.
+_ACCENTED = "áéíóúüñÁÉÍÓÚÜÑ"
+_PLAIN = "aeiouunAEIOUUN"
+
+
+def _fold(col):
+    return func.translate(func.lower(col), _ACCENTED.lower(), _PLAIN.lower())
+
+
+SORT_COLUMNS = {
+    "date": IncomeEntry.period_date,
+    "source": IncomeSource.name,
+    "amount": IncomeEntry.amount,
+}
+
+
 @router.get("/entries", response_model=list[IncomeEntryOut])
 async def list_entries(
     year: int | None = None,
     month: int | None = None,
+    q: str | None = Query(None, description="Coincidencia parcial en fuente o notas"),
+    source_id: int | None = None,
+    date_from: _date | None = None,
+    date_to: _date | None = None,
+    sort: Literal["date", "source", "amount"] = "date",
+    order: Literal["asc", "desc"] = "desc",
     firebase_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """Income entries for a month, or across all of them when searching.
+
+    `year`/`month` and the search filters are meant to be alternatives, not
+    combined: the frontend drops the month as soon as any filter is set, since
+    a search that only looks inside the month currently on screen isn't a
+    search. Nothing here enforces that — passing both just intersects.
+    """
     user = await _get_db_user(firebase_user, db)
-    q = (
+    stmt = (
         select(IncomeEntry)
+        .join(IncomeEntry.source)
         .where(IncomeEntry.tenant_id == user.tenant_id)
         .options(selectinload(IncomeEntry.source))
-        .order_by(IncomeEntry.period_date.desc())
     )
     if year:
-        q = q.where(extract("year", IncomeEntry.period_date) == year)
+        stmt = stmt.where(extract("year", IncomeEntry.period_date) == year)
     if month:
-        q = q.where(extract("month", IncomeEntry.period_date) == month)
-    result = await db.scalars(q)
+        stmt = stmt.where(extract("month", IncomeEntry.period_date) == month)
+    if source_id:
+        stmt = stmt.where(IncomeEntry.source_id == source_id)
+    if date_from:
+        stmt = stmt.where(IncomeEntry.period_date >= date_from)
+    if date_to:
+        stmt = stmt.where(IncomeEntry.period_date <= date_to)
+    if q and q.strip():
+        # One term, matched against both the source name and the free-text
+        # notes: "categoría" and "descripción" aren't columns here, and the
+        # user means either depending on how they filled the entry in.
+        term = f"%{q.strip().translate(str.maketrans(_ACCENTED, _PLAIN)).lower()}%"
+        stmt = stmt.where(or_(
+            _fold(IncomeSource.name).like(term),
+            _fold(func.coalesce(IncomeEntry.notes, "")).like(term),
+        ))
+
+    col = SORT_COLUMNS[sort]
+    # `id` breaks ties so paging through equal dates/amounts is stable.
+    stmt = stmt.order_by(
+        col.asc() if order == "asc" else col.desc(),
+        IncomeEntry.id.desc(),
+    )
+    result = await db.scalars(stmt)
     return result.all()
 
 
