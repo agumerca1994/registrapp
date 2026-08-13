@@ -1,6 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import date as _date
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, extract
+from sqlalchemy import select, extract, func, or_
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
@@ -10,6 +13,7 @@ from app.models.expense import ExpenseCategory, ExpenseEntry
 from app.models.mortgage import MortgageRecord
 from app.models.shared_expense import SharedExpenseSplit
 from app.services.currency import get_or_create_usd_category
+from app.services.search import fold, fold_term
 from app.schemas.expense import (
     ExpenseCategoryCreate, ExpenseCategoryOut,
     ExpenseEntryCreate, ExpenseEntryUpdate, ExpenseEntryOut,
@@ -55,25 +59,80 @@ async def create_category(
 
 # ── Entries ────────────────────────────────────────────────────────────────────
 
+# Amount sorting keeps each currency in its own block instead of interleaving
+# them — the list mixes ARS and USD rows and the app never compares amounts
+# across currencies.
+SORT_COLUMNS = {
+    "date": [ExpenseEntry.expense_date],
+    "category": [ExpenseCategory.name],
+    "amount": [ExpenseEntry.currency, ExpenseEntry.amount],
+}
+
+
 @router.get("/entries", response_model=list[ExpenseEntryOut])
 async def list_entries(
     year: int | None = None,
     month: int | None = None,
+    q: str | None = Query(None, description="Coincidencia parcial en descripción, categoría, comercio o notas"),
+    category_id: int | None = None,
+    currency: str | None = None,
+    date_from: _date | None = None,
+    date_to: _date | None = None,
+    sort: Literal["date", "category", "amount"] = "date",
+    order: Literal["asc", "desc"] = "desc",
     firebase_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """Expenses for a month, or across all of them when searching.
+
+    Dates are the entry's own `expense_date`, not `cash_out_date()`: this is
+    the ledger the user typed, and a row has to be findable by the date printed
+    next to it. The dashboard is the one that reports by when the money left.
+
+    `year`/`month` and the filters are alternatives — the frontend drops the
+    month as soon as a filter is set, since a search that only looks inside the
+    month on screen isn't a search. Nothing here enforces it; both just
+    intersect.
+    """
     user = await _get_db_user(firebase_user, db)
-    q = (
+    stmt = (
         select(ExpenseEntry)
+        .join(ExpenseEntry.category)
         .where(ExpenseEntry.tenant_id == user.tenant_id)
         .options(selectinload(ExpenseEntry.category))
-        .order_by(ExpenseEntry.expense_date.desc())
     )
     if year:
-        q = q.where(extract("year", ExpenseEntry.expense_date) == year)
+        stmt = stmt.where(extract("year", ExpenseEntry.expense_date) == year)
     if month:
-        q = q.where(extract("month", ExpenseEntry.expense_date) == month)
-    result = await db.scalars(q)
+        stmt = stmt.where(extract("month", ExpenseEntry.expense_date) == month)
+    if category_id:
+        stmt = stmt.where(ExpenseEntry.category_id == category_id)
+    if currency:
+        stmt = stmt.where(ExpenseEntry.currency == currency.upper())
+    if date_from:
+        stmt = stmt.where(ExpenseEntry.expense_date >= date_from)
+    if date_to:
+        stmt = stmt.where(ExpenseEntry.expense_date <= date_to)
+    if q and q.strip():
+        # A row shows `description or category.name` and, for card charges, the
+        # card alias in `entity`. All three are what the user reads on screen,
+        # so all three have to be searchable — plus `notes`, which is where the
+        # detail they half-remember usually ended up.
+        term = fold_term(q)
+        stmt = stmt.where(or_(
+            fold(func.coalesce(ExpenseEntry.description, "")).like(term),
+            fold(func.coalesce(ExpenseEntry.notes, "")).like(term),
+            fold(func.coalesce(ExpenseEntry.entity, "")).like(term),
+            fold(ExpenseCategory.name).like(term),
+        ))
+
+    cols = SORT_COLUMNS[sort]
+    # `id` breaks ties so equal dates/amounts keep a stable order.
+    stmt = stmt.order_by(
+        *[c.asc() if order == "asc" else c.desc() for c in cols],
+        ExpenseEntry.id.desc(),
+    )
+    result = await db.scalars(stmt)
     return result.all()
 
 

@@ -15,6 +15,7 @@ from app.core.database import get_db
 from app.core.firebase import get_current_user
 from app.models.user import User
 from app.models.income import IncomeSource, IncomeEntry, IncomeType
+from app.services.search import fold, fold_term
 from app.schemas.income import (
     IncomeSourceCreate, IncomeSourceOut,
     IncomeEntryCreate, IncomeEntryUpdate, IncomeEntryOut,
@@ -130,22 +131,13 @@ async def create_source(
 
 # ── Entries ────────────────────────────────────────────────────────────────────
 
-# Postgres' ILIKE is accent-sensitive, and nobody types "Inversión" with the
-# accent into a search box. `unaccent()` would need an extension (and a
-# migration to install it), so both sides of the comparison get folded with
-# translate() instead — same result, no extension.
-_ACCENTED = "áéíóúüñÁÉÍÓÚÜÑ"
-_PLAIN = "aeiouunAEIOUUN"
-
-
-def _fold(col):
-    return func.translate(func.lower(col), _ACCENTED.lower(), _PLAIN.lower())
-
-
+# Amount sorting lists each currency in its own block instead of interleaving
+# them: "500" in dollars and "500" in pesos are not neighbours, and the app's
+# rule is that amounts in different currencies never get compared.
 SORT_COLUMNS = {
-    "date": IncomeEntry.period_date,
-    "source": IncomeSource.name,
-    "amount": IncomeEntry.amount,
+    "date": [IncomeEntry.period_date],
+    "source": [IncomeSource.name],
+    "amount": [IncomeEntry.currency, IncomeEntry.amount],
 }
 
 
@@ -190,16 +182,16 @@ async def list_entries(
         # One term, matched against both the source name and the free-text
         # notes: "categoría" and "descripción" aren't columns here, and the
         # user means either depending on how they filled the entry in.
-        term = f"%{q.strip().translate(str.maketrans(_ACCENTED, _PLAIN)).lower()}%"
+        term = fold_term(q)
         stmt = stmt.where(or_(
-            _fold(IncomeSource.name).like(term),
-            _fold(func.coalesce(IncomeEntry.notes, "")).like(term),
+            fold(IncomeSource.name).like(term),
+            fold(func.coalesce(IncomeEntry.notes, "")).like(term),
         ))
 
-    col = SORT_COLUMNS[sort]
+    cols = SORT_COLUMNS[sort]
     # `id` breaks ties so paging through equal dates/amounts is stable.
     stmt = stmt.order_by(
-        col.asc() if order == "asc" else col.desc(),
+        *[c.asc() if order == "asc" else c.desc() for c in cols],
         IncomeEntry.id.desc(),
     )
     result = await db.scalars(stmt)
