@@ -66,6 +66,7 @@ backend/app/
               #   internal_logs, oauth (MCP connector)
   services/   # currency.py  — RATE_TYPES, USD holding formula, USD category helper
               # analytics.py — tenant-scoped aggregations, auth-free (dashboard + MCP)
+              # search.py    — accent-folded LIKE shared by the list endpoints' search boxes
               # oauth_provider.py, mcp_tokens.py, rate_limit.py — MCP connector auth
   mcp_server/ # Read-only MCP connector served at /mcp (see "Conector MCP" below)
 ```
@@ -82,7 +83,7 @@ All routers follow the pattern: `Depends(get_current_user)` + `Depends(get_db)` 
 
 **Two distinct invite flows in Settings — don't conflate them**: the "Tu hogar" card's WhatsApp button (`shareHouseholdCodeByWhatsApp`) opens `wa.me/?text=...` (no fixed number, lets the user pick any contact) with a message containing the tenant join code — this invites someone into *your* household. `InviteFriendSection` ("Invitar amigo") looks similar (also has Email/WhatsApp send options) but sends a generic app referral with no join code — the recipient signs up and creates their *own* separate household. Both build their message via a shared helper (`buildHouseholdInviteMessage` vs `buildFriendInviteMessage`) — reuse those instead of inlining a third invite message if this grows again.
 
-**Entry filtering by month**: `GET /income/entries` and `GET /expenses/entries` accept optional `?year=&month=` query params, filtering with SQLAlchemy `extract()`. The dashboard fetches entries pre-filtered to the current calendar month for pie charts.
+**Entry filtering by month**: `GET /income/entries` and `GET /expenses/entries` accept optional `?year=&month=` query params, filtering with SQLAlchemy `extract()`. The dashboard fetches entries pre-filtered to the current calendar month for pie charts. Both also take the search/filter/sort params described under "The two server-side search endpoints share their matching rules" in the frontend section — `year`/`month` and those filters are alternatives, not companions.
 
 **Searching income (`GET /income/entries`)** also takes `q`, `source_id`, `date_from`, `date_to`, `sort` (`date`/`source`/`amount`) and `order`. Two things about it are deliberate and easy to undo by accident:
 - `q` is matched against **both the source name and `notes`**. Income has no "categoría" or "descripción" column — the source is what plays the first role and the free-text notes the second — and which one the user means depends on how they filled the entry in, so one box searches both. Matching is accent-insensitive via `translate()` on both sides rather than `unaccent()`, which would need the extension installed by a migration.
@@ -228,12 +229,16 @@ frontend/app/
   (auth)/login/     # Google sign-in page
   onboarding/       # First-time tenant creation
   (app)/            # Protected layout (sidebar + auth guard)
-    dashboard/      # Monthly summary cards + pie charts (categories, income sources, USD by
-                    #   description) — all always current calendar month, independent of the
-                    #   month selector used for the summary cards
-    income/         # Income entries with bruto/deducciones/neto + bulk import from Excel/CSV
-    expenses/       # Expense entries; credit card entries show badge + "Ver en resumen" only
-    divisas/        # USD holding (hero) + monthly buy/sell/spend flow + operations list
+    dashboard/      # Summary hero (how the month closed, both currencies) + stat tiles +
+                    #   pie charts (categories, income sources, USD by description) — the
+                    #   charts are always the current calendar month, independent of the
+                    #   month selector the hero and tiles follow
+    income/         # Income entries with bruto/deducciones/neto; search + filters, entry and
+                    #   source forms in modals, "+" FAB, bulk import behind the header's ⋮
+    expenses/       # Expense entries; search + filters, entry and category forms in modals,
+                    #   "+" FAB; credit card entries show badge + "Ver en resumen" only
+    divisas/        # USD holding (summary hero) + monthly buy/sell/spend flow + operations
+                    #   list; operation form in a modal, "+" FAB, opening balance behind the ⋮
     mortgage/       # UVA mortgage payment records
     macro/          # Macro variables (UVA value, inflation, USD)
     settings/       # User/tenant settings
@@ -252,6 +257,14 @@ frontend/
   components/ProductTour.tsx  # react-joyride wrapper; tracks "seen" per tourId in localStorage
                               #   (never in the backend), takes a `requireDesktop` flag for tours
                               #   whose targets only exist in the desktop Sidebar (hidden on mobile)
+  components/ui/              # The shared kit every screen builds from — see the sections
+    summary-card.tsx          #   below for the rules each one encodes:
+    filters.tsx               #   hero summary / filter+search bar / form fields /
+    form.tsx                  #   listbox machinery / the one calendar / floating "+".
+    listbox.tsx               #   Adding a screen means composing these, not restyling
+    calendar.tsx              #   `<select>`, `<input type="date">` or a bare grid again.
+    fab.tsx
+    card.tsx, button.tsx, chip.tsx
 ```
 
 **The summary hero always uses `components/ui/summary-card.tsx` — never a new shape.** The one `variant="hero"` card at the top of a screen (dashboard, `/divisas`) answers "where do I stand" and always reads as the same three bands:
@@ -377,7 +390,7 @@ useEffect(() => { setMounted(true); }, []);
 - Use `IF NOT EXISTS` for idempotency — if a deploy fails mid-migration, Alembic won't mark it complete and will retry on next deploy. Use `op.execute(sa.text("ALTER TABLE ... ADD COLUMN IF NOT EXISTS ..."))` and `CREATE UNIQUE INDEX IF NOT EXISTS` to make migrations safe to re-run
 
 ### Form field visual consistency
-All form inputs (text, number, date, select) must share the same CSS classes so they look identical. Define a constant like `const INPUT = "w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"` at the top of each page and apply it everywhere. Never let the browser default style for `type="date"` take over — always force `bg-white text-gray-900`.
+Import `FIELD`, `FormGrid`, `SelectField` and `DateField` from `components/ui/form.tsx` — don't declare a per-page `INPUT` constant, and don't reach for a bare `<select>` or `<input type="date">`. The rules and the reasons are in the frontend section above; the short version is that the two native controls render an OS widget for the part CSS can't restyle, and that a field with no `min-w-0` stretches its whole column to fit its longest option.
 
 ### Amount fields
 Use `type="text" inputMode="decimal" pattern="[0-9.,]*"` instead of `type="number"` for currency inputs. `type="number"` causes UX issues on mobile and with large Argentine peso values.
