@@ -5,11 +5,18 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "@/lib/api";
 import { formatARS, formatDate, parseAmount, getErrorMessage } from "@/lib/utils";
-import { Plus, Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle, ChevronRight, CalendarDays, ChevronLeft, Search, ArrowUp, ArrowDown } from "lucide-react";
+import { Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle, ChevronRight, CalendarDays, ChevronLeft, Search, SlidersHorizontal, MoreVertical } from "lucide-react";
+import {
+  FilterBar, FilterRow, FilterPanel, SortChip, FilterChip, PillSelect,
+  PillDateRange, ClearFilters, CollapsibleSearch,
+} from "@/components/ui/filters";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import ProductTour from "@/components/ProductTour";
 import type { Step } from "react-joyride";
 import { Card } from "@/components/ui/card";
+import { Fab } from "@/components/ui/fab";
 import { Button } from "@/components/ui/button";
+import { FIELD, FormGrid, SelectField, DateField } from "@/components/ui/form";
 
 const INCOME_TOUR_STEPS: Step[] = [
   {
@@ -43,12 +50,55 @@ const EMPTY_FORM = {
   period_date: "", notes: "", currency: "ARS" as "ARS" | "USD",
 };
 
-const FILTER_INPUT = "w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground";
+// A new entry defaults to today — the overwhelmingly common case, and it saves
+// the user a trip through the calendar to pick the date they're standing on.
+const newEntryForm = () => ({ ...EMPTY_FORM, period_date: format(new Date(), "yyyy-MM-dd") });
 
 type SortKey = "date" | "source" | "amount";
 const SORT_LABELS: Record<SortKey, string> = {
   date: "Fecha", source: "Fuente", amount: "Monto",
 };
+
+// ── New source modal ───────────────────────────────────────────────────────────
+
+// Opened from the `+` next to the Fuente combo inside the entry form, the way
+// a card statement offers "nueva categoría" next to its own combo: creating the
+// thing you're missing shouldn't cost you the form you already started filling.
+function NewSourceModal({ onSave, onClose }: {
+  onSave: (src: { name: string; income_type: string }) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [form, setForm] = useState({ name: "", income_type: "salary" });
+  const [saving, setSaving] = useState(false);
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
+      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-foreground">Nueva fuente</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+        </div>
+        <form onSubmit={async e => { e.preventDefault(); setSaving(true); await onSave(form); setSaving(false); }} className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Nombre</label>
+            <input className={FIELD} placeholder="Sueldo" autoFocus
+              value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Tipo</label>
+            <SelectField
+              value={form.income_type}
+              onChange={v => setForm(p => ({ ...p, income_type: v }))}
+              options={Object.entries(INCOME_TYPE_LABELS).map(([v, l]) => ({ value: v, label: l }))} />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button type="submit" disabled={saving}>{saving ? "Guardando..." : "Crear"}</Button>
+          </div>
+        </form>
+      </Card>
+    </div>
+  );
+}
 
 // ── Entry detail modal ─────────────────────────────────────────────────────────
 
@@ -239,7 +289,7 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormGrid>
                 {[
                   ["date_col", "Columna de fecha *", true],
                   ["amount_col", "Columna de neto *", true],
@@ -249,41 +299,38 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
                 ].map(([key, label, required]) => (
                   <div key={key as string}>
                     <label className="text-xs font-medium text-muted-foreground">{label as string}</label>
-                    <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                    <SelectField
                       value={mapping[key as keyof typeof mapping]}
-                      onChange={e => setMapping(m => ({ ...m, [key as string]: e.target.value }))}>
-                      {!required && <option value="">{NO_COL}</option>}
-                      {required && <option value="">— elegir —</option>}
-                      {preview.columns.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
+                      onChange={v => setMapping(m => ({ ...m, [key as string]: v }))}
+                      placeholder={required ? "— elegir —" : NO_COL}
+                      options={preview.columns.map(c => ({ value: c, label: c }))} />
                   </div>
                 ))}
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Fuente de ingreso *</label>
-                  <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
-                    value={mapping.source_id} onChange={e => setMapping(m => ({ ...m, source_id: e.target.value }))}>
-                    <option value="">+ Crear nueva fuente</option>
-                    {sources.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
+                  <SelectField
+                    value={mapping.source_id}
+                    onChange={v => setMapping(m => ({ ...m, source_id: v }))}
+                    placeholder="+ Crear nueva fuente"
+                    options={sources.map(s => ({ value: String(s.id), label: s.name }))} />
                 </div>
-              </div>
+              </FormGrid>
 
               {!mapping.source_id && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-muted rounded-xl p-4">
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Nombre *</label>
-                    <input className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card"
+                    <input className={FIELD}
                       placeholder="Ej: Sueldo Empresa"
                       value={mapping.new_source_name}
                       onChange={e => setMapping(m => ({ ...m, new_source_name: e.target.value }))} />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Tipo</label>
-                    <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card"
+                    <SelectField
                       value={mapping.new_source_type}
-                      onChange={e => setMapping(m => ({ ...m, new_source_type: e.target.value }))}>
-                      {Object.entries(INCOME_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                    </select>
+                      onChange={v => setMapping(m => ({ ...m, new_source_type: v }))}
+                      options={Object.entries(INCOME_TYPE_LABELS).map(([v, l]) => ({ value: v, label: l }))} />
                   </div>
                 </div>
               )}
@@ -361,7 +408,6 @@ export default function IncomePage() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [newSource, setNewSource] = useState({ name: "", income_type: "salary" });
   const [showSourceForm, setShowSourceForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -378,12 +424,16 @@ export default function IncomePage() {
   const periodLabel = format(new Date(year, month - 1, 1), "MMMM yyyy", { locale: es });
 
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [showCustomFilter, setShowCustomFilter] = useState(false);
   const [sourceFilter, setSourceFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [sort, setSort] = useState<SortKey>("date");
-  const [order, setOrder] = useState<"asc" | "desc">("desc");
+  // Null = no chip active, which the backend reads as its own default (most
+  // recent first). Same tri-state cycle as /tarjetas.
+  const [sort, setSort] = useState<SortKey | null>(null);
+  const [order, setOrder] = useState<"asc" | "desc">("asc");
 
   // One request when the user stops typing, not one per keystroke.
   useEffect(() => {
@@ -391,26 +441,24 @@ export default function IncomePage() {
     return () => clearTimeout(t);
   }, [search]);
 
+  const panelFilterActive = !!(sourceFilter || dateFrom || dateTo);
   // Any active filter takes the list out of the month view and into the whole
   // history: a search that only looks inside the month currently on screen
   // would miss what the user is looking for and give no hint that it did.
-  const filtering = !!(debouncedSearch || sourceFilter || dateFrom || dateTo);
-
-  const clearFilters = () => {
-    setSearch(""); setDebouncedSearch(""); setSourceFilter("");
-    setDateFrom(""); setDateTo("");
-  };
+  const filtering = !!debouncedSearch || panelFilterActive;
 
   const load = async () => {
+    // No chip active → the endpoint's own default ordering.
+    const ordering = { sort: sort ?? "date", order: sort ? order : "desc" };
     const params = filtering
       ? {
           q: debouncedSearch || undefined,
           source_id: sourceFilter || undefined,
           date_from: dateFrom || undefined,
           date_to: dateTo || undefined,
-          sort, order,
+          ...ordering,
         }
-      : { year, month, sort, order };
+      : { year, month, ...ordering };
     const [e, s] = await Promise.all([
       api.get("/income/entries", { params }),
       api.get("/income/sources"),
@@ -423,11 +471,11 @@ export default function IncomePage() {
   useEffect(() => { load(); },
     [year, month, debouncedSearch, sourceFilter, dateFrom, dateTo, sort, order]);
 
-  // Clicking the column you're already sorting by flips the direction; a new
-  // column starts on the direction that reads as "most useful first".
+  // Tap cycle: inactive -> asc -> desc -> inactive (back to the default).
   const toggleSort = (key: SortKey) => {
-    if (sort === key) setOrder(o => (o === "asc" ? "desc" : "asc"));
-    else { setSort(key); setOrder(key === "source" ? "asc" : "desc"); }
+    if (sort !== key) { setSort(key); setOrder("asc"); return; }
+    if (order === "asc") { setOrder("desc"); return; }
+    setSort(null);
   };
   const updateBrutoOrDed = (key: "bruto" | "deducciones", value: string) => {
     setForm(prev => {
@@ -482,12 +530,13 @@ export default function IncomePage() {
     setLoading(false);
   };
 
-  const handleAddSource = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await api.post("/income/sources", newSource);
-    setNewSource({ name: "", income_type: "salary" });
+  // Selects the source it just created, so the form the user was filling picks
+  // up where they left off instead of making them find it in the combo.
+  const handleAddSource = async (src: { name: string; income_type: string }) => {
+    const { data } = await api.post("/income/sources", src);
     setShowSourceForm(false);
     await load();
+    setForm(p => ({ ...p, source_id: String(data.id) }));
   };
 
   const handleDelete = async (id: number) => {
@@ -520,48 +569,65 @@ export default function IncomePage() {
     <div className="max-w-4xl space-y-4 md:space-y-6">
       <ProductTour tourId="income-intro" steps={INCOME_TOUR_STEPS} />
       {/* Header */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Ingresos</h2>
-        <div className="flex gap-1 md:gap-2 shrink-0">
-          <Button variant="outline" onClick={() => setShowSourceForm(true)}>
-            + Fuente
-          </Button>
-          <Button variant="outline" onClick={() => setShowImport(true)} data-tour="income-import">
-            <Upload className="w-3.5 h-3.5 shrink-0" />
-            <span className="hidden sm:inline">Importar</span>
-          </Button>
-          <Button onClick={() => { setEditId(null); setForm(EMPTY_FORM); netoManual.current = false; setShowForm(true); }} data-tour="income-add">
-            <Plus className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Registrar</span>
-          </Button>
+        <div className="flex items-center gap-1 shrink-0">
+          {filtering ? (
+            <div className="inline-flex items-center gap-2 rounded-full border-2 border-ink bg-card shadow-chip px-3 py-1.5">
+              <Search className="w-4 h-4 text-primary shrink-0" />
+              <span className="text-sm font-bold text-foreground">
+                {entries.length} resultado{entries.length !== 1 ? "s" : ""}
+                <span className="hidden sm:inline"> en todo el historial</span>
+              </span>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
+              <CalendarDays className="w-4 h-4 text-primary shrink-0" />
+              <button onClick={prev} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
+              <button onClick={next} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+          {/* Importing is a once-in-a-while action; in the header it competed
+              with the month, which is the control the user actually reaches
+              for on every visit. */}
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button data-tour="income-import" title="Más acciones"
+                className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors outline-none">
+                <MoreVertical className="w-5 h-5" />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content align="end" sideOffset={4}
+                className="bg-card border rounded-xl shadow-lg p-1 w-44 z-50">
+                <DropdownMenu.Item asChild>
+                  <button onClick={() => setShowImport(true)}
+                    className="flex items-center justify-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full outline-none cursor-pointer">
+                    <Upload className="w-4 h-4 text-muted-foreground" /> Importar
+                  </button>
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
         </div>
       </div>
 
-      {/* Source form */}
-      {showSourceForm && (
-        <Card className="p-4">
-          <form onSubmit={handleAddSource}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <input className="border rounded-lg px-3 py-2 text-sm" placeholder="Nombre de la fuente"
-              value={newSource.name} onChange={e => setNewSource(p => ({ ...p, name: e.target.value }))} required />
-            <select className="w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
-              value={newSource.income_type} onChange={e => setNewSource(p => ({ ...p, income_type: e.target.value }))}>
-              {Object.entries(INCOME_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
-          <div className="flex justify-end gap-2 mt-3">
-            <Button type="button" variant="outline" onClick={() => setShowSourceForm(false)}>Cancelar</Button>
-            <Button type="submit">Guardar</Button>
-          </div>
-          </form>
-        </Card>
-      )}
-
-      {/* Entry form */}
+      {/* Entry form — a modal, so registering doesn't push the list down the
+          page and the form keeps the focus while it's open. */}
       {showForm && (
-        <Card className="p-4 md:p-5">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={closeForm}>
+          <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg p-5 max-h-[92vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-foreground">{editId ? "Editar ingreso" : "Nuevo ingreso"}</h3>
+            <button type="button" onClick={closeForm} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          </div>
           <form onSubmit={handleSubmit} className="space-y-3">
-          <p className="text-sm font-medium text-foreground">{editId ? "Editar ingreso" : "Nuevo ingreso"}</p>
           {/* Same ARS/USD toggle position as the expense form. A USD income
               also adds to the dollar holding, not just to the USD balance. */}
           <div className="flex gap-2 mb-1">
@@ -578,38 +644,42 @@ export default function IncomePage() {
               Se suma a tu <strong>tenencia en dólares</strong> y al balance en USD, no al balance en pesos.
             </p>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <FormGrid>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Fuente</label>
-              <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
-                value={form.source_id} onChange={e => setForm(p => ({ ...p, source_id: e.target.value }))} required>
-                <option value="">Seleccioná una fuente</option>
-                {sources.map(s => <option key={s.id} value={s.id}>{s.name} ({INCOME_TYPE_LABELS[s.income_type]})</option>)}
-              </select>
+              <div className="flex gap-1.5">
+                <SelectField className="flex-1" required
+                  value={form.source_id}
+                  onChange={v => setForm(p => ({ ...p, source_id: v }))}
+                  placeholder="Fuente de ingreso"
+                  options={sources.map(s => ({ value: String(s.id), label: `${s.name} (${INCOME_TYPE_LABELS[s.income_type]})` }))} />
+                <button type="button" onClick={() => setShowSourceForm(true)} title="Nueva fuente"
+                  className="mt-1 px-2.5 border rounded-lg text-muted-foreground hover:bg-accent shrink-0 text-lg leading-none">+</button>
+              </div>
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Período</label>
-              <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
-                value={form.period_date} onChange={e => setForm(p => ({ ...p, period_date: e.target.value }))} required />
+              <DateField required
+                value={form.period_date} onChange={v => setForm(p => ({ ...p, period_date: v }))} />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Sueldo bruto ($)</label>
-              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
+              <label className="text-xs font-medium text-muted-foreground">Bruto (opcional)</label>
+              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
                 value={form.bruto} onChange={e => updateBrutoOrDed("bruto", e.target.value)} />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Deducciones ($)</label>
-              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
+              <label className="text-xs font-medium text-muted-foreground">Deducciones (opcional)</label>
+              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
                 value={form.deducciones} onChange={e => updateBrutoOrDed("deducciones", e.target.value)} />
             </div>
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-muted-foreground">
-                Sueldo neto ($)
+                Neto
                 {!netoManual.current && form.bruto && (
                   <span className="text-muted-foreground font-normal ml-1">— calculado automáticamente</span>
                 )}
               </label>
-              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
+              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
                 value={form.amount}
                 onFocus={() => { netoManual.current = true; }}
                 onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}
@@ -617,10 +687,10 @@ export default function IncomePage() {
             </div>
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-muted-foreground">Notas (opcional)</label>
-              <input className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+              <input className={FIELD}
                 value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
             </div>
-          </div>
+          </FormGrid>
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
             <Button type="submit" disabled={loading}>
@@ -628,95 +698,55 @@ export default function IncomePage() {
             </Button>
           </div>
           </form>
-        </Card>
+          </Card>
+        </div>
       )}
 
-      {/* Search + filters. Fuente and notas are searched with one box: income
-          has no "categoría"/"descripción" column, and which of the two the
-          user means depends on how they filled the entry in. */}
-      <Card className="p-3 md:p-4 space-y-3">
-        <div className="relative">
-          <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            className={`${FILTER_INPUT} pl-9`}
-            placeholder="Buscar por fuente o notas..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Fuente</label>
-            <select className={`mt-1 ${FILTER_INPUT}`} value={sourceFilter}
-              onChange={e => setSourceFilter(e.target.value)}>
-              <option value="">Todas</option>
-              {sources.map(s => (
-                <option key={s.id} value={s.id}>{s.name} ({INCOME_TYPE_LABELS[s.income_type]})</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Desde</label>
-            <input type="date" className={`mt-1 ${FILTER_INPUT}`} value={dateFrom}
-              onChange={e => setDateFrom(e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Hasta</label>
-            <input type="date" className={`mt-1 ${FILTER_INPUT}`} value={dateTo}
-              onChange={e => setDateTo(e.target.value)} />
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-muted-foreground">Ordenar por</span>
-          {(Object.keys(SORT_LABELS) as SortKey[]).map(key => (
-            <button key={key} onClick={() => toggleSort(key)}
-              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium border-2 transition-colors ${
-                sort === key
-                  ? "border-ink bg-primary text-primary-foreground"
-                  : "border-transparent bg-muted text-muted-foreground hover:bg-accent"
-              }`}>
-              {SORT_LABELS[key]}
-              {sort === key && (order === "asc"
-                ? <ArrowUp className="w-3 h-3" />
-                : <ArrowDown className="w-3 h-3" />)}
-            </button>
-          ))}
-          {filtering && (
-            <button onClick={clearFilters}
-              className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-              <X className="w-3.5 h-3.5" /> Limpiar filtros
-            </button>
-          )}
-        </div>
-      </Card>
-
-      {/* While a filter is on, the month selector is gone rather than merely
-          ignored — leaving it visible but inert is what makes a user think the
-          search is scoped to the month it shows. */}
-      <div className="flex justify-end">
-        {filtering ? (
-          <div className="inline-flex items-center gap-2 rounded-full border-2 border-ink bg-card shadow-chip px-3 py-1.5">
-            <Search className="w-4 h-4 text-primary shrink-0" />
-            <span className="text-sm font-bold text-foreground">
-              {entries.length} resultado{entries.length !== 1 ? "s" : ""}
-              <span className="hidden sm:inline"> en todo el historial</span>
-            </span>
-          </div>
-        ) : (
-          <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
-            <CalendarDays className="w-4 h-4 text-primary shrink-0" />
-            <button onClick={prev} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
-            <button onClick={next} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-      </div>
-
       {/* List */}
+
+      {/* Same bar as /tarjetas — see components/ui/filters.tsx. The one box
+          searches fuente and notas together: income has no "categoría"/
+          "descripción" column, and which of the two the user means depends on
+          how they filled the entry in. */}
+      <FilterBar>
+        <FilterRow>
+          <CollapsibleSearch
+            open={searchOpen}
+            onOpen={() => setSearchOpen(true)}
+            onClose={() => { setSearch(""); setSearchOpen(false); }}
+            value={search}
+            onChange={setSearch}
+            placeholder="Buscar por fuente o notas..."
+          />
+          {!searchOpen && (
+            <>
+              {(Object.keys(SORT_LABELS) as SortKey[]).map(key => (
+                <SortChip key={key} label={SORT_LABELS[key]}
+                  active={sort === key} dir={order} onClick={() => toggleSort(key)} />
+              ))}
+              <FilterChip
+                label="Personalizado" icon={SlidersHorizontal}
+                active={panelFilterActive}
+                onClick={() => setShowCustomFilter(v => !v)}
+              />
+            </>
+          )}
+        </FilterRow>
+        {showCustomFilter && !searchOpen && (
+          <FilterPanel>
+            <PillSelect value={sourceFilter} onChange={setSourceFilter} placeholder="Fuente"
+              options={sources.map(s => ({ value: String(s.id), label: `${s.name} (${INCOME_TYPE_LABELS[s.income_type]})` }))} />
+            <PillDateRange
+              from={dateFrom} to={dateTo}
+              onChange={(f, t) => { setDateFrom(f); setDateTo(t); }}
+            />
+            {panelFilterActive && (
+              <ClearFilters onClick={() => { setSourceFilter(""); setDateFrom(""); setDateTo(""); }} />
+            )}
+          </FilterPanel>
+        )}
+      </FilterBar>
+
       <Card className="p-0 md:p-0 divide-y">
         {entries.length > 0 && (
           <div className="flex items-center gap-3 px-3 md:px-5 py-2 bg-muted rounded-t-2xl">
@@ -781,12 +811,22 @@ export default function IncomePage() {
         ))}
       </Card>
 
+      <Fab label="Registrar ingreso" data-tour="income-add"
+        onClick={() => { setEditId(null); setForm(newEntryForm()); netoManual.current = false; setShowForm(true); }} />
+
       {detailEntry && (
         <EntryDetailModal
           entry={detailEntry}
           onEdit={() => { setDetailEntry(null); openEdit(detailEntry); }}
           onDelete={() => handleDelete(detailEntry.id)}
           onClose={() => setDetailEntry(null)}
+        />
+      )}
+
+      {showSourceForm && (
+        <NewSourceModal
+          onSave={handleAddSource}
+          onClose={() => setShowSourceForm(false)}
         />
       )}
 

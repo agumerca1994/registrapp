@@ -4,17 +4,20 @@ import { useEffect, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import {
-  LineChart, Line, BarChart, Bar,
+  LineChart, Line,
   PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 import api from "@/lib/api";
 import { formatARS, formatUSD, formatPct } from "@/lib/utils";
-import Link from "next/link";
 import { TrendingUp, TrendingDown, Gauge, Home, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import ProductTour from "@/components/ProductTour";
 import type { Step } from "react-joyride";
 import { Card } from "@/components/ui/card";
+import {
+  SummaryCard, SummaryHeader, SummarySection, SummaryGrid, SummaryCell,
+  SummaryFigure, ChainRow, SummaryTotal,
+} from "@/components/ui/summary-card";
 import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
 
@@ -142,20 +145,6 @@ function StatCard({ label, value, sub, icon: Icon, tone = "neutral" }: {
   );
 }
 
-// One line of a "how we got to that number" chain under the hero. The operator
-// gets its own fixed-width column so the labels line up and the block reads as
-// the sum it is — the closing row is the hero figure above it.
-function ChainRow({ op, label, value, strong = false }: {
-  op?: "+" | "−" | "="; label: string; value: string; strong?: boolean;
-}) {
-  return (
-    <p className={`flex justify-between gap-4 ${strong ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
-      <span><span className="inline-block w-3">{op ?? ""}</span>{label}</span>
-      <span className="font-medium tabular-nums">{value}</span>
-    </p>
-  );
-}
-
 function compactAmount(n: number): string {
   return new Intl.NumberFormat("es-AR", { notation: "compact", maximumFractionDigits: 1 }).format(n);
 }
@@ -249,6 +238,7 @@ export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
   const [prevAvailable, setPrevAvailable] = useState<number | null>(null);
   const [mortgageSummary, setMortgageSummary] = useState<MortgageSummary | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -352,12 +342,6 @@ export default function DashboardPage() {
     return { start, end, initial, bought, sold, earned, paid, adjustments, other, net: end - start };
   })();
 
-  // Last 4 months with real income — filtered before slicing so future
-  // income-less months (e.g. credit card installment cuotas propagated
-  // years ahead, which still create real ExpenseEntry-only history points)
-  // never crowd out the tenant's actual income trend.
-  const quarterlyTrend = historyData.filter(h => Number(h.total_income) > 0).slice(-4);
-
   // Denominator for the category bars: peso-equivalent, since categories can
   // now hold both currencies. `total_expenses` is ARS-only and would push the
   // percentages over 100% as soon as a category has any USD in it.
@@ -443,108 +427,97 @@ export default function DashboardPage() {
               while both pockets are actually being drained. So the hero closes
               *both* pockets — what's left in pesos, and what's left in dollars —
               and demotes the balance to a line of the chain that gets there. */}
-          <Card variant="hero" className="p-5 md:p-8">
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6 items-center">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  Cierre de {periodLabel}
-                </p>
+          {/* Hero — the screen's one 3D element: how the month closed.
+              It deliberately does NOT lead with `balance`. Balance is pesos in
+              minus pesos out; on a month where the household buys dollars and
+              then pays a dollar statement with them, it reads as a big surplus
+              while both pockets are actually being drained. So the hero closes
+              *both* pockets — what's left in pesos, and what's left in dollars.
+              Layout comes from components/ui/summary-card.tsx. */}
+          <SummaryCard>
+            <SummaryHeader title={`Cierre de ${periodLabel}`}
+              open={showDetail} onToggle={() => setShowDetail(v => !v)} />
+            <SummarySection label="Estado actual" />
 
-                <div className={`mt-1 grid gap-4 ${usdPocket ? "sm:grid-cols-2" : ""}`}>
-                  <div>
-                    <p className="text-4xl md:text-5xl font-display font-bold text-foreground">
-                      {formatARS(data.ars_available)}
-                    </p>
-                    <p className="text-sm text-muted-foreground mt-0.5">quedaron en pesos</p>
-                    {availableChangePct !== null && (
-                      <p className={`mt-1 text-sm font-medium flex items-center gap-1 ${availableChangePct >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                        {availableChangePct >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                        {availableChangePct >= 0 ? "+" : ""}{availableChangePct.toFixed(1)}% vs mes anterior
-                      </p>
-                    )}
-                  </div>
-                  {usdPocket && (
-                    <Link href="/divisas" className="sm:border-l sm:border-border/60 sm:pl-4 -m-1 p-1 rounded-xl hover:bg-accent/40 transition-colors">
-                      <p className="text-4xl md:text-5xl font-display font-bold text-foreground">
-                        {formatUSD(usdPocket.end)}
-                      </p>
-                      <p className="text-sm text-muted-foreground mt-0.5">
-                        quedan en dólares
-                        {data.usd_holding_ars !== null && usdPocket.end !== 0 && ` ≈ ${formatARS(data.usd_holding_ars)}`}
-                      </p>
-                      {usdPocket.net !== 0 && (
-                        <p className={`mt-1 text-sm font-medium flex items-center gap-1 ${usdPocket.net >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                          {usdPocket.net >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                          {usdPocket.net >= 0 ? "+" : "−"}{formatUSD(Math.abs(usdPocket.net))} este mes
-                        </p>
-                      )}
-                    </Link>
-                  )}
-                </div>
+            {/* Stacked on mobile, the `order` classes keep each chain right
+                under the figure it explains; on `sm` they reset to the 2×2. */}
+            <SummaryGrid cols={usdPocket ? 2 : 1}>
+              <SummaryCell figure className="order-1 sm:order-none">
+                <SummaryFigure
+                  value={formatARS(data.ars_available)}
+                  trend={availableChangePct === null ? undefined : {
+                    positive: availableChangePct >= 0,
+                    label: `${availableChangePct >= 0 ? "+" : ""}${availableChangePct.toFixed(1)}% vs mes anterior`,
+                  }}
+                />
+              </SummaryCell>
 
-                {/* The two chains, one per pocket. Buying dollars isn't an
-                    expense — it's a transfer between these two — so it only
-                    makes sense as a line that leaves one and enters the other. */}
-                {(data.fx_bought_ars > 0 || data.fx_sold_ars > 0 || usdPocket) && (
-                  <div className="mt-4 pt-4 border-t border-border/60 grid sm:grid-cols-2 gap-x-8 gap-y-4 text-sm">
-                    {/* Only worth printing when an FX operation moved pesos:
-                        with no conversions the chain is `balance = balance`. */}
-                    {(data.fx_bought_ars > 0 || data.fx_sold_ars > 0) && (
-                      <div className="space-y-1">
-                        <ChainRow label="Balance del mes" value={formatARS(data.balance)} />
-                        {data.fx_bought_ars > 0 && (
-                          <ChainRow op="−" label="Compré dólares" value={formatARS(data.fx_bought_ars)} />
-                        )}
-                        {data.fx_sold_ars > 0 && (
-                          <ChainRow op="+" label="Vendí dólares" value={formatARS(data.fx_sold_ars)} />
-                        )}
-                        <ChainRow op="=" strong label="Quedaron en pesos" value={formatARS(data.ars_available)} />
-                      </div>
-                    )}
-                    {usdPocket && (
-                      <div className={`space-y-1 ${data.fx_bought_ars > 0 || data.fx_sold_ars > 0 ? "sm:border-l sm:border-border/60 sm:pl-4" : ""}`}>
-                        <ChainRow label="Tenía al inicio" value={formatUSD(usdPocket.start)} />
-                        {usdPocket.initial !== 0 && (
-                          <ChainRow op="+" label="Saldo inicial declarado" value={formatUSD(usdPocket.initial)} />
-                        )}
-                        {usdPocket.bought > 0 && (
-                          <ChainRow op="+" label="Compré" value={formatUSD(usdPocket.bought)} />
-                        )}
-                        {usdPocket.earned > 0 && (
-                          <ChainRow op="+" label="Cobré" value={formatUSD(usdPocket.earned)} />
-                        )}
-                        {usdPocket.sold > 0 && (
-                          <ChainRow op="−" label="Vendí" value={formatUSD(usdPocket.sold)} />
-                        )}
-                        {usdPocket.paid > 0 && (
-                          <ChainRow op="−" label="Pagué" value={formatUSD(usdPocket.paid)} />
-                        )}
-                        {[usdPocket.adjustments, usdPocket.other]
-                          .filter(v => Math.abs(v) >= 0.005)
-                          .map((v, i) => (
-                            <ChainRow key={i} op={v >= 0 ? "+" : "−"} label="Ajustes"
-                              value={formatUSD(Math.abs(v))} />
-                          ))}
-                        <ChainRow op="=" strong label="Quedan en dólares" value={formatUSD(usdPocket.end)} />
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              {mounted && quarterlyTrend.length > 1 && (
-                <div className="w-full md:w-64 rounded-2xl bg-accent p-4 flex flex-col">
-                  <p className="text-xs font-medium text-primary mb-2">Ingresos — últimos meses</p>
-                  <div className="h-20">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={quarterlyTrend} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
-                        <Bar dataKey="total_income" fill="#5B4FE9" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
+              {usdPocket && (
+                <SummaryCell figure href="/divisas"
+                  className="order-3 sm:order-none border-t sm:border-t-0 sm:border-l border-border/60">
+                  <SummaryFigure
+                    value={formatUSD(usdPocket.end)}
+                    sub={data.usd_holding_ars !== null && usdPocket.end !== 0
+                      ? `≈ ${formatARS(data.usd_holding_ars)}` : undefined}
+                    trend={usdPocket.net === 0 ? undefined : {
+                      positive: usdPocket.net >= 0,
+                      label: `${usdPocket.net >= 0 ? "+" : "−"}${formatUSD(Math.abs(usdPocket.net))} este mes`,
+                    }}
+                  />
+                </SummaryCell>
               )}
-            </div>
-          </Card>
+
+              {/* Buying dollars isn't an expense — it's a transfer between
+                  these two pockets — so it only makes sense as a line that
+                  leaves one and enters the other. */}
+              {showDetail && (
+                <>
+                  <SummaryCell className="order-2 sm:order-none border-t border-border/60">
+                    <ChainRow label="Ingresos" sign="+" value={formatARS(data.total_income)} />
+                    <ChainRow label="Egresos" sign="−" value={formatARS(data.total_expenses)} />
+                    {data.fx_bought_ars > 0 && (
+                      <ChainRow label="Compré dólares" sign="−" value={formatARS(data.fx_bought_ars)} />
+                    )}
+                    {data.fx_sold_ars > 0 && (
+                      <ChainRow label="Vendí dólares" sign="+" value={formatARS(data.fx_sold_ars)} />
+                    )}
+                  </SummaryCell>
+                  {usdPocket && (
+                    <SummaryCell className="order-4 sm:order-none border-t sm:border-l border-border/60">
+                      <ChainRow label="Tengo al inicio" value={formatUSD(usdPocket.start)} />
+                      {usdPocket.initial !== 0 && (
+                        <ChainRow label="Saldo inicial declarado" sign="+" value={formatUSD(usdPocket.initial)} />
+                      )}
+                      {usdPocket.bought > 0 && (
+                        <ChainRow label="Compré" sign="+" value={formatUSD(usdPocket.bought)} />
+                      )}
+                      {usdPocket.earned > 0 && (
+                        <ChainRow label="Cobré" sign="+" value={formatUSD(usdPocket.earned)} />
+                      )}
+                      {usdPocket.sold > 0 && (
+                        <ChainRow label="Vendí" sign="−" value={formatUSD(usdPocket.sold)} />
+                      )}
+                      {usdPocket.paid > 0 && (
+                        <ChainRow label="Pagué" sign="−" value={formatUSD(usdPocket.paid)} />
+                      )}
+                      {[usdPocket.adjustments, usdPocket.other]
+                        .filter(v => Math.abs(v) >= 0.005)
+                        .map((v, i) => (
+                          <ChainRow key={i} label="Ajustes" sign={v >= 0 ? "+" : "−"}
+                            value={formatUSD(Math.abs(v))} />
+                        ))}
+                    </SummaryCell>
+                  )}
+                </>
+              )}
+            </SummaryGrid>
+
+            {showDetail && (
+              <SummaryTotal items={usdPocket
+                ? [formatARS(data.ars_available), formatUSD(usdPocket.end)]
+                : [formatARS(data.ars_available)]} />
+            )}
+          </SummaryCard>
 
           {/* The USD tiles that used to sit here (Balance USD, Tenencia USD)
               are gone on purpose: the hero now carries the whole dollar story,

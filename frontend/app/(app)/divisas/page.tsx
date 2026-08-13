@@ -7,13 +7,20 @@ import api from "@/lib/api";
 import { formatARS, formatDate, formatUSD, getErrorMessage, parseAmount } from "@/lib/utils";
 import {
   ArrowLeftRight, CalendarDays, ChevronLeft, ChevronRight,
-  Plus, Pencil, Trash2, Wallet,
+  Pencil, Trash2, Wallet, MoreVertical, X,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Fab } from "@/components/ui/fab";
+import { FIELD, FormGrid, SelectField, DateField } from "@/components/ui/form";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import {
+  SummaryCard, SummaryHeader, SummarySection, SummaryGrid, SummaryCell,
+  SummaryFigure, ChainRow, SummaryTotal,
+} from "@/components/ui/summary-card";
 import { Button } from "@/components/ui/button";
 import { ARGENTINE_BANKS } from "@/lib/banks";
 
-const INPUT = "mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground";
+const INPUT = FIELD;
 
 // Same vocabulary as the shared-expense settlement conversion (backend
 // RATE_TYPES). "personalizado" isn't offered as a household valuation setting —
@@ -293,23 +300,50 @@ export default function DivisasPage() {
     }
   };
 
+  const [showDetail, setShowDetail] = useState(false);
+
   const holding = Number(summary?.holding ?? 0);
   const valuation = summary?.valuation_ars != null ? Number(summary.valuation_ars) : null;
 
   return (
     <div className="max-w-4xl space-y-4 md:space-y-6">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Divisas</h2>
-        <div className="flex gap-1 md:gap-2 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
+          <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
+            <CalendarDays className="w-4 h-4 text-primary shrink-0" />
+            <button onClick={prev} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
+            <button onClick={next} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+          {/* Declaring the opening balance happens once in the life of the
+              household, so it stays out of the way behind the ⋮ — but only
+              while there isn't one, since a second is rejected anyway. */}
           {!hasInitial && !loading && (
-            <Button variant="outline" onClick={() => openNew("initial")}>
-              Tenencia inicial
-            </Button>
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
+                <button title="Más acciones"
+                  className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors outline-none">
+                  <MoreVertical className="w-5 h-5" />
+                </button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content align="end" sideOffset={4}
+                  className="bg-card border rounded-xl shadow-lg p-1 w-48 z-50">
+                  <DropdownMenu.Item asChild>
+                    <button onClick={() => openNew("initial")}
+                      className="flex items-center justify-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full outline-none cursor-pointer">
+                      <Wallet className="w-4 h-4 text-muted-foreground" /> Tenencia inicial
+                    </button>
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
           )}
-          <Button onClick={() => openNew("buy")}>
-            <Plus className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Operación</span>
-          </Button>
         </div>
       </div>
 
@@ -323,64 +357,76 @@ export default function DivisasPage() {
         <Card variant="hero" className="h-36 animate-pulse" />
       ) : (
         <>
-          {/* Hero — the stock. It carries across months: dollars bought in one
-              month to pay the next month's card statement stay on the books. */}
-          <Card variant="hero" className="p-5 md:p-8">
-            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              Tenencia en dólares
-            </p>
-            <p className="text-4xl md:text-5xl font-display font-bold text-foreground mt-1">
-              {formatUSD(holding)}
-            </p>
-            {valuation !== null && (
-              <p className="mt-2 text-sm font-medium text-muted-foreground">
-                ≈ {formatARS(valuation)}
-                <span className="text-muted-foreground/70">
-                  {" "}· {RATE_TYPE_LABELS[summary!.rate_type] ?? summary!.rate_type} {formatARS(Number(summary!.rate))}
-                </span>
-              </p>
-            )}
-            {/* Where the number comes from. The month tiles below only cover the
-                selected month, but the holding accumulates since start_date —
-                without this the total is impossible to reconcile from screen. */}
-            {summary && hasInitial && (
-              <div className="mt-4 pt-3 border-t border-border/60 text-sm space-y-1">
-                <p className="text-xs text-muted-foreground mb-1.5">
-                  Desde tu tenencia inicial del {formatDate(summary.start_date!)}
-                </p>
-                {[
-                  { label: "Tenencia inicial", value: Number(summary.initial), sign: "" },
-                  { label: "Comprado", value: Number(summary.total_bought), sign: "+" },
-                  { label: "Ingresado en USD", value: Number(summary.total_earned), sign: "+" },
-                  { label: "Vendido", value: Number(summary.total_sold), sign: "−" },
-                  { label: "Pagado en USD", value: Number(summary.total_spent), sign: "−" },
-                  { label: "Ajustes", value: Number(summary.total_adjustments), sign: "" },
-                ]
-                  .filter(r => r.value !== 0 || r.label === "Tenencia inicial")
-                  .map(r => (
-                    <p key={r.label} className="flex justify-between gap-4 text-muted-foreground">
-                      <span>{r.sign} {r.label}</span>
-                      <span className="font-medium tabular-nums">{formatUSD(Math.abs(r.value))}</span>
-                    </p>
-                  ))}
-                <p className="flex justify-between gap-4 font-semibold text-foreground pt-1">
-                  <span>= Tenencia actual</span>
-                  <span className="tabular-nums">{formatUSD(holding)}</span>
-                </p>
-              </div>
+          {/* Hero — the stock, in the same shape as the dashboard's:
+              see components/ui/summary-card.tsx. It carries across months:
+              dollars bought in one month to pay the next month's card
+              statement stay on the books. */}
+          <SummaryCard>
+            <SummaryHeader title="Tenencia en dólares"
+              open={showDetail}
+              onToggle={summary && hasInitial ? () => setShowDetail(v => !v) : undefined} />
+            <SummarySection label="Estado actual" />
+
+            <SummaryGrid cols={1}>
+              <SummaryCell figure>
+                <SummaryFigure
+                  value={formatUSD(holding)}
+                  sub={valuation === null ? undefined : (
+                    <>
+                      ≈ {formatARS(valuation)}
+                      <span className="text-muted-foreground/70">
+                        {" "}· {RATE_TYPE_LABELS[summary!.rate_type] ?? summary!.rate_type} {formatARS(Number(summary!.rate))}
+                      </span>
+                    </>
+                  )}
+                />
+              </SummaryCell>
+
+              {/* The month tiles below only cover the selected month, but the
+                  holding accumulates since start_date — without this chain the
+                  total is impossible to reconcile from the screen. */}
+              {showDetail && summary && hasInitial && (
+                <SummaryCell className="border-t border-border/60">
+                  <p className="text-xs text-muted-foreground pb-1">
+                    Desde tu tenencia inicial del {formatDate(summary.start_date!)}
+                  </p>
+                  <ChainRow label="Tenencia inicial" value={formatUSD(Number(summary.initial))} />
+                  {Number(summary.total_bought) !== 0 && (
+                    <ChainRow label="Comprado" sign="+" value={formatUSD(Number(summary.total_bought))} />
+                  )}
+                  {Number(summary.total_earned) !== 0 && (
+                    <ChainRow label="Ingresado en USD" sign="+" value={formatUSD(Number(summary.total_earned))} />
+                  )}
+                  {Number(summary.total_sold) !== 0 && (
+                    <ChainRow label="Vendido" sign="−" value={formatUSD(Number(summary.total_sold))} />
+                  )}
+                  {Number(summary.total_spent) !== 0 && (
+                    <ChainRow label="Pagado en USD" sign="−" value={formatUSD(Number(summary.total_spent))} />
+                  )}
+                  {Number(summary.total_adjustments) !== 0 && (
+                    <ChainRow label="Ajustes"
+                      sign={Number(summary.total_adjustments) >= 0 ? "+" : "−"}
+                      value={formatUSD(Math.abs(Number(summary.total_adjustments)))} />
+                  )}
+                </SummaryCell>
+              )}
+            </SummaryGrid>
+
+            {showDetail && summary && hasInitial && (
+              <SummaryTotal label="Tengo" items={[formatUSD(holding)]} />
             )}
 
             {/* What the bank will actually debit — gross, including the share
                 of shared expenses that belongs to other participants. The
-                shortfall below is a cash-timing warning, not a net-worth one:
-                the holding above already assumes participants reimburse. */}
+                shortfall is a cash-timing warning, not a net-worth one: the
+                holding above already assumes participants reimburse. */}
             {summary && Number(summary.pending_usd) > 0 && (() => {
               const total = Number(summary.pending_usd);
               const own = Number(summary.pending_own_usd);
               const others = Number(summary.pending_others_usd);
               const shortfall = total - holding;
               return (
-                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs">
+                <div className="m-4 md:m-6 mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs">
                   <p className="font-semibold text-amber-900">
                     Vence {summary.next_due_date ? `el ${formatDate(summary.next_due_date)}` : "próximamente"}: {formatUSD(total)}
                   </p>
@@ -411,25 +457,13 @@ export default function DivisasPage() {
               );
             })()}
             {!hasInitial && (
-              <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <p className="m-4 md:m-6 mt-4 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                 Cargá tu <strong>tenencia inicial</strong> para que este número refleje los dólares
                 que ya tenías antes de empezar a registrar.
               </p>
             )}
-          </Card>
+          </SummaryCard>
 
-          <div className="flex justify-end">
-            <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
-              <CalendarDays className="w-4 h-4 text-primary shrink-0" />
-              <button onClick={prev} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
-              <button onClick={next} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
 
           {/* Flow — what happened inside the selected month. */}
           {summary && (
@@ -463,11 +497,16 @@ export default function DivisasPage() {
       )}
 
       {showForm && (
-        <Card className="p-4 md:p-5">
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <p className="text-sm font-medium text-foreground">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={closeForm}>
+          <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg p-5 max-h-[92vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-foreground">
               {editId ? "Editar operación" : "Nueva operación"}
-            </p>
+            </h3>
+            <button type="button" onClick={closeForm} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          </div>
+          <form onSubmit={handleSubmit} className="space-y-3">
 
             <div className="flex gap-2">
               {(["buy", "sell", "adjustment"] as const).map(t => (
@@ -493,22 +532,20 @@ export default function DivisasPage() {
               </p>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <FormGrid>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Fecha</label>
-                <input type="date" className={INPUT} value={form.operation_date}
-                  onChange={e => setForm(p => ({ ...p, operation_date: e.target.value }))} required />
+                <DateField required value={form.operation_date}
+                  onChange={v => setForm(p => ({ ...p, operation_date: v }))} />
               </div>
 
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Monto (U$D)</label>
+                <label className="text-xs font-medium text-muted-foreground">Monto</label>
                 <div className="flex gap-2">
                   {form.op_type === "adjustment" && (
-                    <select className={`${INPUT} w-16 shrink-0`} value={form.adjustSign}
-                      onChange={e => setForm(p => ({ ...p, adjustSign: e.target.value as "+" | "-" }))}>
-                      <option value="+">+</option>
-                      <option value="-">−</option>
-                    </select>
+                    <SelectField className="w-20 shrink-0" value={form.adjustSign}
+                      onChange={v => setForm(p => ({ ...p, adjustSign: v as "+" | "-" }))}
+                      options={[{ value: "+", label: "+" }, { value: "-", label: "−" }]} />
                   )}
                   <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={INPUT}
                     value={form.usd}
@@ -525,15 +562,6 @@ export default function DivisasPage() {
                       value={form.rate}
                       onChange={e => setForm(p => syncAmounts({ ...p, rate: e.target.value, rate_type: "personalizado" }, "rate"))}
                       required={hasArsLeg} />
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {Object.entries(rates).filter(([, v]) => v > 0).map(([type, value]) => (
-                        <button key={type} type="button"
-                          onClick={() => setForm(p => syncAmounts({ ...p, rate: String(value), rate_type: type }, "rate"))}
-                          className={`px-2 py-0.5 text-[11px] rounded-full border transition-colors ${form.rate_type === type ? "border-ink bg-accent text-primary font-medium" : "border-border text-muted-foreground hover:bg-accent"}`}>
-                          {RATE_TYPE_LABELS[type]} {value.toLocaleString("es-AR")}
-                        </button>
-                      ))}
-                    </div>
                   </div>
 
                   <div>
@@ -553,6 +581,20 @@ export default function DivisasPage() {
                       </p>
                     )}
                   </div>
+
+                  {/* Full width and on one line: inside the Cotización column
+                      these five wrapped onto three rows. Below `sm` the modal
+                      is a single column, so there they scroll sideways rather
+                      than shrink to unreadable. */}
+                  <div className="sm:col-span-2 flex gap-1 overflow-x-auto pb-0.5 -mt-1">
+                    {Object.entries(rates).filter(([, v]) => v > 0).map(([type, value]) => (
+                      <button key={type} type="button"
+                        onClick={() => setForm(p => syncAmounts({ ...p, rate: String(value), rate_type: type }, "rate"))}
+                        className={`shrink-0 px-2 py-0.5 text-[11px] rounded-full border transition-colors ${form.rate_type === type ? "border-ink bg-accent text-primary font-medium" : "border-border text-muted-foreground hover:bg-accent"}`}>
+                        {RATE_TYPE_LABELS[type]} {value.toLocaleString("es-AR")}
+                      </button>
+                    ))}
+                  </div>
                 </>
               )}
 
@@ -569,13 +611,10 @@ export default function DivisasPage() {
                     ))}
                   </div>
                   {form.entityMode === "banco" ? (
-                    <select className={INPUT} value={form.entity}
-                      onChange={e => setForm(p => ({ ...p, entity: e.target.value }))}>
-                      <option value="">Sin especificar</option>
-                      {ARGENTINE_BANKS.map(b => (
-                        <option key={b.name} value={b.name}>{b.name}</option>
-                      ))}
-                    </select>
+                    <SelectField value={form.entity}
+                      onChange={v => setForm(p => ({ ...p, entity: v }))}
+                      placeholder="Sin especificar"
+                      options={ARGENTINE_BANKS.map(b => ({ value: b.name, label: b.name }))} />
                   ) : (
                     <input className={INPUT} placeholder="Broker, cueva, persona..."
                       value={form.entity}
@@ -589,15 +628,18 @@ export default function DivisasPage() {
                 <input className={INPUT} value={form.notes}
                   onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
               </div>
-            </div>
+            </FormGrid>
 
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
               <Button type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar"}</Button>
             </div>
           </form>
-        </Card>
+          </Card>
+        </div>
       )}
+
+      <Fab label="Nueva operación" onClick={() => openNew("buy")} />
 
       <Card className="p-0 md:p-0 divide-y">
         {ops.length === 0 && !loading ? (

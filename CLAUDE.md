@@ -254,6 +254,96 @@ frontend/
                               #   whose targets only exist in the desktop Sidebar (hidden on mobile)
 ```
 
+**The summary hero always uses `components/ui/summary-card.tsx` — never a new shape.** The one `variant="hero"` card at the top of a screen (dashboard, `/divisas`) answers "where do I stand" and always reads as the same three bands:
+
+```tsx
+<SummaryCard>
+  <SummaryHeader title="Cierre de agosto 2026" open={showDetail} onToggle={…} />
+  <SummarySection label="Estado actual" />
+  <SummaryGrid cols={2}>
+    <SummaryCell figure className="order-1 sm:order-none"><SummaryFigure value={…} sub={…} trend={…} /></SummaryCell>
+    <SummaryCell figure href="/divisas" className="order-3 sm:order-none border-t sm:border-t-0 sm:border-l border-border/60">…</SummaryCell>
+    {showDetail && <>
+      <SummaryCell className="order-2 sm:order-none border-t border-border/60"><ChainRow label="Ingresos" sign="+" value={…} /> …</SummaryCell>
+      <SummaryCell className="order-4 sm:order-none border-t sm:border-l border-border/60">…</SummaryCell>
+    </>}
+  </SummaryGrid>
+  {showDetail && <SummaryTotal items={[arsTotal, usdTotal]} />}
+</SummaryCard>
+```
+
+Every rule in it was a correction, so don't undo one without knowing which:
+- **Columns are equal width, never content-sized.** A peso figure is three times as wide as a dollar one; sizing to content turns two equally important numbers into a headline and a footnote.
+- **Rows are *not* forced to match each other.** `auto-rows-fr` across the grid stretches the figures row to the height of the taller chain row and leaves a band of dead space under the numbers.
+- **The detail starts collapsed** behind `Ver detalle`. The figures are the answer; the chain is the arithmetic.
+- **Signs ride on the amount, never on the label** (`−$ 1.517.916,00`). A `−`/`=` hanging to the left of the label starts every row at a different x.
+- **The chains close on one shared `SummaryTotal` strip**, not a bold row each — a total per column restates the big figure directly above it.
+- **Every chain lists movements**, never an already-consolidated subtotal. The peso chain used to open on "Balance del mes" while the dollar one listed its parts, and that reads as an inconsistency even though the accounting justifies it (buying dollars isn't income).
+- On mobile the grid stacks to one column and `order-*` keeps each chain directly under the figure it explains.
+
+Note the asymmetry the format can't hide and shouldn't: the dollar column opens on a **stock** ("Tengo al inicio") because the holding carries across months, while the peso column can only report the month's **flow** — the app never records a peso account balance. Closing that gap would mean letting the user declare an opening peso balance the way they declare `initial` for dollars.
+
+**Form fields come from `components/ui/form.tsx`, and the calendar from `components/ui/calendar.tsx`.** A form built out of bare `<input>`/`<select>` looks like an unstyled page next to the rest of the app, whose signature is a 2px ink border (`FIELD` carries it). Two native controls in particular have to go:
+- `<select>` renders its option list as an OS menu, and that list is the part CSS can't reach — styling the closed box still leaves a grey system dropdown landing on top of the app. `SelectField` is a **listbox**: a button plus our own portalled panel, taking `options={[{value,label}]}` and `onChange(value)` (not a DOM event). It keeps the placeholder grey while the value is empty, marks the selection with a check, and handles ↑/↓/Enter/Escape — replacing a native control can't cost the keyboard.
+- `<input type="date">` shows `mm/dd/yyyy` and a browser calendar that looks nothing like the one in the filter bar. `DateField` opens the same `CalendarPanel` the range picker uses — one calendar in the app, one gesture to pick a date.
+
+`calendar.tsx` is the single implementation (`CalendarPanel` + its month grid, hand-built on date-fns like `/calendario`'s — the project has no calendar library and doesn't need one). `from`/`to` drive the painting for both callers: a range highlights the band between them, a single date is just `from === to`.
+
+Placement rules that were bugs first — the panel has to clear a modal that both scrolls and stacks:
+- It is **portalled to `document.body` and positioned `fixed`**. In the flow it pushed the form around; absolute inside the modal it was clipped by `overflow-y-auto`. Out of the tree it floats above everything without a z-index race.
+- It **anchors to its field's right edge and flips above** when there's no room below, clamped to the viewport. These fields sit in two-column grids, so a panel wider than its column has to overflow towards the middle of the modal, not off its edge.
+- Position is measured after render (the height changes with how many weeks the month spans) and recomputed on resize and on **capture-phase** scroll — the scroll that moves the field is the modal's, and it doesn't bubble.
+
+**Fields keep their width; the text truncates.** Grid and flex items default to `min-width: auto`, so the longest option in a combo out-votes `w-full` and stretches the field — and the whole column with it, which knocks the two-column form out of alignment. Reproduced with a real source name: the combo went from 189px to 372px and pushed the date field off its column. The floor is set in three places so no caller has to remember it: `FIELD` carries `min-w-0`, `Listbox`/`DateField` wrap themselves in it, and `FormGrid` (the two-column layout a form modal uses) applies `[&>*]:min-w-0` to every cell. Use `FormGrid` rather than hand-rolling `grid grid-cols-1 sm:grid-cols-2`.
+
+**Label copy**, which is part of the format and not decoration:
+- The label is the **short noun** — `Bruto`, `Deducciones`, `Neto`, not `Sueldo bruto`. The form already says what it is (its title, the screen it's on); repeating that in every label is noise, and it stops being true the moment the same form takes a non-salary income.
+- **No currency in the label.** `Sueldo bruto ($)` was wrong outright: this form has an ARS/USD toggle at the top, so the hardcoded `$` contradicted the field as soon as the user picked dollars. Currency belongs to the toggle, or to the formatter that renders the value.
+- **`(opcional)`, lowercase, only where it's true.** Marking a required field optional is a lie; leaving a genuinely optional one unmarked makes every field look mandatory. In the income form `Bruto` and `Deducciones` carry it and `Neto` doesn't — it's the amount actually stored, the other two only feed its automatic calculation.
+
+A form field defaults to **today**, already selected and ringed in the grid: it's the overwhelmingly common answer, and it saves a trip through the calendar to pick the date you're standing on.
+
+`DateField` also renders a hidden `required` input: the visible control is a button, so without it the browser's own validation would let the form submit with no date.
+
+**Filters and search always use `components/ui/filters.tsx` — never a new shape.** Every list screen that gains searching, sorting or filtering renders the same bar, the one `/tarjetas` established:
+
+```tsx
+<FilterBar>
+  <FilterRow>
+    <CollapsibleSearch open={searchOpen} onOpen={…} onClose={() => { setSearch(""); setSearchOpen(false); }}
+                       value={search} onChange={setSearch} placeholder="Buscar por …" />
+    {!searchOpen && (
+      <>
+        <SortChip label="Fecha" active={sort === "date"} dir={order} onClick={() => toggleSort("date")} />
+        <FilterChip label="Personalizado" icon={SlidersHorizontal} active={panelActive}
+                    onClick={() => setShowPanel(v => !v)} />
+      </>
+    )}
+  </FilterRow>
+  {showPanel && !searchOpen && (
+    <FilterPanel>
+      <PillSelect …>…</PillSelect>
+      <PillDateRange from={dateFrom} to={dateTo} onChange={(f, t) => {…}} />
+      {panelActive && <ClearFilters onClick={…} />}
+    </FilterPanel>
+  )}
+</FilterBar>
+```
+
+The rules that make it that bar and not another one:
+- **Not inside a `<Card>`.** It sits bare above the list. Boxing it turns a control strip into a second panel competing with the content — that's what the first version of the income filters did, and it read as a different app.
+- **Search starts collapsed**, as a magnifier that expands in place into an underlined input, and the chips hide while it's open. Closing it clears the term.
+- **Sorting is tri-state**: inactive → asc → desc → inactive. "Inactive" means the list's natural default, so a screen backed by a sorted endpoint sends its default (e.g. income: `sort=date&order=desc`) when no chip is lit.
+- **Everything beyond one search box and the sort chips goes behind "Personalizado"**, in the second row, as `PillSelect`/`PillDateRange`. `ClearFilters` shows only while something in the panel is set.
+- **A `PillSelect`'s empty option is the field's name** — `Categoría`, `Fuente`, `Titular`, `Moneda` — not `Todas las categorías`. There is no label above the pill, so that option *is* the label, it's on screen far more often unset than set, and four pills reading "Todos los…/Todas las…" say nothing about which is which at a glance. It renders in `text-muted-foreground` while unset and `text-foreground` once a value is picked, so a set filter is visible without reading it.
+- **A period is one control, not two.** `PillDateRange` is a single pill that opens the shared `CalendarPanel` and works the way a flight search does: first click sets the start, second sets the end, the days between fill in as the pointer moves, clicking backwards swaps the ends. One month, like every other calendar in the app — a second month made this one picker look like a different component. Two `type="date"` inputs make the user think in "desde"/"hasta" fields; this lets them think in periods.
+- **`PillSelect` is the same `Listbox` as the form's `SelectField`**, wearing the pill instead of the field. Everything about a dropdown that reads as "genérico" is the OS option list, and that's the part CSS can't restyle, so no screen in the app is allowed to fall back to a bare `<select>`.
+- Screens differ in *where the filtering happens*, and that's fine: `/tarjetas` filters client-side over an already-loaded list, while income and expenses filter server-side (`GET /income/entries`, `GET /expenses/entries`) because they have to reach months that aren't loaded. Same bar either way.
+
+**The two server-side search endpoints share their matching rules, not just their shape.** `services/search.py` holds `fold()`/`fold_term()` — accent- and case-insensitive `LIKE` via `translate()` on both sides — so a term that finds "Inversión" typed as `inversion` finds it on every screen. Two things they both encode:
+- **The search box matches every field the row displays.** Income: source name + notes. Expenses: description, category name, `entity` (the card alias on a card charge) and notes. A row that surfaces for a reason the user can't see on it reads as a bug, which is why both pages render the matched secondary field (notes / category) under the title *only while filtering*.
+- **Sorting by amount orders by `(currency, amount)`, never by amount alone.** Both lists mix ARS and USD rows, and interleaving them would put U$D 500 next to $500 — the one thing the app's domain rules say never to do. Each currency ends up in its own block, sorted within itself.
+
 **Device APIs (PWA-specific)**: The app uses the Web Contact Picker API (`navigator.contacts.select()`) to let users pick contacts from their device. **In practice this only works on Chrome/Edge for Android — Safari on iOS does not support it**, even in "Add to Home Screen" standalone mode, unless the user manually enables an experimental flag (unrealistic for real users). Always wrap contact picker calls in try-catch, check `"contacts" in navigator` before calling, and give the user visible feedback (not a silent no-op) when unsupported — the household agenda (`TenantContact`, see above) is the practical fallback for iOS. When picking contacts, normalize the phone number result via `normalizePhoneNumber()` before using.
 
 `AuthContext` exposes `firebaseUser`, `appUser`, `loading`, and `refreshUser()`. `refreshUser()` re-fetches `GET /auth/me` **and then auto-claims any `pendingInviteToken` stored in localStorage** — call it after register/join to complete the invite flow. The `(app)` layout redirects to `/login` if not authenticated, or `/onboarding` if authenticated but no `appUser` (tenant not created yet) **or `appUser.whatsapp_gate_pending` is still `true`** (see the onboarding gate above).

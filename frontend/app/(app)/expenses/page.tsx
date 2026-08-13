@@ -6,10 +6,16 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "@/lib/api";
 import { formatARS, formatDate, formatUSD, parseAmount, pickCategoryColor } from "@/lib/utils";
-import { Plus, Trash2, Pencil, X, ChevronRight, CreditCard, ExternalLink, CalendarDays, ChevronLeft } from "lucide-react";
+import { Trash2, Pencil, X, ChevronRight, CreditCard, ExternalLink, CalendarDays, ChevronLeft, Search, SlidersHorizontal } from "lucide-react";
+import {
+  FilterBar, FilterRow, FilterPanel, SortChip, FilterChip, PillSelect,
+  PillDateRange, ClearFilters, CollapsibleSearch,
+} from "@/components/ui/filters";
 import ProductTour from "@/components/ProductTour";
 import type { Step } from "react-joyride";
 import { Card } from "@/components/ui/card";
+import { Fab } from "@/components/ui/fab";
+import { FIELD, FormGrid, SelectField, DateField } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 
 const EXPENSES_TOUR_STEPS: Step[] = [
@@ -30,6 +36,60 @@ interface ExpenseEntry {
 }
 
 const EMPTY_FORM = { category_id: "", amount: "", description: "", expense_date: "", notes: "", currency: "ARS" as "ARS" | "USD" };
+
+// A new entry defaults to today — the overwhelmingly common case, and it saves
+// the user a trip through the calendar to pick the date they're standing on.
+const newEntryForm = () => ({ ...EMPTY_FORM, expense_date: format(new Date(), "yyyy-MM-dd") });
+
+type SortKey = "date" | "category" | "amount";
+const SORT_LABELS: Record<SortKey, string> = {
+  date: "Fecha", category: "Categoría", amount: "Monto",
+};
+
+// Opened from the `+` next to the Categoría combo inside the entry form, the
+// way a card statement offers "nueva categoría" next to its own combo:
+// creating what you're missing shouldn't cost you the form you already began.
+function NewCategoryModal({ initialColor, onSave, onClose }: {
+  initialColor: string;
+  onSave: (cat: { name: string; color: string; is_fixed: boolean }) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [form, setForm] = useState({ name: "", color: initialColor, is_fixed: false });
+  const [saving, setSaving] = useState(false);
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
+      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-foreground">Nueva categoría</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+        </div>
+        <form onSubmit={async e => { e.preventDefault(); setSaving(true); await onSave(form); setSaving(false); }} className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Nombre</label>
+            <input className={FIELD} placeholder="Supermercado" autoFocus
+              value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required />
+          </div>
+          <div className="flex items-end gap-4">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Color</label>
+              <input type="color" className="mt-1 block h-9 w-12 border-2 border-ink rounded-lg cursor-pointer"
+                value={form.color} onChange={e => setForm(p => ({ ...p, color: e.target.value }))} />
+            </div>
+            <label className="flex items-center gap-2 text-sm pb-2">
+              <input type="checkbox" checked={form.is_fixed}
+                onChange={e => setForm(p => ({ ...p, is_fixed: e.target.checked }))} />
+              Fijo
+            </label>
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button type="submit" disabled={saving}>{saving ? "Guardando..." : "Crear"}</Button>
+          </div>
+        </form>
+      </Card>
+    </div>
+  );
+}
 
 function EntryDetailModal({
   entry, onEdit, onDelete, onViewStatement, onClose,
@@ -115,7 +175,6 @@ export default function ExpensesPage() {
   const [editId, setEditId] = useState<number | null>(null);
   const [showCatForm, setShowCatForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [catForm, setCatForm] = useState({ name: "", color: "#6366f1", is_fixed: false });
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -128,16 +187,60 @@ export default function ExpensesPage() {
   const next = () => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
   const periodLabel = format(new Date(year, month - 1, 1), "MMMM yyyy", { locale: es });
 
+  const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [showCustomFilter, setShowCustomFilter] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [currencyFilter, setCurrencyFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [sort, setSort] = useState<SortKey | null>(null);
+  const [order, setOrder] = useState<"asc" | "desc">("asc");
+
+  // One request when the user stops typing, not one per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const panelFilterActive = !!(categoryFilter || currencyFilter || dateFrom || dateTo);
+  // Any active filter takes the list out of the month view and into the whole
+  // history: a search that only looks inside the month currently on screen
+  // would miss what the user is looking for and give no hint that it did.
+  const filtering = !!debouncedSearch || panelFilterActive;
+
   const load = async () => {
+    // No chip active → the endpoint's own default ordering.
+    const ordering = { sort: sort ?? "date", order: sort ? order : "desc" };
+    const params = filtering
+      ? {
+          q: debouncedSearch || undefined,
+          category_id: categoryFilter || undefined,
+          currency: currencyFilter || undefined,
+          date_from: dateFrom || undefined,
+          date_to: dateTo || undefined,
+          ...ordering,
+        }
+      : { year, month, ...ordering };
     const [e, c] = await Promise.all([
-      api.get("/expenses/entries", { params: { year, month } }),
+      api.get("/expenses/entries", { params }),
       api.get("/expenses/categories"),
     ]);
     setEntries(e.data);
     setCategories(c.data);
+    setSelected(new Set());
   };
 
-  useEffect(() => { load(); }, [year, month]);
+  useEffect(() => { load(); },
+    [year, month, debouncedSearch, categoryFilter, currencyFilter, dateFrom, dateTo, sort, order]);
+
+  // Tap cycle: inactive -> asc -> desc -> inactive (back to the default).
+  const toggleSort = (key: SortKey) => {
+    if (sort !== key) { setSort(key); setOrder("asc"); return; }
+    if (order === "asc") { setOrder("desc"); return; }
+    setSort(null);
+  };
 
   const openEdit = (entry: ExpenseEntry) => {
     setEditId(entry.id);
@@ -169,12 +272,13 @@ export default function ExpensesPage() {
     setLoading(false);
   };
 
-  const handleAddCat = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await api.post("/expenses/categories", catForm);
-    setCatForm({ name: "", color: "#6366f1", is_fixed: false });
+  // Selects the category it just created, so the form the user was filling
+  // picks up where they left off instead of making them find it in the combo.
+  const handleAddCat = async (cat: { name: string; color: string; is_fixed: boolean }) => {
+    const { data } = await api.post("/expenses/categories", cat);
     setShowCatForm(false);
     await load();
+    setForm(p => ({ ...p, category_id: String(data.id) }));
   };
 
   const handleDelete = async (id: number) => {
@@ -222,56 +326,41 @@ export default function ExpensesPage() {
   return (
     <div className="max-w-4xl space-y-4 md:space-y-6">
       <ProductTour tourId="expenses-intro" steps={EXPENSES_TOUR_STEPS} />
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Egresos</h2>
-        <div className="flex gap-1 md:gap-2 shrink-0">
-          <Button variant="outline" onClick={() => {
-            setCatForm(p => ({ ...p, color: pickCategoryColor(categories.map(c => c.color)) }));
-            setShowCatForm(true);
-          }}>
-            + Categoría
-          </Button>
-          <Button onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true); }} data-tour="expenses-add">
-            <Plus className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Registrar</span>
-          </Button>
+        <div className="flex items-center gap-1 shrink-0">
+          {filtering ? (
+            <div className="inline-flex items-center gap-2 rounded-full border-2 border-ink bg-card shadow-chip px-3 py-1.5">
+              <Search className="w-4 h-4 text-primary shrink-0" />
+              <span className="text-sm font-bold text-foreground">
+                {entries.length} resultado{entries.length !== 1 ? "s" : ""}
+                <span className="hidden sm:inline"> en todo el historial</span>
+              </span>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
+              <CalendarDays className="w-4 h-4 text-primary shrink-0" />
+              <button onClick={prev} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
+              <button onClick={next} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      {showCatForm && (
-        <Card className="p-4">
-          <form onSubmit={handleAddCat}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Nombre</label>
-              <input className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" placeholder="Supermercado"
-                value={catForm.name} onChange={e => setCatForm(p => ({ ...p, name: e.target.value }))} required />
-            </div>
-            <div className="flex items-end gap-4">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Color</label>
-                <input type="color" className="mt-1 block h-9 w-12 border rounded-lg cursor-pointer"
-                  value={catForm.color} onChange={e => setCatForm(p => ({ ...p, color: e.target.value }))} />
-              </div>
-              <label className="flex items-center gap-2 text-sm pb-2">
-                <input type="checkbox" checked={catForm.is_fixed}
-                  onChange={e => setCatForm(p => ({ ...p, is_fixed: e.target.checked }))} />
-                Fijo
-              </label>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 mt-3">
-            <Button type="button" variant="outline" onClick={() => setShowCatForm(false)}>Cancelar</Button>
-            <Button type="submit">Guardar</Button>
-          </div>
-          </form>
-        </Card>
-      )}
-
       {showForm && (
-        <Card className="p-4 md:p-5">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={closeForm}>
+          <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg p-5 max-h-[92vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-foreground">{editId ? "Editar egreso" : "Nuevo egreso"}</h3>
+            <button type="button" onClick={closeForm} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          </div>
           <form onSubmit={handleSubmit} className="space-y-3">
-          <p className="text-sm font-medium text-foreground">{editId ? "Editar egreso" : "Nuevo egreso"}</p>
           <div className="flex gap-2 mb-1">
             {(["ARS", "USD"] as const).map(cur => (
               <button key={cur} type="button"
@@ -281,7 +370,7 @@ export default function ExpensesPage() {
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <FormGrid>
             {/* USD expenses get a real category too — a trip paid in dollars
                 belongs in "Viajes", not in a currency bucket. Leaving it empty
                 falls back to "Consumo en dólares". */}
@@ -292,30 +381,33 @@ export default function ExpensesPage() {
                   <span className="font-normal text-muted-foreground/80"> — opcional</span>
                 )}
               </label>
-              <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
-                value={form.category_id} onChange={e => setForm(p => ({ ...p, category_id: e.target.value }))} required={form.currency === "ARS"}>
-                <option value="">
-                  {form.currency === "USD" ? "Consumo en dólares" : "Selecciona una categoría"}
-                </option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <div className="flex gap-1.5">
+                <SelectField className="flex-1" required={form.currency === "ARS"}
+                  value={form.category_id}
+                  onChange={v => setForm(p => ({ ...p, category_id: v }))}
+                  placeholder={form.currency === "USD" ? "Consumo en dólares" : "Categoría"}
+                  options={categories.map(c => ({ value: String(c.id), label: c.name }))} />
+                <button type="button" title="Nueva categoría"
+                  onClick={() => setShowCatForm(true)}
+                  className="mt-1 px-2.5 border-2 border-ink rounded-lg text-muted-foreground hover:bg-accent shrink-0 text-lg leading-none">+</button>
+              </div>
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Fecha</label>
-              <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
-                value={form.expense_date} onChange={e => setForm(p => ({ ...p, expense_date: e.target.value }))} required />
+              <DateField required
+                value={form.expense_date} onChange={v => setForm(p => ({ ...p, expense_date: v }))} />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Monto ($)</label>
-              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
+              <label className="text-xs font-medium text-muted-foreground">Monto</label>
+              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
                 value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} required />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Descripción</label>
-              <input className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+              <label className="text-xs font-medium text-muted-foreground">Descripción (opcional)</label>
+              <input className={FIELD}
                 value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
             </div>
-          </div>
+          </FormGrid>
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
             <Button type="submit" disabled={loading}>
@@ -323,21 +415,56 @@ export default function ExpensesPage() {
             </Button>
           </div>
           </form>
-        </Card>
+          </Card>
+        </div>
       )}
 
-      <div className="flex justify-end">
-        <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
-          <CalendarDays className="w-4 h-4 text-primary shrink-0" />
-          <button onClick={prev} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
-          <button onClick={next} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+      {/* Same bar as /tarjetas and /ingresos — see components/ui/filters.tsx.
+          One box searches description, category, card alias and notes: a row
+          shows `description || category`, so any of them is what the user
+          remembers about the expense they're looking for. */}
+      <FilterBar>
+        <FilterRow>
+          <CollapsibleSearch
+            open={searchOpen}
+            onOpen={() => setSearchOpen(true)}
+            onClose={() => { setSearch(""); setSearchOpen(false); }}
+            value={search}
+            onChange={setSearch}
+            placeholder="Buscar por descripción, categoría o tarjeta..."
+          />
+          {!searchOpen && (
+            <>
+              {(Object.keys(SORT_LABELS) as SortKey[]).map(key => (
+                <SortChip key={key} label={SORT_LABELS[key]}
+                  active={sort === key} dir={order} onClick={() => toggleSort(key)} />
+              ))}
+              <FilterChip
+                label="Personalizado" icon={SlidersHorizontal}
+                active={panelFilterActive}
+                onClick={() => setShowCustomFilter(v => !v)}
+              />
+            </>
+          )}
+        </FilterRow>
+        {showCustomFilter && !searchOpen && (
+          <FilterPanel>
+            <PillSelect value={categoryFilter} onChange={setCategoryFilter} placeholder="Categoría"
+              options={categories.map(c => ({ value: String(c.id), label: c.name }))} />
+            <PillSelect value={currencyFilter} onChange={setCurrencyFilter} placeholder="Moneda"
+              options={[{ value: "ARS", label: "Pesos" }, { value: "USD", label: "Dólares" }]} />
+            <PillDateRange
+              from={dateFrom} to={dateTo}
+              onChange={(f, t) => { setDateFrom(f); setDateTo(t); }}
+            />
+            {panelFilterActive && (
+              <ClearFilters onClick={() => {
+                setCategoryFilter(""); setCurrencyFilter(""); setDateFrom(""); setDateTo("");
+              }} />
+            )}
+          </FilterPanel>
+        )}
+      </FilterBar>
 
       <Card className="p-0 md:p-0 divide-y">
         {entries.length > 0 && (
@@ -368,7 +495,11 @@ export default function ExpensesPage() {
         )}
 
         {entries.length === 0 ? (
-          <p className="p-6 text-muted-foreground text-sm">No hay egresos registrados en {periodLabel}.</p>
+          <p className="p-6 text-muted-foreground text-sm">
+            {filtering
+              ? "Ningún egreso coincide con la búsqueda."
+              : `No hay egresos registrados en ${periodLabel}.`}
+          </p>
         ) : entries.map(entry => (
           <div key={entry.id} className="flex items-center gap-2 px-3 md:px-4 py-3">
             {entry.payment_method === "tarjeta_credito" ? (
@@ -390,6 +521,12 @@ export default function ExpensesPage() {
                 <span className="block text-sm font-medium text-foreground truncate">
                   {entry.description || entry.category.name}
                 </span>
+                {/* Only while searching, and only when the title is the
+                    description: a hit on the category is otherwise invisible
+                    and the row looks unrelated to what was typed. */}
+                {filtering && entry.description && (
+                  <span className="block text-xs text-muted-foreground truncate">{entry.category.name}</span>
+                )}
                 {entry.payment_method === "tarjeta_credito" && (
                   <span className="inline-flex items-center gap-1 text-xs text-primary font-medium">
                     <CreditCard className="w-3 h-3" />{entry.entity}
@@ -417,6 +554,17 @@ export default function ExpensesPage() {
           );
         })()}
       </Card>
+
+      <Fab label="Registrar egreso" data-tour="expenses-add"
+        onClick={() => { setEditId(null); setForm(newEntryForm()); setShowForm(true); }} />
+
+      {showCatForm && (
+        <NewCategoryModal
+          initialColor={pickCategoryColor(categories.map(c => c.color))}
+          onSave={handleAddCat}
+          onClose={() => setShowCatForm(false)}
+        />
+      )}
 
       {detailEntry && (
         <EntryDetailModal

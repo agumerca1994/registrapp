@@ -3,9 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
-import { CreditCard, Plus, X, Search, ArrowUp, ArrowDown, SlidersHorizontal, ChevronDown } from "lucide-react";
+import { CreditCard, Plus, X, SlidersHorizontal } from "lucide-react";
 import { Card as UiCard } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  FilterBar, FilterRow, FilterPanel, SortChip, FilterChip, PillSelect,
+  ClearFilters, CollapsibleSearch,
+} from "@/components/ui/filters";
 import { CreditCardVisual } from "@/components/CreditCardVisual";
 import { ARGENTINE_BANKS } from "@/lib/banks";
 
@@ -234,34 +238,6 @@ function DeleteCardModal({
 
 type SortField = "titular" | "bank" | null;
 
-function SortChip({ label, active, dir, onClick }: { label: string; active: boolean; dir: "asc" | "desc"; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border-2 transition-colors ${active ? "border-ink bg-accent text-primary font-medium" : "border-transparent text-muted-foreground/60 hover:bg-accent"}`}
-    >
-      {label}
-      {active && (dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}
-    </button>
-  );
-}
-
-function PillSelect({ value, onChange, children }: { value: string; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; children: React.ReactNode }) {
-  return (
-    <div className="relative flex-1">
-      <select
-        value={value}
-        onChange={onChange}
-        className="w-full appearance-none rounded-full border-2 border-ink bg-card pl-3 pr-8 py-1.5 text-xs font-medium text-foreground cursor-pointer"
-      >
-        {children}
-      </select>
-      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-    </div>
-  );
-}
-
 export default function TarjetasPage() {
   const router = useRouter();
   const [cards, setCards] = useState<Card[]>([]);
@@ -363,73 +339,40 @@ export default function TarjetasPage() {
         </UiCard>
       ) : (
         <>
-          <div className="space-y-2">
-            <div className="flex items-center gap-1.5 flex-wrap min-h-[30px]">
-              {!searchOpen ? (
-                <button
-                  type="button"
-                  onClick={() => setSearchOpen(true)}
-                  className="p-1.5 -ml-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
-                  title="Buscar"
-                >
-                  <Search className="w-4 h-4" />
-                </button>
-              ) : (
-                <div className="flex items-center gap-1.5 flex-1 min-w-[160px] border-b-2 border-ink pb-0.5">
-                  <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <input
-                    autoFocus
-                    className="flex-1 min-w-0 bg-transparent border-none outline-none text-sm text-foreground placeholder:text-muted-foreground/50"
-                    placeholder="Buscar por banco, alias o titular..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => { setSearch(""); setSearchOpen(false); }}
-                    className="p-0.5 rounded-full text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
+          <FilterBar>
+            <FilterRow>
+              <CollapsibleSearch
+                open={searchOpen}
+                onOpen={() => setSearchOpen(true)}
+                onClose={() => { setSearch(""); setSearchOpen(false); }}
+                value={search}
+                onChange={setSearch}
+                placeholder="Buscar por banco, alias o titular..."
+              />
               {!searchOpen && (
                 <>
                   <SortChip label="Titular" active={sortField === "titular"} dir={sortDir} onClick={() => toggleSort("titular")} />
                   <SortChip label="Banco" active={sortField === "bank"} dir={sortDir} onClick={() => toggleSort("bank")} />
-                  <button
-                    type="button"
+                  <FilterChip
+                    label="Personalizado" icon={SlidersHorizontal}
+                    active={customFilterActive}
                     onClick={() => setShowCustomFilter((v) => !v)}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border-2 transition-colors ${customFilterActive ? "border-ink bg-accent text-primary font-medium" : "border-transparent text-muted-foreground/60 hover:bg-accent"}`}
-                  >
-                    <SlidersHorizontal className="w-3 h-3" />
-                    Personalizado
-                  </button>
+                  />
                 </>
               )}
-            </div>
+            </FilterRow>
             {showCustomFilter && !searchOpen && (
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                <PillSelect value={filterTitular} onChange={(e) => setFilterTitular(e.target.value)}>
-                  <option value="">Todos los titulares</option>
-                  {distinctTitulares.map((t) => <option key={t} value={t}>{t}</option>)}
-                </PillSelect>
-                <PillSelect value={filterBank} onChange={(e) => setFilterBank(e.target.value)}>
-                  <option value="">Todos los bancos</option>
-                  {distinctBanks.map((b) => <option key={b} value={b}>{b}</option>)}
-                </PillSelect>
+              <FilterPanel>
+                <PillSelect value={filterTitular} onChange={setFilterTitular} placeholder="Titular"
+                  options={distinctTitulares.map((t) => ({ value: t, label: t }))} />
+                <PillSelect value={filterBank} onChange={setFilterBank} placeholder="Banco"
+                  options={distinctBanks.map((b) => ({ value: b, label: b }))} />
                 {customFilterActive && (
-                  <button
-                    type="button"
-                    onClick={() => { setFilterTitular(""); setFilterBank(""); }}
-                    className="text-xs text-muted-foreground hover:text-foreground px-2 shrink-0 self-center"
-                  >
-                    Limpiar
-                  </button>
+                  <ClearFilters onClick={() => { setFilterTitular(""); setFilterBank(""); }} />
                 )}
-              </div>
+              </FilterPanel>
             )}
-          </div>
+          </FilterBar>
 
           {visibleCards.length === 0 ? (
             <UiCard className="p-8 text-center text-muted-foreground">
