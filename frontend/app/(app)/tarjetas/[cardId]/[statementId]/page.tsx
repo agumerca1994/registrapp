@@ -9,6 +9,7 @@ import { Plus, ChevronLeft, X, ExternalLink, Users2, Phone } from "lucide-react"
 import { Card as UiCard } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
+import { FIELD, SelectField, DateField } from "@/components/ui/form";
 
 const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -217,17 +218,15 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                     {p.type === "self" ? (
                       <span className="border rounded-lg px-2 py-1.5 text-xs bg-card text-muted-foreground shrink-0">Vos</span>
                     ) : (
-                      <select
+                      <SelectField className="w-36 shrink-0"
                         value={p.type}
-                        onChange={e => {
-                          const t = e.target.value as "member" | "external";
-                          updateParticipant(idx, { type: t, user_id: null, member_name: "", contact: "" });
-                        }}
-                        className="border rounded-lg px-2 py-1.5 text-xs bg-card shrink-0"
-                      >
-                        <option value="member">Del hogar</option>
-                        <option value="external">Externo</option>
-                      </select>
+                        onChange={v => updateParticipant(idx, {
+                          type: v as "member" | "external", user_id: null, member_name: "", contact: "",
+                        })}
+                        options={[
+                          { value: "member", label: "Del hogar" },
+                          { value: "external", label: "Externo" },
+                        ]} />
                     )}
                     {p.type !== "self" && (
                       <button type="button" onClick={() => removeParticipant(idx)}
@@ -238,38 +237,28 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                   {p.type === "self" ? (
                     <p className="text-sm text-foreground px-1">{p.member_name}</p>
                   ) : p.type === "member" ? (
-                    <select
+                    <SelectField
                       required
-                      value={p.user_id ?? ""}
-                      onChange={e => {
-                        const id = parseInt(e.target.value);
+                      value={p.user_id != null ? String(p.user_id) : ""}
+                      onChange={v => {
+                        const id = parseInt(v);
                         const mem = otherMembers.find(m => m.id === id);
                         updateParticipant(idx, { user_id: id, member_name: mem?.display_name || mem?.email || "" });
                       }}
-                      className="w-full border rounded-lg px-2 py-2 text-sm bg-card text-foreground"
-                    >
-                      <option value="">Seleccionar miembro...</option>
-                      {otherMembers.map(m => (
-                        <option key={m.id} value={m.id}>{m.display_name || m.email}</option>
-                      ))}
-                    </select>
+                      placeholder="Miembro del hogar"
+                      options={otherMembers.map(m => ({ value: String(m.id), label: m.display_name || m.email }))} />
                   ) : (
                     <div className="space-y-1.5">
                       {agendaContacts.length > 0 && (
-                        <select
+                        <SelectField
                           value=""
-                          onChange={e => {
-                            const c = agendaContacts.find(a => a.id === parseInt(e.target.value));
+                          onChange={v => {
+                            const c = agendaContacts.find(a => a.id === parseInt(v));
                             if (!c) return;
                             updateParticipant(idx, { member_name: c.contact_name, contact: c.contact_phone });
                           }}
-                          className="w-full border rounded-lg px-2 py-1.5 text-xs bg-accent border-primary/20 text-primary"
-                        >
-                          <option value="">📇 Elegir de la agenda...</option>
-                          {agendaContacts.map(c => (
-                            <option key={c.id} value={c.id}>{c.contact_name} · {c.contact_phone}</option>
-                          ))}
-                        </select>
+                          placeholder="Elegir de la agenda"
+                          options={agendaContacts.map(c => ({ value: String(c.id), label: `${c.contact_name} · ${c.contact_phone}` }))} />
                       )}
                       <input
                         required
@@ -277,7 +266,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                         placeholder="Alias (ej: Maria)"
                         value={p.member_name}
                         onChange={e => updateParticipant(idx, { member_name: e.target.value })}
-                        className="w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
+                        className={FIELD}
                       />
                       <div className="flex gap-2">
                         <input
@@ -286,7 +275,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                           placeholder="WhatsApp o email (opcional)"
                           value={p.contact}
                           onChange={e => updateParticipant(idx, { contact: e.target.value })}
-                          className="flex-1 border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
+                          className={`${FIELD} flex-1`}
                         />
                         <button
                           type="button"
@@ -319,7 +308,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                         placeholder="0,00"
                         value={p.amount}
                         onChange={e => updateParticipant(idx, { amount: e.target.value })}
-                        className="mt-0.5 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
+                        className={FIELD}
                       />
                     </div>
                   ) : (
@@ -446,24 +435,23 @@ function EditItemModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-muted-foreground">Descripción</label>
-              <input className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+              <input className={FIELD}
                 value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} required />
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Categoría</label>
-              <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
-                value={form.category_id} onChange={(e) => setForm((p) => ({ ...p, category_id: e.target.value }))}>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <SelectField value={form.category_id}
+                onChange={v => setForm((p) => ({ ...p, category_id: v }))}
+                options={categories.map((c) => ({ value: String(c.id), label: c.name }))} />
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Fecha</label>
-              <input type="date" className={INPUT}
-                value={form.item_date} onChange={(e) => setForm((p) => ({ ...p, item_date: e.target.value }))} required />
+              <DateField required value={form.item_date}
+                onChange={v => setForm((p) => ({ ...p, item_date: v }))} />
             </div>
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-muted-foreground">Monto ($)</label>
-              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={INPUT}
+              <label className="text-xs font-medium text-muted-foreground">Monto</label>
+              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
                 value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} required />
             </div>
           </div>
@@ -485,7 +473,6 @@ function EditItemModal({
   );
 }
 
-const INPUT = "mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground";
 
 function NewCategoryModal({ existingColors, onSave, onClose }: {
   existingColors: (string | null | undefined)[];
@@ -503,12 +490,12 @@ function NewCategoryModal({ existingColors, onSave, onClose }: {
         <form onSubmit={async (e) => { e.preventDefault(); setSaving(true); await onSave(form); setSaving(false); }} className="space-y-3">
           <div>
             <label className="text-xs font-medium text-muted-foreground">Nombre</label>
-            <input className={INPUT} placeholder="Supermercado" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required />
+            <input className={FIELD} placeholder="Supermercado" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required />
           </div>
           <div className="flex items-end gap-4">
             <div>
               <label className="text-xs font-medium text-muted-foreground">Color</label>
-              <input type="color" className="mt-1 block h-9 w-12 border rounded-lg cursor-pointer"
+              <input type="color" className="mt-1 block h-9 w-12 border-2 border-ink rounded-lg cursor-pointer"
                 value={form.color} onChange={(e) => setForm((p) => ({ ...p, color: e.target.value }))} />
             </div>
             <label className="flex items-center gap-2 text-sm pb-2">
@@ -685,27 +672,27 @@ export default function StatementDetailPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-muted-foreground">Descripción</label>
-              <input className={INPUT} placeholder="TV Samsung"
+              <input className={FIELD} placeholder="TV Samsung"
                 value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} required />
             </div>
             {form.currency !== "USD" && (
             <div>
               <label className="text-xs font-medium text-muted-foreground">Categoría</label>
               <div className="flex gap-1.5">
-                <select className={INPUT}
-                  value={form.category_id} onChange={(e) => setForm((p) => ({ ...p, category_id: e.target.value }))} required={form.currency === "ARS"}>
-                  <option value="">Seleccionar...</option>
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                <button type="button" onClick={() => setShowNewCat(true)}
-                  className="mt-1 px-2.5 border rounded-lg text-muted-foreground hover:bg-accent shrink-0 text-lg leading-none">+</button>
+                <SelectField className="flex-1" required={form.currency === "ARS"}
+                  value={form.category_id}
+                  onChange={v => setForm((p) => ({ ...p, category_id: v }))}
+                  placeholder="Categoría"
+                  options={categories.map((c) => ({ value: String(c.id), label: c.name }))} />
+                <button type="button" onClick={() => setShowNewCat(true)} title="Nueva categoría"
+                  className="mt-1 px-2.5 border-2 border-ink rounded-lg text-muted-foreground hover:bg-accent shrink-0 text-lg leading-none">+</button>
               </div>
             </div>
             )}
             <div>
               <label className="text-xs font-medium text-muted-foreground">Fecha</label>
-              <input type="date" className={INPUT}
-                value={form.item_date} onChange={(e) => setForm((p) => ({ ...p, item_date: e.target.value }))} required />
+              <DateField required value={form.item_date}
+                onChange={v => setForm((p) => ({ ...p, item_date: v }))} />
             </div>
             {form.currency !== "USD" && (
             <div className="sm:col-span-2">
@@ -728,25 +715,25 @@ export default function StatementDetailPage() {
               <>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Cant. cuotas</label>
-                  <input type="number" min="2" className={INPUT}
+                  <input type="number" min="2" className={FIELD}
                     value={form.installment_count} onChange={(e) => handleInstallmentCountChange(e.target.value)} required />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Monto por cuota ($)</label>
-                  <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={INPUT}
+                  <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
                     value={form.amount} onChange={(e) => handleAmountChange("amount", e.target.value)} required />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Monto total ($)</label>
-                  <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={INPUT}
+                  <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
                     value={form.purchase_total} onChange={(e) => handleAmountChange("purchase_total", e.target.value)} />
                   <p className="text-xs text-muted-foreground/70 mt-0.5">Modificar uno auto-calcula el otro</p>
                 </div>
               </>
             ) : (
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Monto ($)</label>
-                <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={INPUT}
+                <label className="text-xs font-medium text-muted-foreground">Monto</label>
+                <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
                   value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} required />
               </div>
             )}

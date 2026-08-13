@@ -7,6 +7,7 @@ import api from "@/lib/api";
 import { formatARS, getErrorMessage } from "@/lib/utils";
 import { Pencil, X, Loader2, Home, Trash2, CalendarDays } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { FIELD } from "@/components/ui/form";
 import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
 
@@ -171,7 +172,8 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
     }
   };
 
-  const inputCls = "mt-1 w-full border rounded-lg px-3 py-2 text-[16px] sm:text-sm";
+  // 16px on mobile: anything smaller makes iOS Safari zoom on focus.
+  const inputCls = `${FIELD} text-[16px] sm:text-sm`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>

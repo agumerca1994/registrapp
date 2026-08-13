@@ -11,6 +11,8 @@ import { formatARS, formatUSD, normalizePhoneNumber, getErrorMessage, pickCatego
 import { useAuth } from "@/contexts/AuthContext";
 import { COUNTRIES } from "@/lib/countries";
 import { Card } from "@/components/ui/card";
+import { FIELD, FormGrid, SelectField, DateField } from "@/components/ui/form";
+import { Fab } from "@/components/ui/fab";
 import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
 
@@ -289,19 +291,17 @@ function EditExpenseModal({
           <div>
             <label className="text-xs font-medium text-muted-foreground">Descripción</label>
             <input required value={title} onChange={e => setTitle(e.target.value)}
-              className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+              className={FIELD} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-muted-foreground">Fecha del gasto</label>
-              <input required type="date" value={expenseDate} onChange={e => setExpenseDate(e.target.value)}
-                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+              <DateField required value={expenseDate} onChange={setExpenseDate} />
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Fecha de pago</label>
-              <input required type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)}
-                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+              <DateField required value={paymentDate} onChange={setPaymentDate} />
             </div>
           </div>
 
@@ -312,14 +312,12 @@ function EditExpenseModal({
                   <label className="text-xs font-medium text-muted-foreground">Monto total</label>
                   <input required type="text" inputMode="decimal" value={totalAmount}
                     onChange={e => setTotalAmount(e.target.value)}
-                    className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+                    className={FIELD} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Categoría</label>
-                  <select required value={categoryId} onChange={e => setCategoryId(e.target.value)}
-                    className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card">
-                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  <SelectField required value={categoryId} onChange={setCategoryId}
+                    options={categories.map(c => ({ value: String(c.id), label: c.name }))} />
                 </div>
               </div>
 
@@ -331,7 +329,7 @@ function EditExpenseModal({
                       <span className="flex-1 text-sm text-foreground truncate">{s.member_name}</span>
                       <input type="text" inputMode="decimal" value={splitAmounts[s.id] ?? ""}
                         onChange={e => setSplitAmounts(prev => ({ ...prev, [s.id]: e.target.value }))}
-                        className="w-28 border rounded-lg px-2 py-1.5 text-sm text-right" />
+                        className={`${FIELD} mt-0 w-28 text-right`} />
                     </div>
                   ))}
                 </div>
@@ -462,19 +460,15 @@ function ConvertToArsModal({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-medium text-muted-foreground">Cotización</label>
-            <select value={rateType} onChange={e => handleRateTypeChange(e.target.value as RateType)}
-              className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card">
-              {RATE_TYPES.map(t => (
-                <option key={t} value={t}>{RATE_TYPE_LABELS[t]}</option>
-              ))}
-            </select>
+            <SelectField value={rateType} onChange={v => handleRateTypeChange(v as RateType)}
+              options={RATE_TYPES.map(t => ({ value: t, label: RATE_TYPE_LABELS[t] }))} />
           </div>
 
           <div>
             <label className="text-xs font-medium text-muted-foreground">Valor del dólar</label>
             <input required type="text" inputMode="decimal" value={rate} onChange={e => handleRateInputChange(e.target.value)}
               placeholder={loadingRate ? "Cargando..." : "0,00"}
-              className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+              className={FIELD} />
           </div>
         </div>
 
@@ -959,10 +953,10 @@ export default function SharedExpensesPage() {
     <div className="max-w-4xl space-y-4 md:space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-lg md:text-2xl font-display font-bold text-foreground">Gastos compartidos</h1>
-        <Button onClick={() => { setShowForm(v => !v); resetForm(); }}>
-          <Plus className="w-4 h-4" /> Nuevo gasto
-        </Button>
       </div>
+
+      <Fab label="Nuevo gasto compartido"
+        onClick={() => { setShowForm(true); resetForm(); }} />
 
       {people.length > 0 && (
         <div className="flex items-start gap-3 overflow-x-auto pt-1.5 pb-1 -mx-4 px-4 md:mx-0 md:px-0">
@@ -983,15 +977,22 @@ export default function SharedExpensesPage() {
       )}
 
       {showForm && (
-        <Card className="p-4 md:p-5">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40"
+          onClick={() => setShowForm(false)}>
+          <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg p-5 max-h-[92vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-foreground">Nuevo gasto compartido</h3>
+            <button type="button" onClick={() => setShowForm(false)}
+              className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          </div>
           <form onSubmit={handleSubmit} className="space-y-4">
-          <p className="text-sm font-medium text-foreground">Nuevo gasto compartido</p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <FormGrid>
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-muted-foreground">Descripción *</label>
               <input required value={title} onChange={e => setTitle(e.target.value)}
-                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                className={FIELD}
                 placeholder="ej: Supermercado del fin de semana" />
             </div>
 
@@ -1003,16 +1004,14 @@ export default function SharedExpensesPage() {
                 inputMode="decimal"
                 value={totalAmount}
                 onChange={e => setTotalAmount(e.target.value)}
-                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+                className={FIELD}
                 placeholder="0,00"
               />
             </div>
 
             <div>
               <label className="text-xs font-medium text-muted-foreground">Fecha *</label>
-              <input required type="date" value={expenseDate}
-                onChange={e => setExpenseDate(e.target.value)}
-                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+              <DateField required value={expenseDate} onChange={setExpenseDate} />
             </div>
 
             <div className="sm:col-span-2">
@@ -1025,9 +1024,7 @@ export default function SharedExpensesPage() {
               {differentPaymentDate && (
                 <div className="mt-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Fecha de pago *</label>
-                  <input required type="date" value={paymentDate}
-                    onChange={e => setPaymentDate(e.target.value)}
-                    className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+                  <DateField required value={paymentDate} onChange={setPaymentDate} />
                   <p className="text-xs text-muted-foreground/70 mt-1">
                     Se usa para saber en qué mes aparece este gasto en la vista por persona — no afecta tus Egresos.
                   </p>
@@ -1053,7 +1050,7 @@ export default function SharedExpensesPage() {
                       value={catName}
                       onChange={e => setCatName(e.target.value)}
                       placeholder="Nombre categoría"
-                      className="flex-1 border rounded-lg px-2 py-1.5 text-sm"
+                      className={`${FIELD} mt-0 flex-1`}
                     />
                     <input type="color" value={catColor}
                       onChange={e => setCatColor(e.target.value)}
@@ -1069,11 +1066,9 @@ export default function SharedExpensesPage() {
                   </div>
                 </div>
               )}
-              <select required value={categoryId} onChange={e => setCategoryId(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm bg-card">
-                <option value="">Seleccionar...</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <SelectField required value={categoryId} onChange={setCategoryId}
+                placeholder="Categoría"
+                options={categories.map(c => ({ value: String(c.id), label: c.name }))} />
               {!showCatForm && categories.length === 0 && (
                 <p className="text-xs text-amber-600 mt-1">
                   No hay categorías. Usa <strong>+ Crear</strong> para agregar una.
@@ -1083,13 +1078,13 @@ export default function SharedExpensesPage() {
 
             <div>
               <label className="text-xs font-medium text-muted-foreground">Division *</label>
-              <select value={splitType} onChange={e => handleSplitTypeChange(e.target.value as "equal" | "custom")}
-                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card">
-                <option value="equal">Equitativa</option>
-                <option value="custom">Personalizada</option>
-              </select>
+              <SelectField value={splitType} onChange={v => handleSplitTypeChange(v as "equal" | "custom")}
+                options={[
+                  { value: "equal", label: "Equitativa" },
+                  { value: "custom", label: "Personalizada" },
+                ]} />
             </div>
-          </div>
+          </FormGrid>
 
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -1107,19 +1102,18 @@ export default function SharedExpensesPage() {
                   <div key={idx} className="border rounded-lg p-2.5 bg-muted space-y-2">
                     <div className="flex items-center gap-2">
                       {isCreator ? (
-                        <span className="border rounded-lg px-2 py-1.5 text-xs bg-card text-muted-foreground shrink-0">
+                        <span className="border-2 border-ink rounded-lg px-2 py-1.5 text-xs bg-card text-muted-foreground shrink-0">
                           Del hogar
                         </span>
                       ) : (
-                        <select value={p.type}
-                          onChange={e => {
-                            const t = e.target.value as "member" | "external";
-                            updateParticipant(idx, { type: t, user_id: null, member_name: "" });
-                          }}
-                          className="border rounded-lg px-2 py-1.5 text-xs bg-card shrink-0">
-                          <option value="member">Del hogar</option>
-                          <option value="external">Externo</option>
-                        </select>
+                        <SelectField className="w-36 shrink-0" value={p.type}
+                          onChange={v => updateParticipant(idx, {
+                            type: v as "member" | "external", user_id: null, member_name: "",
+                          })}
+                          options={[
+                            { value: "member", label: "Del hogar" },
+                            { value: "external", label: "Externo" },
+                          ]} />
                       )}
                       {!isCreator && (
                         <button type="button" onClick={() => removeParticipant(idx)}
@@ -1134,25 +1128,22 @@ export default function SharedExpensesPage() {
                         {p.member_name}
                       </p>
                     ) : p.type === "member" ? (
-                      <select required value={p.user_id ?? ""}
-                        onChange={e => {
-                          const id = parseInt(e.target.value);
+                      <SelectField required value={p.user_id != null ? String(p.user_id) : ""}
+                        onChange={v => {
+                          const id = parseInt(v);
                           const mem = members.find(m => m.id === id);
                           updateParticipant(idx, { user_id: id, member_name: mem?.display_name || mem?.email || "" });
                         }}
-                        className="w-full border rounded-lg px-2 py-2 text-sm bg-card">
-                        <option value="">Seleccionar miembro...</option>
-                        {members.filter(m => m.id !== appUser?.id).map(m => (
-                          <option key={m.id} value={m.id}>{m.display_name || m.email}</option>
-                        ))}
-                      </select>
+                        placeholder="Miembro del hogar"
+                        options={members.filter(m => m.id !== appUser?.id)
+                          .map(m => ({ value: String(m.id), label: m.display_name || m.email }))} />
                     ) : (
                       <div className="space-y-2">
                         {agendaContacts.length > 0 && (
-                          <select
+                          <SelectField
                             value=""
-                            onChange={e => {
-                              const c = agendaContacts.find(a => a.id === parseInt(e.target.value));
+                            onChange={v => {
+                              const c = agendaContacts.find(a => a.id === parseInt(v));
                               if (!c) return;
                               const { prefix, local, isValid } = normalizePhoneNumber(c.contact_phone, COUNTRIES.map(cc => cc.prefix));
                               if (!isValid) return;
@@ -1163,18 +1154,13 @@ export default function SharedExpensesPage() {
                                 invite_method: "whatsapp",
                               });
                             }}
-                            className="w-full border rounded-lg px-2 py-1.5 text-xs bg-accent border-primary/20 text-primary"
-                          >
-                            <option value="">📇 Elegir de la agenda...</option>
-                            {agendaContacts.map(c => (
-                              <option key={c.id} value={c.id}>{c.contact_name} · {c.contact_phone}</option>
-                            ))}
-                          </select>
+                            placeholder="Elegir de la agenda"
+                            options={agendaContacts.map(c => ({ value: String(c.id), label: `${c.contact_name} · ${c.contact_phone}` }))} />
                         )}
                         <div className="flex gap-2">
                           <input required type="text" placeholder="Nombre del externo"
                             value={p.member_name} onChange={e => updateParticipant(idx, { member_name: e.target.value })}
-                            className="flex-1 border rounded-lg px-3 py-2 text-sm" />
+                            className={`${FIELD} flex-1`} />
                           <button type="button"
                             onClick={async () => {
                               const result = await pickContactAndNormalize(COUNTRIES.map(c => c.prefix));
@@ -1222,7 +1208,7 @@ export default function SharedExpensesPage() {
                             <input type="email" placeholder="email@ejemplo.com"
                               value={p.invite_email}
                               onChange={e => updateParticipant(idx, { invite_email: e.target.value })}
-                              className="w-full border rounded-lg px-3 py-2 text-sm" />
+                              className={FIELD} />
                             <p className="text-xs text-primary">Se generara un link para copiar y compartir manualmente</p>
                           </div>
                         )}
@@ -1230,20 +1216,16 @@ export default function SharedExpensesPage() {
                         {p.invite_method === "whatsapp" && (
                           <div className="space-y-1">
                             <div className="flex gap-2">
-                              <select
+                              <SelectField className="w-32 shrink-0"
                                 value={p.invite_phone_prefix}
-                                onChange={e => updateParticipant(idx, { invite_phone_prefix: e.target.value, invite_phone_local: "" })}
-                                className="border rounded-lg px-2 py-2 text-sm bg-card shrink-0">
-                                {COUNTRIES.map(c => (
-                                  <option key={c.prefix} value={c.prefix}>{c.flag} +{c.prefix}</option>
-                                ))}
-                              </select>
+                                onChange={v => updateParticipant(idx, { invite_phone_prefix: v, invite_phone_local: "" })}
+                                options={COUNTRIES.map(c => ({ value: c.prefix, label: `${c.flag} +${c.prefix}` }))} />
                               <input type="tel"
                                 value={p.invite_phone_local}
                                 onChange={e => updateParticipant(idx, { invite_phone_local: e.target.value.replace(/[^\d\s]/g, "") })}
                                 placeholder={COUNTRIES.find(c => c.prefix === p.invite_phone_prefix)?.placeholder ?? ""}
                                 inputMode="numeric"
-                                className="flex-1 border rounded-lg px-3 py-2 text-sm min-w-0" />
+                                className={`${FIELD} mt-0 flex-1`} />
                             </div>
                             {p.invite_phone_local.trim() && (
                               <p className="text-xs text-muted-foreground/70">
@@ -1265,7 +1247,7 @@ export default function SharedExpensesPage() {
                           placeholder="0,00"
                           value={p.amount}
                           onChange={e => setManualAmount(idx, e.target.value)}
-                          className={`mt-0.5 w-full border rounded-lg px-3 py-2 text-sm ${!p.manual ? "text-muted-foreground italic" : ""}`}
+                          className={`${FIELD} ${!p.manual ? "text-muted-foreground italic" : ""}`}
                         />
                         {!p.manual && parseAmt(p.amount) > 0 && (
                           <p className="text-xs text-primary mt-0.5">sugerencia</p>
@@ -1310,7 +1292,8 @@ export default function SharedExpensesPage() {
             </Button>
           </div>
           </form>
-        </Card>
+          </Card>
+        </div>
       )}
 
       {selectedPerson ? (

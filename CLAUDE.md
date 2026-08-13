@@ -396,7 +396,7 @@ useEffect(() => { setMounted(true); }, []);
 - Use `IF NOT EXISTS` for idempotency — if a deploy fails mid-migration, Alembic won't mark it complete and will retry on next deploy. Use `op.execute(sa.text("ALTER TABLE ... ADD COLUMN IF NOT EXISTS ..."))` and `CREATE UNIQUE INDEX IF NOT EXISTS` to make migrations safe to re-run
 
 ### Form field visual consistency
-Import `FIELD`, `FormGrid`, `SelectField` and `DateField` from `components/ui/form.tsx` — don't declare a per-page `INPUT` constant, and don't reach for a bare `<select>` or `<input type="date">`. The rules and the reasons are in the frontend section above; the short version is that the two native controls render an OS widget for the part CSS can't restyle, and that a field with no `min-w-0` stretches its whole column to fit its longest option.
+Import `FIELD`, `FormGrid`, `SelectField` and `DateField` from `components/ui/form.tsx` — don't declare a per-page `INPUT` constant, and don't reach for a bare `<select>` or `<input type="date">`. As of 2026-08-13 there are **zero** of either left under `app/(app)/`, so a new one stands out as the odd screen rather than as one more of many. The rules and the reasons are in the frontend section above; the short version is that the two native controls render an OS widget for the part CSS can't restyle, and that a field with no `min-w-0` stretches its whole column to fit its longest option.
 
 ### Amount fields
 Use `type="text" inputMode="decimal" pattern="[0-9.,]*"` instead of `type="number"` for currency inputs. `type="number"` causes UX issues on mobile and with large Argentine peso values.

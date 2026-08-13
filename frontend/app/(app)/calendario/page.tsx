@@ -11,10 +11,10 @@ import { ChevronLeft, ChevronRight, Plus, X, Trash2, Bell, CreditCard as CardIco
 import api from "@/lib/api";
 import { formatARS, cn, getErrorMessage } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
+import { FIELD, DateField } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 
 const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-const INPUT = "mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground";
 
 interface StatementCal {
   id: number;
@@ -79,13 +79,12 @@ function AddReminderModal({
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label className="text-xs font-medium text-muted-foreground">Texto *</label>
-            <input required className={INPUT} placeholder="ej: Pagar tarjeta Visa"
+            <input required className={FIELD} placeholder="ej: Pagar tarjeta Visa"
               value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground">Fecha *</label>
-            <input required type="date" className={INPUT}
-              value={dateStr} onChange={(e) => setDateStr(e.target.value)} />
+            <DateField required value={dateStr} onChange={setDateStr} />
           </div>
           <p className="text-xs text-muted-foreground/70">
             Se te va a avisar por WhatsApp ese día (si tenés tu WhatsApp vinculado en Configuración).

@@ -6,6 +6,7 @@ import api from "@/lib/api";
 import { CreditCard, Plus, X, SlidersHorizontal } from "lucide-react";
 import { Card as UiCard } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { FIELD, FormGrid, SelectField } from "@/components/ui/form";
 import {
   FilterBar, FilterRow, FilterPanel, SortChip, FilterChip, PillSelect,
   ClearFilters, CollapsibleSearch,
@@ -32,7 +33,6 @@ interface Member {
 }
 
 const EMPTY_FORM = { bank: "", alias: "", titular: "", last_4_digits: "", due_day: "" };
-const INPUT = "mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-card text-foreground";
 
 type DeleteMode = "keep" | "delete";
 
@@ -82,28 +82,24 @@ function CardModal({
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <FormGrid>
             <div className={bankSelect === OTRO ? "sm:col-span-2" : ""}>
               <label className="text-xs font-medium text-muted-foreground">Banco</label>
-              <select
-                className={INPUT}
+              <SelectField
+                required
                 value={bankSelect}
-                onChange={(e) => {
-                  const v = e.target.value;
+                onChange={(v) => {
                   setBankSelect(v);
                   setForm((p) => ({ ...p, bank: v === OTRO ? "" : v }));
                 }}
-                required
-              >
-                <option value="" disabled>Seleccionar...</option>
-                {ARGENTINE_BANKS.map((b) => (
-                  <option key={b.name} value={b.name}>{b.name}</option>
-                ))}
-                <option value={OTRO}>Otro...</option>
-              </select>
+                placeholder="Banco"
+                options={[
+                  ...ARGENTINE_BANKS.map((b) => ({ value: b.name, label: b.name })),
+                  { value: OTRO, label: "Otro..." },
+                ]} />
               {bankSelect === OTRO && (
                 <input
-                  className={`${INPUT} mt-2`}
+                  className={FIELD}
                   placeholder="Nombre del banco/entidad"
                   value={form.bank}
                   onChange={(e) => setForm((p) => ({ ...p, bank: e.target.value }))}
@@ -113,7 +109,7 @@ function CardModal({
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Alias</label>
-              <input className={INPUT} placeholder="Visa Gold"
+              <input className={FIELD} placeholder="Visa Gold"
                 value={form.alias} onChange={(e) => setForm((p) => ({ ...p, alias: e.target.value }))} required />
             </div>
             <div className="sm:col-span-2">
@@ -135,19 +131,14 @@ function CardModal({
                 </button>
               </div>
               {titularMode === "hogar" ? (
-                <select
-                  className={`${INPUT} mt-2`}
+                <SelectField className="mt-1"
                   value={form.titular}
-                  onChange={(e) => setForm((p) => ({ ...p, titular: e.target.value }))}
-                >
-                  <option value="">Sin especificar</option>
-                  {memberNames.map((name) => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setForm((p) => ({ ...p, titular: v }))}
+                  placeholder="Sin especificar"
+                  options={memberNames.map((name) => ({ value: name, label: name }))} />
               ) : (
                 <input
-                  className={`${INPUT} mt-2`}
+                  className={FIELD}
                   placeholder="Nombre del titular"
                   value={form.titular}
                   onChange={(e) => setForm((p) => ({ ...p, titular: e.target.value }))}
@@ -156,19 +147,19 @@ function CardModal({
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Últimos 4 dígitos (opcional)</label>
-              <input maxLength={4} className={INPUT} placeholder="1234"
+              <input maxLength={4} className={FIELD} placeholder="1234"
                 value={form.last_4_digits} onChange={(e) => setForm((p) => ({ ...p, last_4_digits: e.target.value }))} />
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Día de vencimiento (opcional)</label>
-              <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2} className={INPUT} placeholder="7"
+              <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2} className={FIELD} placeholder="7"
                 value={form.due_day} onChange={(e) => setForm((p) => ({ ...p, due_day: e.target.value.replace(/[^0-9]/g, "") }))} />
               <p className="text-[11px] text-muted-foreground mt-1">
                 Se usa para estimar en qué mes se paga un resumen mientras el banco
                 no envió el vencimiento real. Al cargar la fecha real, la estimación se pisa.
               </p>
             </div>
-          </div>
+          </FormGrid>
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
             <Button type="submit" disabled={saving}>

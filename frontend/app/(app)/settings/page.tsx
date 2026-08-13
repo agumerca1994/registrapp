@@ -11,6 +11,7 @@ import WhatsAppVerifyForm from "@/components/WhatsAppVerifyForm";
 import McpConnectorSection from "@/components/McpConnectorSection";
 import { resetAllTours } from "@/components/ProductTour";
 import { Card } from "@/components/ui/card";
+import { FIELD, SelectField } from "@/components/ui/form";
 import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
 
@@ -169,7 +170,7 @@ function InviteFriendSection() {
       {method === "email" && (
         <div className="space-y-3">
           <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-            placeholder="correo@ejemplo.com" className="w-full border rounded-lg px-3 py-2 text-sm" />
+            placeholder="correo@ejemplo.com" className={`${FIELD} mt-0`} />
           <Button onClick={sendEmail} disabled={!email.trim()}>
             Enviar invitacion
           </Button>
@@ -179,16 +180,13 @@ function InviteFriendSection() {
       {method === "whatsapp" && (
         <div className="space-y-3">
           <div className="flex gap-2">
-            <select value={prefix} onChange={e => { setPrefix(e.target.value); setLocalPhone(""); }}
-              className="border rounded-lg px-2 py-2 text-sm bg-card shrink-0">
-              {COUNTRIES.map(c => (
-                <option key={c.prefix} value={c.prefix}>{c.flag} +{c.prefix}</option>
-              ))}
-            </select>
+            <SelectField className="w-32 shrink-0" value={prefix}
+              onChange={v => { setPrefix(v); setLocalPhone(""); }}
+              options={COUNTRIES.map(c => ({ value: c.prefix, label: `${c.flag} +${c.prefix}` }))} />
             <input type="tel" value={localPhone}
               onChange={e => setLocalPhone(e.target.value.replace(/[^0-9 ]/g, ""))}
               placeholder={country.placeholder} inputMode="numeric"
-              className="flex-1 border rounded-lg px-3 py-2 text-sm min-w-0" />
+              className={`${FIELD} flex-1 mt-0`} />
           </div>
           <Button onClick={sendWhatsApp} disabled={!localPhone.trim()}>
             Enviar invitacion
