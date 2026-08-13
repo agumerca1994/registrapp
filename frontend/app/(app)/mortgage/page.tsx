@@ -5,9 +5,9 @@ import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "@/lib/api";
 import { formatARS, getErrorMessage } from "@/lib/utils";
-import { Pencil, X, Loader2, Home, Trash2, CalendarDays } from "lucide-react";
+import { Pencil, X, Loader2, Home, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { FIELD } from "@/components/ui/form";
+import { FIELD, FormGrid, MonthField } from "@/components/ui/form";
 import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
 
@@ -222,24 +222,19 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormGrid>
                 {!editLoan && (
                   <>
                     <div>
                       <label className="text-xs font-medium text-muted-foreground">Primera cuota *</label>
-                      <div className="relative mt-1">
-                        <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60 pointer-events-none" />
-                        <input
-                          type="month" required
-                          value={form.first_payment_date} onChange={f("first_payment_date")}
-                          className="w-full border rounded-lg pl-9 pr-3 py-2 text-[16px] sm:text-sm bg-card text-foreground"
-                        />
-                      </div>
+                      <MonthField required
+                        value={form.first_payment_date}
+                        onChange={v => setForm(p => ({ ...p, first_payment_date: v }))} />
                     </div>
                     <div>
                       <label className="text-xs font-medium text-muted-foreground">Cantidad de cuotas *</label>
                       <input
-                        type="number" min={1} required
+                        type="text" inputMode="numeric" pattern="[0-9]*" required
                         value={form.total_cuotas} onChange={f("total_cuotas")}
                         className={inputCls}
                       />
@@ -267,7 +262,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                   </div>
                   {form.payment_day_mode === "fixed" ? (
                     <input
-                      type="number" min={1} max={28}
+                      type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2}
                       placeholder="ej: 10"
                       value={form.payment_day} onChange={f("payment_day")}
                       className={inputCls + " mt-2"}
@@ -344,7 +339,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                     className={inputCls}
                   />
                 </div>
-              </div>
+              </FormGrid>
 
               {error && <p className="text-xs text-destructive mt-1">{error}</p>}
 

@@ -5,6 +5,7 @@ import api from "@/lib/api";
 import { formatARS, formatPct, formatDate } from "@/lib/utils";
 import { X, Settings2, ChevronRight, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { MonthField } from "@/components/ui/form";
 import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
 
@@ -181,7 +182,7 @@ export default function MacroPage() {
         </div>
         <button
           onClick={() => setShowConfig(v => !v)}
-          className={`border p-1.5 rounded-lg hover:bg-accent transition-colors ${showConfig ? "bg-muted border-primary/40" : ""}`}
+          className={`p-1.5 rounded-full transition-colors ${showConfig ? "bg-accent text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
           title="Configurar variables"
         >
           <Settings2 className="w-4 h-4 text-muted-foreground" />
@@ -215,15 +216,9 @@ export default function MacroPage() {
               Carga un registro por día desde la fecha elegida hasta hoy (acumulativo).
             </p>
             <div className="flex items-center gap-2">
-              <input
-                type="month"
-                value={backfillFrom}
-                min="2016-01"
-                max={TODAY_MONTH}
-                onChange={e => setBackfillFrom(e.target.value)}
-                disabled={backfilling}
-                className="text-sm border rounded-lg px-2.5 py-1.5 bg-card flex-1 disabled:opacity-50"
-              />
+              <MonthField className="flex-1"
+                value={backfillFrom} onChange={setBackfillFrom}
+                min="2016-01" max={TODAY_MONTH} disabled={backfilling} />
               <Button
                 onClick={runBackfill}
                 disabled={backfilling || !backfillFrom}
@@ -244,8 +239,8 @@ export default function MacroPage() {
             onClick={() => changeRange(opt.value)}
             className={`text-xs px-3 py-1 rounded-full border-2 font-medium transition-colors ${
               range === opt.value
-                ? "border-ink bg-primary text-primary-foreground shadow-chip"
-                : "border-transparent bg-card text-muted-foreground hover:bg-accent"
+                ? "border-ink bg-primary text-primary-foreground"
+                : "border-transparent text-muted-foreground hover:bg-accent"
             }`}
           >
             {opt.label}

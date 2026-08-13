@@ -4,11 +4,13 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { startOfMonth, format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { CalendarDays, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { CalendarPanel, isoDate } from "@/components/ui/calendar";
 import {
-  Listbox, RequiredMirror, useAnchoredPanel, useDismiss, type SelectOption,
+  Listbox, PANEL, RequiredMirror, useAnchoredPanel, useDismiss, type SelectOption,
 } from "@/components/ui/listbox";
+
+const MONTHS_SHORT = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
 export type { SelectOption };
 
@@ -84,6 +86,82 @@ export function SelectField({ value, onChange, options, placeholder, required, c
       placeholder={placeholder} required={required} className={className}
       triggerClassName={`${FIELD} flex items-center gap-2 text-left`}
     />
+  );
+}
+
+/**
+ * A month, in the app's clothes. `<input type="month">` is the same story as
+ * `type="date"`: an OS widget with its own format (`mm/yyyy`) and its own
+ * picker. Value is `yyyy-MM`, which is what the endpoints that take a period
+ * already expect.
+ */
+export function MonthField({ value, onChange, min, max, required, disabled, className = "" }: {
+  value: string;
+  onChange: (value: string) => void;
+  min?: string;
+  max?: string;
+  required?: boolean;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [year, setYear] = useState(() => (value ? parseInt(value.slice(0, 4)) : new Date().getFullYear()));
+  const { trigger, panel, pos, reset } = useAnchoredPanel(open, [year]);
+  useDismiss(open, () => setOpen(false), [trigger, panel]);
+
+  const minYear = min ? parseInt(min.slice(0, 4)) : undefined;
+  const maxYear = max ? parseInt(max.slice(0, 4)) : undefined;
+  const label = value
+    ? format(parseISO(`${value}-01`), "MMMM yyyy", { locale: es })
+    : "Elegí un mes";
+
+  return (
+    <div className={`min-w-0 ${className}`}>
+      <button ref={trigger} type="button" disabled={disabled}
+        onClick={() => { setOpen(v => !v); reset(); }}
+        className={`${FIELD} flex items-center gap-2 text-left disabled:opacity-50`}>
+        <CalendarDays className="w-4 h-4 text-muted-foreground shrink-0" />
+        <span className={`flex-1 truncate ${value ? "first-letter:uppercase" : "text-muted-foreground"}`}>{label}</span>
+      </button>
+      {required && <RequiredMirror value={value} />}
+      {open && typeof document !== "undefined" && createPortal(
+        <div ref={panel} className={`fixed z-[100] ${PANEL} p-3 w-[248px]`}
+          style={{ top: pos?.top ?? 0, left: pos?.left ?? 0, visibility: pos ? "visible" : "hidden" }}>
+          <div className="flex items-center justify-between mb-2">
+            <button type="button" onClick={() => setYear(y => y - 1)}
+              disabled={minYear !== undefined && year <= minYear}
+              className="p-1 rounded-full hover:bg-accent text-muted-foreground disabled:opacity-30"
+              aria-label="Año anterior">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-xs font-semibold text-foreground">{year}</span>
+            <button type="button" onClick={() => setYear(y => y + 1)}
+              disabled={maxYear !== undefined && year >= maxYear}
+              className="p-1 rounded-full hover:bg-accent text-muted-foreground disabled:opacity-30"
+              aria-label="Año siguiente">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-1">
+            {MONTHS_SHORT.map((m, i) => {
+              const v = `${year}-${String(i + 1).padStart(2, "0")}`;
+              const selected = v === value;
+              const off = (min && v < min) || (max && v > max);
+              return (
+                <button key={m} type="button" disabled={!!off}
+                  onClick={() => { onChange(v); setOpen(false); }}
+                  className={`py-1.5 text-xs rounded-lg capitalize transition-colors disabled:opacity-30 ${
+                    selected ? "bg-primary text-primary-foreground font-semibold" : "hover:bg-accent"
+                  }`}>
+                  {m}
+                </button>
+              );
+            })}
+          </div>
+        </div>,
+        document.body,
+      )}
+    </div>
   );
 }
 
