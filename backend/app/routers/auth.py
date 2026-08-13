@@ -14,7 +14,13 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.firebase import get_current_user
-from app.models.shared_expense import SharedExpenseSplit
+from app.models.credit_card import CreditCard
+from app.models.currency_operation import CurrencyOperation
+from app.models.expense import ExpenseEntry
+from app.models.income import IncomeEntry
+from app.models.mortgage import MortgageRecord
+from app.models.payment_reminder import PaymentReminder
+from app.models.shared_expense import SharedExpense, SharedExpenseSplit
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 from app.routers.shared_expenses import _normalize_phone
@@ -27,6 +33,51 @@ logger = logging.getLogger(__name__)
 def _generate_tenant_code() -> str:
     chars = string.ascii_uppercase + string.digits
     return "".join(random.choices(chars, k=8))
+
+
+# Tables that hold what a household would actually lose by being abandoned.
+# Not exhaustive on purpose — categories and sources get auto-created and would
+# make an untouched household look occupied.
+_TENANT_DATA_MODELS = (
+    IncomeEntry, ExpenseEntry, CurrencyOperation, CreditCard, MortgageRecord,
+    SharedExpense, PaymentReminder,
+)
+
+
+async def _tenant_has_data(db: AsyncSession, tenant_id: int) -> bool:
+    """Whether abandoning this tenant would strand anything the user loaded."""
+    for model in _TENANT_DATA_MODELS:
+        found = await db.scalar(
+            select(model.id).where(model.tenant_id == tenant_id).limit(1)
+        )
+        if found is not None:
+            return True
+    return False
+
+
+async def _assert_can_leave_current_tenant(user: User, db: AsyncSession) -> None:
+    """Guard for the branch of register/join that re-tenants an existing user.
+
+    That branch exists for the user who left a household (or was removed) and
+    is parked in the empty tenant `_move_to_new_solo_tenant` gave them. It used
+    to be gated on member count alone, which let a *solo* user with a fully
+    loaded household create or join another one: the row moves, the old tenant
+    stays behind with every income, expense and card in it, and nothing about
+    the request looks like data loss. Being alone in a household is not the
+    same as not having one — what makes it safe to walk away is that there's
+    nothing to leave behind.
+    """
+    member_count = await db.scalar(
+        select(func.count()).select_from(User).where(User.tenant_id == user.tenant_id)
+    )
+    if member_count > 1:
+        raise HTTPException(status_code=400, detail="Ya sos parte de un hogar activo")
+    if await _tenant_has_data(db, user.tenant_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Ya tenés un hogar con datos cargados. Si querés cambiar de hogar, "
+                   "salí del actual desde Configuración.",
+        )
 
 
 async def _link_pending_splits(user: User, db: AsyncSession) -> None:
@@ -63,11 +114,7 @@ async def register(
         select(User).where(User.firebase_uid == firebase_user["uid"])
     )
     if existing:
-        member_count = await db.scalar(
-            select(func.count()).select_from(User).where(User.tenant_id == existing.tenant_id)
-        )
-        if member_count > 1:
-            raise HTTPException(status_code=400, detail="Ya sos parte de un hogar activo")
+        await _assert_can_leave_current_tenant(existing, db)
         new_t = Tenant(name=body.tenant_name, code=_generate_tenant_code())
         db.add(new_t)
         await db.flush()
@@ -113,11 +160,7 @@ async def join_tenant(
         select(User).where(User.firebase_uid == firebase_user["uid"])
     )
     if existing:
-        member_count = await db.scalar(
-            select(func.count()).select_from(User).where(User.tenant_id == existing.tenant_id)
-        )
-        if member_count > 1:
-            raise HTTPException(status_code=400, detail="Ya sos parte de un hogar activo")
+        await _assert_can_leave_current_tenant(existing, db)
 
     tenant = await db.scalar(select(Tenant).where(Tenant.code == body.tenant_code.strip().upper()))
     if not tenant:
