@@ -1,4 +1,5 @@
 import re
+import secrets
 import traceback as tb_module
 from datetime import datetime, timezone, timedelta
 from typing import Any
@@ -20,7 +21,11 @@ LEVEL_ORDER = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
 
 
 def _require_internal_key(x_internal_key: str = Header(...)) -> None:
-    if not settings.INTERNAL_LOG_KEY or x_internal_key != settings.INTERNAL_LOG_KEY:
+    # compare_digest, no `!=`: these endpoints do cross-tenant reads and writes
+    # and have no rate limit, so don't hand out a byte-at-a-time oracle.
+    if not settings.INTERNAL_LOG_KEY or not secrets.compare_digest(
+        x_internal_key, settings.INTERNAL_LOG_KEY
+    ):
         raise HTTPException(status_code=403, detail="Invalid internal key")
 
 
@@ -416,12 +421,9 @@ async def credit_card_item_raw(
 @router.post("/logs/frontend-error")
 async def log_frontend_error(
     payload: dict[str, Any],
-    x_internal_key: str = Header(...),
+    _: None = Depends(_require_internal_key),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    if not settings.INTERNAL_LOG_KEY or x_internal_key != settings.INTERNAL_LOG_KEY:
-        raise HTTPException(status_code=403, detail="Invalid internal key")
-
     db.add(AppLog(
         level="ERROR",
         logger_name="frontend",

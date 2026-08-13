@@ -10,12 +10,23 @@ alembic==1.14.0
 pydantic==2.13.4
 pydantic-settings==2.6.1
 firebase-admin==6.6.0
-python-dotenv==1.0.1
+python-dotenv==1.2.2
 httpx==0.28.1
-python-multipart==0.0.18
+# 0.0.18 arrastra path traversal (PYSEC-2026-1852) y varios DoS de parseo de
+# multipart. FastAPI lo usa para todo upload, así que la superficie es el import
+# de resúmenes.
+python-multipart==0.0.31
 openpyxl==3.1.5
 apscheduler==3.10.4
-pdfplumber==0.11.4
+# Subido de 0.11.4: pdfminer.six <20251230 deserializa con pickle los CMap que
+# referencia el PDF (PYSEC-2026-1761/1762) y esta app parsea resúmenes bancarios.
+# pdfplumber pinea pdfminer.six de forma exacta, así que no alcanza con overridear
+# la transitiva — hay que subir pdfplumber. 0.11.9 es la primera que trae los dos
+# parches (el de 20251107 cubre sólo la variante remota).
+# OJO: cambia el parser. Reprocesá un resumen de cada banco con
+# `extract` antes de confiar en los importadores de backend/scripts/.
+pdfplumber==0.11.9
+pdfminer.six==20251230
 # Pinned: later releases rename FastMCP -> MCPServer and change the signature of
 # streamable_http_app(), which the /mcp mounting in app/mcp_server/ relies on.
 mcp==1.29.0

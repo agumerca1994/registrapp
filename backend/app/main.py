@@ -88,11 +88,17 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 
+# El esquema completo de la API — incluidos /internal/* y /oauth/* — es el mapa
+# que necesita cualquiera que quiera atacarla. Fuera de producción sigue estando,
+# que es donde sirve.
+_is_prod = settings.ENVIRONMENT == "production"
+
 app = FastAPI(
     title="RegistrApp API",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=None if _is_prod else "/docs",
+    redoc_url=None if _is_prod else "/redoc",
+    openapi_url=None if _is_prod else "/openapi.json",
     lifespan=lifespan,
 )
 
@@ -215,5 +221,6 @@ if settings.MCP_ENABLED:
 
 @app.get("/health")
 async def health():
-    from app.core.config import settings
-    return {"status": "ok", "frontend_url": settings.FRONTEND_URL}
+    # Sin auth y público: devuelve liveness y nada más. Devolvía FRONTEND_URL,
+    # que es configuración interna que no le sirve a un health check.
+    return {"status": "ok"}

@@ -1,0 +1,23 @@
+# El contexto de build es ./frontend — ver la nota en backend/.dockerignore.
+#
+# node_modules acá además hace que el build sea mucho más lento: se copian miles
+# de archivos al contexto para después descartarlos e instalar de nuevo adentro.
+
+# Secretos
+.env
+.env.*
+firebase-debug.log
+
+# Dependencias y output de build (se regeneran adentro de la imagen)
+node_modules/
+.next/
+*.tsbuildinfo
+
+# Output efímero de Playwright (los snapshots commiteados viven en e2e/)
+test-results/
+playwright-report/
+blob-report/
+e2e/
+
+# OS
+.DS_Store

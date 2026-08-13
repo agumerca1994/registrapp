@@ -6,7 +6,7 @@ from decimal import Decimal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import or_, exists, select
+from sqlalchemy import func, or_, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -66,6 +66,77 @@ def _normalize_phone(value: str) -> str:
     return f"+{digits}" if digits else ""
 
 
+def _phone_lookup_values(phone: str | None) -> list[str]:
+    """Every spelling `User.whatsapp_phone` might be stored in for this number.
+
+    Rows written before `/auth/me/verify-whatsapp` started normalizing kept the
+    raw input, which for most users means no leading `+`. Matching only the
+    normalized form silently misses those accounts, and a missed match doesn't
+    fail loudly — it downgrades the share into an invite token that lives only
+    inside the WhatsApp message, invisible in the recipient's app.
+    """
+    digits = re.sub(r"\D", "", phone or "")
+    if not digits:
+        return []
+    return [f"+{digits}", digits]
+
+
+async def _find_user_by_phone(phone: str, db: AsyncSession) -> User | None:
+    values = _phone_lookup_values(phone)
+    if not values:
+        return None
+    return await db.scalar(select(User).where(User.whatsapp_phone.in_(values)))
+
+
+async def _find_user_by_email(email: str, db: AsyncSession) -> User | None:
+    """Case-insensitive on purpose — same failure mode as the phone lookup:
+    an exact-match miss costs the recipient in-app visibility, not an error.
+    """
+    return await db.scalar(select(User).where(func.lower(User.email) == email.strip().lower()))
+
+
+def _invite_lookup_values(user: User) -> list[str]:
+    """What an unclaimed invite's `invite_email` (which holds an email OR a
+    normalized phone) could contain for this user. Lowercased — the creator
+    typed the address by hand, so its casing is not to be trusted; comparisons
+    against this list must lowercase the stored side too. Phone spellings are
+    unaffected by `lower()`.
+    """
+    values = _phone_lookup_values(user.whatsapp_phone)
+    if user.email:
+        values.append(user.email.strip().lower())
+    return values
+
+
+def _my_split(user: User, splits: list["SharedExpenseSplit"]) -> "SharedExpenseSplit | None":
+    """The split that belongs to `user` — either already linked to their
+    account, or still an unclaimed invite addressed to their email/phone.
+    """
+    own = next((s for s in splits if s.user_id == user.id), None)
+    if own:
+        return own
+    values = _invite_lookup_values(user)
+    if not values:
+        return None
+    return next(
+        (s for s in splits
+         if s.user_id is None and (s.invite_email or "").strip().lower() in values),
+        None,
+    )
+
+
+def _consume_invite(user: User, split: SharedExpenseSplit) -> None:
+    """Bind an unclaimed invite to `user` without accepting it. Needed on
+    reject: leaving the token alive means the WhatsApp link still works and
+    silently re-accepts what they just turned down.
+    """
+    if split.user_id is None:
+        split.user_id = user.id
+        split.member_name = user.display_name or user.email
+    split.invite_token = None
+    split.invite_expires_at = None
+
+
 async def _save_tenant_contact(tenant_id: int, name: str, phone: str, db: AsyncSession) -> None:
     """Save a phone contact to the household agenda, skipping if that phone is already saved."""
     existing = await db.scalar(
@@ -86,23 +157,56 @@ async def _get_db_user(firebase_user: dict, db: AsyncSession) -> User:
     return user
 
 
-def _load_q(user_id: int, tenant_id: int):
-    return (
-        select(SharedExpense)
-        .where(
-            or_(
-                SharedExpense.tenant_id == tenant_id,
-                exists(
-                    select(SharedExpenseSplit.id).where(
-                        SharedExpenseSplit.shared_expense_id == SharedExpense.id,
-                        SharedExpenseSplit.user_id == user_id,
-                    )
-                ),
+def _load_q(user: User):
+    visible = [
+        SharedExpense.tenant_id == user.tenant_id,
+        exists(
+            select(SharedExpenseSplit.id).where(
+                SharedExpenseSplit.shared_expense_id == SharedExpense.id,
+                SharedExpenseSplit.user_id == user.id,
+            )
+        ),
+    ]
+    # Invites addressed to this user that nobody claimed yet. Without this the
+    # expense exists for them only inside the WhatsApp link, which is what
+    # produces the "nunca me llegó" reports — it did arrive, they just never
+    # clicked it, and the app had no way to show them that.
+    invite_values = _invite_lookup_values(user)
+    if invite_values:
+        visible.append(
+            exists(
+                select(SharedExpenseSplit.id).where(
+                    SharedExpenseSplit.shared_expense_id == SharedExpense.id,
+                    SharedExpenseSplit.user_id.is_(None),
+                    SharedExpenseSplit.invite_token.is_not(None),
+                    func.lower(SharedExpenseSplit.invite_email).in_(invite_values),
+                )
             )
         )
+    return (
+        select(SharedExpense)
+        .where(or_(*visible))
         .options(selectinload(SharedExpense.splits))
         .order_by(SharedExpense.expense_date.desc(), SharedExpense.created_at.desc())
     )
+
+
+def _out(shared: SharedExpense, user: User) -> SharedExpenseOut:
+    """Serialize for `user`: flag which split is theirs, and hide invite tokens
+    they have no business holding. Anyone who can see the expense can see every
+    split, and a token alone is enough to claim the split it belongs to — so
+    only the creator (who re-sends the links) and the invitee themselves get
+    the real value.
+    """
+    out = SharedExpenseOut.model_validate(shared)
+    mine = _my_split(user, shared.splits)
+    is_creator = shared.created_by_user_id == user.id
+    for split_out in out.splits:
+        if mine is not None and split_out.id == mine.id:
+            split_out.mine = True
+        elif not is_creator:
+            split_out.invite_token = None
+    return out
 
 
 async def _get_or_create_shared_category(tenant_id: int, db: AsyncSession) -> int:
@@ -262,8 +366,8 @@ async def list_shared_expenses(
     db: AsyncSession = Depends(get_db),
 ):
     user = await _get_db_user(firebase_user, db)
-    result = await db.scalars(_load_q(user.id, user.tenant_id))
-    return result.all()
+    result = await db.scalars(_load_q(user))
+    return [_out(shared, user) for shared in result.all()]
 
 
 @router.post("", response_model=SharedExpenseOut, status_code=status.HTTP_201_CREATED)
@@ -303,7 +407,7 @@ async def create_shared_expense(
             contact = split_in.invite_contact.strip()
             if _is_email(contact):
                 # Look up existing user by email
-                found = await db.scalar(select(User).where(User.email == contact))
+                found = await _find_user_by_email(contact, db)
                 if found:
                     resolved_user_id = found.id
                     resolved_name = found.display_name or found.email
@@ -316,7 +420,7 @@ async def create_shared_expense(
             elif _is_phone(contact):
                 normalized_phone = _normalize_phone(contact)
                 # Look up existing user by whatsapp_phone
-                found = await db.scalar(select(User).where(User.whatsapp_phone == normalized_phone))
+                found = await _find_user_by_phone(normalized_phone, db)
                 if found:
                     resolved_user_id = found.id
                     resolved_name = found.display_name or found.email
@@ -383,9 +487,9 @@ async def create_shared_expense(
             )
 
     result = await db.scalar(
-        _load_q(user.id, user.tenant_id).where(SharedExpense.id == shared.id)
+        _load_q(user).where(SharedExpense.id == shared.id)
     )
-    return result
+    return _out(result, user)
 
 
 @router.patch("/{shared_id}", response_model=SharedExpenseOut)
@@ -476,9 +580,9 @@ async def update_shared_expense(
     await db.commit()
 
     result = await db.scalar(
-        _load_q(user.id, user.tenant_id).where(SharedExpense.id == shared.id)
+        _load_q(user).where(SharedExpense.id == shared.id)
     )
-    return result
+    return _out(result, user)
 
 
 @router.post("/{shared_id}/convert-to-ars", response_model=SharedExpenseOut)
@@ -528,9 +632,9 @@ async def convert_to_ars(
     await db.commit()
 
     result = await db.scalar(
-        _load_q(user.id, user.tenant_id).where(SharedExpense.id == shared.id)
+        _load_q(user).where(SharedExpense.id == shared.id)
     )
-    return result
+    return _out(result, user)
 
 
 @router.delete("/{shared_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -617,11 +721,11 @@ async def accept_split(
     if not shared:
         raise HTTPException(status_code=404, detail="Gasto compartido no encontrado")
 
-    split = next(
-        (s for s in shared.splits if s.user_id == user.id and s.status == "pending"),
-        None,
-    )
-    if not split:
+    # `_my_split` also matches a still-unclaimed invite addressed to this user's
+    # email/phone, so accepting from the app does the same job as the invite
+    # link — the link is now a shortcut, not the only way in.
+    split = _my_split(user, shared.splits)
+    if not split or split.status != "pending":
         raise HTTPException(status_code=400, detail="No hay un split pendiente para este usuario")
 
     await _accept_split(user, shared, split, db)
@@ -632,19 +736,16 @@ async def accept_split(
             select(SharedExpense).where(SharedExpense.id == sib_id)
             .options(selectinload(SharedExpense.splits))
         )
-        sib_split = next(
-            (s for s in sib_shared.splits if s.user_id == user.id and s.status == "pending"),
-            None,
-        )
-        if sib_split:
+        sib_split = _my_split(user, sib_shared.splits)
+        if sib_split and sib_split.status == "pending":
             await _accept_split(user, sib_shared, sib_split, db)
 
     await db.commit()
 
     result = await db.scalar(
-        _load_q(user.id, user.tenant_id).where(SharedExpense.id == shared_id)
+        _load_q(user).where(SharedExpense.id == shared_id)
     )
-    return result
+    return _out(result, user)
 
 
 @router.post("/{shared_id}/reject", response_model=SharedExpenseOut)
@@ -663,32 +764,29 @@ async def reject_split(
     if not shared:
         raise HTTPException(status_code=404, detail="Gasto compartido no encontrado")
 
-    split = next(
-        (s for s in shared.splits if s.user_id == user.id and s.status == "pending"),
-        None,
-    )
-    if not split:
+    split = _my_split(user, shared.splits)
+    if not split or split.status != "pending":
         raise HTTPException(status_code=400, detail="No hay un split pendiente para este usuario")
 
     split.status = "rejected"
+    _consume_invite(user, split)
 
     for sib_id in await _find_group_shared_ids(shared, shared.id, db):
-        sib_split = await db.scalar(
-            select(SharedExpenseSplit).where(
-                SharedExpenseSplit.shared_expense_id == sib_id,
-                SharedExpenseSplit.user_id == user.id,
-                SharedExpenseSplit.status == "pending",
-            )
+        sib_shared = await db.scalar(
+            select(SharedExpense).where(SharedExpense.id == sib_id)
+            .options(selectinload(SharedExpense.splits))
         )
-        if sib_split:
+        sib_split = _my_split(user, sib_shared.splits)
+        if sib_split and sib_split.status == "pending":
             sib_split.status = "rejected"
+            _consume_invite(user, sib_split)
 
     await db.commit()
 
     result = await db.scalar(
-        _load_q(user.id, user.tenant_id).where(SharedExpense.id == shared_id)
+        _load_q(user).where(SharedExpense.id == shared_id)
     )
-    return result
+    return _out(result, user)
 
 
 @router.get("/invite/{token}", response_model=InviteInfoOut)
@@ -784,8 +882,8 @@ async def claim_invite(
     await db.commit()
 
     result = await db.scalar(
-        _load_q(user.id, user.tenant_id).where(
+        _load_q(user).where(
             SharedExpense.id == split.shared_expense_id
         )
     )
-    return result
+    return _out(result, user)

@@ -1,5 +1,4 @@
 import logging
-import random
 import secrets
 import string
 from datetime import datetime, timedelta
@@ -29,10 +28,17 @@ from app.schemas.user import UserJoinTenant, UserOut, UserRegister
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
+MAX_WHATSAPP_VERIFY_ATTEMPTS = 5
+
 
 def _generate_tenant_code() -> str:
+    # `secrets`, no `random`: este código es una credencial al portador sin
+    # segundo factor — `POST /auth/join` con el código da acceso completo al
+    # historial financiero del hogar. El Mersenne Twister de `random` es
+    # determinista y su estado se reconstruye observando salidas suficientes,
+    # así que códigos emitidos cerca en la secuencia se vuelven predecibles.
     chars = string.ascii_uppercase + string.digits
-    return "".join(random.choices(chars, k=8))
+    return "".join(secrets.choice(chars) for _ in range(8))
 
 
 # Tables that hold what a household would actually lose by being abandoned.
@@ -219,6 +225,13 @@ async def link_whatsapp(
     code = f"{secrets.randbelow(1000000):06d}"
     user.whatsapp_verify_code = code
     user.whatsapp_verify_expires = datetime.utcnow() + timedelta(minutes=10)
+    # Guardar a qué teléfono se mandó el código. Sin esto `verify_whatsapp`
+    # aceptaba cualquier número que le pasaran junto al código: pedías el código
+    # a tu propio número y verificabas con el de otra persona, quedándote con su
+    # `whatsapp_phone` — que es clave de autorización para las invitaciones de
+    # gastos compartidos y para resolver el webhook entrante.
+    user.whatsapp_pending_phone = _normalize_phone(body.phone)
+    user.whatsapp_verify_attempts = 0
     await db.commit()
 
     if not settings.EVOLUTION_API_URL or not settings.EVOLUTION_INSTANCE:
@@ -261,17 +274,35 @@ async def verify_whatsapp(
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
+    # `body.phone` se ignora a propósito: el número que vale es el que
+    # `link_whatsapp` guardó cuando mandó el código. El campo se sigue aceptando
+    # para no romper al frontend, que lo manda.
     if (
         not user.whatsapp_verify_code
-        or user.whatsapp_verify_code != body.code
+        or not user.whatsapp_pending_phone
         or not user.whatsapp_verify_expires
         or user.whatsapp_verify_expires < datetime.utcnow()
     ):
         raise HTTPException(status_code=400, detail="Codigo incorrecto o expirado")
 
-    user.whatsapp_phone = _normalize_phone(body.phone)
+    # Sin contador de intentos, 6 dígitos con 10 minutos de validez se agotan por
+    # fuerza bruta bien dentro de la ventana.
+    if user.whatsapp_verify_attempts >= MAX_WHATSAPP_VERIFY_ATTEMPTS:
+        user.whatsapp_verify_code = None
+        user.whatsapp_pending_phone = None
+        await db.commit()
+        raise HTTPException(status_code=429, detail="Demasiados intentos, pedí un código nuevo")
+
+    if not secrets.compare_digest(user.whatsapp_verify_code, body.code):
+        user.whatsapp_verify_attempts += 1
+        await db.commit()
+        raise HTTPException(status_code=400, detail="Codigo incorrecto o expirado")
+
+    user.whatsapp_phone = user.whatsapp_pending_phone
+    user.whatsapp_pending_phone = None
     user.whatsapp_verify_code = None
     user.whatsapp_verify_expires = None
+    user.whatsapp_verify_attempts = 0
     user.whatsapp_gate_pending = False
     await db.commit()
     user = await db.scalar(

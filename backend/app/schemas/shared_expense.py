@@ -77,6 +77,10 @@ class SplitOut(BaseModel):
     expense_entry_id: int | None
     invite_email: str | None
     invite_token: str | None
+    # Set per-request by the router: this is the split belonging to whoever is
+    # asking — either linked to their account or an invite addressed to them.
+    # Not a column; the same split is "mine" for one viewer and not another.
+    mine: bool = False
     converted_ars_amount: Decimal | None = None
     converted_ars_rate: Decimal | None = None
     converted_ars_rate_type: str | None = None

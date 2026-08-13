@@ -19,8 +19,9 @@ from app.schemas.credit_card import (
     ForExpenseOut,
 )
 from app.models.shared_expense import SharedExpense, SharedExpenseSplit
+from app.routers.expenses import assert_owns_category
 from app.schemas.shared_expense import SharedExpenseOut, ShareCreditCardItemBody
-from app.services.currency import get_or_create_usd_category
+from app.services.currency import estimate_due_date_py, get_or_create_usd_category
 
 router = APIRouter(prefix="/credit-cards", tags=["credit-cards"])
 
@@ -538,6 +539,8 @@ async def create_item(
     elif category_id is None:
         from fastapi import HTTPException as _HTTPException
         raise _HTTPException(status_code=422, detail="category_id es requerido para gastos en ARS")
+    else:
+        await assert_owns_category(category_id, user.tenant_id, db)
 
     entry = await _create_expense_entry(
         card, body.item_date, body.amount,
@@ -622,6 +625,8 @@ async def update_item(
         raise HTTPException(status_code=400, detail="Para editar una cuota, ve al resumen de la cuota 1")
 
     updates = body.model_dump(exclude_none=True)
+    if "category_id" in updates:
+        await assert_owns_category(updates["category_id"], user.tenant_id, db)
     for field, value in updates.items():
         setattr(item, field, value)
 
@@ -694,6 +699,7 @@ async def share_item(
     db: AsyncSession = Depends(get_db),
 ):
     from app.routers.shared_expenses import (
+        _find_user_by_email, _find_user_by_phone,
         _is_email, _is_phone, _normalize_phone, _save_tenant_contact,
         _send_whatsapp_invite, _send_whatsapp_member_notify,
     )
@@ -740,13 +746,26 @@ async def share_item(
     # own accounting/purchase date — fetch once for every statement involved
     # instead of lazy-loading `.statement` per item (would MissingGreenlet on
     # the children, which weren't eager-loaded with it).
+    #
+    # Future cuota statements almost never have a real due_date yet (the bank
+    # only sends it at period end), and falling back to the cuota's item_date
+    # is wrong: item_date counts months from the purchase, the statement from
+    # the period the purchase landed in, so a plan bought late in a period ends
+    # up months off. Estimate it exactly like StatementOut.due_date_effective.
     statement_ids = {ti.statement_id for ti in items_to_share}
-    due_dates = dict(
-        (await db.execute(
-            select(CreditCardStatement.id, CreditCardStatement.due_date)
-            .where(CreditCardStatement.id.in_(statement_ids))
-        )).all()
-    )
+    stmt_rows = (await db.execute(
+        select(
+            CreditCardStatement.id,
+            CreditCardStatement.due_date,
+            CreditCardStatement.year,
+            CreditCardStatement.month,
+        ).where(CreditCardStatement.id.in_(statement_ids))
+    )).all()
+    card = item.statement.card
+    due_dates = {
+        sid: due or estimate_due_date_py(year, month, card.due_day)
+        for sid, due, year, month in stmt_rows
+    }
 
     created_shared_ids = []
     creator_name = user.display_name or user.email
@@ -792,8 +811,7 @@ async def share_item(
             if split_in.invite_contact and not split_in.user_id:
                 contact = split_in.invite_contact.strip()
                 if _is_email(contact):
-                    from app.models.user import User as _User
-                    found = await db.scalar(select(_User).where(_User.email == contact))
+                    found = await _find_user_by_email(contact, db)
                     if found:
                         resolved_user_id = found.id
                         resolved_name = found.display_name or found.email
@@ -806,9 +824,8 @@ async def share_item(
                             invite_expires_at = datetime.utcnow() + timedelta(days=30)
                             pending_wa_invites.append((contact, invite_token))
                 elif _is_phone(contact):
-                    from app.models.user import User as _User
                     normalized_phone = _normalize_phone(contact)
-                    found = await db.scalar(select(_User).where(_User.whatsapp_phone == normalized_phone))
+                    found = await _find_user_by_phone(normalized_phone, db)
                     if found:
                         resolved_user_id = found.id
                         resolved_name = found.display_name or found.email
@@ -869,4 +886,5 @@ async def share_item(
         .where(SharedExpense.id.in_(created_shared_ids))
         .options(selectinload(SharedExpense.splits))
     )
-    return results.all()
+    from app.routers.shared_expenses import _out
+    return [_out(shared, user) for shared in results.all()]

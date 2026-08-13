@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Boolean, String, DateTime, ForeignKey, func, Enum
+from sqlalchemy import Boolean, String, DateTime, ForeignKey, Integer, func, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum
 from app.core.database import Base
@@ -25,6 +25,13 @@ class User(Base):
     whatsapp_phone: Mapped[str | None] = mapped_column(String(20), nullable=True, unique=True, index=True)
     whatsapp_verify_code: Mapped[str | None] = mapped_column(String(6), nullable=True)
     whatsapp_verify_expires: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # A qué número se mandó el código. `verify_whatsapp` copia de acá a
+    # `whatsapp_phone` en vez de confiar en el número que manda el cliente —
+    # sin esto el código verificaba cualquier teléfono. No es unique: dos
+    # personas pueden tener una verificación en vuelo contra el mismo número,
+    # y el unique de `whatsapp_phone` es el que decide quién se lo queda.
+    whatsapp_pending_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    whatsapp_verify_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
     whatsapp_gate_pending: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false", default=False)
 
     tenant: Mapped["Tenant"] = relationship(back_populates="users")

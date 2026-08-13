@@ -37,3 +37,6 @@ frontend/blob-report/
 .DS_Store
 Thumbs.db
 firebase-debug.log
+
+# Duplicado del registro global en ~/.claude.json, y ahí es donde vive la clave.
+.mcp.json

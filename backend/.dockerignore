@@ -1,0 +1,26 @@
+# El contexto de build es ./backend, así que un .dockerignore en la raíz del repo
+# no aplica acá — tiene que vivir en esta carpeta.
+#
+# Sin esto, el `COPY . .` del Dockerfile mete en una capa de la imagen las
+# credenciales de Firebase y los resúmenes bancarios reales de _staging_*/, y las
+# capas sobreviven a un `RUN rm` posterior.
+
+# Secretos
+firebase-credentials.json
+**/firebase-credentials.json
+*.json.secret
+.env
+.env.*
+
+# Resúmenes bancarios reales que quedan staged por los importadores
+scripts/_staging*/
+
+# Entornos virtuales y bytecode
+.venv/
+.venv-import/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# OS
+.DS_Store

@@ -54,6 +54,10 @@ interface Split {
   expense_entry_id: number | null;
   invite_email: string | null;
   invite_token: string | null;
+  // Set by the backend per viewer: this split is the requesting user's, whether
+  // it's linked to their account or still an invite addressed to their
+  // email/phone. Not a column — the same split is "mine" for one viewer only.
+  mine: boolean;
   converted_ars_amount: number | null;
   converted_ars_rate: number | null;
   converted_ars_rate_type: RateType | null;
@@ -739,13 +743,13 @@ export default function SharedExpensesPage() {
     const map = new Map<string, { key: string; name: string }>();
     for (const exp of expenses) {
       for (const split of exp.splits) {
-        if (split.user_id != null && split.user_id === currentUserId) continue;
+        if (split.mine) continue;
         const key = personKey(split);
         if (!map.has(key)) map.set(key, { key, name: split.member_name });
       }
     }
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "es"));
-  }, [expenses, currentUserId]);
+  }, [expenses]);
 
   const selectedPerson = people.find(p => p.key === selectedPersonKey) ?? null;
 
@@ -801,13 +805,13 @@ export default function SharedExpensesPage() {
     }
     const iOwe = { ARS: 0, USD: 0 };
     for (const exp of iOweExpenses) {
-      const mySplit = exp.splits.find(s => s.user_id === currentUserId);
+      const mySplit = exp.splits.find(s => s.mine);
       if (!mySplit) continue;
       const { amount, currency } = resolveDisplay(mySplit, exp.currency);
       iOwe[currency] += amount;
     }
     return { owedToMe, iOwe };
-  }, [owedToMeExpenses, iOweExpenses, selectedPerson, currentUserId]);
+  }, [owedToMeExpenses, iOweExpenses, selectedPerson]);
 
   function shareByWhatsApp() {
     if (!selectedPerson) return;
@@ -825,7 +829,7 @@ export default function SharedExpensesPage() {
     if (iOweExpenses.length > 0) {
       lines.push("", "Debo:");
       for (const exp of iOweExpenses) {
-        const mySplit = exp.splits.find(s => s.user_id === currentUserId);
+        const mySplit = exp.splits.find(s => s.mine);
         if (!mySplit) continue;
         const { amount, currency } = resolveDisplay(mySplit, exp.currency);
         lines.push(`• ${fmtDate(exp.payment_date)} - ${exp.title}: ${fmtByCurrency(amount, currency)}`);
@@ -1365,7 +1369,7 @@ export default function SharedExpensesPage() {
                 <p className="text-xs font-medium text-muted-foreground mb-1.5 px-1">Vos debés</p>
                 {renderDirectionTable(
                   iOweExpenses,
-                  exp => exp.splits.find(s => s.user_id === currentUserId),
+                  exp => exp.splits.find(s => s.mine),
                   "Vos",
                   personTotals.iOwe,
                   `No le debés nada a ${selectedPerson.name} en ${personPeriodLabel}.`
@@ -1410,7 +1414,7 @@ export default function SharedExpensesPage() {
             return displayGroups.map(({ root: exp, cuotas }) => {
               const isGrouped = cuotas.length > 1;
               const groupTotal = cuotas.reduce((s, c) => s + Number(c.total_amount), 0);
-              const myMemberSplit = exp.splits.find(s => s.user_id === currentUserId);
+              const myMemberSplit = exp.splits.find(s => s.mine);
               const pendingCount = exp.splits.filter(s => s.user_id !== null && s.status === "pending" && !s.invite_token).length;
               const isCreator = exp.created_by_user_id === currentUserId;
               // "Convertir todo" (header) only makes sense whole-expense — a cuota
@@ -1511,7 +1515,7 @@ export default function SharedExpensesPage() {
                         <span className="flex items-center gap-1 justify-self-end">
                           <StatusChip
                             status={split.user_id === null && !split.invite_token ? "accepted" : split.status}
-                            hasToken={!!split.invite_token}
+                            hasToken={!!split.invite_token && !split.mine}
                           />
                           {split.invite_token && isCreator && (
                             <button
@@ -1531,7 +1535,7 @@ export default function SharedExpensesPage() {
                     })}
                   </div>
 
-                  {myMemberSplit?.status === "pending" && !myMemberSplit?.invite_token && (
+                  {myMemberSplit?.status === "pending" && (
                     <div className="flex items-center gap-2 pt-2 border-t">
                       <p className="text-sm text-muted-foreground flex-1">
                         Te corresponden <strong>{fmtByCurrency(resolveDisplay(myMemberSplit, exp.currency).amount, resolveDisplay(myMemberSplit, exp.currency).currency)}</strong>{isGrouped && ` por cuota (${cuotas.length} cuotas)`}

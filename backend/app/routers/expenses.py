@@ -29,6 +29,25 @@ async def _get_db_user(firebase_user: dict, db: AsyncSession) -> User:
     return user
 
 
+async def assert_owns_category(category_id: int, tenant_id: int, db: AsyncSession) -> None:
+    """La categoría tiene que ser del hogar que la está usando.
+
+    `expense_categories.id` es global, así que cualquier entero resuelve. Los
+    endpoints verifican que el *entry* sea del tenant pero escribían el
+    `category_id` que mandaba el cliente sin mirarlo, y `ExpenseEntryOut` trae
+    la categoría embebida: creando un entry con `category_id: N` y leyéndolo de
+    vuelta se enumeraban los nombres de categorías de todos los hogares.
+    """
+    owned = await db.scalar(
+        select(ExpenseCategory.id).where(
+            ExpenseCategory.id == category_id,
+            ExpenseCategory.tenant_id == tenant_id,
+        )
+    )
+    if owned is None:
+        raise HTTPException(status_code=404, detail="Categoría no encontrada")
+
+
 # ── Categories ────────────────────────────────────────────────────────────────
 
 @router.get("/categories", response_model=list[ExpenseCategoryOut])
@@ -152,6 +171,8 @@ async def create_entry(
             data["category_id"] = await get_or_create_usd_category(user.tenant_id, db)
         else:
             raise HTTPException(status_code=422, detail="category_id es requerido para gastos en ARS")
+    else:
+        await assert_owns_category(data["category_id"], user.tenant_id, db)
     entry = ExpenseEntry(**data, tenant_id=user.tenant_id, user_id=user.id)
     db.add(entry)
     await db.commit()
@@ -174,7 +195,10 @@ async def update_entry(
     entry = await db.get(ExpenseEntry, entry_id)
     if not entry or entry.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
-    for field, value in body.model_dump(exclude_none=True).items():
+    updates = body.model_dump(exclude_none=True)
+    if "category_id" in updates:
+        await assert_owns_category(updates["category_id"], user.tenant_id, db)
+    for field, value in updates.items():
         setattr(entry, field, value)
     await db.commit()
     result = await db.scalar(

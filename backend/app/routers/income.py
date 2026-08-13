@@ -31,6 +31,23 @@ async def _get_db_user(firebase_user: dict, db: AsyncSession) -> User:
     return user
 
 
+async def _assert_owns_source(source_id: int, tenant_id: int, db: AsyncSession) -> None:
+    """La fuente tiene que ser del hogar que la está usando.
+
+    Mismo agujero que con `category_id` en expenses.py: `income_sources.id` es
+    global y `IncomeEntryOut` trae la fuente embebida (nombre, tipo, descripción),
+    así que un id ajeno se leía de vuelta en la respuesta.
+    """
+    owned = await db.scalar(
+        select(IncomeSource.id).where(
+            IncomeSource.id == source_id,
+            IncomeSource.tenant_id == tenant_id,
+        )
+    )
+    if owned is None:
+        raise HTTPException(status_code=404, detail="Fuente no encontrada")
+
+
 # ── Import helpers ─────────────────────────────────────────────────────────────
 
 def _parse_number(val) -> float | None:
@@ -205,7 +222,10 @@ async def create_entry(
     db: AsyncSession = Depends(get_db),
 ):
     user = await _get_db_user(firebase_user, db)
-    entry = IncomeEntry(**body.model_dump(), tenant_id=user.tenant_id, user_id=user.id)
+    data = body.model_dump()
+    if data.get("source_id") is not None:
+        await _assert_owns_source(data["source_id"], user.tenant_id, db)
+    entry = IncomeEntry(**data, tenant_id=user.tenant_id, user_id=user.id)
     db.add(entry)
     await db.commit()
     result = await db.scalar(
@@ -227,7 +247,10 @@ async def update_entry(
     entry = await db.get(IncomeEntry, entry_id)
     if not entry or entry.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
-    for field, value in body.model_dump(exclude_none=True).items():
+    updates = body.model_dump(exclude_none=True)
+    if "source_id" in updates:
+        await _assert_owns_source(updates["source_id"], user.tenant_id, db)
+    for field, value in updates.items():
         setattr(entry, field, value)
     await db.commit()
     result = await db.scalar(
@@ -252,6 +275,30 @@ async def delete_entry(
 
 # ── Bulk import ────────────────────────────────────────────────────────────────
 
+MAX_IMPORT_BYTES = 5 * 1024 * 1024
+
+
+async def _read_capped(file: UploadFile) -> bytes:
+    """Lee el upload con techo, en chunks.
+
+    `await file.read()` a secas se traía el archivo entero a memoria sin límite y
+    se lo pasaba a `openpyxl`. No hay tope en ningún lado — uvicorn no impone uno
+    y no hay middleware que lo haga — así que un upload grande alcanzaba para
+    voltear el contenedor, y un xlsx es un zip: una bomba de descompresión llega
+    al mismo resultado desde unos cientos de KB. El backend corre con un solo
+    worker, así que se lleva puesta la API de todos los hogares.
+    """
+    buf = bytearray()
+    while chunk := await file.read(64 * 1024):
+        buf.extend(chunk)
+        if len(buf) > MAX_IMPORT_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"El archivo supera los {MAX_IMPORT_BYTES // (1024 * 1024)} MB",
+            )
+    return bytes(buf)
+
+
 @router.post("/import/preview")
 async def import_preview(
     file: UploadFile = File(...),
@@ -259,7 +306,7 @@ async def import_preview(
     db: AsyncSession = Depends(get_db),
 ):
     await _get_db_user(firebase_user, db)
-    content = await file.read()
+    content = await _read_capped(file)
     data, columns = _parse_file(content, file.filename or "")
     sample = [[str(v) if v is not None else "" for v in row] for row in data[:5]]
     return {"columns": columns, "sample": sample, "row_count": len(data)}
@@ -297,7 +344,7 @@ async def import_run(
     else:
         raise HTTPException(status_code=422, detail="Debés elegir o crear una fuente de ingreso")
 
-    content = await file.read()
+    content = await _read_capped(file)
     data, columns = _parse_file(content, file.filename or "")
 
     imported = 0

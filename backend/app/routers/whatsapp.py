@@ -1,6 +1,7 @@
 import logging
 import random
 import re
+import secrets
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
@@ -96,10 +97,20 @@ async def whatsapp_webhook(
     # Accept the shared secret via header (x-webhook-secret) or query string
     # (?secret=) — some Evolution API panels don't support custom webhook
     # headers, so the query param is the fallback that always works.
-    if settings.WHATSAPP_WEBHOOK_SECRET and settings.WHATSAPP_WEBHOOK_SECRET not in (x_webhook_secret, secret):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    #
+    # Fails *closed* when the secret isn't configured. It used to log a warning
+    # and keep going, and docker-compose.prod.yml passes
+    # `${WHATSAPP_WEBHOOK_SECRET:-}` — so forgetting the env var in Easypanel
+    # left this endpoint unauthenticated on the public internet, and the handler
+    # below picks the household straight out of the attacker-supplied remoteJid.
     if not settings.WHATSAPP_WEBHOOK_SECRET:
-        logger.warning("WHATSAPP_WEBHOOK_SECRET is not set — /webhook/whatsapp is accepting unauthenticated requests")
+        logger.error("WHATSAPP_WEBHOOK_SECRET no configurado — /webhook/whatsapp deshabilitado")
+        raise HTTPException(status_code=503, detail="Webhook no configurado")
+    if not any(
+        secrets.compare_digest(settings.WHATSAPP_WEBHOOK_SECRET, candidate)
+        for candidate in (x_webhook_secret or "", secret or "")
+    ):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     try:
         data = payload.get("data", {})
