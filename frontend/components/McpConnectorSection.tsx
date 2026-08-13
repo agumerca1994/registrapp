@@ -6,6 +6,7 @@ import { getErrorMessage } from "@/lib/utils";
 import { Check, Copy, KeyRound, Plug, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { FIELD, SelectField } from "@/components/ui/form";
 import { Chip } from "@/components/ui/chip";
 
 interface Connection {
@@ -32,8 +33,6 @@ interface CreatedToken {
   expires_at: string | null;
 }
 
-const INPUT =
-  "w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900";
 
 const EXPIRY_OPTIONS = [
   { value: "30", label: "30 días" },
@@ -185,23 +184,31 @@ export default function McpConnectorSection() {
         <h3 className="font-semibold text-foreground">Conectar con una IA</h3>
       </div>
       <p className="text-sm text-muted-foreground">
-        Conectá RegistrApp a Claude u otro asistente para preguntarle sobre tus gastos,
-        tus ingresos o el impacto de una compra grande. El asistente puede{" "}
+        Conectá RegistrApp a un asistente de IA para preguntarle sobre tus gastos, tus
+        ingresos o el impacto de una compra. El asistente puede{" "}
         <strong className="text-foreground">leer</strong> los datos de tu hogar, pero
         nunca modificarlos ni borrarlos.
       </p>
 
       <div className="space-y-2">
         <p className="text-xs text-muted-foreground">Dirección del conector</p>
-        <div className="flex items-center gap-3 flex-wrap">
-          <code className="flex-1 min-w-[200px] bg-muted border rounded-lg px-3 py-2 text-xs font-mono break-all">
-            {connectorUrl || "—"}
-          </code>
+        <div className="flex items-center gap-2">
+          {/* An input, not a <code> block: `break-all` wrapped the URL across
+              lines and a copy from the rendered text dragged those breaks with
+              it. One line that scrolls, read-only, and copying takes the value
+              from the field rather than from the selection. */}
+          <input
+            readOnly
+            value={connectorUrl || "—"}
+            onFocus={e => e.currentTarget.select()}
+            aria-label="Dirección del conector"
+            className="flex-1 min-w-0 bg-muted border-2 border-ink rounded-lg px-3 py-2 text-xs font-mono text-foreground truncate"
+          />
           {connectorUrl && <CopyButton value={connectorUrl} />}
         </div>
         <p className="text-xs text-muted-foreground">
-          En Claude: Configuración → Conectores → Agregar conector personalizado, y pegá
-          esa dirección. Te va a pedir iniciar sesión con Google.
+          Agregala en tu asistente como conector personalizado. Te va a pedir iniciar
+          sesión para autorizarlo.
         </p>
       </div>
 
@@ -215,9 +222,8 @@ export default function McpConnectorSection() {
               <div key={c.grant_id} className="flex items-center justify-between py-3 gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-foreground truncate">{c.client_name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Conectada el {shortDate(c.connected_at)} · último uso {relative(c.last_used_at)}
-                  </p>
+                  <p className="text-xs text-muted-foreground">Conectada el {shortDate(c.connected_at)}</p>
+                  <p className="text-xs text-muted-foreground">Último uso {relative(c.last_used_at)}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Chip tone="emerald">Solo lectura</Chip>
@@ -233,7 +239,7 @@ export default function McpConnectorSection() {
         <div className="flex items-center justify-between gap-2">
           <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
             <KeyRound className="w-3.5 h-3.5" />
-            Tokens personales
+            Token
           </h4>
           {!showForm && (
             <Button variant="outline" onClick={() => setShowForm(true)}>
@@ -242,26 +248,20 @@ export default function McpConnectorSection() {
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          Para clientes que piden una clave en lugar de iniciar sesión (por ejemplo Claude
-          Code). Si usás Claude en la web, no te hace falta.
+          Para los asistentes que piden una clave en vez de iniciar sesión.
         </p>
 
         {showForm && (
           <div className="space-y-2 border rounded-lg p-3">
             <input
-              className={INPUT}
-              placeholder="Nombre (ej. Claude Code de la notebook)"
+              className={FIELD}
+              placeholder="Nombre (ej. asistente de la notebook)"
               value={name}
               onChange={e => setName(e.target.value)}
               maxLength={100}
             />
-            <select className={INPUT} value={expiry} onChange={e => setExpiry(e.target.value)}>
-              {EXPIRY_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>
-                  Vence en {o.label.toLowerCase()}
-                </option>
-              ))}
-            </select>
+            <SelectField value={expiry} onChange={setExpiry}
+              options={EXPIRY_OPTIONS.map(o => ({ value: o.value, label: `Vence en ${o.label.toLowerCase()}` }))} />
             <div className="flex gap-2">
               <Button onClick={createToken} disabled={busy}>
                 {busy ? "Creando..." : "Crear"}
@@ -291,7 +291,7 @@ export default function McpConnectorSection() {
         )}
 
         {tokens.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No tenés tokens personales.</p>
+          <p className="text-sm text-muted-foreground">Todavía no creaste ninguno.</p>
         ) : (
           <div className="divide-y">
             {tokens.map(t => (

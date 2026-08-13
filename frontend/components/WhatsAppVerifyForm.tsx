@@ -65,7 +65,7 @@ export default function WhatsAppVerifyForm({ onVerified, onSkip }: {
     return (
       <div className="space-y-3">
         <p className="text-sm text-muted-foreground">
-          Vinculá tu número para registrar egresos enviando un mensaje de WhatsApp al bot.
+          Vinculá tu número para empezar.
         </p>
         <div className="flex gap-2">
           <select

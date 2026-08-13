@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "@/lib/api";
+import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { formatARS, formatDate, parseAmount, getErrorMessage } from "@/lib/utils";
 import { Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle, ChevronRight, CalendarDays, ChevronLeft, Search, SlidersHorizontal, MoreVertical } from "lucide-react";
 import {
@@ -11,6 +12,7 @@ import {
   PillDateRange, ClearFilters, CollapsibleSearch,
 } from "@/components/ui/filters";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { PrivacyMenuItem } from "@/components/ui/privacy-toggle";
 import ProductTour from "@/components/ProductTour";
 import type { Step } from "react-joyride";
 import { Card } from "@/components/ui/card";
@@ -403,6 +405,7 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function IncomePage() {
+  useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const [entries, setEntries] = useState<IncomeEntry[]>([]);
   const [sources, setSources] = useState<IncomeSource[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -605,6 +608,10 @@ export default function IncomePage() {
             <DropdownMenu.Portal>
               <DropdownMenu.Content align="end" sideOffset={4}
                 className="bg-card border rounded-xl shadow-lg p-1 w-44 z-50">
+                <DropdownMenu.Item asChild>
+                  <PrivacyMenuItem />
+                </DropdownMenu.Item>
+                <DropdownMenu.Separator className="h-px bg-border my-1" />
                 <DropdownMenu.Item asChild>
                   <button onClick={() => setShowImport(true)}
                     className="flex items-center justify-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full outline-none cursor-pointer">

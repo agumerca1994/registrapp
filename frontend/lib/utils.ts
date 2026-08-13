@@ -22,7 +22,28 @@ export function getErrorMessage(err: unknown, fallback = "Ocurrió un error"): s
   return fallback;
 }
 
+/**
+ * Privacy mode, read by every money formatter.
+ *
+ * It lives as module state rather than as a prop threaded through the app
+ * because the alternative is touching ~90 call sites of `formatARS`/`formatUSD`
+ * and hoping none is ever missed — and one missed amount defeats the whole
+ * feature. `PrivacyProvider` sets it during render, before its children run,
+ * and re-renders the tree when it flips.
+ */
+let amountsHidden = false;
+const MASK = "••••";
+
+export function setAmountsHidden(value: boolean) {
+  amountsHidden = value;
+}
+
+export function areAmountsHidden(): boolean {
+  return amountsHidden;
+}
+
 export function formatARS(amount: number | string): string {
+  if (amountsHidden) return `$ ${MASK}`;
   return new Intl.NumberFormat("es-AR", {
     style: "currency",
     currency: "ARS",
@@ -40,6 +61,7 @@ export function formatDate(isoDate: string): string {
 }
 
 export function formatUSD(amount: number | string): string {
+  if (amountsHidden) return `U$D ${MASK}`;
   return "U$D " + new Intl.NumberFormat("es-AR", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,

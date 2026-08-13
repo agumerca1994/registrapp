@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import Sidebar from "@/components/layout/Sidebar";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { ErrorReporter } from "@/components/ErrorReporter";
+import { PrivacyProvider } from "@/contexts/PrivacyContext";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { firebaseUser, appUser, loading } = useAuth();
@@ -20,13 +21,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (loading || !appUser || appUser.whatsapp_gate_pending) return null;
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-      <ScrollToTop />
-      <ErrorReporter />
-      <main id="main-content" className="flex-1 p-4 md:p-8 overflow-auto pt-20 pb-28 md:pt-8 md:pb-8">
-        {children}
-      </main>
-    </div>
+    // Wraps every protected screen: hiding amounts on one and not the others
+    // would be worse than not hiding them at all.
+    <PrivacyProvider>
+      <div className="flex min-h-screen bg-background">
+        <Sidebar />
+        <ScrollToTop />
+        <ErrorReporter />
+        <main id="main-content" className="flex-1 p-4 md:p-8 overflow-auto pt-20 pb-28 md:pt-8 md:pb-8">
+          {children}
+        </main>
+      </div>
+    </PrivacyProvider>
   );
 }

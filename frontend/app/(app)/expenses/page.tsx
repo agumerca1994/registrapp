@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "@/lib/api";
+import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { formatARS, formatDate, formatUSD, parseAmount, pickCategoryColor } from "@/lib/utils";
-import { Trash2, Pencil, X, ChevronRight, CreditCard, ExternalLink, CalendarDays, ChevronLeft, Search, SlidersHorizontal } from "lucide-react";
+import { Trash2, Pencil, X, ChevronRight, CreditCard, ExternalLink, CalendarDays, ChevronLeft, Search, SlidersHorizontal, MoreVertical } from "lucide-react";
 import {
   FilterBar, FilterRow, FilterPanel, SortChip, FilterChip, PillSelect,
   PillDateRange, ClearFilters, CollapsibleSearch,
 } from "@/components/ui/filters";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { PrivacyMenuItem } from "@/components/ui/privacy-toggle";
 import ProductTour from "@/components/ProductTour";
 import type { Step } from "react-joyride";
 import { Card } from "@/components/ui/card";
@@ -168,6 +171,7 @@ function EntryDetailModal({
 }
 
 export default function ExpensesPage() {
+  useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const router = useRouter();
   const [entries, setEntries] = useState<ExpenseEntry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -349,6 +353,22 @@ export default function ExpensesPage() {
               </button>
             </div>
           )}
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button title="Más acciones"
+              className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors outline-none">
+              <MoreVertical className="w-5 h-5" />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content align="end" sideOffset={4}
+              className="bg-card border rounded-xl shadow-lg p-1 w-44 z-50">
+              <DropdownMenu.Item asChild>
+                <PrivacyMenuItem />
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
         </div>
       </div>
 
@@ -548,7 +568,7 @@ export default function ExpensesPage() {
               <span className="text-sm font-medium text-foreground">Total</span>
               <div className="flex flex-col items-end gap-0.5">
                 {arsTotal > 0 && <span className="text-base font-bold text-rose-600">{formatARS(arsTotal)}</span>}
-                {usdTotal > 0 && <span className="text-sm font-bold text-emerald-600">U$D {usdTotal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>}
+                {usdTotal > 0 && <span className="text-sm font-bold text-emerald-600">{formatUSD(usdTotal)}</span>}
               </div>
             </div>
           );

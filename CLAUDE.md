@@ -275,6 +275,12 @@ frontend/
     card.tsx, button.tsx, chip.tsx
 ```
 
+**Hiding amounts is a module flag, not a prop.** "Ocultar montos" (the ⋮ menu on dashboard, ingresos and egresos) masks every peso and dollar figure in the app as `••••`. The flag lives in `lib/utils` so `formatARS`/`formatUSD` mask without their ~90 call sites knowing — threading a prop through all of them and hoping none is ever missed is how one amount stays on screen and defeats the feature. `PrivacyProvider` (in the `(app)` layout) owns the state, persists it, and writes the flag **during render**, before its children run.
+
+That is not enough on its own, and the trap is worth knowing: the pages arrive as the provider's `children` prop, so their element identity doesn't change when the provider's state does, and React skips re-rendering them — the flag flips and the painted numbers stay. **Every screen that renders money calls `useAmountsHidden()`**, which subscribes it to the context and gets it repainted. If a new screen shows amounts and forgets that line, its numbers won't hide.
+
+Anything that formats money outside `formatARS`/`formatUSD` has to check `areAmountsHidden()` itself — that's how the dashboard donut's centre total is covered. Public data (a market rate chip in `/macro`) is not masked.
+
 **The summary hero always uses `components/ui/summary-card.tsx` — never a new shape.** The one `variant="hero"` card at the top of a screen (dashboard, `/divisas`) answers "where do I stand" and always reads as the same three bands:
 
 ```tsx

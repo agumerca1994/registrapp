@@ -9,6 +9,7 @@ import { es } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Plus, X, Trash2, Bell, CreditCard as CardIcon } from "lucide-react";
 
 import api from "@/lib/api";
+import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { formatARS, cn, getErrorMessage } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
@@ -164,6 +165,7 @@ function DayDetail({
 }
 
 export default function CalendarioPage() {
+  useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [statements, setStatements] = useState<StatementCal[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);

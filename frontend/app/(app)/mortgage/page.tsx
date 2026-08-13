@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "@/lib/api";
+import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { formatARS, getErrorMessage } from "@/lib/utils";
 import { Pencil, X, Loader2, Home, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -421,6 +422,7 @@ function DeleteLoanModal({ loanId, onClose, onDeleted }: {
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function MortgagePage() {
+  useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const [loans, setLoans] = useState<MortgageLoan[]>([]);
   const [summary, setSummary] = useState<MortgageSummary | null>(null);
   const [records, setRecords] = useState<MortgageRecord[]>([]);

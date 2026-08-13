@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { formatARS, formatDate, formatUSD, parseAmount, normalizePhoneNumber, getErrorMessage, pickCategoryColor } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Plus, ChevronLeft, X, ExternalLink, Users2, Phone } from "lucide-react";
@@ -516,6 +517,7 @@ function NewCategoryModal({ existingColors, onSave, onClose }: {
 }
 
 export default function StatementDetailPage() {
+  useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const { appUser } = useAuth();
   const params = useParams();
   const router = useRouter();
@@ -805,7 +807,7 @@ export default function StatementDetailPage() {
               <span className="text-sm font-medium text-foreground">Total</span>
               <div className="flex flex-col items-end gap-0.5">
                 {arsTotal > 0 && <span className="text-base font-bold text-rose-600">{formatARS(arsTotal)}</span>}
-                {usdTotal > 0 && <span className="text-sm font-bold text-emerald-600">U$D {usdTotal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>}
+                {usdTotal > 0 && <span className="text-sm font-bold text-emerald-600">{formatUSD(usdTotal)}</span>}
               </div>
             </div>
           );

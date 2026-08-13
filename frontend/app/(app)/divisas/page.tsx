@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "@/lib/api";
+import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { formatARS, formatDate, formatUSD, getErrorMessage, parseAmount } from "@/lib/utils";
 import {
   ArrowLeftRight, CalendarDays, ChevronLeft, ChevronRight,
@@ -121,6 +122,7 @@ function StatTile({ label, value, hint, tone = "neutral" }: {
 }
 
 export default function DivisasPage() {
+  useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);

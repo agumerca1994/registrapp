@@ -93,14 +93,13 @@ function CurrencySettingsSection() {
     <Card className="p-6 space-y-4">
       <h3 className="font-semibold text-foreground">Cotización del dólar</h3>
       <p className="text-sm text-muted-foreground">
-        Con qué cotización se valúa en pesos tu tenencia en dólares. Cambia solo cómo se
-        muestra: no afecta ninguna operación ya registrada.
+        Con cuál se valúa tu tenencia en dólares.
       </p>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
         {FX_RATE_TYPES.map(t => (
           <button key={t.value} type="button" disabled={saving || rateType === null}
             onClick={() => save(t.value)}
-            className={`px-3 py-1.5 text-sm rounded-full border-2 font-medium transition-colors disabled:opacity-50 ${rateType === t.value ? "border-ink bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-accent"}`}>
+            className={`shrink-0 px-3 py-1.5 text-sm rounded-full border-2 font-medium transition-colors disabled:opacity-50 ${rateType === t.value ? "border-ink bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-accent"}`}>
             {t.label}
           </button>
         ))}
@@ -150,7 +149,7 @@ function InviteFriendSection() {
           <h3 className="font-semibold text-foreground">Invitar amigo</h3>
         </div>
         <p className="text-sm text-muted-foreground">
-          Invitá a alguien a probar RegistrApp. Va a crear su propia cuenta y hogar, sin relación con el tuyo.
+          Va a crear su propia cuenta y hogar, aparte del tuyo.
         </p>
       </div>
       <div className="flex gap-2">
@@ -219,9 +218,15 @@ function WhatsAppSection() {
 
   return (
     <Card className="p-6 space-y-4">
-      <div className="flex items-center gap-2">
-        <MessageCircle className="w-5 h-5 text-emerald-600" />
-        <h3 className="font-semibold text-foreground">WhatsApp</h3>
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          <MessageCircle className="w-5 h-5 text-emerald-600" />
+          <h3 className="font-semibold text-foreground">WhatsApp</h3>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Enviale mensajes al bot para registrar tus movimientos, ej:{" "}
+          <span className="font-mono bg-muted px-1 rounded">15000 supermercado</span>
+        </p>
       </div>
 
       {isLinked ? (
@@ -230,9 +235,6 @@ function WhatsAppSection() {
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             <span className="text-sm text-foreground">Vinculado: <span className="font-medium">+{appUser.whatsapp_phone}</span></span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Enviá mensajes al bot con el formato <span className="font-mono bg-muted px-1 rounded">monto descripción</span> para registrar egresos. Ej: <span className="font-mono bg-muted px-1 rounded">15000 supermercado</span>
-          </p>
           <button
             onClick={unlink}
             disabled={loading}
@@ -330,7 +332,7 @@ export default function SettingsPage() {
       <InviteFriendSection />
 
       <Card className="p-6 space-y-4">
-        <h3 className="font-semibold text-foreground">Miembros ({members.length})</h3>
+        <h3 className="font-semibold text-foreground">Miembros</h3>
         <div className="divide-y">
           {members.map(m => (
             <div key={m.id} className="flex items-center justify-between py-3 gap-3">
@@ -395,7 +397,7 @@ export default function SettingsPage() {
 
       <Card className="p-6 space-y-2">
         <h3 className="font-semibold text-foreground">Guía de la app</h3>
-        <p className="text-sm text-muted-foreground">Volvé a ver la guía introductoria de cada sección.</p>
+        <p className="text-sm text-muted-foreground">¿Necesitás ayuda? Reiniciá la guía de funcionalidades.</p>
         <Button
           variant="outline"
           onClick={() => { resetAllTours(APP_TOUR_IDS); window.location.href = "/dashboard"; }}

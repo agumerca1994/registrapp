@@ -9,8 +9,11 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 import api from "@/lib/api";
-import { formatARS, formatUSD, formatPct } from "@/lib/utils";
-import { TrendingUp, TrendingDown, Gauge, Home, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { useAmountsHidden } from "@/contexts/PrivacyContext";
+import { formatARS, formatUSD, formatPct, areAmountsHidden } from "@/lib/utils";
+import { TrendingUp, TrendingDown, Gauge, Home, CalendarDays, ChevronLeft, ChevronRight, MoreVertical } from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { PrivacyMenuItem } from "@/components/ui/privacy-toggle";
 import ProductTour from "@/components/ProductTour";
 import type { Step } from "react-joyride";
 import { Card } from "@/components/ui/card";
@@ -146,6 +149,9 @@ function StatCard({ label, value, sub, icon: Icon, tone = "neutral" }: {
 }
 
 function compactAmount(n: number): string {
+  // Goes through the privacy flag like every other amount — the donut's centre
+  // total is as sensitive as the rows it summarises.
+  if (areAmountsHidden()) return "••••";
   return new Intl.NumberFormat("es-AR", { notation: "compact", maximumFractionDigits: 1 }).format(n);
 }
 
@@ -223,6 +229,7 @@ function PieCustomTooltip({ active, payload, formatValue = formatARS }: any) {
 }
 
 export default function DashboardPage() {
+  useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -409,6 +416,22 @@ export default function DashboardPage() {
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button title="Más acciones"
+              className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors outline-none">
+              <MoreVertical className="w-5 h-5" />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content align="end" sideOffset={4}
+              className="bg-card border rounded-xl shadow-lg p-1 w-44 z-50">
+              <DropdownMenu.Item asChild>
+                <PrivacyMenuItem />
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
       </div>
 
       {loading ? (

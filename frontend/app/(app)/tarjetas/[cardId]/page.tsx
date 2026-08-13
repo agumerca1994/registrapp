@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { getErrorMessage } from "@/lib/utils";
 import { Plus, ChevronLeft, X } from "lucide-react";
 import { Card as UiCard } from "@/components/ui/card";
@@ -183,6 +184,7 @@ function EditStatementModal({ statement, onSave, onClose }: {
 }
 
 export default function CardDetailPage() {
+  useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const params = useParams();
   const router = useRouter();
   const cardId = Number(params.cardId);

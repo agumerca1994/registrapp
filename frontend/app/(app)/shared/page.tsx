@@ -7,6 +7,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone, Layers, CalendarDays, ChevronLeft, ChevronRight, Share2, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Pencil, X, MoreVertical } from "lucide-react";
 
 import api from "@/lib/api";
+import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { formatARS, formatUSD, normalizePhoneNumber, getErrorMessage, pickCategoryColor } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { COUNTRIES } from "@/lib/countries";
@@ -502,6 +503,7 @@ function ConvertToArsModal({
 }
 
 export default function SharedExpensesPage() {
+  useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const { appUser } = useAuth();
   const [expenses, setExpenses] = useState<SharedExpense[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
