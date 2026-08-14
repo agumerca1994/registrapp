@@ -1,5 +1,9 @@
 # Secretos — nunca en git
 .env
+# Webhook de deploy de Easypanel. Archivo aparte y no .env porque
+# docker-compose inyecta .env entero en los contenedores, y el token no tiene
+# por qué estar en el environment de la app.
+.deploy.env
 backend/firebase-credentials.json
 **/firebase-credentials.json
 **/*.json.secret

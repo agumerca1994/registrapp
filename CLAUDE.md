@@ -32,7 +32,7 @@ There are no backend or unit tests (no pytest, no jest). The only automated suit
 
 ## Deployment
 
-Production uses `docker-compose.prod.yml` which Easypanel pulls from the `main` branch on GitHub. Pushing to `main` and clicking "Deploy" in Easypanel triggers a full rebuild. The frontend `NEXT_PUBLIC_*` variables are **baked in at build time** via Dockerfile.prod `ARG`s — changing them requires a rebuild.
+Production uses `docker-compose.prod.yml` which Easypanel pulls from the `main` branch on GitHub. Pushing to `main` and clicking "Deploy" in Easypanel triggers a full rebuild. The same rebuild can be fired from the command line with the webhook in `.deploy.env` (gitignored — it's a bearer credential and this repo is public): `curl -X POST "$EASYPANEL_DEPLOY_URL"`. Note the URL Easypanel displays uses whatever host you opened the panel with; the `159.112.147.178:3000` spelling only works from inside the server, since that port isn't published. The one that works from anywhere is the panel's own domain. The frontend `NEXT_PUBLIC_*` variables are **baked in at build time** via Dockerfile.prod `ARG`s — changing them requires a rebuild.
 
 **Firebase credentials**: never committed. The `FIREBASE_CREDENTIALS_B64` env var (base64-encoded JSON) is decoded to `/tmp/firebase-credentials.json` by `backend/entrypoint.sh` at container startup. `entrypoint.sh` also runs `alembic upgrade head` before starting uvicorn, so all pending migrations apply automatically on every deploy.
 
