@@ -961,7 +961,7 @@ export default function SharedExpensesPage() {
         onClick={() => { setShowForm(true); resetForm(); }} />
 
       {people.length > 0 && (
-        <div className="flex items-start gap-3 overflow-x-auto pt-1.5 pb-1 -mx-4 px-4 md:mx-0 md:px-0">
+        <div className="flex items-start gap-3 overflow-x-auto no-scrollbar pt-1.5 pb-1 -mx-4 px-4 md:mx-0 md:px-0">
           <button
             type="button"
             onClick={() => setSelectedPersonKey(null)}

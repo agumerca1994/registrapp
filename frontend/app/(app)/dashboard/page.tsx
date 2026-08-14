@@ -17,6 +17,7 @@ import { PrivacyMenuItem } from "@/components/ui/privacy-toggle";
 import ProductTour from "@/components/ProductTour";
 import type { Step } from "react-joyride";
 import { Card } from "@/components/ui/card";
+import { ScrollRow } from "@/components/ui/scroll-row";
 import {
   SummaryCard, SummaryHeader, SummarySection, SummaryGrid, SummaryCell,
   SummaryFigure, ChainRow, SummaryTotal,
@@ -549,7 +550,7 @@ export default function DashboardPage() {
               are gone on purpose: the hero now carries the whole dollar story,
               and repeating it as loose tiles is what let the peso figure be
               read as the month's result with the dollars as a footnote. */}
-          <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0">
+          <ScrollRow className="pb-1 -mx-4 px-4 md:mx-0 md:px-0">
             <StatCard label="Ingresos" value={formatARS(data.total_income)} icon={TrendingUp} tone="positive" />
             <StatCard
               label="Egresos" value={formatARS(data.total_expenses)}
@@ -561,7 +562,7 @@ export default function DashboardPage() {
             {data.inflation_pct !== null && (
               <StatCard label="Inflación" value={formatPct(data.inflation_pct)} icon={Gauge} />
             )}
-          </div>
+          </ScrollRow>
 
           {(mortgageSummary || data.expenses_by_category.length > 0 || data.total_expenses_usd > 0) && (
             <div className={mortgageSummary && (data.expenses_by_category.length > 0 || data.total_expenses_usd > 0) ? "grid grid-cols-1 lg:grid-cols-2 gap-4" : ""}>

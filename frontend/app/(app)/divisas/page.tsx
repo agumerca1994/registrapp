@@ -588,7 +588,7 @@ export default function DivisasPage() {
                       these five wrapped onto three rows. Below `sm` the modal
                       is a single column, so there they scroll sideways rather
                       than shrink to unreadable. */}
-                  <div className="sm:col-span-2 flex gap-1 overflow-x-auto pb-0.5 -mt-1">
+                  <div className="sm:col-span-2 flex gap-1 overflow-x-auto no-scrollbar pb-0.5 -mt-1">
                     {Object.entries(rates).filter(([, v]) => v > 0).map(([type, value]) => (
                       <button key={type} type="button"
                         onClick={() => setForm(p => syncAmounts({ ...p, rate: String(value), rate_type: type }, "rate"))}

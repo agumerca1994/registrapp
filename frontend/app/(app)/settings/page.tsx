@@ -95,7 +95,7 @@ function CurrencySettingsSection() {
       <p className="text-sm text-muted-foreground">
         Con cuál se valúa tu tenencia en dólares.
       </p>
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
         {FX_RATE_TYPES.map(t => (
           <button key={t.value} type="button" disabled={saving || rateType === null}
             onClick={() => save(t.value)}

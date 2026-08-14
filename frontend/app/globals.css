@@ -58,3 +58,27 @@
      focus on form fields. */
   input, select, textarea { font-size: 16px !important; }
 }
+
+@layer utilities {
+  /* A horizontal strip of tiles/chips scrolls, but the scrollbar itself is
+     chrome the design doesn't want. Pair it with `ScrollRow`, which nudges
+     the row on first paint so the affordance isn't lost with the bar. */
+  .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+}
+
+/* Two short slides and back: enough to read as "this moves", short enough not
+   to be a distraction. Only plays when the content actually overflows. */
+@keyframes scroll-hint {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-14px); }
+  30% { transform: translateX(0); }
+  45% { transform: translateX(-14px); }
+  60% { transform: translateX(0); }
+}
+
+.animate-scroll-hint { animation: scroll-hint 2s ease-in-out 0.5s 1 both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-scroll-hint { animation: none; }
+}
