@@ -68,6 +68,20 @@ export function formatUSD(amount: number | string): string {
   }).format(Number(amount));
 }
 
+/**
+ * A stored phone, for display.
+ *
+ * `_normalize_phone()` writes `+549…` with the plus already in it, so the `+`
+ * the UI used to prepend produced `++549…`. Tolerant of both spellings on
+ * purpose: the same reason the backend lookups try `+549…` and `549…` — rows
+ * predating migration `c9d0e1f2a3b4` were bare digits, and a row written by
+ * some other path could be again.
+ */
+export function formatPhone(phone: string): string {
+  const trimmed = phone.trim();
+  return trimmed.startsWith("+") ? trimmed : `+${trimmed}`;
+}
+
 // Parse Argentine decimal format: "9,99" or "1.000,99" → 9.99 or 1000.99
 // Also handles standard decimal notation from toFixed(): "7500.00" → 7500
 export function parseAmount(value: string | number): number {

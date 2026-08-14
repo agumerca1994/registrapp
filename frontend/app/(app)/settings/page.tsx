@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
-import { formatARS, getErrorMessage } from "@/lib/utils";
+import { formatARS, getErrorMessage, formatPhone } from "@/lib/utils";
 import { Copy, Check, MessageCircle, CheckCircle2, Unlink, Mail, UserPlus, Trash2 } from "lucide-react";
 import { COUNTRIES } from "@/lib/countries";
 import WhatsAppVerifyForm from "@/components/WhatsAppVerifyForm";
@@ -233,7 +233,7 @@ function WhatsAppSection() {
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span className="text-sm text-foreground">Vinculado: <span className="font-medium">+{appUser.whatsapp_phone}</span></span>
+            <span className="text-sm text-foreground">Vinculado: <span className="font-medium">{formatPhone(appUser.whatsapp_phone ?? "")}</span></span>
           </div>
           <button
             onClick={unlink}
