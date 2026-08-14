@@ -135,7 +135,10 @@ function StatCard({ label, value, sub, icon: Icon, tone = "neutral" }: {
   label: string; value: string; sub?: string; icon: React.ElementType; tone?: keyof typeof STAT_TONES;
 }) {
   return (
-    <div className="p-3 md:p-5 flex items-center gap-3">
+    // `flex-1` so a handful of tiles spreads across the row, `min-w` so they
+    // stop shrinking and start scrolling instead of squashing once there are
+    // too many — or on a phone, where three already don't fit.
+    <div className="p-3 md:p-5 flex items-center gap-3 flex-1 shrink-0 min-w-[170px]">
       <div className={`p-2 md:p-3 rounded-xl shrink-0 ${STAT_TONES[tone]}`}>
         <Icon className="w-4 h-4 md:w-5 md:h-5" />
       </div>
@@ -546,7 +549,7 @@ export default function DashboardPage() {
               are gone on purpose: the hero now carries the whole dollar story,
               and repeating it as loose tiles is what let the peso figure be
               read as the month's result with the dollars as a footnote. */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0">
             <StatCard label="Ingresos" value={formatARS(data.total_income)} icon={TrendingUp} tone="positive" />
             <StatCard
               label="Egresos" value={formatARS(data.total_expenses)}
