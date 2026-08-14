@@ -169,6 +169,15 @@ function DonutChartCard({ title, subtitle, data, centerLabel, formatValue = form
   formatValue?: (n: number) => string; currencyPrefix?: string;
 }) {
   const total = data.reduce((s, d) => s + d.value, 0);
+  // Recharts runs the mount animation on the first render, which is the one
+  // where ResponsiveContainer still measures 0×0 — so it played out invisibly
+  // and the donut just appeared finished. Feeding it the data one frame later,
+  // once the container has a size, is what makes the sweep visible.
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
   return (
     <Card className="p-4 md:p-5">
       <h3 className="font-semibold text-foreground mb-4 text-sm md:text-base">
@@ -178,8 +187,9 @@ function DonutChartCard({ title, subtitle, data, centerLabel, formatValue = form
         <div className="relative shrink-0 w-full sm:w-[220px] h-[220px]">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%"
-                innerRadius={68} outerRadius={100} paddingAngle={2} stroke="none">
+              <Pie data={ready ? data : []} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                innerRadius={68} outerRadius={100} paddingAngle={2} stroke="none"
+                isAnimationActive animationBegin={0} animationDuration={800} animationEasing="ease-out">
                 {data.map((entry, i) => <Cell key={i} fill={entry.color} />)}
               </Pie>
               <Tooltip content={<PieCustomTooltip formatValue={formatValue} />} />
@@ -584,7 +594,7 @@ export default function DashboardPage() {
                       <span className="font-medium text-foreground">{mortgageSummary.pct_completado}% completado</span>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2">
-                      <div className="bg-primary h-2 rounded-full transition-all"
+                      <div className="bg-primary h-2 rounded-full animate-grow-bar"
                         style={{ width: `${Math.min(mortgageSummary.pct_completado, 100)}%` }} />
                     </div>
                   </div>
@@ -611,7 +621,7 @@ export default function DashboardPage() {
                     {/* Bars are sized by the peso equivalent so a category paid
                         in dollars is comparable to one paid in pesos — but the
                         amounts stay unmixed, so it's clear what was paid in what. */}
-                    {data.expenses_by_category.map(cat => {
+                    {data.expenses_by_category.map((cat, i) => {
                       const share = categoryTotal > 0 ? (cat.ars_equivalent / categoryTotal) * 100 : 0;
                       return (
                         <div key={cat.category_name}>
@@ -632,8 +642,14 @@ export default function DashboardPage() {
                             </div>
                           </div>
                           <div className="h-1 bg-muted rounded-full overflow-hidden">
-                            <div className="h-full rounded-full"
-                              style={{ width: `${share}%`, backgroundColor: cat.color || "#6366f1" }} />
+                            {/* Staggered by row so the list fills top to bottom
+                                instead of every bar snapping at once. */}
+                            <div className="h-full rounded-full animate-grow-bar"
+                              style={{
+                                width: `${share}%`,
+                                backgroundColor: cat.color || "#6366f1",
+                                animationDelay: `${i * 60}ms`,
+                              }} />
                           </div>
                         </div>
                       );

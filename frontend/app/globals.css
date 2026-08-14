@@ -82,3 +82,20 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-scroll-hint { animation: none; }
 }
+
+/* Bars grow from their left edge. `scaleX` rather than animating `width`
+   because the target width is a percentage computed per row — one keyframe
+   can't know it, and scaling to a fixed 1 works for any of them. */
+@keyframes grow-bar {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.animate-grow-bar {
+  transform-origin: left center;
+  animation: grow-bar 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-grow-bar { animation: none; }
+}
