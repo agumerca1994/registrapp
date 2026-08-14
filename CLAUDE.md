@@ -305,6 +305,7 @@ Every rule in it was a correction, so don't undo one without knowing which:
 - **The detail starts collapsed** behind `Ver detalle`. The figures are the answer; the chain is the arithmetic.
 - **Signs ride on the amount, never on the label** (`−$ 1.517.916,00`). A `−`/`=` hanging to the left of the label starts every row at a different x.
 - **The chains close on one shared `SummaryTotal` strip**, not a bold row each — a total per column restates the big figure directly above it.
+- **Only the dashboard's two figures count up** (`SummaryFigure` takes `amount` + `format` instead of a pre-formatted `value`, and `useCountUp` animates from what's on screen to the target — 0 on mount, the previous month's figure when the month changes). It's the screen's headline; animating every figure in the app turns a flourish into noise. It no-ops under `prefers-reduced-motion`, and the figure carries `tabular-nums` so the digits don't dance while it runs.
 - **Every chain lists movements**, never an already-consolidated subtotal. The peso chain used to open on "Balance del mes" while the dollar one listed its parts, and that reads as an inconsistency even though the accounting justifies it (buying dollars isn't income).
 - On mobile the grid stacks to one column and `order-*` keeps each chain directly under the figure it explains.
 

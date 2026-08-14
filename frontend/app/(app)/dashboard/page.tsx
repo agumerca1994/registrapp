@@ -471,7 +471,7 @@ export default function DashboardPage() {
             <SummaryGrid cols={usdPocket ? 2 : 1}>
               <SummaryCell figure className="order-1 sm:order-none">
                 <SummaryFigure
-                  value={formatARS(data.ars_available)}
+                  amount={Number(data.ars_available)} format={formatARS}
                   trend={availableChangePct === null ? undefined : {
                     positive: availableChangePct >= 0,
                     label: `${availableChangePct >= 0 ? "+" : ""}${availableChangePct.toFixed(1)}% vs mes anterior`,
@@ -483,7 +483,7 @@ export default function DashboardPage() {
                 <SummaryCell figure href="/divisas"
                   className="order-3 sm:order-none border-t sm:border-t-0 sm:border-l border-border/60">
                   <SummaryFigure
-                    value={formatUSD(usdPocket.end)}
+                    amount={usdPocket.end} format={formatUSD}
                     sub={data.usd_holding_ars !== null && usdPocket.end !== 0
                       ? `≈ ${formatARS(data.usd_holding_ars)}` : undefined}
                     trend={usdPocket.net === 0 ? undefined : {

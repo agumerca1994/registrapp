@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ChevronDown, TrendingUp, TrendingDown } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { useCountUp } from "@/components/ui/count-up";
 
 /**
  * The app's summary hero — the one `variant="hero"` card at the top of a
@@ -110,15 +111,25 @@ export function SummaryCell({ figure = false, href, className = "", children }: 
   return <div className={cls}>{children}</div>;
 }
 
-export function SummaryFigure({ value, sub, trend }: {
-  value: string;
+/**
+ * Pass `value` for a figure that just renders, or `amount` + `format` for one
+ * that counts up to it. The counted version is for the screen's single most
+ * important number — animating every figure on a page turns a flourish into
+ * noise.
+ */
+export function SummaryFigure({ value, amount, format, sub, trend }: {
+  value?: string;
+  amount?: number;
+  format?: (n: number) => string;
   sub?: React.ReactNode;
   trend?: { label: string; positive: boolean };
 }) {
+  const counted = useCountUp(amount ?? 0);
+  const text = amount !== undefined && format ? format(counted) : value;
   return (
     <>
-      <p className="text-2xl md:text-4xl font-display font-bold text-foreground break-words">
-        {value}
+      <p className="text-2xl md:text-4xl font-display font-bold text-foreground break-words tabular-nums">
+        {text}
       </p>
       {sub && <p className="text-sm text-muted-foreground mt-0.5">{sub}</p>}
       {trend && (
