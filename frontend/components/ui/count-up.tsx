@@ -9,11 +9,11 @@ import { useEffect, useRef, useState } from "react";
  * On mount that means 0 → the amount; when the month changes it means the
  * previous month's figure → the new one, which reads as the number moving
  * rather than being replaced. Cubic ease-out: most of the distance up front,
- * so it feels quick even at 800ms.
+ * so it stays lively even at 1.2s.
  *
  * Returns `target` verbatim under `prefers-reduced-motion`.
  */
-export function useCountUp(target: number, duration = 800): number {
+export function useCountUp(target: number, duration = 1200): number {
   const [display, setDisplay] = useState(0);
   // The animation restarts from whatever is on screen, not from the value it
   // was heading to — otherwise interrupting it mid-flight jumps.

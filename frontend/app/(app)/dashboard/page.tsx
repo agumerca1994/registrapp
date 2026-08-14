@@ -189,7 +189,7 @@ function DonutChartCard({ title, subtitle, data, centerLabel, formatValue = form
             <PieChart>
               <Pie data={ready ? data : []} dataKey="value" nameKey="name" cx="50%" cy="50%"
                 innerRadius={68} outerRadius={100} paddingAngle={2} stroke="none"
-                isAnimationActive animationBegin={0} animationDuration={800} animationEasing="ease-out">
+                isAnimationActive animationBegin={0} animationDuration={1200} animationEasing="ease-out">
                 {data.map((entry, i) => <Cell key={i} fill={entry.color} />)}
               </Pie>
               <Tooltip content={<PieCustomTooltip formatValue={formatValue} />} />
@@ -648,7 +648,7 @@ export default function DashboardPage() {
                               style={{
                                 width: `${share}%`,
                                 backgroundColor: cat.color || "#6366f1",
-                                animationDelay: `${i * 60}ms`,
+                                animationDelay: `${i * 80}ms`,
                               }} />
                           </div>
                         </div>
