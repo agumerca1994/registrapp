@@ -32,7 +32,18 @@ There are no backend or unit tests (no pytest, no jest). The only automated suit
 
 ## Deployment
 
-Production uses `docker-compose.prod.yml` which Easypanel pulls from the `main` branch on GitHub. Pushing to `main` and clicking "Deploy" in Easypanel triggers a full rebuild. The same rebuild can be fired from the command line with the webhook in `.deploy.env` (gitignored — it's a bearer credential and this repo is public): `curl -X POST "$EASYPANEL_DEPLOY_URL"`. Note the URL Easypanel displays uses whatever host you opened the panel with; the `159.112.147.178:3000` spelling only works from inside the server, since that port isn't published. The one that works from anywhere is the panel's own domain. The frontend `NEXT_PUBLIC_*` variables are **baked in at build time** via Dockerfile.prod `ARG`s — changing them requires a rebuild.
+Production uses `docker-compose.prod.yml` which Easypanel pulls from the `main` branch on GitHub. Pushing to `main` and clicking "Deploy" in Easypanel triggers a full rebuild. The same rebuild can be fired from the command line with the webhook in `.deploy.env` (gitignored — it's a bearer credential and this repo is public):
+
+```bash
+set -a && . ./.deploy.env && set +a
+curl -X POST "$EASYPANEL_DEPLOY_URL"   # → 200, body "Deploying..."
+```
+
+Two things about it, both found the hard way:
+- **The URL Easypanel shows uses whatever host you opened the panel with.** Entering by the internal `159.112.147.178:3000` yields a webhook on that address, and that port isn't published — it times out from anywhere but the server itself. The one that works is the panel's own domain (`imanzanastore.com.ar`).
+- **There is no way to test it without deploying.** Any request to that path starts a rebuild; there's no dry run. Treat firing it as the deploy it is.
+
+The rebuild is rolling: `registrapp.imanzanastore.com.ar` kept answering 200 throughout, so a deploy doesn't take the site down. It still doesn't return a build id or status — to know whether the new image actually came up you check the app (or Easypanel's own logs), not the webhook's response. The frontend `NEXT_PUBLIC_*` variables are **baked in at build time** via Dockerfile.prod `ARG`s — changing them requires a rebuild.
 
 **Firebase credentials**: never committed. The `FIREBASE_CREDENTIALS_B64` env var (base64-encoded JSON) is decoded to `/tmp/firebase-credentials.json` by `backend/entrypoint.sh` at container startup. `entrypoint.sh` also runs `alembic upgrade head` before starting uvicorn, so all pending migrations apply automatically on every deploy.
 
