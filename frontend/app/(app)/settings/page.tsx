@@ -149,7 +149,7 @@ function InviteFriendSection() {
           <h3 className="font-semibold text-foreground">Invitar amigo</h3>
         </div>
         <p className="text-sm text-muted-foreground">
-          Va a crear su propia cuenta y hogar, aparte del tuyo.
+          Invitá a un amigo a sumarse a RegistrApp.
         </p>
       </div>
       <div className="flex gap-2">
@@ -304,10 +304,12 @@ export default function SettingsPage() {
     <div className="max-w-3xl space-y-8">
       <h2 className="text-2xl font-display font-bold text-foreground">{"Configuración"}</h2>
 
+      <InviteFriendSection />
+
       <Card className="p-6 space-y-4">
         <h3 className="font-semibold text-foreground">{"Tu hogar"}</h3>
         <p className="text-sm text-muted-foreground">
-          {"Comparte este código con quien quieras que se una a tu hogar."}
+          {"Sumá miembros a tu hogar compartiendo este código."}
         </p>
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex-1 min-w-[140px] bg-muted border rounded-lg px-4 py-3">
@@ -325,14 +327,8 @@ export default function SettingsPage() {
             </Button>
           </div>
         </div>
-      </Card>
-
-      <CurrencySettingsSection />
-
-      <InviteFriendSection />
-
-      <Card className="p-6 space-y-4">
-        <h3 className="font-semibold text-foreground">Miembros</h3>
+        <div className="pt-2 border-t">
+          <h4 className="text-sm font-semibold text-foreground mb-1">Miembros</h4>
         <div className="divide-y">
           {members.map(m => (
             <div key={m.id} className="flex items-center justify-between py-3 gap-3">
@@ -389,11 +385,14 @@ export default function SettingsPage() {
             </div>
           ))}
         </div>
+        </div>
       </Card>
 
       <WhatsAppSection />
 
       <McpConnectorSection />
+
+      <CurrencySettingsSection />
 
       <Card className="p-6 space-y-2">
         <h3 className="font-semibold text-foreground">Guía de la app</h3>

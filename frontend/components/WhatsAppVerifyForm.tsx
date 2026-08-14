@@ -95,9 +95,6 @@ export default function WhatsAppVerifyForm({ onVerified, onSkip }: {
             {loading ? "Enviando..." : "Enviar código"}
           </button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Ingresá el número sin el código de país. Para Argentina sin el 0 inicial y sin el 15: <span className="font-mono">351 2345678</span>
-        </p>
         {error && <p className="text-xs text-red-600">{error}</p>}
         {onSkip && (
           <button onClick={skipForNow} disabled={skipping} className="text-xs text-muted-foreground hover:underline disabled:opacity-50">
