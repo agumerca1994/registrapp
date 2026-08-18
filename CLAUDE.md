@@ -105,6 +105,7 @@ All routers follow the pattern: `Depends(get_current_user)` + `Depends(get_db)` 
 
 Tres reglas del selector que no hay que romper:
 - **"Invitar a «texto»" está siempre**, no aparece sólo cuando la búsqueda falla. Mandarle un gasto a alguien que quizá no tiene la app es lo que trae usuarios nuevos, no el plan B de una búsqueda vacía.
+- **"Invitar a «texto»" abre un sub-formulario, no hace `focus()` en el buscador.** La primera versión hacía eso último y al tocar el renglón no pasaba nada visible — un botón nunca puede no hacer nada. El sub-formulario pre-llena el campo que el término *no* completó: si escribiste un nombre pide el contacto, si escribiste un mail pide el nombre, y en los dos casos el foco va al que falta. Adentro hay una salida a "sin cuenta" para el caso de que esa persona no vaya a instalar la app nunca.
 - **Si `/directory` falla, el selector sigue usable**: se muestran hogar, agenda e invitar igual, con una nota. Un selector que muere cuando el directorio devuelve 500 impide cargar el gasto entero.
 - **El botón de contactos del teléfono se esconde** cuando el navegador no lo soporta, en vez del `alert()` que había al tocarlo — que es lo peor de los dos mundos en iOS, donde nunca funciona.
 

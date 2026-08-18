@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AtSign, Mail, Phone, Search, Smartphone, UserPlus, Users2, X } from "lucide-react";
 import { Card as UiCard } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
+import { Button } from "@/components/ui/button";
+import { FIELD } from "@/components/ui/form";
 import api from "@/lib/api";
 import { foldText, normalizePhoneNumber } from "@/lib/utils";
 
@@ -89,12 +91,20 @@ export function ParticipantPicker({
   const [found, setFound] = useState<DirectoryUser[]>([]);
   const [lookup, setLookup] = useState<DirectoryUser | null>(null);
   const [searching, setSearching] = useState(false);
+  // Sub-formulario de invitación. Antes "Invitar a «X»" sólo hacía focus() en
+  // el buscador: al tocarlo no pasaba nada visible, que es exactamente lo que
+  // un botón nunca puede hacer.
+  const [inviting, setInviting] = useState<{ name: string; contact: string } | null>(null);
+  const [inviteError, setInviteError] = useState("");
+  const contactRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
   const [dirDown, setDirDown] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
     setQ(""); setFound([]); setLookup(null); setDirDown(false);
+    setInviting(null); setInviteError("");
     Promise.allSettled([api.get("/auth/members"), api.get("/contacts")]).then(([m, c]) => {
       if (m.status === "fulfilled") setMembers(m.value.data);
       if (c.status === "fulfilled") setContacts(c.value.data);
@@ -136,6 +146,17 @@ export function ParticipantPicker({
 
   const pick = useCallback((p: PickedParticipant) => { onPick(p); onClose(); }, [onPick, onClose]);
 
+  /** Abre el sub-formulario con el término ya puesto en el campo que
+   *  corresponda: si escribiste un mail va a contacto, si escribiste un nombre
+   *  va a nombre. Así el paso siguiente es siempre el campo que falta. */
+  const startInvite = useCallback((raw: string) => {
+    const t = raw.trim();
+    const asContact = isContactish(t);
+    setInviting({ name: asContact ? "" : t, contact: asContact ? t : "" });
+    setInviteError("");
+    setTimeout(() => (asContact ? nameRef : contactRef).current?.focus(), 60);
+  }, []);
+
   const needle = foldText(term);
   const visibleMembers = useMemo(
     () => members.filter(m => !excludeUserIds.includes(m.id))
@@ -174,6 +195,21 @@ export function ParticipantPicker({
     }
   };
 
+  function confirmInvite() {
+    if (!inviting) return;
+    const name = inviting.name.trim();
+    const contact = inviting.contact.trim();
+    if (!name && !contact) { setInviteError("Poné al menos un nombre."); return; }
+    if (contact && !isContactish(contact)) {
+      setInviteError("Eso no parece un mail ni un teléfono.");
+      return;
+    }
+    // Sin contacto no hay a quién invitar: es un externo sin cuenta, que es una
+    // cosa distinta y el backend la crea ya aceptada.
+    if (!contact) { pick({ kind: "guest", member_name: name }); return; }
+    pick({ kind: "invite", member_name: name || contact, contact });
+  }
+
   if (!open) return null;
 
   return (
@@ -204,6 +240,62 @@ export function ParticipantPicker({
           </button>
         </div>
 
+        {inviting !== null ? (
+          <div className="p-4 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Se le va a compartir el gasto y le llega una invitación para sumarse
+              a RegistrApp. Si ya tiene cuenta con ese dato, le aparece directo en
+              su app.
+            </p>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Nombre</label>
+              <input
+                ref={nameRef}
+                className={FIELD}
+                placeholder="Cómo lo querés ver en el gasto"
+                value={inviting.name}
+                onChange={e => setInviting(v => v && { ...v, name: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Mail o teléfono</label>
+              <input
+                ref={contactRef}
+                className={FIELD}
+                placeholder="ana@mail.com o +54 9 11 1234 5678"
+                value={inviting.contact}
+                onChange={e => setInviting(v => v && { ...v, contact: e.target.value })}
+                autoCapitalize="none"
+                autoCorrect="off"
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); confirmInvite(); } }}
+              />
+            </div>
+            {inviteError && (
+              <p className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+                {inviteError}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setInviting(null)}>
+                Volver
+              </Button>
+              <Button type="button" className="flex-1" onClick={confirmInvite}>
+                Agregar
+              </Button>
+            </div>
+            {/* Salida para el caso "no tiene ni va a tener la app": se anota
+                igual, sólo que sin avisarle a nadie. */}
+            {allowGuest && inviting.name.trim() && (
+              <button
+                type="button"
+                onClick={() => pick({ kind: "guest", member_name: inviting.name.trim() })}
+                className="w-full text-xs text-muted-foreground hover:text-foreground"
+              >
+                Agregar sin cuenta, sólo para anotar mi parte
+              </button>
+            )}
+          </div>
+        ) : (
         <div className="overflow-y-auto flex-1 p-1">
           {visibleMembers.length > 0 && (
             <>
@@ -282,11 +374,8 @@ export function ParticipantPicker({
                 title={`Invitar a "${term}"`}
                 subtitle={isContactish(term)
                   ? "Le llega una invitación para sumarse"
-                  : "Escribí su mail o teléfono para invitarlo"}
-                onClick={() => {
-                  if (isContactish(term)) pick({ kind: "invite", member_name: term, contact: term });
-                  else inputRef.current?.focus();
-                }}
+                  : "Pedile el mail o el teléfono en el paso siguiente"}
+                onClick={() => startInvite(term)}
               />
               {allowGuest && (
                 <Row
@@ -313,13 +402,14 @@ export function ParticipantPicker({
               )}
               <Row
                 icon={<UserPlus className="w-4 h-4" />}
-                title="Escribí un nombre, mail o teléfono"
-                subtitle="Para invitar a alguien que todavía no tiene la app"
-                onClick={() => inputRef.current?.focus()}
+                title="Invitar a alguien que no tiene la app"
+                subtitle="Con su mail o teléfono"
+                onClick={() => startInvite("")}
               />
             </>
           )}
         </div>
+        )}
       </UiCard>
     </div>
   );

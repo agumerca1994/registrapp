@@ -89,7 +89,12 @@ interface Category {
 function participantHint(p: ParticipantRow): string {
   if (p.user_id) return "Usuario de RegistrApp";
   if (p.invite_email) return `Se le invita a ${p.invite_email}`;
-  if (p.invite_phone_local) return `Se le invita al ${p.invite_phone_prefix}${p.invite_phone_local}`;
+  // El `+` se antepone acá y no se guarda en el campo: `buildPhone` compone
+  // sobre dígitos, y meterle el símbolo lo rompería.
+  if (p.invite_phone_local) {
+    const num = `${p.invite_phone_prefix}${p.invite_phone_local}`;
+    return `Se le invita al +${num.replace(/^\+/, "")}`;
+  }
   if (p.member_name) return "Sin cuenta — sólo para anotar tu parte";
   return "";
 }
