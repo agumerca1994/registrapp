@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { AtSign, Copy, Home, Pencil, User as UserIcon, X } from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { AtSign, Check, Copy, MoreVertical, Pencil, User as UserIcon, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
 import { FIELD, FormGrid } from "@/components/ui/form";
 import api from "@/lib/api";
@@ -153,54 +155,56 @@ export function ProfileSection() {
 
   return (
     <Card className="p-6 space-y-4">
-      <div className="flex items-start gap-2">
-        <UserIcon className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-foreground">Tus datos</h3>
-          <p className="text-sm text-muted-foreground">
-            Tu alias es como el de una transferencia: alcanza con pasarlo para
-            que te compartan un gasto.
-          </p>
+      <div className="flex items-center gap-2">
+        <UserIcon className="w-5 h-5 text-primary shrink-0" />
+        <h3 className="font-semibold text-foreground flex-1 min-w-0">Tus datos</h3>
+        {/* El mismo menú de ⋮ que usan las tarjetas y los resúmenes, en vez de
+            un enlace propio de esta pantalla. */}
+        <div className="shrink-0">
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors outline-none" title="Más acciones">
+                <MoreVertical className="w-4 h-4" />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content align="end" sideOffset={4} className="bg-card border rounded-xl shadow-lg p-1 w-44 z-50">
+                <DropdownMenu.Item asChild>
+                  <button onClick={() => setEditing(true)}
+                    className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full text-left outline-none cursor-pointer">
+                    <Pencil className="w-4 h-4 text-muted-foreground" /> Editar tus datos
+                  </button>
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
         </div>
-        <button
-          onClick={() => setEditing(true)}
-          className="flex items-center gap-1.5 text-sm text-primary hover:underline shrink-0"
-        >
-          <Pencil className="w-3.5 h-3.5" /> Editar
-        </button>
       </div>
 
-      <dl className="space-y-2 text-sm">
-        <div className="flex items-baseline gap-3">
-          <dt className="text-muted-foreground w-24 shrink-0">Nombre</dt>
-          <dd className="text-foreground font-medium min-w-0 truncate">
-            {appUser.display_name || <span className="text-muted-foreground font-normal">Sin completar</span>}
-          </dd>
-        </div>
-        <div className="flex items-baseline gap-3">
-          <dt className="text-muted-foreground w-24 shrink-0">Alias</dt>
-          <dd className="text-foreground font-medium min-w-0 truncate flex items-baseline gap-2">
-            {appUser.alias ? (
-              <>
-                @{appUser.alias}
-                <button onClick={copy} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
-                  <Copy className="w-3 h-3" /> {copied ? "¡Copiado!" : "Copiar"}
-                </button>
-              </>
-            ) : (
-              <span className="text-muted-foreground font-normal">Sin elegir</span>
-            )}
-          </dd>
-        </div>
-        <div className="flex items-baseline gap-3">
-          <dt className="text-muted-foreground w-24 shrink-0 flex items-center gap-1">
-            <Home className="w-3 h-3" /> Hogar
-          </dt>
-          <dd className="text-foreground font-medium min-w-0 truncate">
-            {appUser.tenant_name || <span className="text-muted-foreground font-normal">Sin nombre</span>}
-          </dd>
-        </div>
-      </dl>
+      {/* Chips en su propia fila, pegados al borde izquierdo: es lo que dicen
+          de qué está hecha la card, no en qué estado está. */}
+      <div className="flex flex-wrap gap-1.5">
+        <Chip tone="neutral">
+          {appUser.display_name || "Sin nombre"}
+        </Chip>
+        {appUser.alias ? (
+          <Chip tone="violet" className="pr-2">
+            @{appUser.alias}
+            <button
+              onClick={copy}
+              aria-label={copied ? "Alias copiado" : "Copiar alias"}
+              title={copied ? "¡Copiado!" : "Copiar al portapapeles"}
+              className="ml-1 -mr-0.5 p-0.5 rounded hover:bg-primary/15 transition-colors"
+            >
+              {copied
+                ? <Check className="w-3.5 h-3.5 text-emerald-600" />
+                : <Copy className="w-3.5 h-3.5" />}
+            </button>
+          </Chip>
+        ) : (
+          <Chip tone="neutral" locked>Sin alias</Chip>
+        )}
+      </div>
 
       {editing && <EditProfileModal onClose={() => setEditing(false)} />}
     </Card>
