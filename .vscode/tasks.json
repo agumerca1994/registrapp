@@ -2,7 +2,7 @@
   // Cmd+Shift+P → "Tasks: Run Task" → elegí una. También tienen atajos:
   //   Cmd+Alt+G  Commit + push
   //   Cmd+Alt+C  Deploy — solo chequear
-  //   Cmd+Alt+D  Deploy a producción
+  //   Cmd+Shift+Alt+D  Deploy a producción  (con shift: macOS se queda Cmd+Alt+D para el Dock)
   //   Cmd+Shift+B  Build del frontend
   // Todas corren en la terminal integrada y piden confirmación ahí mismo, así
   // que un atajo apretado sin querer no commitea ni deploya nada.
