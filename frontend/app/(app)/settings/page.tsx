@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
+import { PushNotificationsSection } from "@/components/PushNotificationsSection";
 import { formatARS, getErrorMessage, formatPhone } from "@/lib/utils";
 import { Copy, Check, MessageCircle, CheckCircle2, Unlink, Mail, UserPlus, Trash2 } from "lucide-react";
 import { COUNTRIES } from "@/lib/countries";
@@ -387,6 +388,8 @@ export default function SettingsPage() {
         </div>
         </div>
       </Card>
+
+      <PushNotificationsSection />
 
       <WhatsAppSection />
 

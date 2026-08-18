@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { User, onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
+import { disablePush } from "@/lib/push";
 import { auth, googleProvider } from "@/lib/firebase";
 import api from "@/lib/api";
 
@@ -81,6 +82,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearUser = () => { setAppUser(null); };
 
   const logout = async () => {
+    // Antes del signOut, que necesita el token para llamar al backend: el que
+    // use este navegador después no tiene por qué recibir los avisos del
+    // anterior. Si falla, el backend igual lo va a limpiar cuando FCM le diga
+    // que ese token ya no existe.
+    await disablePush().catch(() => {});
     await signOut(auth);
     setAppUser(null);
   };

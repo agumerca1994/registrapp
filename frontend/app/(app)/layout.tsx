@@ -9,6 +9,7 @@ import { ErrorReporter } from "@/components/ErrorReporter";
 import { PrivacyProvider } from "@/contexts/PrivacyContext";
 import { PendingSharedProvider } from "@/contexts/PendingSharedContext";
 import { PendingSharedDialog } from "@/components/PendingSharedDialog";
+import { syncPushToken } from "@/lib/push";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { firebaseUser, appUser, loading } = useAuth();
@@ -19,6 +20,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (!firebaseUser) router.replace("/login");
     else if (!appUser || appUser.whatsapp_gate_pending) router.replace("/onboarding");
   }, [firebaseUser, appUser, loading, router]);
+
+  // FCM rota el token cuando quiere y deja de entregar al viejo sin avisar. Si
+  // nadie lo vuelve a registrar, los avisos se cortan en algún momento y no hay
+  // nada en la app que lo delate. No hace nada si no hay permiso.
+  useEffect(() => {
+    if (!appUser) return;
+    syncPushToken().catch(() => {});
+  }, [appUser]);
 
   if (loading || !appUser || appUser.whatsapp_gate_pending) return null;
 

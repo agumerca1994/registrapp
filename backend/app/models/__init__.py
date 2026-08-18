@@ -9,6 +9,7 @@ from app.models.credit_card import CreditCard, CreditCardStatement, CreditCardIt
 from app.models.contact import TenantContact
 from app.models.app_log import AppLog
 from app.models.payment_reminder import PaymentReminder
+from app.models.device_token import DeviceToken
 from app.models.currency_operation import CurrencyOperation
 from app.models.mcp_auth import (
     McpAuthCode, McpOAuthAuthorization, McpOAuthClient, McpToken,
@@ -24,6 +25,7 @@ __all__ = [
     "TenantContact",
     "AppLog",
     "PaymentReminder",
+    "DeviceToken",
     "CurrencyOperation",
     "McpOAuthClient", "McpOAuthAuthorization", "McpAuthCode", "McpToken",
 ]

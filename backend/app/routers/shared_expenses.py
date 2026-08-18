@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.firebase import get_current_user
+from app.services import push
 from app.models.contact import TenantContact
 from app.models.credit_card import CreditCardItem
 from app.models.expense import ExpenseCategory, ExpenseEntry
@@ -451,7 +452,7 @@ async def create_shared_expense(
     await db.flush()
 
     pending_wa_invites = []    # (phone, token) for unregistered externals
-    pending_wa_notify = []     # user_id for registered members to notify
+    notify_user_ids = []     # user_id for registered members to notify
 
     for split_in in body.splits:
         is_creator = split_in.user_id == user.id
@@ -471,7 +472,7 @@ async def create_shared_expense(
                     resolved_user_id = found.id
                     resolved_name = found.display_name or found.email
                     if found.id != user.id:
-                        pending_wa_notify.append(found.id)
+                        notify_user_ids.append(found.id)
                 else:
                     invite_email = contact
                     invite_token = secrets.token_urlsafe(32)
@@ -484,7 +485,7 @@ async def create_shared_expense(
                     resolved_user_id = found.id
                     resolved_name = found.display_name or found.email
                     if found.id != user.id:
-                        pending_wa_notify.append(found.id)
+                        notify_user_ids.append(found.id)
                 else:
                     invite_email = normalized_phone  # store normalized phone in invite_email column
                     invite_token = secrets.token_urlsafe(32)
@@ -494,7 +495,7 @@ async def create_shared_expense(
                 await _save_tenant_contact(user.tenant_id, resolved_name, normalized_phone, db)
         elif split_in.user_id and split_in.user_id != user.id:
             # Direct member selection — queue WhatsApp notification if they have phone
-            pending_wa_notify.append(split_in.user_id)
+            notify_user_ids.append(split_in.user_id)
 
         is_external = resolved_user_id is None and not invite_token
 
@@ -532,8 +533,25 @@ async def create_shared_expense(
     for phone, token in pending_wa_invites:
         await _send_whatsapp_invite(phone, creator_name, body.title, body.total_amount, token)
 
+    # Push a los dispositivos registrados. Va antes que WhatsApp y sin
+    # condición: WhatsApp sólo llega a quien vinculó su número, y ese es
+    # justamente el agujero por el que un participante no se enteraba de nada.
+    if notify_user_ids:
+        try:
+            await push.send_to_users(
+                db,
+                notify_user_ids,
+                title="Te compartieron un gasto",
+                body=f"{creator_name}: {body.title}",
+                path="/shared",
+            )
+        except Exception:
+            # send_to_users ya no levanta, pero el gasto está commiteado y no
+            # se puede perder por un aviso.
+            logger.exception("No se pudo notificar por push el gasto compartido %s", shared.id)
+
     # Notify registered members (if they have WhatsApp linked)
-    for notify_uid in pending_wa_notify:
+    for notify_uid in notify_user_ids:
         notify_user = await db.get(User, notify_uid)
         if notify_user and notify_user.whatsapp_phone:
             split_row = next(

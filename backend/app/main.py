@@ -13,6 +13,7 @@ from starlette.routing import Route
 from app.routers import (
     auth, income, expenses, macro, dashboard, mortgage,
     shared_expenses, whatsapp, credit_cards, contacts, reminders, currency,
+    notifications,
 )
 from app.routers.internal_logs import router as internal_logs_router
 from app.core.config import settings
@@ -203,6 +204,7 @@ app.include_router(whatsapp.router)
 app.include_router(contacts.router)
 app.include_router(reminders.router)
 app.include_router(currency.router)
+app.include_router(notifications.router)
 app.include_router(internal_logs_router)
 
 if settings.MCP_ENABLED:
