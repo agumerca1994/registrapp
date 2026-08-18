@@ -2,11 +2,12 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.firebase import get_current_user
+from app.models.device_token import DeviceToken
 from app.models.user import User
 from app.services import push
 
@@ -49,6 +50,29 @@ async def register_device(
         platform=body.platform,
     )
     return DeviceTokenOut(registered=True)
+
+
+class DeviceCountOut(BaseModel):
+    count: int
+
+
+@router.get("/device-tokens/me", response_model=DeviceCountOut)
+async def my_device_count(
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cuántos dispositivos tiene registrados este usuario.
+
+    Existe porque el frontend no puede contestarlo solo: guardaba el token en
+    `localStorage`, así que en un segundo navegador concluía "este dispositivo
+    no quedó registrado" aunque lo estuviera. Un dato local no puede responder
+    una pregunta sobre el servidor.
+    """
+    user = await _get_db_user(firebase_user, db)
+    count = await db.scalar(
+        select(func.count()).select_from(DeviceToken).where(DeviceToken.user_id == user.id)
+    )
+    return DeviceCountOut(count=count or 0)
 
 
 @router.delete("/device-tokens", status_code=status.HTTP_204_NO_CONTENT)

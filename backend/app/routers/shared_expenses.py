@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.firebase import get_current_user
-from app.services import push
+from app.services import notify_shared, participants, push, whatsapp
 from app.models.contact import TenantContact
 from app.models.credit_card import CreditCardItem
 from app.models.expense import ExpenseCategory, ExpenseEntry
@@ -31,82 +31,21 @@ router = APIRouter(prefix="/shared-expenses", tags=["shared-expenses"])
 logger = logging.getLogger(__name__)
 
 
-def _is_email(value: str) -> bool:
-    return "@" in value
-
-
-def _is_phone(value: str) -> bool:
-    cleaned = re.sub(r"[\s\-().]", "", value)
-    return bool(re.match(r"^\+?\d{7,15}$", cleaned))
-
-
-def _normalize_phone(value: str) -> str:
-    """Normalize phone to international format with + prefix.
-    Handles: +549351234567, 9351234567, 351234567, +54 9 351 234567, etc.
-    Returns: +549351234567 (for Argentina examples)
-    """
-    digits = re.sub(r"\D", "", value)
-
-    # Common country code prefixes: 54 (AR), 598 (UY), 56 (CL), 55 (BR), 595 (PY)
-    known_prefixes = ["595", "598", "54", "56", "55"]
-
-    for prefix in known_prefixes:
-        if digits.startswith(prefix):
-            remainder = digits[len(prefix):]
-            # Argentina mobile numbers require a 9 right after the country code
-            # for WhatsApp — insert it if the caller didn't already include it.
-            if prefix == "54" and not remainder.startswith("9"):
-                remainder = "9" + remainder
-            return f"+{prefix}{remainder}"
-
-    # No recognized prefix — assume a bare Argentine local number
-    if len(digits) >= 9:
-        return f"+549{digits}"
-
-    # Fallback: just add + prefix
-    return f"+{digits}" if digits else ""
-
-
-def _phone_lookup_values(phone: str | None) -> list[str]:
-    """Every spelling `User.whatsapp_phone` might be stored in for this number.
-
-    Rows written before `/auth/me/verify-whatsapp` started normalizing kept the
-    raw input, which for most users means no leading `+`. Matching only the
-    normalized form silently misses those accounts, and a missed match doesn't
-    fail loudly — it downgrades the share into an invite token that lives only
-    inside the WhatsApp message, invisible in the recipient's app.
-    """
-    digits = re.sub(r"\D", "", phone or "")
-    if not digits:
-        return []
-    return [f"+{digits}", digits]
-
-
-async def _find_user_by_phone(phone: str, db: AsyncSession) -> User | None:
-    values = _phone_lookup_values(phone)
-    if not values:
-        return None
-    return await db.scalar(select(User).where(User.whatsapp_phone.in_(values)))
-
-
-async def _find_user_by_email(email: str, db: AsyncSession) -> User | None:
-    """Case-insensitive on purpose — same failure mode as the phone lookup:
-    an exact-match miss costs the recipient in-app visibility, not an error.
-    """
-    return await db.scalar(select(User).where(func.lower(User.email) == email.strip().lower()))
-
-
-def _invite_lookup_values(user: User) -> list[str]:
-    """What an unclaimed invite's `invite_email` (which holds an email OR a
-    normalized phone) could contain for this user. Lowercased — the creator
-    typed the address by hand, so its casing is not to be trusted; comparisons
-    against this list must lowercase the stored side too. Phone spellings are
-    unaffected by `lower()`.
-    """
-    values = _phone_lookup_values(user.whatsapp_phone)
-    if user.email:
-        values.append(user.email.strip().lower())
-    return values
+# Estos helpers viven ahora en services/participants.py — se movieron junto con
+# la resolución de participantes, que `credit_cards.py` duplicaba.
+#
+# Se re-exportan con sus nombres privados originales a propósito: siete módulos
+# los importan desde acá (auth, contacts, reminders, credit_cards,
+# internal_logs) y CLAUDE.md documenta `_normalize_phone` por esta ruta.
+# Renombrar en el mismo commit que mueve el código convierte un refactor
+# mecánico en una cacería de imports rotos.
+_is_email = participants.is_email
+_is_phone = participants.is_phone
+_normalize_phone = participants.normalize_phone
+_phone_lookup_values = participants.phone_lookup_values
+_find_user_by_phone = participants.find_user_by_phone
+_find_user_by_email = participants.find_user_by_email
+_invite_lookup_values = participants.invite_lookup_values
 
 
 def _my_split(user: User, splits: list["SharedExpenseSplit"]) -> "SharedExpenseSplit | None":
@@ -329,79 +268,15 @@ async def _accept_split(user: User, shared: SharedExpense, split: SharedExpenseS
         shared.locked = True
 
 
-async def _resolve_whatsapp_jid(client: httpx.AsyncClient, phone: str) -> str | None:
-    """Ask Evolution's dedicated /chat/whatsappNumbers lookup for the canonical
-    number before sending. sendText's own internal existence check is stricter
-    (and buggier) than this endpoint — it rejects numbers this lookup happily
-    resolves, e.g. Argentine mobiles that already include the required 9.
-    """
-    digits = re.sub(r"\D", "", phone)
-    try:
-        resp = await client.post(
-            f"{settings.EVOLUTION_API_URL}/chat/whatsappNumbers/{settings.EVOLUTION_INSTANCE}",
-            json={"numbers": [digits]},
-            headers={"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"},
-        )
-        if resp.status_code < 400:
-            data = resp.json()
-            if data and data[0].get("exists"):
-                return data[0]["jid"].split("@")[0]
-    except Exception:
-        pass
-    return None
+# Los enviadores de WhatsApp viven ahora en services/whatsapp.py: los usan
+# auth.py (OTP) y reminders.py (recordatorios diarios), que no tienen nada que
+# ver con gastos compartidos. Se re-exportan con los nombres privados por la
+# misma razón que los helpers de participantes.
+_resolve_whatsapp_jid = whatsapp.resolve_whatsapp_jid
+_send_wa_msg = whatsapp.send_wa_msg
+_send_whatsapp_invite = whatsapp.send_whatsapp_invite
+_send_whatsapp_member_notify = whatsapp.send_whatsapp_member_notify
 
-
-async def _send_wa_msg(phone: str, msg: str) -> None:
-    if not settings.EVOLUTION_API_URL or not settings.EVOLUTION_INSTANCE:
-        logger.info("Evolution API not configured, skipping WhatsApp send")
-        return
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resolved = await _resolve_whatsapp_jid(client, phone)
-            target = resolved or phone.lstrip("+")
-            resp = await client.post(
-                f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE}",
-                json={"number": target, "text": msg},
-                headers={"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"},
-            )
-            if resp.status_code >= 400:
-                logger.warning(f"WhatsApp send failed {resp.status_code} to {phone} (resolved {target}): {resp.text[:300]}")
-            else:
-                logger.info(f"WhatsApp sent to {phone} (resolved {target}): {resp.status_code}")
-    except Exception as e:
-        logger.warning(f"WhatsApp send error to {phone}: {e}")
-
-
-async def _send_whatsapp_invite(phone: str, creator_name: str, title: str, amount, token: str, cuotas_count: int = 1) -> None:
-    link = f"{settings.FRONTEND_URL}/invite/{token}"
-    if cuotas_count > 1:
-        msg = (
-            f"Hola! {creator_name} te invito a compartir un gasto: '{title}' "
-            f"en {cuotas_count} cuotas de ${amount} c/u.\n\nEntra al link para ver el detalle y aceptarlas:\n{link}"
-        )
-    else:
-        msg = (
-            f"Hola! {creator_name} te invito a compartir un gasto: '{title}' "
-            f"por ${amount}.\n\nEntra al link para verlo y aceptarlo:\n{link}"
-        )
-    await _send_wa_msg(phone, msg)
-
-
-async def _send_whatsapp_member_notify(phone: str, creator_name: str, title: str, total_amount, split_amount, cuotas_count: int = 1) -> None:
-    app_url = f"{settings.FRONTEND_URL}/shared"
-    if cuotas_count > 1:
-        msg = (
-            f"Hola! {creator_name} te compartio el gasto '{title}' "
-            f"en {cuotas_count} cuotas de ${total_amount} c/u.\nTu parte por cuota: ${split_amount}.\n"
-            f"Ingresa a la app para aceptarlas: {app_url}"
-        )
-    else:
-        msg = (
-            f"Hola! {creator_name} te compartio el gasto '{title}' "
-            f"por ${total_amount}.\nTu parte: ${split_amount}.\n"
-            f"Ingresa a la app para aceptarlo: {app_url}"
-        )
-    await _send_wa_msg(phone, msg)
 
 @router.get("", response_model=list[SharedExpenseOut])
 async def list_shared_expenses(
@@ -451,63 +326,34 @@ async def create_shared_expense(
     db.add(shared)
     await db.flush()
 
-    pending_wa_invites = []    # (phone, token) for unregistered externals
-    notify_user_ids = []     # user_id for registered members to notify
+    pending_wa_invites = []    # (phone, token) para externos sin cuenta
+    notify_pairs = []          # (user_id, monto de su parte) de los registrados
 
     for split_in in body.splits:
-        is_creator = split_in.user_id == user.id
-
-        resolved_user_id = split_in.user_id
-        resolved_name = split_in.member_name
-        invite_token = None
-        invite_email = None  # stores email OR phone in this column
-        invite_expires_at = None
-
-        if split_in.invite_contact and not split_in.user_id:
-            contact = split_in.invite_contact.strip()
-            if _is_email(contact):
-                # Look up existing user by email
-                found = await _find_user_by_email(contact, db)
-                if found:
-                    resolved_user_id = found.id
-                    resolved_name = found.display_name or found.email
-                    if found.id != user.id:
-                        notify_user_ids.append(found.id)
-                else:
-                    invite_email = contact
-                    invite_token = secrets.token_urlsafe(32)
-                    invite_expires_at = datetime.utcnow() + timedelta(days=30)
-            elif _is_phone(contact):
-                normalized_phone = _normalize_phone(contact)
-                # Look up existing user by whatsapp_phone
-                found = await _find_user_by_phone(normalized_phone, db)
-                if found:
-                    resolved_user_id = found.id
-                    resolved_name = found.display_name or found.email
-                    if found.id != user.id:
-                        notify_user_ids.append(found.id)
-                else:
-                    invite_email = normalized_phone  # store normalized phone in invite_email column
-                    invite_token = secrets.token_urlsafe(32)
-                    invite_expires_at = datetime.utcnow() + timedelta(days=30)
-                    # Queue WhatsApp invite to send after flush
-                    pending_wa_invites.append((normalized_phone, invite_token))
-                await _save_tenant_contact(user.tenant_id, resolved_name, normalized_phone, db)
-        elif split_in.user_id and split_in.user_id != user.id:
-            # Direct member selection — queue WhatsApp notification if they have phone
-            notify_user_ids.append(split_in.user_id)
-
-        is_external = resolved_user_id is None and not invite_token
+        r = await participants.resolve_participant(
+            creator=user,
+            db=db,
+            member_name=split_in.member_name,
+            user_id=split_in.user_id,
+            invite_contact=split_in.invite_contact,
+        )
+        is_creator = r.is_creator
+        if r.notify_user_id is not None:
+            notify_pairs.append((r.notify_user_id, split_in.amount))
+        if r.wa_invite_phone and r.invite_token:
+            pending_wa_invites.append((r.wa_invite_phone, r.invite_token))
+        if r.agenda_phone:
+            await _save_tenant_contact(user.tenant_id, r.member_name, r.agenda_phone, db)
 
         split = SharedExpenseSplit(
             shared_expense_id=shared.id,
-            user_id=resolved_user_id,
-            member_name=resolved_name,
+            user_id=r.user_id,
+            member_name=r.member_name,
             amount=split_in.amount,
-            status="accepted" if (is_creator or is_external) else "pending",
-            invite_email=invite_email,
-            invite_token=invite_token,
-            invite_expires_at=invite_expires_at,
+            status=r.status,
+            invite_email=r.invite_email,
+            invite_token=r.invite_token,
+            invite_expires_at=r.invite_expires_at,
         )
         db.add(split)
         await db.flush()
@@ -528,40 +374,17 @@ async def create_shared_expense(
 
     await db.commit()
 
-    # Send WhatsApp notifications after commit
+    # Avisos, después del commit. El mismo servicio que usa el compartir de
+    # tarjetas, para que las dos vías avisen igual.
     creator_name = user.display_name or user.email
-    for phone, token in pending_wa_invites:
-        await _send_whatsapp_invite(phone, creator_name, body.title, body.total_amount, token)
-
-    # Push a los dispositivos registrados. Va antes que WhatsApp y sin
-    # condición: WhatsApp sólo llega a quien vinculó su número, y ese es
-    # justamente el agujero por el que un participante no se enteraba de nada.
-    if notify_user_ids:
-        try:
-            await push.send_to_users(
-                db,
-                notify_user_ids,
-                title="Te compartieron un gasto",
-                body=f"{creator_name}: {body.title}",
-                path="/shared",
-            )
-        except Exception:
-            # send_to_users ya no levanta, pero el gasto está commiteado y no
-            # se puede perder por un aviso.
-            logger.exception("No se pudo notificar por push el gasto compartido %s", shared.id)
-
-    # Notify registered members (if they have WhatsApp linked)
-    for notify_uid in notify_user_ids:
-        notify_user = await db.get(User, notify_uid)
-        if notify_user and notify_user.whatsapp_phone:
-            split_row = next(
-                (s for s in body.splits if getattr(s, "user_id", None) == notify_uid),
-                None,
-            )
-            split_amt = split_row.amount if split_row else body.total_amount
-            await _send_whatsapp_member_notify(
-                notify_user.whatsapp_phone, creator_name, body.title, body.total_amount, split_amt
-            )
+    await notify_shared.notify_share(
+        db,
+        creator_name=creator_name,
+        title=body.title,
+        total_amount=body.total_amount,
+        notify=notify_pairs,
+        invites=pending_wa_invites,
+    )
 
     result = await db.scalar(
         _load_q(user).where(SharedExpense.id == shared.id)

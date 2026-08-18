@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.firebase import get_current_user
+from app.services import notify_shared, participants
 from app.models.user import User
 from app.models.expense import ExpenseEntry, ExpenseCategory
 from app.models.credit_card import CreditCard, CreditCardStatement, CreditCardItem
@@ -698,11 +699,13 @@ async def share_item(
     firebase_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.routers.shared_expenses import (
-        _find_user_by_email, _find_user_by_phone,
-        _is_email, _is_phone, _normalize_phone, _save_tenant_contact,
-        _send_whatsapp_invite, _send_whatsapp_member_notify,
-    )
+    # Import local para esquivar el ciclo shared_expenses <-> credit_cards.
+    # La resolución de participantes ya no se importa: vive en
+    # services/participants.py y este router la usa desde ahí.
+    # Import local para esquivar el ciclo shared_expenses <-> credit_cards.
+    # Sólo queda la agenda: la resolución de participantes y los avisos ya
+    # viven en services/ y se importan arriba, sin ciclo.
+    from app.routers.shared_expenses import _save_tenant_contact
     import secrets
     from datetime import datetime, timedelta
 
@@ -801,57 +804,37 @@ async def share_item(
         pending_wa_notify = []
 
         for split_in in body.splits:
-            is_creator = split_in.user_id == user.id
-            resolved_user_id = split_in.user_id
-            resolved_name = split_in.member_name
-            invite_token = None
-            invite_email = None
-            invite_expires_at = None
+            # `mint_token=not is_root` invertido: sólo la cuota raíz acuña token,
+            # una invitación por plan y no una por cuota. Es un parámetro y no
+            # una rama duplicada — la duplicación anterior fue justo lo que
+            # produjo los dos bugs que este refactor arregla.
+            r = await participants.resolve_participant(
+                creator=user,
+                db=db,
+                member_name=split_in.member_name,
+                user_id=split_in.user_id,
+                invite_contact=split_in.invite_contact,
+                mint_token=is_root,
+            )
+            is_creator = r.is_creator
 
-            if split_in.invite_contact and not split_in.user_id:
-                contact = split_in.invite_contact.strip()
-                if _is_email(contact):
-                    found = await _find_user_by_email(contact, db)
-                    if found:
-                        resolved_user_id = found.id
-                        resolved_name = found.display_name or found.email
-                        if found.id != user.id and is_root:
-                            pending_wa_notify.append((found.id, split_in.amount))
-                    else:
-                        invite_email = contact
-                        if is_root:
-                            invite_token = secrets.token_urlsafe(32)
-                            invite_expires_at = datetime.utcnow() + timedelta(days=30)
-                            pending_wa_invites.append((contact, invite_token))
-                elif _is_phone(contact):
-                    normalized_phone = _normalize_phone(contact)
-                    found = await _find_user_by_phone(normalized_phone, db)
-                    if found:
-                        resolved_user_id = found.id
-                        resolved_name = found.display_name or found.email
-                        if found.id != user.id and is_root:
-                            pending_wa_notify.append((found.id, split_in.amount))
-                    else:
-                        invite_email = normalized_phone
-                        if is_root:
-                            invite_token = secrets.token_urlsafe(32)
-                            invite_expires_at = datetime.utcnow() + timedelta(days=30)
-                            pending_wa_invites.append((normalized_phone, invite_token))
-                    if is_root:
-                        await _save_tenant_contact(user.tenant_id, resolved_name, normalized_phone, db)
-            elif split_in.user_id and split_in.user_id != user.id:
-                if is_root:
-                    pending_wa_notify.append((split_in.user_id, split_in.amount))
+            if is_root:
+                if r.notify_user_id is not None:
+                    pending_wa_notify.append((r.notify_user_id, split_in.amount))
+                if r.wa_invite_phone and r.invite_token:
+                    pending_wa_invites.append((r.wa_invite_phone, r.invite_token))
+                if r.agenda_phone:
+                    await _save_tenant_contact(user.tenant_id, r.member_name, r.agenda_phone, db)
 
             split = SharedExpenseSplit(
                 shared_expense_id=shared.id,
-                user_id=resolved_user_id,
-                member_name=resolved_name,
+                user_id=r.user_id,
+                member_name=r.member_name,
                 amount=split_in.amount,
-                status="accepted" if is_creator else "pending",
-                invite_email=invite_email,
-                invite_token=invite_token,
-                invite_expires_at=invite_expires_at,
+                status=r.status,
+                invite_email=r.invite_email,
+                invite_token=r.invite_token,
+                invite_expires_at=r.invite_expires_at,
             )
             db.add(split)
             await db.flush()
@@ -866,16 +849,18 @@ async def share_item(
 
         if is_root:
             await db.flush()
-            for phone, token in pending_wa_invites:
-                await _send_whatsapp_invite(phone, creator_name, item.description, target_item.amount, token, cuotas_count)
-            for notify_uid, split_amt in pending_wa_notify:
-                from app.models.user import User as _User
-                notify_user = await db.get(_User, notify_uid)
-                if notify_user and notify_user.whatsapp_phone:
-                    await _send_whatsapp_member_notify(
-                        notify_user.whatsapp_phone, creator_name,
-                        item.description, target_item.amount, split_amt, cuotas_count,
-                    )
+            # Mismo servicio que /shared. Antes acá sólo se mandaba WhatsApp:
+            # compartir la cuota de una tarjeta no le llegaba a nadie que no
+            # tuviera el número vinculado.
+            await notify_shared.notify_share(
+                db,
+                creator_name=creator_name,
+                title=item.description,
+                total_amount=target_item.amount,
+                notify=pending_wa_notify,
+                invites=pending_wa_invites,
+                cuotas_count=cuotas_count,
+            )
 
         created_shared_ids.append(shared.id)
 

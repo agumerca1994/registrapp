@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { Bell, BellOff, CheckCircle2, Smartphone, TriangleAlert } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { enablePush, isDeviceRegistered, isIOS, pushConfigProblem, pushState, type PushState } from "@/lib/push";
+import api from "@/lib/api";
+import { enablePush, isIOS, pushConfigProblem, pushState, type PushState } from "@/lib/push";
 
 /**
  * Activar las notificaciones push, desde Configuración.
@@ -26,18 +27,34 @@ export function PushNotificationsSection() {
   const [registered, setRegistered] = useState(true);
   const [busy, setBusy] = useState(false);
 
+  // Se le pregunta al backend, no a localStorage: un dato local no puede
+  // contestar una pregunta sobre el servidor. Guardarlo local hacía que en un
+  // segundo navegador la pantalla dijera "no quedó registrado" con el
+  // dispositivo perfectamente registrado.
+  //
+  // Ante la duda se asume registrado: es mejor no decir nada que acusar en
+  // falso de un problema que no existe.
+  const refreshRegistered = async () => {
+    try {
+      const res = await api.get<{ count: number }>("/notifications/device-tokens/me");
+      setRegistered(res.data.count > 0);
+    } catch {
+      setRegistered(true);
+    }
+  };
+
   // En un efecto, no en el render: `Notification.permission` no existe en el
   // server y leerlo durante el render desincroniza la hidratación.
   useEffect(() => {
     setState(pushState());
-    setRegistered(isDeviceRegistered());
+    refreshRegistered();
   }, []);
 
   const activate = async () => {
     setBusy(true);
     try {
       setState(await enablePush());
-      setRegistered(isDeviceRegistered());
+      await refreshRegistered();
     } finally {
       setBusy(false);
     }

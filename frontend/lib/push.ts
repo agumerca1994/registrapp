@@ -45,19 +45,14 @@ function firebaseConfig() {
   };
 }
 
-/**
- * Si este dispositivo llegó a registrarse en el backend.
- *
- * Es una pregunta DISTINTA de si hay permiso, y la diferencia es justamente lo
- * que hacía imposible diagnosticar por qué no llegaban los avisos: el permiso
- * puede estar concedido y el registro no haber ocurrido nunca — porque falta la
- * VAPID key, porque `getToken` no devolvió nada, o porque el POST falló. En
- * todos esos casos la pantalla decía "Activadas" y no llegaba nada.
- */
-export function isDeviceRegistered(): boolean {
-  if (typeof window === "undefined") return false;
-  return !!localStorage.getItem(LAST_TOKEN_KEY);
-}
+// "¿Este dispositivo está registrado?" es una pregunta DISTINTA de "¿hay
+// permiso?", y confundirlas es lo que hacía indiagnosticable que no llegaran
+// los avisos: el permiso puede estar dado y el registro no haber ocurrido nunca
+// (falta la VAPID key, `getToken` no devolvió nada, o el POST falló).
+//
+// Pero la contesta el backend, en GET /notifications/device-tokens/me, no este
+// módulo: el token guardado acá es local al navegador, así que en un segundo
+// navegador respondía "no registrado" con el dispositivo registrado.
 
 /** Por qué no se pudo registrar, para poder mostrarlo en pantalla. */
 export function pushConfigProblem(): string | null {

@@ -88,9 +88,17 @@ async def _assert_can_leave_current_tenant(user: User, db: AsyncSession) -> None
 
 async def _link_pending_splits(user: User, db: AsyncSession) -> None:
     """Auto-link shared expense splits invited to this email when user registers."""
+    # `func.lower` en los dos lados: `_find_user_by_email` normaliza y esto no,
+    # así que alguien invitado a "Juan.Perez@Gmail.com" que entra como
+    # "juan.perez@gmail.com" no se vinculaba nunca — y el fallo es silencioso,
+    # simplemente el gasto no aparece.
+    #
+    # Deliberadamente no matchea por teléfono: al registrarse el número todavía
+    # no está verificado. Ese caso lo cubre la cláusula 3 de `_load_q` una vez
+    # que lo verifica.
     splits = (await db.scalars(
         select(SharedExpenseSplit).where(
-            SharedExpenseSplit.invite_email == user.email,
+            func.lower(SharedExpenseSplit.invite_email) == (user.email or "").strip().lower(),
             SharedExpenseSplit.user_id.is_(None),
         )
     )).all()
