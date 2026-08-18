@@ -32,12 +32,17 @@ There are no backend or unit tests (no pytest, no jest). The only automated suit
 
 ## Deployment
 
-Production uses `docker-compose.prod.yml` which Easypanel pulls from the `main` branch on GitHub. Pushing to `main` and clicking "Deploy" in Easypanel triggers a full rebuild. The same rebuild can be fired from the command line with the webhook in `.deploy.env` (gitignored — it's a bearer credential and this repo is public):
+Production uses `docker-compose.prod.yml` which Easypanel pulls from the `main` branch on GitHub. Pushing to `main` and clicking "Deploy" in Easypanel triggers a full rebuild. The same rebuild is fired from the command line by `scripts/deploy.sh`, which wraps the webhook in `.deploy.env` (gitignored — it's a bearer credential and this repo is public):
 
 ```bash
-set -a && . ./.deploy.env && set +a
-curl -X POST "$EASYPANEL_DEPLOY_URL"   # → 200, body "Deploying..."
+./scripts/deploy.sh          # chequeos + confirmación + deploy
+./scripts/deploy.sh --check  # solo los chequeos, no dispara nada
+./scripts/deploy.sh --yes    # sin confirmación (para atajos/automatización)
 ```
+
+**The preflight is the point, not the curl.** Easypanel builds whatever `main` holds *on GitHub*, so the webhook's outcome is decided by state the webhook never looks at: firing it with local `main` ahead of the remote deploys the previous commit, firing it with a dirty tree deploys something that isn't what's on screen, and neither shows up in the response. The script refuses (unless `--force`) when the branch isn't `main`, the tree is dirty, or HEAD and `origin/main` have diverged, and prints the exact commit subject it is about to ship. It also confirms interactively, because there's no dry run on Easypanel's side — any request to that path starts a rebuild.
+
+The same three commands are wired as VS Code tasks in `.vscode/tasks.json` (Cmd+Shift+P → "Tasks: Run Task"). `Build del frontend` is the default build task (Cmd+Shift+B) deliberately: the easiest shortcut goes to the action that can't break production, and it's what you want to run before deploying anyway.
 
 Two things about it, both found the hard way:
 - **The URL Easypanel shows uses whatever host you opened the panel with.** Entering by the internal `159.112.147.178:3000` yields a webhook on that address, and that port isn't published — it times out from anywhere but the server itself. The one that works is the panel's own domain (`imanzanastore.com.ar`).

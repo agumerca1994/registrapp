@@ -1,0 +1,48 @@
+{
+  // Cmd+Shift+P → "Tasks: Run Task" → elegí una.
+  // "Deploy a producción" corre en la terminal integrada y pide confirmación
+  // ahí mismo, así que un click perdido no deploya nada.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Deploy a producción",
+      "type": "shell",
+      "command": "./scripts/deploy.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "focus": true,
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      // Los mismos chequeos, sin disparar nada. Para responder "¿qué se
+      // deployaría si aprieto el otro?".
+      "label": "Deploy — solo chequear",
+      "type": "shell",
+      "command": "./scripts/deploy.sh --check",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      // El build que corre el deploy. Va como tarea de build por defecto
+      // (Cmd+Shift+B) a propósito: es lo que conviene tener a mano antes de
+      // deployar, y deja el atajo más fácil en la acción que no rompe nada.
+      "label": "Build del frontend",
+      "type": "shell",
+      "command": "npm run build",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$tsc"],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    }
+  ]
+}
