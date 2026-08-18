@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { usePendingShared } from "@/contexts/PendingSharedContext";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
@@ -32,6 +33,23 @@ const nav = [
 const MOBILE_TAB_HREFS = ["/dashboard", "/income", "/expenses", "/tarjetas"];
 const mobileTabs = nav.filter((item) => MOBILE_TAB_HREFS.includes(item.href));
 const moreItems = nav.filter((item) => !MOBILE_TAB_HREFS.includes(item.href));
+
+// Ámbar y no rojo: es lo que la app ya usa para "pendiente" (el chip de
+// /shared), y esto no es un error, es una decisión esperando. El anillo del
+// color de la tarjeta lo despega tanto del fondo blanco como del violeta del
+// ítem activo, que si no se lo come.
+function NavDot({ className = "" }: { className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`w-2 h-2 rounded-full bg-amber-500 ring-2 ring-card shrink-0 ${className}`}
+    />
+  );
+}
+
+// Un solo lugar decide qué ítem lleva el aviso, así el sidebar, la hoja "Más"
+// y la tab bar no pueden discrepar.
+const PENDING_HREF = "/shared";
 
 const BUILD_DATE = process.env.NEXT_PUBLIC_BUILD_DATE
   ? new Date(process.env.NEXT_PUBLIC_BUILD_DATE).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })
@@ -75,6 +93,10 @@ function VersionInfo() {
 function NavContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { appUser, firebaseUser, logout } = useAuth();
+  // Hay que llamar al hook acá, no leer el contexto por otro lado: las
+  // pantallas llegan como children del provider y React no las re-renderiza
+  // cuando cambia su estado. Esto es lo que suscribe al puntito.
+  const { count: pendingCount } = usePendingShared();
 
   return (
     <>
@@ -100,7 +122,10 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
             )}
           >
             <Icon className="w-4 h-4" />
-            {label}
+            <span className="flex-1 min-w-0">{label}</span>
+            {href === PENDING_HREF && pendingCount > 0 && (
+              <NavDot />
+            )}
           </Link>
         ))}
       </nav>
@@ -144,6 +169,7 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
 function MoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const pathname = usePathname();
   const { appUser, firebaseUser, logout } = useAuth();
+  const { count: pendingCount } = usePendingShared();
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -171,7 +197,8 @@ function MoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bo
                 )}
               >
                 <Icon className="w-4 h-4" />
-                {label}
+                <span className="flex-1 min-w-0">{label}</span>
+                {href === PENDING_HREF && pendingCount > 0 && <NavDot />}
               </Link>
             ))}
 
@@ -202,6 +229,7 @@ export default function Sidebar() {
   const [moreOpen, setMoreOpen] = useState(false);
   const pathname = usePathname();
   const { appUser } = useAuth();
+  const { count: pendingCount } = usePendingShared();
   const isMoreActive = moreItems.some((item) => item.href === pathname);
 
   return (
@@ -249,7 +277,12 @@ export default function Sidebar() {
             isMoreActive ? "text-primary bg-accent" : "text-muted-foreground"
           )}
         >
-          <MoreHorizontal className="w-5 h-5" />
+          {/* El puntito sobre el icono, no al lado del texto: en la tab bar el
+              icono es lo que se mira, y colgarlo del texto descentra el tab. */}
+          <span className="relative">
+            <MoreHorizontal className="w-5 h-5" />
+            {pendingCount > 0 && <NavDot className="absolute -top-0.5 -right-1" />}
+          </span>
           Más
         </button>
       </nav>

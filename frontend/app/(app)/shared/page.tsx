@@ -10,6 +10,7 @@ import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { formatARS, formatUSD, normalizePhoneNumber, getErrorMessage, pickCategoryColor } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePendingShared } from "@/contexts/PendingSharedContext";
 import { COUNTRIES } from "@/lib/countries";
 import { Card } from "@/components/ui/card";
 import { FIELD, FormGrid, SelectField, DateField } from "@/components/ui/form";
@@ -503,6 +504,7 @@ function ConvertToArsModal({
 }
 
 export default function SharedExpensesPage() {
+  const { refresh: refreshPending } = usePendingShared();
   useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const { appUser } = useAuth();
   const [expenses, setExpenses] = useState<SharedExpense[]>([]);
@@ -704,11 +706,13 @@ export default function SharedExpensesPage() {
     } finally { setSaving(false); }
   }
 
+  // `refreshPending` además del `load()` de la pantalla: resolver acá tiene que
+  // apagar el puntito de la navegación, que se alimenta de otra consulta.
   async function handleAccept(sharedId: number) {
-    await api.post(`/shared-expenses/${sharedId}/accept`); await load();
+    await api.post(`/shared-expenses/${sharedId}/accept`); await load(); await refreshPending();
   }
   async function handleReject(sharedId: number) {
-    await api.post(`/shared-expenses/${sharedId}/reject`); await load();
+    await api.post(`/shared-expenses/${sharedId}/reject`); await load(); await refreshPending();
   }
   async function handleDelete(sharedId: number, isGrouped: boolean) {
     const msg = isGrouped

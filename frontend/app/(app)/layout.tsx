@@ -7,6 +7,8 @@ import Sidebar from "@/components/layout/Sidebar";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { ErrorReporter } from "@/components/ErrorReporter";
 import { PrivacyProvider } from "@/contexts/PrivacyContext";
+import { PendingSharedProvider } from "@/contexts/PendingSharedContext";
+import { PendingSharedDialog } from "@/components/PendingSharedDialog";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { firebaseUser, appUser, loading } = useAuth();
@@ -24,14 +26,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     // Wraps every protected screen: hiding amounts on one and not the others
     // would be worse than not hiding them at all.
     <PrivacyProvider>
-      <div className="flex min-h-screen bg-background">
-        <Sidebar />
-        <ScrollToTop />
-        <ErrorReporter />
-        <main id="main-content" className="flex-1 p-4 md:p-8 overflow-auto pt-20 pb-28 md:pt-8 md:pb-8">
-          {children}
-        </main>
-      </div>
+      {/* Envuelve todo por la misma razón que PrivacyProvider: el puntito de la
+          navegación y el aviso del primer ingreso tienen que leer los mismos
+          pendientes, y la navegación está en todas las pantallas. */}
+      <PendingSharedProvider>
+        <div className="flex min-h-screen bg-background">
+          <Sidebar />
+          <ScrollToTop />
+          <ErrorReporter />
+          <main id="main-content" className="flex-1 p-4 md:p-8 overflow-auto pt-20 pb-28 md:pt-8 md:pb-8">
+            {children}
+          </main>
+        </div>
+        <PendingSharedDialog />
+      </PendingSharedProvider>
     </PrivacyProvider>
   );
 }

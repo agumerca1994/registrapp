@@ -191,6 +191,48 @@ def _load_q(user: User):
     )
 
 
+def _pending_q(user: User):
+    """Expenses whose split for `user` is still undecided.
+
+    Same ownership rules as `_load_q` — their own split, or an unclaimed invite
+    addressed to their email/phone — narrowed to `status == "pending"`.
+
+    Note what is deliberately *absent*: `_load_q` ORs in
+    `tenant_id == user.tenant_id`, so everyone in a household sees every shared
+    expense in it. That is right for the list screen and wrong here — a
+    housemate's undecided split is not yours to accept, and including it would
+    make the nav dot light up for a decision the user cannot take.
+    """
+    mine_pending = [
+        exists(
+            select(SharedExpenseSplit.id).where(
+                SharedExpenseSplit.shared_expense_id == SharedExpense.id,
+                SharedExpenseSplit.user_id == user.id,
+                SharedExpenseSplit.status == "pending",
+            )
+        )
+    ]
+    invite_values = _invite_lookup_values(user)
+    if invite_values:
+        mine_pending.append(
+            exists(
+                select(SharedExpenseSplit.id).where(
+                    SharedExpenseSplit.shared_expense_id == SharedExpense.id,
+                    SharedExpenseSplit.user_id.is_(None),
+                    SharedExpenseSplit.invite_token.is_not(None),
+                    SharedExpenseSplit.status == "pending",
+                    func.lower(SharedExpenseSplit.invite_email).in_(invite_values),
+                )
+            )
+        )
+    return (
+        select(SharedExpense)
+        .where(or_(*mine_pending))
+        .options(selectinload(SharedExpense.splits))
+        .order_by(SharedExpense.expense_date.desc(), SharedExpense.created_at.desc())
+    )
+
+
 def _out(shared: SharedExpense, user: User) -> SharedExpenseOut:
     """Serialize for `user`: flag which split is theirs, and hide invite tokens
     they have no business holding. Anyone who can see the expense can see every
@@ -367,6 +409,23 @@ async def list_shared_expenses(
 ):
     user = await _get_db_user(firebase_user, db)
     result = await db.scalars(_load_q(user))
+    return [_out(shared, user) for shared in result.all()]
+
+
+@router.get("/pending", response_model=list[SharedExpenseOut])
+async def list_pending_for_me(
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """The expenses waiting on this user's accept/reject, newest first.
+
+    Feeds both the first-login dialog and the nav dot. It returns the rows
+    rather than a bare count on purpose: the dialog needs the amounts and the
+    dot needs the number, and two endpoints answering "how many are pending"
+    is exactly the pair that drifts apart.
+    """
+    user = await _get_db_user(firebase_user, db)
+    result = await db.scalars(_pending_q(user))
     return [_out(shared, user) for shared in result.all()]
 
 
