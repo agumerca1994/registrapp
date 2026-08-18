@@ -47,6 +47,12 @@ class User(Base):
     # por alias, mail o teléfono: apagarlo ahí rompería en silencio que te
     # compartan gastos, que es el fallo más caro de este dominio.
     discoverable: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true", default=True)
+    # Si querés que además del aviso en la app te llegue un WhatsApp. El push
+    # del sistema es la base y no se apaga desde acá: es el canal que no
+    # depende de tener un número vinculado ni de un proveedor externo.
+    whatsapp_notifications: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", default=True
+    )
 
     tenant: Mapped["Tenant"] = relationship(back_populates="users")
 

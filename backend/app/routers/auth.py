@@ -228,6 +228,7 @@ class ProfileUpdate(BaseModel):
     display_name: str | None = Field(default=None, max_length=120)
     alias: str | None = Field(default=None, max_length=30)
     discoverable: bool | None = None
+    whatsapp_notifications: bool | None = None
 
 
 @router.patch("/me", response_model=UserOut)
@@ -271,6 +272,9 @@ async def update_me(
 
     if "discoverable" in fields and fields["discoverable"] is not None:
         user.discoverable = fields["discoverable"]
+
+    if "whatsapp_notifications" in fields and fields["whatsapp_notifications"] is not None:
+        user.whatsapp_notifications = fields["whatsapp_notifications"]
 
     await db.commit()
     # Re-seleccionar con selectinload: `UserOut.tenant_code` lee la relación, y

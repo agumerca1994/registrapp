@@ -7,7 +7,7 @@ import api from "@/lib/api";
 import { PushNotificationsSection } from "@/components/PushNotificationsSection";
 import { ProfileSection } from "@/components/ProfileSection";
 import { formatARS, getErrorMessage, formatPhone } from "@/lib/utils";
-import { Copy, Check, MessageCircle, CheckCircle2, Unlink, Mail, UserPlus, Trash2 } from "lucide-react";
+import { Copy, Check, MessageCircle, CheckCircle2, Unlink, UserPlus, Trash2 } from "lucide-react";
 import { COUNTRIES } from "@/lib/countries";
 import WhatsAppVerifyForm from "@/components/WhatsAppVerifyForm";
 import McpConnectorSection from "@/components/McpConnectorSection";
@@ -118,8 +118,9 @@ function CurrencySettingsSection() {
 
 function InviteFriendSection() {
   const { appUser } = useAuth();
-  const [method, setMethod] = useState<"none" | "email" | "whatsapp">("none");
-  const [email, setEmail] = useState("");
+  // Sin mail: la app no manda correos, así que ofrecer "Email" acá era la
+  // única puerta que quedaba a un canal que no existe en ningún otro lado.
+  const [method, setMethod] = useState<"none" | "whatsapp">("none");
   const [prefix, setPrefix] = useState("54");
   const [localPhone, setLocalPhone] = useState("");
 
@@ -136,13 +137,6 @@ function InviteFriendSection() {
     window.open("https://wa.me/" + fullPhone + "?text=" + encodeURIComponent(buildMessage()), "_blank");
   };
 
-  const sendEmail = () => {
-    if (!email.trim()) return;
-    const subject = encodeURIComponent("Invitacion a RegistrApp");
-    const body = encodeURIComponent(buildMessage());
-    window.open("mailto:" + email + "?subject=" + subject + "&body=" + body, "_blank");
-  };
-
   return (
     <Card className="p-6 space-y-4">
       <div>
@@ -155,12 +149,6 @@ function InviteFriendSection() {
         </p>
       </div>
       <div className="flex gap-2">
-        <button onClick={() => setMethod(method === "email" ? "none" : "email")}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-full text-sm border-2 border-transparent text-muted-foreground hover:bg-accent aria-pressed:bg-accent aria-pressed:border-primary aria-pressed:text-primary transition-colors"
-          aria-pressed={method === "email"}
-        >
-          <Mail className="w-4 h-4" /> Email
-        </button>
         <button onClick={() => setMethod(method === "whatsapp" ? "none" : "whatsapp")}
           className="flex items-center gap-1.5 px-3 py-2 rounded-full text-sm border-2 border-transparent text-muted-foreground hover:bg-accent aria-pressed:bg-emerald-50 aria-pressed:border-emerald-300 aria-pressed:text-emerald-700 transition-colors"
           aria-pressed={method === "whatsapp"}
@@ -168,16 +156,6 @@ function InviteFriendSection() {
           <MessageCircle className="w-4 h-4" /> WhatsApp
         </button>
       </div>
-      {method === "email" && (
-        <div className="space-y-3">
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-            placeholder="correo@ejemplo.com" className={`${FIELD} mt-0`} />
-          <Button onClick={sendEmail} disabled={!email.trim()}>
-            Enviar invitacion
-          </Button>
-          <p className="text-xs text-muted-foreground">Abre tu cliente de correo con el mensaje listo.</p>
-        </div>
-      )}
       {method === "whatsapp" && (
         <div className="space-y-3">
           <div className="flex gap-2">
@@ -203,6 +181,22 @@ function WhatsAppSection() {
   const { appUser, refreshUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [savingPref, setSavingPref] = useState(false);
+
+  // El aviso del sistema (push) es la base y no se apaga desde acá: no depende
+  // de tener un número vinculado ni de un servicio externo. Esto gobierna sólo
+  // el canal secundario.
+  const toggleWaNotifs = async () => {
+    setSavingPref(true);
+    try {
+      await api.patch("/auth/me", { whatsapp_notifications: !appUser?.whatsapp_notifications });
+      await refreshUser();
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, "No se pudo guardar"));
+    } finally {
+      setSavingPref(false);
+    }
+  };
 
   const isLinked = !!appUser?.whatsapp_phone;
 
@@ -237,6 +231,25 @@ function WhatsAppSection() {
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             <span className="text-sm text-foreground">Vinculado: <span className="font-medium">{formatPhone(appUser.whatsapp_phone ?? "")}</span></span>
           </div>
+          <label className="flex items-start gap-3 p-3 rounded-xl border-2 border-ink bg-accent/30 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!appUser?.whatsapp_notifications}
+              onChange={toggleWaNotifs}
+              disabled={savingPref}
+              className="mt-0.5 w-4 h-4 accent-primary shrink-0"
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-foreground">
+                Avisarme también por WhatsApp
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                Cuando te comparten un gasto. El aviso dentro de la app te llega
+                igual, esto es un canal extra.
+              </span>
+            </span>
+          </label>
+
           <button
             onClick={unlink}
             disabled={loading}

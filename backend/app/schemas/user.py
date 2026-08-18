@@ -29,5 +29,6 @@ class UserOut(BaseModel):
     whatsapp_gate_pending: bool
     alias: str | None = None
     discoverable: bool = True
+    whatsapp_notifications: bool = True
     role: UserRole
     created_at: datetime

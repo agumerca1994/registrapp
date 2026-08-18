@@ -243,9 +243,8 @@ export function ParticipantPicker({
         {inviting !== null ? (
           <div className="p-4 space-y-3">
             <p className="text-sm text-muted-foreground">
-              Se le va a compartir el gasto y le llega una invitación para sumarse
-              a RegistrApp. Si ya tiene cuenta con ese dato, le aparece directo en
-              su app.
+              Si ya tiene cuenta con ese mail o teléfono, el gasto le aparece
+              directo en su app.
             </p>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Nombre</label>
@@ -270,6 +269,21 @@ export function ParticipantPicker({
                 onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); confirmInvite(); } }}
               />
             </div>
+            {/* La app no manda mails. Decirlo acá y no después: si el que
+                comparte cree que salió un correo, no le pasa el link y la otra
+                persona no se entera nunca. */}
+            {inviting.contact.includes("@") && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                Por mail no se envía nada automáticamente. Después de crear el
+                gasto vas a poder copiar el link de invitación y pasárselo vos.
+              </p>
+            )}
+            {!inviting.contact.includes("@") && isContactish(inviting.contact) && (
+              <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                Si no tiene cuenta, le llega una invitación por WhatsApp.
+              </p>
+            )}
+
             {inviteError && (
               <p className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
                 {inviteError}
@@ -373,7 +387,7 @@ export function ParticipantPicker({
                 icon={<UserPlus className="w-4 h-4" />}
                 title={`Invitar a "${term}"`}
                 subtitle={isContactish(term)
-                  ? "Le llega una invitación para sumarse"
+                  ? (term.includes("@") ? "Le compartís el gasto por mail" : "Le llega una invitación por WhatsApp")
                   : "Pedile el mail o el teléfono en el paso siguiente"}
                 onClick={() => startInvite(term)}
               />
