@@ -20,6 +20,16 @@ def fold(col):
     return func.translate(func.lower(col), ACCENTED.lower(), PLAIN.lower())
 
 
+def fold_text(q: str) -> str:
+    """Lowercase + strip accents, Python side. Sin comodines.
+
+    Separado de `fold_term` porque no todo lo que se pliega es un patrón de
+    búsqueda: `services/contacts.person_key` lo usa para armar una clave de
+    identidad, y ahí un `%` alrededor la corrompe.
+    """
+    return q.strip().translate(_TABLE).lower()
+
+
 def fold_term(q: str) -> str:
     """The user's term as a `LIKE` pattern, folded the same way."""
-    return f"%{q.strip().translate(_TABLE).lower()}%"
+    return f"%{fold_text(q)}%"

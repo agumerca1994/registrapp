@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.firebase import get_current_user
+from app.services import contacts as contacts_service
 from app.services import user_directory
 from app.models.credit_card import CreditCard
 from app.models.currency_operation import CurrencyOperation
@@ -108,6 +109,8 @@ async def _link_pending_splits(user: User, db: AsyncSession) -> None:
         split.member_name = user.display_name or user.email
         split.invite_token = None
         split.invite_expires_at = None
+    # Idem: los contactos que lo tenían por mail pasan a estar linkeados.
+    await contacts_service.link_contact_to_user(db, user=user)
 
 
 class WhatsAppLinkRequest(BaseModel):

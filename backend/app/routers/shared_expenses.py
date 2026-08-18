@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.firebase import get_current_user
+from app.services import contacts as contacts_service
 from app.services import notify_shared, participants, push, whatsapp
 from app.models.contact import TenantContact
 from app.models.credit_card import CreditCardItem
@@ -77,17 +78,10 @@ def _consume_invite(user: User, split: SharedExpenseSplit) -> None:
     split.invite_expires_at = None
 
 
-async def _save_tenant_contact(tenant_id: int, name: str, phone: str, db: AsyncSession) -> None:
-    """Save a phone contact to the household agenda, skipping if that phone is already saved."""
-    existing = await db.scalar(
-        select(TenantContact).where(
-            TenantContact.tenant_id == tenant_id,
-            TenantContact.contact_phone == phone,
-        )
-    )
-    if existing:
-        return
-    db.add(TenantContact(tenant_id=tenant_id, contact_name=name.strip() or phone, contact_phone=phone))
+# `_save_tenant_contact` se fue a services/contacts.upsert_contact: guardaba
+# sólo teléfonos en `tenant_contacts`, que no tenía dónde poner un mail — y ése
+# era el único motivo de que "Elegir de la agenda" nunca mostrara un contacto
+# de mail.
 
 
 async def _get_db_user(firebase_user: dict, db: AsyncSession) -> User:
@@ -267,6 +261,11 @@ async def _accept_split(user: User, shared: SharedExpense, split: SharedExpenseS
     if user.id != shared.created_by_user_id and not shared.locked:
         shared.locked = True
 
+    # La fila de agenda que lo tenía por teléfono o mail pasa a estar linkeada a
+    # su cuenta. Sin esto la misma persona queda como dos contactos el día que
+    # se registra, y "Frecuentes" muestra dos veces a la misma.
+    await contacts_service.link_contact_to_user(db, user=user)
+
 
 # Los enviadores de WhatsApp viven ahora en services/whatsapp.py: los usan
 # auth.py (OTP) y reminders.py (recordatorios diarios), que no tienen nada que
@@ -342,8 +341,19 @@ async def create_shared_expense(
             notify_pairs.append((r.notify_user_id, split_in.amount))
         if r.wa_invite_phone and r.invite_token:
             pending_wa_invites.append((r.wa_invite_phone, r.invite_token))
-        if r.agenda_phone:
-            await _save_tenant_contact(user.tenant_id, r.member_name, r.agenda_phone, db)
+        # También para la rama de mail: antes sólo se guardaba agenda cuando el
+        # contacto era un teléfono, y ése es el único motivo de que "Elegir de
+        # la agenda" nunca haya mostrado un contacto de mail.
+        # `not r.is_creator`: no tiene sentido figurar en tu propia agenda.
+        if not r.is_creator:
+            await contacts_service.upsert_contact(
+                db,
+                tenant_id=user.tenant_id,
+                display_name=r.member_name,
+                user_id=r.user_id,
+                phone=r.agenda_phone,
+                email=r.agenda_email,
+            )
 
         split = SharedExpenseSplit(
             shared_expense_id=shared.id,

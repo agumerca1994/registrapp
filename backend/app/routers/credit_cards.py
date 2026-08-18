@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.firebase import get_current_user
+from app.services import contacts as contacts_service
 from app.services import notify_shared, participants
 from app.models.user import User
 from app.models.expense import ExpenseEntry, ExpenseCategory
@@ -702,10 +703,9 @@ async def share_item(
     # Import local para esquivar el ciclo shared_expenses <-> credit_cards.
     # La resolución de participantes ya no se importa: vive en
     # services/participants.py y este router la usa desde ahí.
-    # Import local para esquivar el ciclo shared_expenses <-> credit_cards.
-    # Sólo queda la agenda: la resolución de participantes y los avisos ya
-    # viven en services/ y se importan arriba, sin ciclo.
-    from app.routers.shared_expenses import _save_tenant_contact
+    # Ya no queda nada por importar del otro router: participantes, avisos y
+    # agenda viven en services/, así que el ciclo shared_expenses <-> credit_cards
+    # desapareció del todo.
     import secrets
     from datetime import datetime, timedelta
 
@@ -823,8 +823,16 @@ async def share_item(
                     pending_wa_notify.append((r.notify_user_id, split_in.amount))
                 if r.wa_invite_phone and r.invite_token:
                     pending_wa_invites.append((r.wa_invite_phone, r.invite_token))
-                if r.agenda_phone:
-                    await _save_tenant_contact(user.tenant_id, r.member_name, r.agenda_phone, db)
+                # `not r.is_creator`: no tiene sentido figurar en tu propia agenda.
+                if not r.is_creator:
+                    await contacts_service.upsert_contact(
+                        db,
+                        tenant_id=user.tenant_id,
+                        display_name=r.member_name,
+                        user_id=r.user_id,
+                        phone=r.agenda_phone,
+                        email=r.agenda_email,
+                    )
 
             split = SharedExpenseSplit(
                 shared_expense_id=shared.id,
