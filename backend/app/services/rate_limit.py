@@ -44,3 +44,16 @@ def enforce(request: Request, scope: str, limit: int, window_seconds: float) -> 
     """Raise 429 when the caller has burned through its allowance."""
     if not check(f"{scope}:{client_ip(request)}", limit, window_seconds):
         raise HTTPException(status_code=429, detail="Demasiadas solicitudes, probá más tarde")
+
+
+def enforce_key(key: str, scope: str, limit: int, window_seconds: float) -> None:
+    """Igual que `enforce` pero con una clave arbitraria en vez de la IP.
+
+    Hace falta para los endpoints autenticados: en la Argentina los usuarios
+    móviles comparten IP por el NAT del operador, así que limitar por IP castiga
+    a gente que no hizo nada y no frena a quien rota de red. Limitar por usuario
+    frena que una cuenta raspe el directorio; se usan los dos baldes juntos,
+    porque el de IP es el que frena rotar cuentas desde un mismo host.
+    """
+    if not check(f"{scope}:{key}", limit, window_seconds):
+        raise HTTPException(status_code=429, detail="Demasiadas solicitudes, probá más tarde")
