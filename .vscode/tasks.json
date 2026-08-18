@@ -1,9 +1,32 @@
 {
-  // Cmd+Shift+P → "Tasks: Run Task" → elegí una.
-  // "Deploy a producción" corre en la terminal integrada y pide confirmación
-  // ahí mismo, así que un click perdido no deploya nada.
+  // Cmd+Shift+P → "Tasks: Run Task" → elegí una. También tienen atajos:
+  //   Cmd+Alt+G  Commit + push
+  //   Cmd+Alt+C  Deploy — solo chequear
+  //   Cmd+Alt+D  Deploy a producción
+  //   Cmd+Shift+B  Build del frontend
+  // Todas corren en la terminal integrada y piden confirmación ahí mismo, así
+  // que un atajo apretado sin querer no commitea ni deploya nada.
   "version": "2.0.0",
   "tasks": [
+    {
+      // Pide el mensaje en un cuadro arriba y después muestra qué va a entrar.
+      // El mensaje viaja por env var, no interpolado en la línea de comando:
+      // un mensaje con comillas o espacios rompería el shell.
+      "label": "Commit + push",
+      "type": "shell",
+      "command": "./scripts/commit-push.sh",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": { "MSG": "${input:commitMessage}" }
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "focus": true,
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
     {
       "label": "Deploy a producción",
       "type": "shell",
@@ -43,6 +66,13 @@
       "group": { "kind": "build", "isDefault": true },
       "problemMatcher": ["$tsc"],
       "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "commitMessage",
+      "type": "promptString",
+      "description": "Mensaje del commit — el repo usa tipo(scope): mensaje"
     }
   ]
 }
