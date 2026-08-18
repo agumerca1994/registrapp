@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import type { EventData, Step } from "react-joyride";
 
@@ -18,6 +18,35 @@ export function resetAllTours(tourIds: string[]): void {
   tourIds.forEach(resetTour);
 }
 
+// ── Quién más está ocupando la pantalla ──────────────────────────────────────
+// Otros overlays (hoy el aviso de gastos compartidos) tienen que apartarse
+// mientras corre una guía: dos cosas encimadas no se pueden usar.
+//
+// Es un contador vivo y no la clave `tour_seen_*` de localStorage, porque esa
+// clave miente en mobile: un tour con `requireDesktop` sale sin marcarse como
+// visto, así que en un teléfono queda "sin ver" para siempre. Preguntarle a
+// localStorage si va a correr un tour daba "sí" eternamente y el otro overlay
+// no aparecía nunca — que es exactamente el bug que esto arregla.
+let runningTours = 0;
+const tourListeners = new Set<() => void>();
+
+function publishTourCount(delta: number) {
+  runningTours += delta;
+  tourListeners.forEach((notify) => notify());
+}
+
+/** `true` mientras haya una guía efectivamente en pantalla. */
+export function useTourRunning(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      tourListeners.add(onChange);
+      return () => { tourListeners.delete(onChange); };
+    },
+    () => runningTours > 0,
+    () => false,  // en el server no corre ninguna
+  );
+}
+
 export default function ProductTour({ tourId, steps, requireDesktop }: {
   tourId: string;
   steps: Step[];
@@ -32,6 +61,14 @@ export default function ProductTour({ tourId, steps, requireDesktop }: {
     if (requireDesktop && !window.matchMedia("(min-width: 768px)").matches) return;
     setRun(true);
   }, [tourId, requireDesktop]);
+
+  // Publicar el estado real, no la intención: `run` ya incorpora la clave de
+  // localStorage y el chequeo de viewport.
+  useEffect(() => {
+    if (!run) return;
+    publishTourCount(1);
+    return () => publishTourCount(-1);
+  }, [run]);
 
   const handleEvent = (data: EventData) => {
     if (data.status === "finished" || data.status === "skipped") {

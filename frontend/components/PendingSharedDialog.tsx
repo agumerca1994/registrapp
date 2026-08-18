@@ -6,7 +6,7 @@ import { Card as UiCard } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatARS, formatUSD, formatDate, getErrorMessage } from "@/lib/utils";
 import { usePendingShared, type PendingShared, type PendingSplit } from "@/contexts/PendingSharedContext";
-import { tourSeenKey } from "@/components/ProductTour";
+import { useTourRunning } from "@/components/ProductTour";
 
 // Misma regla que /shared: si el split se saldó en pesos, el número que importa
 // es el convertido, no el original en dólares.
@@ -38,15 +38,16 @@ export function PendingSharedDialog() {
   const { pending, accept, reject } = usePendingShared();
   const [dismissed, setDismissed] = useState(false);
   const [index, setIndex] = useState(0);
-  // La guía de producto y este aviso se disparan los dos en el primer ingreso y
-  // se encimarían: dos overlays a la vez no se pueden usar. Gana la guía, que
-  // corre una sola vez y justamente enseña dónde queda cada sección. El aviso
-  // vuelve en el ingreso siguiente, y mientras tanto el puntito ya está
-  // encendido, así que no se pierde nada.
+  // La guía de producto y este aviso pueden dispararse los dos en el primer
+  // ingreso y se encimarían. Gana la guía, que corre una sola vez y justamente
+  // enseña dónde queda cada sección; el aviso vuelve apenas termina, y mientras
+  // tanto el puntito ya está encendido.
   //
-  // Arranca en `true` y se resuelve en un efecto: leer localStorage durante el
-  // render desincroniza la hidratación.
-  const [tourPending, setTourPending] = useState(true);
+  // Se pregunta si hay una guía CORRIENDO, no si quedó alguna sin ver: los
+  // tours `requireDesktop` no se marcan como vistos en mobile, así que la
+  // segunda pregunta se contesta "sí" para siempre en un teléfono y el aviso
+  // no aparecía nunca ahí.
+  const tourRunning = useTourRunning();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -57,16 +58,12 @@ export function PendingSharedDialog() {
   }, [pending.length, index]);
 
   useEffect(() => {
-    setTourPending(!localStorage.getItem(tourSeenKey("dashboard-intro")));
-  }, []);
-
-  useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDismissed(true); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  if (dismissed || tourPending || pending.length === 0) return null;
+  if (dismissed || tourRunning || pending.length === 0) return null;
 
   const exp = pending[Math.min(index, pending.length - 1)];
   if (!exp) return null;
