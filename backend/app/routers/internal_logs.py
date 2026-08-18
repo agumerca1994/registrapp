@@ -109,6 +109,48 @@ async def get_logs_summary(
     }
 
 
+@router.get("/device-tokens")
+async def device_tokens(
+    email: str | None = Query(None, description="Filtrar por el mail del usuario"),
+    _: None = Depends(_require_internal_key),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Diagnóstico: qué dispositivos tiene registrados cada usuario para push.
+
+    Contesta la única pregunta que importa cuando "activé las notificaciones y
+    no me llegan": si el navegador llegó a registrarse. La pantalla puede decir
+    "activadas" con sólo tener el permiso — si falta la VAPID key nunca se pide
+    token y no hay fila acá. Sin token registrado no hay a dónde mandar, y no
+    queda ningún rastro en los logs porque no falla nada: sencillamente no se
+    envía.
+
+    El token se devuelve recortado: identifica un dispositivo y no hace falta
+    entero para diagnosticar.
+    """
+    from app.models.device_token import DeviceToken
+    from app.models.user import User
+
+    q = select(DeviceToken, User).join(User, User.id == DeviceToken.user_id)
+    if email:
+        q = q.where(func.lower(User.email) == email.strip().lower())
+    rows = (await db.execute(q.order_by(DeviceToken.last_seen_at.desc()))).all()
+
+    return {
+        "count": len(rows),
+        "devices": [
+            {
+                "email": u.email,
+                "user_id": u.id,
+                "platform": t.platform,
+                "token_preview": f"{t.token[:12]}…{t.token[-6:]}" if len(t.token) > 20 else t.token,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+                "last_seen_at": t.last_seen_at.isoformat() if t.last_seen_at else None,
+            }
+            for t, u in rows
+        ],
+    }
+
+
 @router.get("/pending-shared-invites")
 async def pending_shared_invites(
     creator_email: str | None = Query(None, description="Filter to shared expenses created by this user's email"),

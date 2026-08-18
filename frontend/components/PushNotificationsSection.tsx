@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Bell, BellOff, CheckCircle2, Smartphone, TriangleAlert } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { enablePush, isIOS, pushState, type PushState } from "@/lib/push";
+import { enablePush, isDeviceRegistered, isIOS, pushConfigProblem, pushState, type PushState } from "@/lib/push";
 
 /**
  * Activar las notificaciones push, desde Configuración.
@@ -23,16 +23,21 @@ import { enablePush, isIOS, pushState, type PushState } from "@/lib/push";
  */
 export function PushNotificationsSection() {
   const [state, setState] = useState<PushState | null>(null);
+  const [registered, setRegistered] = useState(true);
   const [busy, setBusy] = useState(false);
 
   // En un efecto, no en el render: `Notification.permission` no existe en el
   // server y leerlo durante el render desincroniza la hidratación.
-  useEffect(() => { setState(pushState()); }, []);
+  useEffect(() => {
+    setState(pushState());
+    setRegistered(isDeviceRegistered());
+  }, []);
 
   const activate = async () => {
     setBusy(true);
     try {
       setState(await enablePush());
+      setRegistered(isDeviceRegistered());
     } finally {
       setBusy(false);
     }
@@ -53,10 +58,31 @@ export function PushNotificationsSection() {
 
       {state === null && <p className="text-sm text-muted-foreground">Comprobando…</p>}
 
-      {state === "granted" && (
+      {state === "granted" && registered && (
         <div className="flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <span className="text-sm text-foreground">Activadas en este dispositivo</span>
+        </div>
+      )}
+
+      {/* Permiso concedido pero el dispositivo nunca llegó a registrarse. Antes
+          esto se mostraba como "Activadas" y no llegaba nada, que es la peor
+          combinación posible: parece que funciona y no hay dónde mirar. */}
+      {state === "granted" && !registered && (
+        <div className="rounded-xl border-2 border-ink bg-amber-50 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <TriangleAlert className="w-4 h-4 text-amber-700 shrink-0" />
+            <p className="text-sm font-medium text-foreground">
+              Diste el permiso, pero este dispositivo no quedó registrado
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {pushConfigProblem() ?? "No se pudo obtener el identificador del dispositivo."}
+            {" "}Los avisos no van a llegar hasta que esto se resuelva.
+          </p>
+          <Button onClick={activate} disabled={busy} variant="outline" className="w-full sm:w-auto">
+            {busy ? "Reintentando…" : "Reintentar"}
+          </Button>
         </div>
       )}
 

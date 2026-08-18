@@ -45,6 +45,27 @@ function firebaseConfig() {
   };
 }
 
+/**
+ * Si este dispositivo llegó a registrarse en el backend.
+ *
+ * Es una pregunta DISTINTA de si hay permiso, y la diferencia es justamente lo
+ * que hacía imposible diagnosticar por qué no llegaban los avisos: el permiso
+ * puede estar concedido y el registro no haber ocurrido nunca — porque falta la
+ * VAPID key, porque `getToken` no devolvió nada, o porque el POST falló. En
+ * todos esos casos la pantalla decía "Activadas" y no llegaba nada.
+ */
+export function isDeviceRegistered(): boolean {
+  if (typeof window === "undefined") return false;
+  return !!localStorage.getItem(LAST_TOKEN_KEY);
+}
+
+/** Por qué no se pudo registrar, para poder mostrarlo en pantalla. */
+export function pushConfigProblem(): string | null {
+  if (!VAPID_KEY) return "Falta la clave VAPID en la configuración de la app.";
+  if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) return "Falta la configuración de Firebase.";
+  return null;
+}
+
 export function isStandalone(): boolean {
   if (typeof window === "undefined") return false;
   // `navigator.standalone` es la de Safari en iOS; la media query es el
@@ -117,14 +138,23 @@ export async function enablePush(): Promise<PushState> {
 
   try {
     const messaging = await messagingOrNull();
-    if (!messaging) return "granted";  // permiso sí, FCM sin configurar
+    if (!messaging) {
+      // Permiso sí, pero la app no puede pedir token: falta la VAPID key o la
+      // config de Firebase. Devolver "granted" a secas hacía que la pantalla
+      // dijera "Activadas" cuando no se registró nada.
+      console.warn("push: permiso concedido pero FCM no está configurado", pushConfigProblem());
+      return "granted";
+    }
 
     const registration = await registerServiceWorker();
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
       ...(registration ? { serviceWorkerRegistration: registration } : {}),
     });
-    if (!token) return "granted";
+    if (!token) {
+      console.warn("push: getToken no devolvió token; el dispositivo no queda registrado");
+      return "granted";
+    }
 
     await api.post("/notifications/device-tokens", {
       token,
