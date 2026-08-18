@@ -148,3 +148,14 @@ export function pickCategoryColor(existingColors: (string | null | undefined)[])
   // Palette exhausted (lots of categories) — fall back to a random hue.
   return hslToHex(Math.floor(Math.random() * 360), 65, 55);
 }
+
+/**
+ * Accent- and case-insensitive comparison key, the client-side mirror of
+ * `services/search.fold()` on the backend. Screens that filter an
+ * already-loaded list (a card statement's items) have to match the way the
+ * server-side search endpoints do, or the same term finds a row on /egresos
+ * and misses it inside the resumen it came from.
+ */
+export function foldText(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
