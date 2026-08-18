@@ -23,6 +23,8 @@ interface AppUser {
   tenant_code: string | null;
   email: string;
   display_name: string | null;
+  alias: string | null;
+  discoverable: boolean;
   whatsapp_phone: string | null;
   whatsapp_gate_pending: boolean;
   role: string;

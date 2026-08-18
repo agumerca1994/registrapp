@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
 import { PushNotificationsSection } from "@/components/PushNotificationsSection";
+import { ProfileSection } from "@/components/ProfileSection";
 import { formatARS, getErrorMessage, formatPhone } from "@/lib/utils";
 import { Copy, Check, MessageCircle, CheckCircle2, Unlink, Mail, UserPlus, Trash2 } from "lucide-react";
 import { COUNTRIES } from "@/lib/countries";
@@ -304,6 +305,8 @@ export default function SettingsPage() {
   return (
     <div className="max-w-3xl space-y-8">
       <h2 className="text-2xl font-display font-bold text-foreground">{"Configuración"}</h2>
+
+      <ProfileSection />
 
       <InviteFriendSection />
 

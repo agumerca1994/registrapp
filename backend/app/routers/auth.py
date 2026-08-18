@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.firebase import get_current_user
+from app.services import user_directory
 from app.models.credit_card import CreditCard
 from app.models.currency_operation import CurrencyOperation
 from app.models.expense import ExpenseEntry
@@ -218,6 +219,84 @@ async def me(
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado. Registrate primero.")
     return user
+
+
+class ProfileUpdate(BaseModel):
+    display_name: str | None = Field(default=None, max_length=120)
+    alias: str | None = Field(default=None, max_length=30)
+    discoverable: bool | None = None
+
+
+@router.patch("/me", response_model=UserOut)
+async def update_me(
+    body: ProfileUpdate,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Editar el propio perfil: nombre, alias y visibilidad.
+
+    Hasta ahora no había ninguna forma de cambiarse el nombre.
+
+    `alias=""` lo borra (volvés a no tener). Un alias tomado devuelve **409**,
+    no 400: para el frontend "inválido" y "ya está en uso" son dos mensajes
+    distintos y sólo el segundo se arregla probando otro.
+    """
+    user = await db.scalar(select(User).where(User.firebase_uid == firebase_user["uid"]))
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    fields = body.model_dump(exclude_unset=True)
+
+    if "display_name" in fields:
+        name = (fields["display_name"] or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="El nombre no puede quedar vacío.")
+        user.display_name = name
+
+    if "alias" in fields:
+        raw = (fields["alias"] or "").strip()
+        if not raw:
+            user.alias = None
+        else:
+            try:
+                alias = user_directory.validate_alias(raw)
+            except user_directory.AliasError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+            if await user_directory.alias_taken(db, alias, exclude_user_id=user.id):
+                raise HTTPException(status_code=409, detail="Ese alias ya está en uso.")
+            user.alias = alias
+
+    if "discoverable" in fields and fields["discoverable"] is not None:
+        user.discoverable = fields["discoverable"]
+
+    await db.commit()
+    # Re-seleccionar con selectinload: `UserOut.tenant_code` lee la relación, y
+    # sin esto revienta con MissingGreenlet al serializar.
+    return await db.scalar(
+        select(User).options(selectinload(User.tenant)).where(User.id == user.id)
+    )
+
+
+@router.get("/alias-available")
+async def alias_available(
+    alias: str,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Para que el formulario avise antes de guardar."""
+    user = await db.scalar(select(User).where(User.firebase_uid == firebase_user["uid"]))
+    try:
+        normalized = user_directory.validate_alias(alias)
+    except user_directory.AliasError as e:
+        return {"available": False, "reason": str(e)}
+    taken = await user_directory.alias_taken(
+        db, normalized, exclude_user_id=user.id if user else None
+    )
+    return {
+        "available": not taken,
+        "reason": "Ese alias ya está en uso." if taken else None,
+        "alias": normalized,
+    }
 
 
 @router.post("/me/link-whatsapp")
