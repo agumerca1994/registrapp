@@ -578,10 +578,10 @@ export default function DashboardPage() {
             <div className={mortgageSummary && (data.expenses_by_category.length > 0 || data.total_expenses_usd > 0) ? "grid grid-cols-1 lg:grid-cols-2 gap-4" : ""}>
               {mortgageSummary && (
                 <Card className="p-4 md:p-5 space-y-4">
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
                     <Home className="w-4 h-4 text-primary shrink-0" />
-                    <h3 className="font-semibold text-foreground text-sm md:text-base">Hipoteca</h3>
-                    <Chip tone="neutral">
+                    <h3 className="font-semibold text-foreground text-sm md:text-base truncate">Hipoteca</h3>
+                    <Chip tone="neutral" className="ml-auto shrink-0">
                       Próximo vencimiento: {(() => {
                         try { return format(parseISO(mortgageSummary.next_payment_date), "d MMM", { locale: es }); }
                         catch { return mortgageSummary.next_payment_date; }
