@@ -119,6 +119,6 @@ printf '\033[32m✓\033[0m pusheado a origin/%s\n' "$branch"
 if [ "$branch" = "main" ]; then
   echo
   echo "main deploya a producción, pero recién cuando disparás el rebuild:"
-  echo "  Cmd+Alt+D  (o ./scripts/deploy.sh)"
+  echo "  Cmd+Shift+Alt+D  (o ./scripts/deploy.sh)"
   echo "Antes conviene correr el build: Cmd+Shift+B"
 fi
