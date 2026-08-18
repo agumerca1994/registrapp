@@ -134,12 +134,15 @@ export function PushNotificationsSection() {
           <div className="flex items-center gap-2">
             <BellOff className="w-4 h-4 text-amber-700 shrink-0" />
             <p className="text-sm font-medium text-foreground">
-              Las notificaciones están bloqueadas
+              El navegador está bloqueando las notificaciones
             </p>
           </div>
+          {/* NO se afirma que el usuario las rechazó: `Notification.permission`
+              devuelve "denied" también cuando el navegador las tiene apagadas a
+              nivel general, sin que nadie haya tocado nada en este sitio. */}
           <p className="text-xs text-muted-foreground">
-            El permiso se rechazó una vez y el navegador ya no vuelve a
-            preguntar, así que hay que habilitarlo a mano:
+            Puede ser que estén rechazadas para este sitio, o apagadas para
+            todos. Hay que habilitarlas a mano:
           </p>
           {isIOS() ? (
             <p className="text-xs text-muted-foreground">
@@ -148,12 +151,37 @@ export function PushNotificationsSection() {
               <strong> Permitir notificaciones</strong>.
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground">
-              Tocá el <strong>candado</strong> a la izquierda de la dirección web
-              → <strong>Notificaciones</strong> → <strong>Permitir</strong>. Después
-              recargá la página.
-            </p>
+            <>
+              <p className="text-xs text-muted-foreground">
+                Tocá el <strong>candado</strong> a la izquierda de la dirección
+                web → <strong>Notificaciones</strong> → <strong>Permitir</strong>,
+                y recargá.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Si ahí aparece en &quot;Preguntar&quot; y aun así no funciona, revisá el
+                permiso general: en Chrome, <strong>Configuración</strong> →
+                <strong> Privacidad y seguridad</strong> →
+                <strong> Configuración de sitios</strong> →
+                <strong> Notificaciones</strong>.
+              </p>
+            </>
           )}
+        </div>
+      )}
+
+      {state === "insecure" && (
+        <div className="rounded-xl border-2 border-ink bg-amber-50 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <TriangleAlert className="w-4 h-4 text-amber-700 shrink-0" />
+            <p className="text-sm font-medium text-foreground">
+              Esta dirección no admite notificaciones
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Ningún navegador las entrega en un sitio sin HTTPS. Entrá por
+            <strong> localhost</strong> o por la dirección de producción, que sí
+            lo tiene. No es un permiso que puedas cambiar.
+          </p>
         </div>
       )}
 

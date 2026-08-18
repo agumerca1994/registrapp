@@ -23,6 +23,9 @@ export type PushState =
   | "unsupported"
   /** iPhone/iPad en pestaña: hay que "Agregar a inicio" antes de poder pedir nada. */
   | "ios-needs-install"
+  /** Sitio servido sin HTTPS (una IP de la LAN, por ejemplo). Ningún navegador
+   *  entrega push fuera de un contexto seguro, y el permiso ni se puede pedir. */
+  | "insecure"
   /** Se puede pedir el permiso. */
   | "prompt"
   /** El usuario lo rechazó. El navegador no vuelve a preguntar. */
@@ -77,8 +80,20 @@ export function isIOS(): boolean {
     (/Macintosh/.test(ua) && window.navigator.maxTouchPoints > 1);
 }
 
+/** `true` si la página se sirve por HTTPS o desde localhost. */
+export function isSecure(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.isSecureContext;
+}
+
 export function pushState(): PushState {
   if (typeof window === "undefined") return "unsupported";
+
+  // Antes que nada: sin contexto seguro no hay push posible, y el navegador
+  // reporta el permiso como "denied" aunque el usuario nunca haya rechazado
+  // nada. Decirle "lo rechazaste una vez" sería mentirle y mandarlo a buscar un
+  // permiso que no va a encontrar.
+  if (!isSecure()) return "insecure";
 
   if (!("Notification" in window) || !("serviceWorker" in navigator)) {
     // En iOS sin instalar, esto es exactamente lo que pasa: la API no existe.
