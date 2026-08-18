@@ -4,14 +4,14 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, MessageCircle, Smartphone, Layers, CalendarDays, ChevronLeft, ChevronRight, Share2, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Pencil, X, MoreVertical } from "lucide-react";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, Layers, CalendarDays, ChevronLeft, ChevronRight, Share2, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Pencil, X, MoreVertical } from "lucide-react";
 
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
-import { formatARS, formatUSD, normalizePhoneNumber, getErrorMessage, pickCategoryColor } from "@/lib/utils";
+import { formatARS, formatUSD, getErrorMessage, pickCategoryColor } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { ParticipantPicker, type PickedParticipant } from "@/components/ParticipantPicker";
 import { usePendingShared } from "@/contexts/PendingSharedContext";
-import { COUNTRIES } from "@/lib/countries";
 import { Card } from "@/components/ui/card";
 import { FIELD, FormGrid, SelectField, DateField } from "@/components/ui/form";
 import { Fab } from "@/components/ui/fab";
@@ -24,30 +24,6 @@ function buildPhone(prefix: string, local: string): string {
 }
 
 // Pick a contact from device and normalize phone to prefix + local format
-async function pickContactAndNormalize(availablePrefixes: string[]): Promise<{ name: string; phone: string; prefix: string; local: string } | null> {
-  if (!("contacts" in navigator) || !navigator.contacts) return null;
-
-  try {
-    const contacts = navigator as unknown as { contacts: { select: (f: string[], o: object) => Promise<{ name?: string[]; tel?: string[] }[]> } };
-    const [contact] = await contacts.contacts.select(["name", "tel"], { multiple: false });
-    if (!contact) return null;
-
-    const name = contact.name?.[0] ?? "";
-    const rawPhone = contact.tel?.[0] ?? "";
-    if (!name || !rawPhone) return null;
-
-    const { prefix, local, isValid } = normalizePhoneNumber(rawPhone, availablePrefixes);
-    if (!isValid) {
-      alert(`Número no válido: ${rawPhone}. Por favor, completa manualmente.`);
-      return null;
-    }
-
-    return { name, phone: buildPhone(prefix, local), prefix, local };
-  } catch (err) {
-    console.error("Contact picker error:", err);
-    return null;
-  }
-}
 
 interface Split {
   id: number;
@@ -101,11 +77,6 @@ interface SharedExpense {
   splits: Split[];
 }
 
-interface Member {
-  id: number;
-  display_name: string | null;
-  email: string;
-}
 
 interface Category {
   id: number;
@@ -113,10 +84,14 @@ interface Category {
   color: string | null;
 }
 
-interface AgendaContact {
-  id: number;
-  contact_name: string;
-  contact_phone: string;
+
+/** Qué se muestra debajo del nombre de un participante ya elegido. */
+function participantHint(p: ParticipantRow): string {
+  if (p.user_id) return "Usuario de RegistrApp";
+  if (p.invite_email) return `Se le invita a ${p.invite_email}`;
+  if (p.invite_phone_local) return `Se le invita al ${p.invite_phone_prefix}${p.invite_phone_local}`;
+  if (p.member_name) return "Sin cuenta — sólo para anotar tu parte";
+  return "";
 }
 
 interface ParticipantRow {
@@ -505,12 +480,12 @@ function ConvertToArsModal({
 
 export default function SharedExpensesPage() {
   const { refresh: refreshPending } = usePendingShared();
+  // Índice de la fila que está eligiendo participante, o null.
+  const [pickerFor, setPickerFor] = useState<number | null>(null);
   useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const { appUser } = useAuth();
   const [expenses, setExpenses] = useState<SharedExpense[]>([]);
-  const [members, setMembers] = useState<Member[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [agendaContacts, setAgendaContacts] = useState<AgendaContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [showCatForm, setShowCatForm] = useState(false);
@@ -550,14 +525,11 @@ export default function SharedExpensesPage() {
 
   const load = async () => {
     setLoading(true);
-    const [se, mem, contacts] = await Promise.allSettled([
-      api.get("/shared-expenses"),
-      api.get("/auth/members"),
-      api.get("/contacts"),
-    ]);
+    // Miembros y agenda ya no se piden acá: los carga ParticipantPicker cuando
+    // se abre, que es el único lugar que los usa. Pedirlos en cada visita a la
+    // pantalla era traer dos listas para no mostrarlas.
+    const [se] = await Promise.allSettled([api.get("/shared-expenses")]);
     if (se.status === "fulfilled") setExpenses(se.value.data);
-    if (mem.status === "fulfilled") setMembers(mem.value.data);
-    if (contacts.status === "fulfilled") setAgendaContacts(contacts.value.data);
     await loadCategories();
     setLoading(false);
   };
@@ -608,6 +580,34 @@ export default function SharedExpensesPage() {
       );
       return redistAuto(updated, total);
     });
+  }
+
+  // Traduce lo que devuelve el selector a la fila que este formulario maneja.
+  // El selector no sabe de montos ni de redistribución: eso es de acá.
+  function applyPick(idx: number, picked: PickedParticipant) {
+    const base = {
+      user_id: null as number | null, member_name: "", invite_method: "none" as const,
+      invite_email: "", invite_phone_prefix: "54", invite_phone_local: "",
+    };
+    if (picked.kind === "member" || picked.kind === "user") {
+      updateParticipant(idx, { ...base, type: "member", user_id: picked.user_id, member_name: picked.member_name });
+    } else if (picked.kind === "invite") {
+      const isMail = picked.contact.includes("@");
+      updateParticipant(idx, {
+        ...base, type: "external", member_name: picked.member_name,
+        invite_method: isMail ? "email" : "whatsapp",
+        invite_email: isMail ? picked.contact : "",
+        // El selector ya entrega el contacto completo, con prefijo incluido, así
+        // que acá NO se vuelve a componer: se guardan los dígitos enteros y el
+        // prefijo queda vacío, que en `buildPhone` es un no-op. El backend lo
+        // normaliza igual (`normalize_phone` reconoce "549…" sin el +).
+        // Anteponerle otro prefijo duplicaría el código de país.
+        invite_phone_local: isMail ? "" : picked.contact.replace(/\D/g, ""),
+        invite_phone_prefix: "",
+      });
+    } else {
+      updateParticipant(idx, { ...base, type: "external", member_name: picked.member_name });
+    }
   }
 
   function addParticipant() {
@@ -1101,148 +1101,41 @@ export default function SharedExpensesPage() {
               </button>
             </div>
 
+            <ParticipantPicker
+              open={pickerFor !== null}
+              onClose={() => setPickerFor(null)}
+              onPick={picked => { if (pickerFor !== null) applyPick(pickerFor, picked); }}
+              excludeUserIds={participants.map(x => x.user_id).filter((x): x is number => x !== null)}
+            />
+
             <div className="space-y-2">
               {participants.map((p, idx) => {
                 const isCreator = idx === 0;
                 return (
                   <div key={idx} className="border rounded-lg p-2.5 bg-muted space-y-2">
                     <div className="flex items-center gap-2">
-                      {isCreator ? (
-                        <span className="border-2 border-ink rounded-lg px-2 py-1.5 text-xs bg-card text-muted-foreground shrink-0">
-                          Del hogar
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-medium text-foreground truncate">
+                          {p.member_name || <span className="text-muted-foreground font-normal">Sin elegir</span>}
                         </span>
-                      ) : (
-                        <SelectField className="w-36 shrink-0" value={p.type}
-                          onChange={v => updateParticipant(idx, {
-                            type: v as "member" | "external", user_id: null, member_name: "",
-                          })}
-                          options={[
-                            { value: "member", label: "Del hogar" },
-                            { value: "external", label: "Externo" },
-                          ]} />
-                      )}
+                        <span className="block text-xs text-muted-foreground truncate">
+                          {isCreator ? "Vos" : participantHint(p)}
+                        </span>
+                      </span>
                       {!isCreator && (
-                        <button type="button" onClick={() => removeParticipant(idx)}
-                          className="ml-auto text-muted-foreground hover:text-destructive px-1 text-base leading-none">
-                          x
-                        </button>
+                        <>
+                          <button type="button" onClick={() => setPickerFor(idx)}
+                            className="text-xs text-primary hover:underline shrink-0">
+                            {p.member_name ? "Cambiar" : "Elegir"}
+                          </button>
+                          <button type="button" onClick={() => removeParticipant(idx)}
+                            aria-label="Quitar participante"
+                            className="text-muted-foreground hover:text-destructive px-1 text-base leading-none shrink-0">
+                            x
+                          </button>
+                        </>
                       )}
                     </div>
-
-                    {isCreator ? (
-                      <p className="text-sm text-foreground px-1">
-                        {p.member_name}
-                      </p>
-                    ) : p.type === "member" ? (
-                      <SelectField required value={p.user_id != null ? String(p.user_id) : ""}
-                        onChange={v => {
-                          const id = parseInt(v);
-                          const mem = members.find(m => m.id === id);
-                          updateParticipant(idx, { user_id: id, member_name: mem?.display_name || mem?.email || "" });
-                        }}
-                        placeholder="Miembro del hogar"
-                        options={members.filter(m => m.id !== appUser?.id)
-                          .map(m => ({ value: String(m.id), label: m.display_name || m.email }))} />
-                    ) : (
-                      <div className="space-y-2">
-                        {agendaContacts.length > 0 && (
-                          <SelectField
-                            value=""
-                            onChange={v => {
-                              const c = agendaContacts.find(a => a.id === parseInt(v));
-                              if (!c) return;
-                              const { prefix, local, isValid } = normalizePhoneNumber(c.contact_phone, COUNTRIES.map(cc => cc.prefix));
-                              if (!isValid) return;
-                              updateParticipant(idx, {
-                                member_name: c.contact_name,
-                                invite_phone_prefix: prefix,
-                                invite_phone_local: local,
-                                invite_method: "whatsapp",
-                              });
-                            }}
-                            placeholder="Elegir de la agenda"
-                            options={agendaContacts.map(c => ({ value: String(c.id), label: `${c.contact_name} · ${c.contact_phone}` }))} />
-                        )}
-                        <div className="flex gap-2">
-                          <input required type="text" placeholder="Nombre del externo"
-                            value={p.member_name} onChange={e => updateParticipant(idx, { member_name: e.target.value })}
-                            className={`${FIELD} flex-1`} />
-                          <button type="button"
-                            onClick={async () => {
-                              const result = await pickContactAndNormalize(COUNTRIES.map(c => c.prefix));
-                              if (result) {
-                                updateParticipant(idx, {
-                                  member_name: result.name,
-                                  invite_phone_prefix: result.prefix,
-                                  invite_phone_local: result.local,
-                                  invite_method: "whatsapp",
-                                });
-                              } else if (!("contacts" in navigator) || !navigator.contacts) {
-                                alert("Tu navegador no permite elegir contactos del dispositivo. Completá el nombre y teléfono manualmente, o elegí uno de la agenda si ya lo compartiste antes.");
-                              }
-                            }}
-                            title="Seleccionar contacto del dispositivo"
-                            className="px-3 py-2 text-sm border rounded-lg bg-card hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 shrink-0"
-                          >
-                            <Smartphone className="w-4 h-4" />
-                          </button>
-                        </div>
-
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground mb-1.5">Enviar invitacion</p>
-                          <div className="flex gap-1.5 flex-wrap">
-                            <button type="button"
-                              onClick={() => updateParticipant(idx, { invite_method: "none" })}
-                              className={`px-2.5 py-1 text-xs rounded-full border-2 transition-colors ${p.invite_method === "none" ? "border-ink bg-muted text-foreground font-medium" : "border-transparent text-muted-foreground/60 hover:bg-accent"}`}>
-                              Sin invitacion
-                            </button>
-                            <button type="button"
-                              onClick={() => updateParticipant(idx, { invite_method: "email" })}
-                              className={`px-2.5 py-1 text-xs rounded-full border-2 transition-colors ${p.invite_method === "email" ? "border-ink bg-accent text-primary font-medium" : "border-transparent text-muted-foreground/60 hover:bg-accent"}`}>
-                              Email
-                            </button>
-                            <button type="button"
-                              onClick={() => updateParticipant(idx, { invite_method: "whatsapp" })}
-                              className={`px-2.5 py-1 text-xs rounded-full border-2 transition-colors flex items-center gap-1 ${p.invite_method === "whatsapp" ? "border-ink bg-emerald-100 text-emerald-700 font-medium" : "border-transparent text-muted-foreground/60 hover:bg-accent"}`}>
-                              <MessageCircle className="w-3 h-3" /> WhatsApp
-                            </button>
-                          </div>
-                        </div>
-
-                        {p.invite_method === "email" && (
-                          <div className="space-y-1">
-                            <input type="email" placeholder="email@ejemplo.com"
-                              value={p.invite_email}
-                              onChange={e => updateParticipant(idx, { invite_email: e.target.value })}
-                              className={FIELD} />
-                            <p className="text-xs text-primary">Se generara un link para copiar y compartir manualmente</p>
-                          </div>
-                        )}
-
-                        {p.invite_method === "whatsapp" && (
-                          <div className="space-y-1">
-                            <div className="flex gap-2">
-                              <SelectField className="w-32 shrink-0"
-                                value={p.invite_phone_prefix}
-                                onChange={v => updateParticipant(idx, { invite_phone_prefix: v, invite_phone_local: "" })}
-                                options={COUNTRIES.map(c => ({ value: c.prefix, label: `${c.flag} +${c.prefix}` }))} />
-                              <input type="tel"
-                                value={p.invite_phone_local}
-                                onChange={e => updateParticipant(idx, { invite_phone_local: e.target.value.replace(/[^\d\s]/g, "") })}
-                                placeholder={COUNTRIES.find(c => c.prefix === p.invite_phone_prefix)?.placeholder ?? ""}
-                                inputMode="numeric"
-                                className={`${FIELD} mt-0 flex-1`} />
-                            </div>
-                            {p.invite_phone_local.trim() && (
-                              <p className="text-xs text-muted-foreground/70">
-                                Número a enviar: +{buildPhone(p.invite_phone_prefix, p.invite_phone_local)}
-                              </p>
-                            )}
-                            <p className="text-xs text-emerald-700">Se enviara una invitacion automaticamente por WhatsApp al crear el gasto</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
 
                     {splitType === "custom" ? (
                       <div>

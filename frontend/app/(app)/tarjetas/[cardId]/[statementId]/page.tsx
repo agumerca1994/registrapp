@@ -4,13 +4,14 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
-import { formatARS, formatDate, formatUSD, parseAmount, normalizePhoneNumber, getErrorMessage, pickCategoryColor, foldText } from "@/lib/utils";
+import { formatARS, formatDate, formatUSD, parseAmount, getErrorMessage, pickCategoryColor, foldText } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, ChevronLeft, X, ExternalLink, Users2, Phone, SlidersHorizontal } from "lucide-react";
+import { Plus, ChevronLeft, X, ExternalLink, Users2, SlidersHorizontal } from "lucide-react";
 import { Card as UiCard } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
 import { FIELD, SelectField, DateField } from "@/components/ui/form";
+import { ParticipantPicker, type PickedParticipant } from "@/components/ParticipantPicker";
 import {
   FilterBar, FilterRow, FilterPanel, SortChip, FilterChip, PillSelect,
   PillDateRange, ClearFilters, CollapsibleSearch,
@@ -28,12 +29,6 @@ interface CardItem {
 interface Statement {
   id: number; card_id: number; year: number; month: number;
   total: number; items: CardItem[];
-}
-interface Member {
-  id: number; display_name: string | null; email: string;
-}
-interface AgendaContact {
-  id: number; contact_name: string; contact_phone: string;
 }
 interface Card {
   id: number; bank: string; alias: string; closing_day: number; due_day: number;
@@ -84,18 +79,27 @@ interface ShareParticipantRow {
 }
 
 function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem; onClose: () => void; onDone: () => void; currentUser: { id: number; display_name: string | null; email: string } | null }) {
-  const [members, setMembers] = useState<Member[]>([]);
-  const [agendaContacts, setAgendaContacts] = useState<AgendaContact[]>([]);
   const [participants, setParticipants] = useState<ShareParticipantRow[]>([]);
   const [splitType, setSplitType] = useState<"equal" | "custom">("equal");
   const [sharing, setSharing] = useState(false);
   const [error, setError] = useState("");
+  const [pickerFor, setPickerFor] = useState<number | null>(null);
+
+  // Traduce lo que devuelve el selector a la fila de este modal. El selector no
+  // sabe de montos ni de redondeo del resto: eso es de acá.
+  function applyPick(idx: number, picked: PickedParticipant) {
+    if (picked.kind === "member" || picked.kind === "user") {
+      updateParticipant(idx, { type: "member", user_id: picked.user_id, member_name: picked.member_name, contact: "" });
+    } else if (picked.kind === "invite") {
+      updateParticipant(idx, { type: "external", user_id: null, member_name: picked.member_name, contact: picked.contact });
+    } else {
+      updateParticipant(idx, { type: "external", user_id: null, member_name: picked.member_name, contact: "" });
+    }
+  }
 
   const totalAmount = Number(item.amount);
 
   useEffect(() => {
-    api.get("/auth/members").then(r => setMembers(r.data as Member[]));
-    api.get("/contacts").then(r => setAgendaContacts(r.data as AgendaContact[]));
   }, []);
 
   useEffect(() => {
@@ -113,7 +117,6 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
     ? (item.installment_count || 1) - (item.installment_number || 1) + 1
     : 0;
 
-  const otherMembers = members.filter(m => m.id !== currentUser?.id);
   const equalShare = participants.length > 0 ? totalAmount / participants.length : 0;
   const customTotal = participants.reduce((s, p) => s + parseAmount(p.amount || "0"), 0);
   const overBudget = splitType === "custom" && customTotal > totalAmount + 0.01;
@@ -130,26 +133,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
     setParticipants(prev => prev.filter((_, i) => i !== idx));
   }
 
-  const hasContactsApi = typeof navigator !== "undefined" && "contacts" in navigator;
 
-  async function pickContact(idx: number) {
-    if (!hasContactsApi) {
-      alert("Tu navegador no permite elegir contactos del dispositivo. Completá el nombre y teléfono manualmente, o elegí uno de la agenda si ya lo compartiste antes.");
-      return;
-    }
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const contacts = await (navigator as any).contacts.select(["name", "tel"], { multiple: false });
-      if (!contacts.length) return;
-      const c = contacts[0];
-      const name: string = c.name?.[0] || "";
-      const raw: string = c.tel?.[0] || "";
-      if (!raw) return;
-      const norm = normalizePhoneNumber(raw);
-      const phone = norm.prefix === "54" ? "549" + norm.local : norm.prefix + norm.local;
-      updateParticipant(idx, { member_name: name || participants[idx].member_name, contact: phone });
-    } catch { /* user cancelled */ }
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -226,91 +210,39 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
               </button>
             </div>
 
+            <ParticipantPicker
+              open={pickerFor !== null}
+              onClose={() => setPickerFor(null)}
+              onPick={picked => { if (pickerFor !== null) applyPick(pickerFor, picked); }}
+              excludeUserIds={participants.map(x => x.user_id).filter((x): x is number => x !== null)}
+            />
+
             <div className="space-y-2">
               {participants.map((p, idx) => (
                 <div key={idx} className="border rounded-lg p-2.5 bg-muted space-y-2">
                   <div className="flex items-center gap-2">
-                    {p.type === "self" ? (
-                      <span className="border rounded-lg px-2 py-1.5 text-xs bg-card text-muted-foreground shrink-0">Vos</span>
-                    ) : (
-                      <SelectField className="w-36 shrink-0"
-                        value={p.type}
-                        onChange={v => updateParticipant(idx, {
-                          type: v as "member" | "external", user_id: null, member_name: "", contact: "",
-                        })}
-                        options={[
-                          { value: "member", label: "Del hogar" },
-                          { value: "external", label: "Externo" },
-                        ]} />
-                    )}
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-medium text-foreground truncate">
+                        {p.member_name || <span className="text-muted-foreground font-normal">Sin elegir</span>}
+                      </span>
+                      <span className="block text-xs text-muted-foreground truncate">
+                        {p.type === "self" ? "Vos" : p.user_id ? "Usuario de RegistrApp"
+                          : p.contact ? `Se le invita a ${p.contact}`
+                          : p.member_name ? "Sin cuenta — sólo para anotar tu parte" : ""}
+                      </span>
+                    </span>
                     {p.type !== "self" && (
-                      <button type="button" onClick={() => removeParticipant(idx)}
-                        className="ml-auto text-muted-foreground hover:text-destructive px-1 text-base leading-none">x</button>
+                      <>
+                        <button type="button" onClick={() => setPickerFor(idx)}
+                          className="text-xs text-primary hover:underline shrink-0">
+                          {p.member_name ? "Cambiar" : "Elegir"}
+                        </button>
+                        <button type="button" onClick={() => removeParticipant(idx)}
+                          aria-label="Quitar participante"
+                          className="text-muted-foreground hover:text-destructive px-1 text-base leading-none shrink-0">x</button>
+                      </>
                     )}
                   </div>
-
-                  {p.type === "self" ? (
-                    <p className="text-sm text-foreground px-1">{p.member_name}</p>
-                  ) : p.type === "member" ? (
-                    <SelectField
-                      required
-                      value={p.user_id != null ? String(p.user_id) : ""}
-                      onChange={v => {
-                        const id = parseInt(v);
-                        const mem = otherMembers.find(m => m.id === id);
-                        updateParticipant(idx, { user_id: id, member_name: mem?.display_name || mem?.email || "" });
-                      }}
-                      placeholder="Miembro del hogar"
-                      options={otherMembers.map(m => ({ value: String(m.id), label: m.display_name || m.email }))} />
-                  ) : (
-                    <div className="space-y-1.5">
-                      {agendaContacts.length > 0 && (
-                        <SelectField
-                          value=""
-                          onChange={v => {
-                            const c = agendaContacts.find(a => a.id === parseInt(v));
-                            if (!c) return;
-                            updateParticipant(idx, { member_name: c.contact_name, contact: c.contact_phone });
-                          }}
-                          placeholder="Elegir de la agenda"
-                          options={agendaContacts.map(c => ({ value: String(c.id), label: `${c.contact_name} · ${c.contact_phone}` }))} />
-                      )}
-                      <input
-                        required
-                        type="text"
-                        placeholder="Alias (ej: Maria)"
-                        value={p.member_name}
-                        onChange={e => updateParticipant(idx, { member_name: e.target.value })}
-                        className={FIELD}
-                      />
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          inputMode="tel"
-                          placeholder="WhatsApp o email (opcional)"
-                          value={p.contact}
-                          onChange={e => updateParticipant(idx, { contact: e.target.value })}
-                          className={`${FIELD} flex-1`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => pickContact(idx)}
-                          title={hasContactsApi ? "Elegir de contactos" : "Selector de contactos no disponible en este navegador"}
-                          className="px-3 py-2 rounded-lg shrink-0 bg-muted hover:bg-accent text-muted-foreground"
-                        >
-                          <Phone className="w-4 h-4" />
-                        </button>
-                      </div>
-                      {p.contact && (
-                        <p className="text-xs text-primary">
-                          {p.contact.includes("@")
-                            ? "Se generara un link de invitacion para copiar"
-                            : "Se enviara una invitacion por WhatsApp"
-                          }
-                        </p>
-                      )}
-                    </div>
-                  )}
 
                   {splitType === "custom" ? (
                     <div>
