@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { getErrorMessage } from "@/lib/utils";
-import { Plus, ChevronLeft, X } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Card as UiCard } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FIELD, FormGrid, SelectField, DateField } from "@/components/ui/form";
@@ -193,6 +193,9 @@ export default function CardDetailPage() {
   const [showNewStmt, setShowNewStmt] = useState(false);
   const [deleteStmt, setDeleteStmt] = useState<Statement | null>(null);
   const [editStmt, setEditStmt] = useState<Statement | null>(null);
+  const [showFuture, setShowFuture] = useState(false);
+  // null = untouched, so the default can follow the data (see below).
+  const [pastOpen, setPastOpen] = useState<boolean | null>(null);
 
   const load = async () => {
     const [cardRes, stmtRes] = await Promise.all([
@@ -233,6 +236,26 @@ export default function CardDetailPage() {
     await load();
   };
 
+  // Instalment propagation creates every future statement up front, and the
+  // endpoint returns newest-first — so a 12-cuota purchase buries the month
+  // the user actually came to see under eleven statements that only exist as
+  // commitments. They collapse into one row; the current month is the cut, and
+  // it stays visible.
+  const now = new Date();
+  const currentPeriod = now.getFullYear() * 12 + now.getMonth();
+  const periodOf = (s: Statement) => s.year * 12 + (s.month - 1);
+  const futureStatements = statements.filter((s) => periodOf(s) > currentPeriod);
+  const currentStatements = statements.filter((s) => periodOf(s) === currentPeriod);
+  const pastStatements = statements.filter((s) => periodOf(s) < currentPeriod);
+
+  // With both groups closed the page is the current month and two rows — which
+  // is the "one statement per card per month" view, without a month selector.
+  // But a card can legitimately have no statement for the current month (the
+  // bank hasn't closed it, or nothing was charged), and two collapsed rows over
+  // an empty page reads as a screen that failed to load. So the past opens by
+  // default in exactly that case; an explicit toggle always wins.
+  const showPast = pastOpen ?? currentStatements.length === 0;
+
   if (!card) return <div className="p-6 text-sm text-muted-foreground">Cargando...</div>;
 
   return (
@@ -259,7 +282,34 @@ export default function CardDetailPage() {
         </UiCard>
       ) : (
         <div className="space-y-3">
-          {statements.map((stmt) => (
+          {futureStatements.length > 0 && (
+            <>
+              {/* Dashed, like every not-yet-confirmed thing in the app (the
+                  `locked` Chip, the estimated due date): these statements are
+                  commitments, not documents the bank has sent. */}
+              <button
+                type="button"
+                onClick={() => setShowFuture((v) => !v)}
+                aria-expanded={showFuture}
+                className="w-full rounded-2xl border border-dashed border-border bg-card/60 p-3 sm:p-4 flex items-center gap-2.5 text-left transition-colors hover:bg-accent/40"
+              >
+                <ChevronRight className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${showFuture ? "rotate-90" : ""}`} />
+                <span className="text-sm font-medium text-foreground">Próximos resúmenes</span>
+                <span className="text-sm text-muted-foreground">({futureStatements.length})</span>
+              </button>
+              {showFuture && futureStatements.map((stmt) => (
+                <StatementPaper
+                  key={stmt.id}
+                  statement={stmt}
+                  onClick={() => router.push(`/tarjetas/${cardId}/${stmt.id}`)}
+                  onEdit={() => setEditStmt(stmt)}
+                  onDelete={() => setDeleteStmt(stmt)}
+                />
+              ))}
+            </>
+          )}
+
+          {currentStatements.map((stmt) => (
             <StatementPaper
               key={stmt.id}
               statement={stmt}
@@ -268,11 +318,41 @@ export default function CardDetailPage() {
               onDelete={() => setDeleteStmt(stmt)}
             />
           ))}
-          <div className="flex items-center gap-3 pt-2">
-            <div className="flex-1 border-t border-dashed border-border" />
-            <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wide shrink-0">Fin del historial</p>
-            <div className="flex-1 border-t border-dashed border-border" />
-          </div>
+
+          {pastStatements.length > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={() => setPastOpen(!showPast)}
+                aria-expanded={showPast}
+                className="w-full rounded-2xl border border-dashed border-border bg-card/60 p-3 sm:p-4 flex items-center gap-2.5 text-left transition-colors hover:bg-accent/40"
+              >
+                <ChevronRight className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${showPast ? "rotate-90" : ""}`} />
+                <span className="text-sm font-medium text-foreground">Resúmenes anteriores</span>
+                <span className="text-sm text-muted-foreground">({pastStatements.length})</span>
+              </button>
+              {showPast && pastStatements.map((stmt) => (
+                <StatementPaper
+                  key={stmt.id}
+                  statement={stmt}
+                  onClick={() => router.push(`/tarjetas/${cardId}/${stmt.id}`)}
+                  onEdit={() => setEditStmt(stmt)}
+                  onDelete={() => setDeleteStmt(stmt)}
+                />
+              ))}
+            </>
+          )}
+
+          {/* The divider marks the end of the papers. While the past group is
+              closed the history is right there behind the row above it, so
+              announcing its end would be a lie. */}
+          {(showPast || pastStatements.length === 0) && (
+            <div className="flex items-center gap-3 pt-2">
+              <div className="flex-1 border-t border-dashed border-border" />
+              <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wide shrink-0">Fin del historial</p>
+              <div className="flex-1 border-t border-dashed border-border" />
+            </div>
+          )}
         </div>
       )}
 
