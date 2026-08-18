@@ -1,16 +1,20 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
-import { formatARS, formatDate, formatUSD, parseAmount, normalizePhoneNumber, getErrorMessage, pickCategoryColor } from "@/lib/utils";
+import { formatARS, formatDate, formatUSD, parseAmount, normalizePhoneNumber, getErrorMessage, pickCategoryColor, foldText } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, ChevronLeft, X, ExternalLink, Users2, Phone } from "lucide-react";
+import { Plus, ChevronLeft, X, ExternalLink, Users2, Phone, SlidersHorizontal } from "lucide-react";
 import { Card as UiCard } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
 import { FIELD, SelectField, DateField } from "@/components/ui/form";
+import {
+  FilterBar, FilterRow, FilterPanel, SortChip, FilterChip, PillSelect,
+  PillDateRange, ClearFilters, CollapsibleSearch,
+} from "@/components/ui/filters";
 
 const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -36,6 +40,16 @@ interface Card {
 }
 
 type ItemType = "single" | "installment" | "recurring";
+
+type SortKey = "date" | "category" | "amount";
+const SORT_LABELS: Record<SortKey, string> = {
+  date: "Fecha", category: "Categoría", amount: "Monto",
+};
+
+// Same wording as the row badges, so a filter names what the user sees.
+const ITEM_TYPE_LABELS: Record<ItemType, string> = {
+  single: "Único", installment: "Cuotas", recurring: "Recurrente",
+};
 type AmountMode = "per_installment" | "total";
 
 const EMPTY_ITEM = {
@@ -535,6 +549,17 @@ export default function StatementDetailPage() {
   const [shareItem, setShareItem] = useState<CardItem | null>(null);
   const [editItem, setEditItem] = useState<CardItem | null>(null);
 
+  const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [sort, setSort] = useState<SortKey | null>(null);
+  const [order, setOrder] = useState<"asc" | "desc">("asc");
+  const [showCustomFilter, setShowCustomFilter] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [currencyFilter, setCurrencyFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
   const load = useCallback(async () => {
     const [cardRes, stmtRes, catRes] = await Promise.all([
       api.get("/credit-cards"),
@@ -618,9 +643,67 @@ export default function StatementDetailPage() {
     await load();
   };
 
+  const panelFilterActive = !!(categoryFilter || typeFilter || currencyFilter || dateFrom || dateTo);
+  const clearPanelFilters = () => {
+    setCategoryFilter(""); setTypeFilter(""); setCurrencyFilter("");
+    setDateFrom(""); setDateTo("");
+  };
+
+  // Tap cycle: inactive -> asc -> desc -> inactive, where inactive is the
+  // order the endpoint already returns (item_date, id).
+  function toggleSort(key: SortKey) {
+    if (sort !== key) { setSort(key); setOrder("asc"); return; }
+    if (order === "asc") { setOrder("desc"); return; }
+    setSort(null);
+  }
+
+  // Only offer values this statement actually contains — a pill option that
+  // matches nothing here reads as "no hay nada" when it means "no existe".
+  const items = useMemo(() => statement?.items ?? [], [statement]);
+  const presentCategories = useMemo(() => {
+    const seen = new Map<number, string>();
+    items.forEach(i => seen.set(i.category.id, i.category.name));
+    return Array.from(seen, ([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [items]);
+  const presentTypes = useMemo(
+    () => (Object.keys(ITEM_TYPE_LABELS) as ItemType[]).filter(t => items.some(i => i.item_type === t)),
+    [items],
+  );
+  const presentCurrencies = useMemo(
+    () => ["ARS", "USD"].filter(c => items.some(i => (i.currency || "ARS") === c)),
+    [items],
+  );
+
+  const visibleItems = useMemo(() => {
+    const q = foldText(search.trim());
+    const out = items.filter(i => {
+      // Match every field the row shows: its description and its category.
+      if (q && !foldText(`${i.description} ${i.category.name}`).includes(q)) return false;
+      if (categoryFilter && String(i.category.id) !== categoryFilter) return false;
+      if (typeFilter && i.item_type !== typeFilter) return false;
+      if (currencyFilter && (i.currency || "ARS") !== currencyFilter) return false;
+      // item_date is ISO yyyy-MM-dd, so a string compare is a date compare.
+      if (dateFrom && i.item_date < dateFrom) return false;
+      if (dateTo && i.item_date > dateTo) return false;
+      return true;
+    });
+    if (!sort) return out;
+    const dir = order === "asc" ? 1 : -1;
+    return [...out].sort((a, b) => {
+      if (sort === "date") return dir * a.item_date.localeCompare(b.item_date);
+      if (sort === "category") return dir * a.category.name.localeCompare(b.category.name, "es");
+      // Amount orders by (currency, amount), never by amount alone: a statement
+      // mixes both, and interleaving would sit U$D 500 next to $500.
+      const ca = a.currency || "ARS", cb = b.currency || "ARS";
+      if (ca !== cb) return ca.localeCompare(cb);
+      return dir * (Number(a.amount) - Number(b.amount));
+    });
+  }, [items, search, categoryFilter, typeFilter, currencyFilter, dateFrom, dateTo, sort, order]);
+
   if (!card || !statement) return <div className="p-6 text-sm text-muted-foreground">Cargando...</div>;
 
-  const totalByCategory = statement.items.reduce<Record<number, { name: string; color?: string; total: number }>>((acc, item) => {
+  const totalByCategory = visibleItems.reduce<Record<number, { name: string; color?: string; total: number }>>((acc, item) => {
     const cid = item.category.id;
     if (!acc[cid]) acc[cid] = { name: item.category.name, color: item.category.color, total: 0 };
     acc[cid].total += Number(item.amount);
@@ -750,12 +833,62 @@ export default function StatementDetailPage() {
         </UiCard>
       )}
 
+      {statement.items.length > 0 && (
+        <FilterBar>
+          <FilterRow>
+            <CollapsibleSearch
+              open={searchOpen}
+              onOpen={() => setSearchOpen(true)}
+              onClose={() => { setSearch(""); setSearchOpen(false); }}
+              value={search}
+              onChange={setSearch}
+              placeholder="Buscar por descripción o categoría..."
+            />
+            {!searchOpen && (
+              <>
+                {(Object.keys(SORT_LABELS) as SortKey[]).map(key => (
+                  <SortChip key={key} label={SORT_LABELS[key]}
+                    active={sort === key} dir={order} onClick={() => toggleSort(key)} />
+                ))}
+                <FilterChip
+                  label="Personalizado" icon={SlidersHorizontal}
+                  active={panelFilterActive}
+                  onClick={() => setShowCustomFilter(v => !v)}
+                />
+              </>
+            )}
+          </FilterRow>
+          {showCustomFilter && !searchOpen && (
+            <FilterPanel>
+              <PillSelect value={categoryFilter} onChange={setCategoryFilter} placeholder="Categoría"
+                options={presentCategories.map(c => ({ value: String(c.id), label: c.name }))} />
+              {presentTypes.length > 1 && (
+                <PillSelect value={typeFilter} onChange={setTypeFilter} placeholder="Tipo"
+                  options={presentTypes.map(t => ({ value: t, label: ITEM_TYPE_LABELS[t] }))} />
+              )}
+              {presentCurrencies.length > 1 && (
+                <PillSelect value={currencyFilter} onChange={setCurrencyFilter} placeholder="Moneda"
+                  options={presentCurrencies.map(c => ({ value: c, label: c === "ARS" ? "Pesos" : "Dólares" }))} />
+              )}
+              <PillDateRange
+                from={dateFrom} to={dateTo}
+                onChange={(f, t) => { setDateFrom(f); setDateTo(t); }}
+                placeholder="Fecha de compra"
+              />
+              {panelFilterActive && <ClearFilters onClick={clearPanelFilters} />}
+            </FilterPanel>
+          )}
+        </FilterBar>
+      )}
+
       {/* Items list */}
       <UiCard className="p-0 md:p-0 divide-y">
         {statement.items.length === 0 ? (
           <p className="p-6 text-sm text-muted-foreground">No hay items en este resumen.</p>
+        ) : visibleItems.length === 0 ? (
+          <p className="p-6 text-sm text-muted-foreground">Ningún item coincide con la búsqueda/filtro.</p>
         ) : (
-          statement.items.map((item) => (
+          visibleItems.map((item) => (
             <div key={item.id} className="flex items-center gap-2 px-4 py-3">
               <button
                 onClick={() => item.installment_group_id
@@ -799,12 +932,29 @@ export default function StatementDetailPage() {
             </div>
           ))
         )}
-        {statement.items.length > 0 && (() => {
-          const arsTotal = statement.items.filter(i => i.currency !== "USD").reduce((s, i) => s + Number(i.amount), 0);
-          const usdTotal = statement.items.filter(i => i.currency === "USD").reduce((s, i) => s + Number(i.amount), 0);
+        {visibleItems.length > 0 && (() => {
+          const arsTotal = visibleItems.filter(i => i.currency !== "USD").reduce((s, i) => s + Number(i.amount), 0);
+          const usdTotal = visibleItems.filter(i => i.currency === "USD").reduce((s, i) => s + Number(i.amount), 0);
+          // A resumen's "Total" is what the bank debits, so a filtered sum
+          // can't wear that label unqualified — and the real total has to stay
+          // on screen next to it.
+          const filtering = visibleItems.length !== statement.items.length;
+          const fullArs = statement.items.filter(i => i.currency !== "USD").reduce((s, i) => s + Number(i.amount), 0);
+          const fullUsd = statement.items.filter(i => i.currency === "USD").reduce((s, i) => s + Number(i.amount), 0);
           return (
             <div className="flex items-center justify-between px-4 py-3 bg-muted rounded-b-2xl flex-wrap gap-1">
-              <span className="text-sm font-medium text-foreground">Total</span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-medium text-foreground">
+                  {filtering ? `Total filtrado (${visibleItems.length} de ${statement.items.length})` : "Total"}
+                </span>
+                {filtering && (
+                  <span className="text-xs text-muted-foreground">
+                    Total del resumen: {fullArs > 0 && formatARS(fullArs)}
+                    {fullArs > 0 && fullUsd > 0 && " + "}
+                    {fullUsd > 0 && formatUSD(fullUsd)}
+                  </span>
+                )}
+              </div>
               <div className="flex flex-col items-end gap-0.5">
                 {arsTotal > 0 && <span className="text-base font-bold text-rose-600">{formatARS(arsTotal)}</span>}
                 {usdTotal > 0 && <span className="text-sm font-bold text-emerald-600">{formatUSD(usdTotal)}</span>}
