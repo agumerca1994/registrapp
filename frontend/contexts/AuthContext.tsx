@@ -21,7 +21,10 @@ interface AppUser {
   firebase_uid: string;
   tenant_id: number;
   tenant_code: string | null;
+  tenant_name: string | null;
   email: string;
+  first_name: string | null;
+  last_name: string | null;
   display_name: string | null;
   alias: string | null;
   discoverable: boolean;

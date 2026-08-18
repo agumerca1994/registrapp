@@ -151,11 +151,25 @@ async def register(
         firebase_uid=firebase_user["uid"],
         tenant_id=tenant.id,
         email=firebase_user.get("email", ""),
-        display_name=body.display_name or firebase_user.get("name"),
+        first_name=(body.first_name or "").strip() or None,
+        last_name=(body.last_name or "").strip() or None,
+        display_name=compose_display_name(
+            body.first_name, body.last_name,
+            body.display_name or firebase_user.get("name"),
+        ),
         phone_number=body.phone_number,
         role=UserRole.admin,
         whatsapp_gate_pending=True,
     )
+    if body.alias:
+        try:
+            alias = user_directory.validate_alias(body.alias)
+        except user_directory.AliasError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        if await user_directory.alias_taken(db, alias):
+            raise HTTPException(status_code=409, detail="Ese alias ya está en uso.")
+        user.alias = alias
+
     db.add(user)
     await db.flush()
     await _link_pending_splits(user, db)
@@ -196,11 +210,25 @@ async def join_tenant(
         firebase_uid=firebase_user["uid"],
         tenant_id=tenant.id,
         email=firebase_user.get("email", ""),
-        display_name=body.display_name or firebase_user.get("name"),
+        first_name=(body.first_name or "").strip() or None,
+        last_name=(body.last_name or "").strip() or None,
+        display_name=compose_display_name(
+            body.first_name, body.last_name,
+            body.display_name or firebase_user.get("name"),
+        ),
         phone_number=body.phone_number,
         role=UserRole.member,
         whatsapp_gate_pending=True,
     )
+    if body.alias:
+        try:
+            alias = user_directory.validate_alias(body.alias)
+        except user_directory.AliasError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        if await user_directory.alias_taken(db, alias):
+            raise HTTPException(status_code=409, detail="Ese alias ya está en uso.")
+        user.alias = alias
+
     db.add(user)
     await db.flush()
     await _link_pending_splits(user, db)
@@ -224,7 +252,20 @@ async def me(
     return user
 
 
+def compose_display_name(first: str | None, last: str | None, fallback: str | None = None) -> str | None:
+    """`display_name` a partir de nombre y apellido.
+
+    Se guarda derivado y no se compone al leer: es la clave por la que busca el
+    directorio, la que agrupa `personKey()` y la que quedó escrita en los splits
+    ya creados.
+    """
+    full = " ".join(x.strip() for x in (first, last) if x and x.strip())
+    return full or (fallback.strip() if fallback and fallback.strip() else None)
+
+
 class ProfileUpdate(BaseModel):
+    first_name: str | None = Field(default=None, max_length=60)
+    last_name: str | None = Field(default=None, max_length=60)
     display_name: str | None = Field(default=None, max_length=120)
     alias: str | None = Field(default=None, max_length=30)
     discoverable: bool | None = None
@@ -251,7 +292,16 @@ async def update_me(
 
     fields = body.model_dump(exclude_unset=True)
 
-    if "display_name" in fields:
+    if "first_name" in fields or "last_name" in fields:
+        first = fields.get("first_name", user.first_name)
+        last = fields.get("last_name", user.last_name)
+        if not (first or "").strip():
+            raise HTTPException(status_code=400, detail="El nombre no puede quedar vacío.")
+        user.first_name = (first or "").strip() or None
+        user.last_name = (last or "").strip() or None
+        user.display_name = compose_display_name(user.first_name, user.last_name)
+    elif "display_name" in fields:
+        # Sigue aceptándose suelto por si algún cliente viejo lo manda así.
         name = (fields["display_name"] or "").strip()
         if not name:
             raise HTTPException(status_code=400, detail="El nombre no puede quedar vacío.")
@@ -279,6 +329,36 @@ async def update_me(
     await db.commit()
     # Re-seleccionar con selectinload: `UserOut.tenant_code` lee la relación, y
     # sin esto revienta con MissingGreenlet al serializar.
+    return await db.scalar(
+        select(User).options(selectinload(User.tenant)).where(User.id == user.id)
+    )
+
+
+class TenantUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+@router.patch("/tenant", response_model=UserOut)
+async def rename_tenant(
+    body: TenantUpdate,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Renombrar el hogar. Sólo un admin.
+
+    Devuelve `UserOut` y no el tenant porque es lo que el frontend ya tiene en
+    contexto: así refresca todo con la respuesta, sin un segundo pedido.
+    """
+    user = await db.scalar(select(User).where(User.firebase_uid == firebase_user["uid"]))
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    if user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Sólo un administrador puede renombrar el hogar.")
+    tenant = await db.get(Tenant, user.tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Hogar no encontrado")
+    tenant.name = body.name.strip()
+    await db.commit()
     return await db.scalar(
         select(User).options(selectinload(User.tenant)).where(User.id == user.id)
     )

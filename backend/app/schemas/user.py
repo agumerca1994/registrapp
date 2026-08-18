@@ -5,12 +5,18 @@ from app.models.user import UserRole
 
 class UserRegister(BaseModel):
     tenant_name: str
+    first_name: str | None = None
+    last_name: str | None = None
+    alias: str | None = None
     display_name: str | None = None
     phone_number: str | None = None
 
 
 class UserJoinTenant(BaseModel):
     tenant_code: str
+    first_name: str | None = None
+    last_name: str | None = None
+    alias: str | None = None
     display_name: str | None = None
     phone_number: str | None = None
 
@@ -22,7 +28,10 @@ class UserOut(BaseModel):
     firebase_uid: str
     tenant_id: int
     tenant_code: str | None = None
+    tenant_name: str | None = None
     email: str
+    first_name: str | None = None
+    last_name: str | None = None
     display_name: str | None
     phone_number: str | None
     whatsapp_phone: str | None

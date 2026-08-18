@@ -6,7 +6,9 @@ import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import WhatsAppVerifyForm from "@/components/WhatsAppVerifyForm";
-import { MessageCircle } from "lucide-react";
+import { AtSign, MessageCircle } from "lucide-react";
+import { FIELD, FormGrid } from "@/components/ui/form";
+import { suggestAlias } from "@/lib/alias";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -25,9 +27,21 @@ export default function OnboardingPage() {
   const [mode, setMode] = useState<"create" | "join">("create");
   const [tenantName, setTenantName] = useState("");
   const [tenantCode, setTenantCode] = useState("");
-  const [displayName, setDisplayName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [alias, setAlias] = useState("");
+  // `true` mientras el usuario no lo tocó: hasta entonces la sugerencia sigue
+  // al nombre que va escribiendo. Una vez que lo edita, deja de moverse solo —
+  // que un campo se reescriba mientras lo estás mirando es peor que una
+  // sugerencia mediocre.
+  const [aliasUntouched, setAliasUntouched] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!aliasUntouched) return;
+    setAlias(suggestAlias(firstName, lastName));
+  }, [firstName, lastName, aliasUntouched]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,8 +49,14 @@ export default function OnboardingPage() {
     setError("");
     try {
       const { data } = mode === "create"
-        ? await api.post("/auth/register", { tenant_name: tenantName, display_name: displayName })
-        : await api.post("/auth/join", { tenant_code: tenantCode.trim().toUpperCase(), display_name: displayName });
+        ? await api.post("/auth/register", {
+            tenant_name: tenantName, first_name: firstName, last_name: lastName,
+            alias: alias.trim() || null,
+          })
+        : await api.post("/auth/join", {
+            tenant_code: tenantCode.trim().toUpperCase(), first_name: firstName,
+            last_name: lastName, alias: alias.trim() || null,
+          });
       await refreshUser();
       if (data.whatsapp_gate_pending) {
         setStep("whatsapp");
@@ -93,33 +113,51 @@ export default function OnboardingPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <FormGrid>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Nombre</label>
+              <input className={FIELD} value={firstName} required
+                onChange={(e) => setFirstName(e.target.value)} placeholder="Agustín" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Apellido</label>
+              <input className={FIELD} value={lastName}
+                onChange={(e) => setLastName(e.target.value)} placeholder="Mercadal" />
+            </div>
+          </FormGrid>
+
           <div>
-            <label className="text-sm font-medium text-gray-700">Tu nombre</label>
-            <input
-              className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Cómo querés que te identifiquen"
-              required
-            />
+            <label className="text-xs font-medium text-muted-foreground">Alias</label>
+            <div className="relative">
+              <AtSign className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                className={`${FIELD} pl-9`}
+                value={alias}
+                onChange={(e) => { setAlias(e.target.value.toLowerCase()); setAliasUntouched(false); }}
+                placeholder="tu.alias"
+                maxLength={30}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Con esto te encuentran para compartirte un gasto, sin dar tu mail
+              ni tu teléfono. Lo podés cambiar después.
+            </p>
           </div>
 
           {mode === "create" ? (
             <div>
-              <label className="text-sm font-medium text-gray-700">Nombre del hogar</label>
-              <input
-                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                value={tenantName}
-                onChange={(e) => setTenantName(e.target.value)}
-                placeholder="Ej: Casa García"
-                required
-              />
+              <label className="text-xs font-medium text-muted-foreground">Nombre del hogar</label>
+              <input className={FIELD} value={tenantName} required
+                onChange={(e) => setTenantName(e.target.value)} placeholder="Ej: Casa García" />
             </div>
           ) : (
             <div>
-              <label className="text-sm font-medium text-gray-700">{"Código del hogar"}</label>
+              <label className="text-xs font-medium text-muted-foreground">Código del hogar</label>
               <input
-                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary uppercase tracking-widest"
+                className={`${FIELD} uppercase tracking-widest`}
                 value={tenantCode}
                 onChange={(e) => setTenantCode(e.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase())}
                 placeholder="XXXXXXXX"
