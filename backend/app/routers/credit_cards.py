@@ -771,7 +771,6 @@ async def share_item(
     }
 
     created_shared_ids = []
-    creator_name = user.display_name or user.email
     cuotas_count = len(items_to_share)
     root_shared_id: int | None = None
 
@@ -862,7 +861,7 @@ async def share_item(
             # tuviera el número vinculado.
             await notify_shared.notify_share(
                 db,
-                creator_name=creator_name,
+                creator=user,
                 title=item.description,
                 total_amount=target_item.amount,
                 notify=pending_wa_notify,

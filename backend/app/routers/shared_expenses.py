@@ -386,10 +386,9 @@ async def create_shared_expense(
 
     # Avisos, después del commit. El mismo servicio que usa el compartir de
     # tarjetas, para que las dos vías avisen igual.
-    creator_name = user.display_name or user.email
     await notify_shared.notify_share(
         db,
-        creator_name=creator_name,
+        creator=user,
         title=body.title,
         total_amount=body.total_amount,
         notify=notify_pairs,

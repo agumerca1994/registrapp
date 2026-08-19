@@ -241,11 +241,18 @@ function WhatsAppSection() {
             />
             <span className="min-w-0">
               <span className="block text-sm font-medium text-foreground">
-                Avisarme también por WhatsApp
+                Usar WhatsApp para los avisos
               </span>
               <span className="block text-xs text-muted-foreground">
-                Cuando te comparten un gasto. El aviso dentro de la app te llega
-                igual, esto es un canal extra.
+                Para avisarle por WhatsApp a quien le compartís un gasto, y para
+                que te avisen a vos. El aviso dentro de la app va igual: esto es
+                un canal extra.
+              </span>
+              {/* La consecuencia que no se ve: a quien no tiene la app,
+                  WhatsApp es su único canal. Decirlo acá y no cuando ya pasó. */}
+              <span className="block text-xs text-amber-700 mt-1">
+                Si lo apagás, a quien invites y no tenga la app no le va a llegar
+                nada.
               </span>
             </span>
           </label>
