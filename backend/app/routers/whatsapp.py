@@ -150,6 +150,11 @@ async def whatsapp_webhook(
     # el mismo de siempre: el fallo no da error, sólo no encuentra.
     user = await find_user_by_phone(phone, db)
     if not user:
+        # Se registra a propósito: este rechazo devuelve 200, así que el
+        # middleware de errores no lo ve y no dejaba ningún rastro. Un usuario
+        # que sí estaba vinculado y recibía este mensaje era invisible en los
+        # logs — que es justo lo que hizo tan difícil encontrar el bug del `==`.
+        logger.warning("WhatsApp: mensaje de %s, sin usuario vinculado con ese número", phone)
         await _send_wa(phone, MSG_NOT_LINKED)
         return {"status": "not_linked"}
 
