@@ -430,12 +430,29 @@ async def link_whatsapp(
             }
             resp = await client.post(url, json=payload, headers=headers)
             if resp.status_code >= 400:
+                logger.error(
+                    "Evolution rechazó el código para %s: HTTP %s %s",
+                    target, resp.status_code, resp.text[:200],
+                )
                 raise HTTPException(status_code=502, detail=f"Error al enviar el codigo ({resp.status_code})")
     except httpx.RequestError as e:
         logger.error(f"Evolution API connection error: {e}")
         raise HTTPException(status_code=502, detail="No se pudo conectar con WhatsApp")
 
-    return {"message": "Codigo enviado"}
+    # Un 2xx de Evolution significa "lo acepté", NO "lo entregué": con la
+    # instancia desconectada de WhatsApp responde igual y el mensaje no sale
+    # nunca. Ese es exactamente el reporte de "no puedo vincular mi número" que
+    # no dejaba ni un rastro en los logs — no fallaba nada, simplemente no
+    # llegaba. Se registra el resultado para que la próxima se pueda ver.
+    if resolved is None:
+        logger.warning(
+            "WhatsApp: el número %s no resolvió en Evolution; el código se mandó a ciegas",
+            target,
+        )
+    else:
+        logger.info("WhatsApp: código enviado a %s (resuelto)", target)
+
+    return {"message": "Codigo enviado", "resolved": resolved is not None}
 
 
 @router.post("/me/verify-whatsapp", response_model=UserOut)
