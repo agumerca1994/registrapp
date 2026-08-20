@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.models.expense import ExpenseCategory, ExpenseEntry
 from app.models.user import User
+from app.services.participants import find_user_by_phone
 
 router = APIRouter(prefix="/webhook", tags=["webhook"])
 logger = logging.getLogger(__name__)
@@ -138,7 +139,16 @@ async def whatsapp_webhook(
         logger.error(f"WA webhook parse error: {e}")
         return {"status": "error"}
 
-    user = await db.scalar(select(User).where(User.whatsapp_phone == phone))
+    # `find_user_by_phone` y NO `==`: el JID entrante viene sin `+`
+    # ("5493834373344@s.whatsapp.net"), mientras que `verify_whatsapp` guarda el
+    # número normalizado CON `+`. La comparación exacta no matcheaba nunca, así
+    # que el bot contestaba "número no vinculado" a gente que sí lo tenía
+    # vinculado — recibía los avisos de gastos compartidos (esos sí usan la
+    # búsqueda tolerante) pero no podía cargar un gasto por chat.
+    #
+    # Es exactamente lo que el CLAUDE.md advierte que no se haga, y el motivo es
+    # el mismo de siempre: el fallo no da error, sólo no encuentra.
+    user = await find_user_by_phone(phone, db)
     if not user:
         await _send_wa(phone, MSG_NOT_LINKED)
         return {"status": "not_linked"}
