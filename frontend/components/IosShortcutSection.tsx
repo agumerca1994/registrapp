@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, Download, Smartphone } from "lucide-react";
+import { ChevronDown, Download, Smartphone, Zap } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -170,6 +170,79 @@ export function IosShortcutSection() {
         ¿Tenés el comprobante en PDF? No hace falta el atajo: abrí RegistrApp,
         tocá el <strong>+</strong> del inicio y usá <strong>Subir PDF</strong>.
       </p>
+
+      {/* ── Automatización ─────────────────────────────────────────────────
+          Lo que iOS deja y lo que no, dicho de frente. Prometer "detecta tus
+          pagos" cuando en realidad se dispara al cerrar la app es la forma
+          más rápida de que alguien desactive la automatización y no vuelva. */}
+      <div className="border-t border-border pt-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Zap className="w-4 h-4 text-primary shrink-0" />
+          <h4 className="font-semibold text-foreground text-sm">
+            Que te lo recuerde solo, después de pagar
+          </h4>
+        </div>
+
+        <p className="text-sm text-muted-foreground">
+          Se puede, pero con un límite que conviene saber de antemano:{" "}
+          <strong>iOS no le avisa a nadie que hiciste un pago</strong>, salvo
+          que lo hayas hecho con una tarjeta guardada en Wallet. Para Naranja X,
+          Personal Pay o el banco, lo más cerca que se llega hoy es disparar la
+          pregunta <em>cuando salís de esa app</em>.
+        </p>
+
+        <a
+          href="/atajos/registrar-gasto-preguntar.shortcut"
+          download="Registrar gasto - preguntar.shortcut"
+          className="flex items-center justify-center gap-2 w-full rounded-full border-2 border-ink bg-white text-foreground px-4 py-2.5 text-sm font-medium shadow-chip transition-transform active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+        >
+          <Download className="w-4 h-4" />
+          Descargar el atajo «preguntar»
+        </a>
+
+        <p className="text-xs text-muted-foreground">
+          Después, en <strong>Atajos → Automatización → +</strong>, elegí un
+          disparador y mandalo a ejecutar este atajo:
+        </p>
+
+        <div className="space-y-2.5">
+          <div className="rounded-lg border border-border px-3 py-2.5 space-y-1">
+            <p className="text-xs font-medium text-foreground">
+              Pagos contactless con una tarjeta de Wallet
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Disparador <strong>Transacción → Cuando toco</strong> y elegís la
+              tarjeta. Éste sí es el pago de verdad: se dispara al apoyar el
+              teléfono, y nunca en otro momento.
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-border px-3 py-2.5 space-y-1">
+            <p className="text-xs font-medium text-foreground">
+              Naranja X, Personal Pay, el banco (QR y transferencias)
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Disparador <strong>App → Se cierra</strong> y elegís la app. Ojo:
+              se dispara <strong>cada vez que salís</strong> de ella, hayas
+              pagado o no — por eso el atajo pregunta en lugar de abrirte el
+              formulario de una. Si te cansa, apagalo desde la misma pantalla.
+            </p>
+          </div>
+        </div>
+
+        <p className="text-[11px] text-muted-foreground">
+          En <strong>Atajos → Automatización</strong>, tocando la automatización
+          podés apagar <strong>Preguntar antes de ejecutar</strong> para que
+          salga sin confirmación extra.
+        </p>
+
+        <p className="text-[11px] text-muted-foreground">
+          Lo que falta para que esto sea detección real en las billeteras es un
+          disparador <em>por notificación</em> — cuando la app te avisa que el
+          pago salió. Apple lo suma en iOS 27; cuando llegue, este mismo atajo
+          sirve sin tocar nada, sólo se le cambia el disparador.
+        </p>
+      </div>
     </Card>
   );
 }

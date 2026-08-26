@@ -41,7 +41,7 @@ test("las instrucciones del Atajo se muestran sólo en iPhone", async ({ browser
   ).toBeVisible();
   // El camino que se ofrece primero es la descarga; los pasos manuales quedan
   // plegados detrás, así que ese texto NO tiene que estar visible de entrada.
-  await expect(onPhone.getByRole("link", { name: /Descargar el atajo/ })).toBeVisible();
+  await expect(onPhone.getByRole("link", { name: "Descargar el atajo", exact: true })).toBeVisible();
   await expect(onPhone.getByText(/Extraer texto de la imagen/)).toHaveCount(0);
   await iphone.close();
 
@@ -61,7 +61,16 @@ test("el archivo del atajo se descarga firmado", async ({ browser }) => {
   });
   const page = await iphone.newPage();
   await page.goto("/settings");
-  await expect(page.getByRole("link", { name: /Descargar el atajo/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Descargar el atajo", exact: true })).toBeVisible();
+
+  await expect(page.getByRole("link", { name: /Descargar el atajo «preguntar»/ })).toBeVisible();
+
+  // Los dos archivos se sirven de verdad.
+  for (const file of ["registrar-gasto.shortcut", "registrar-gasto-preguntar.shortcut"]) {
+    const r = await page.request.get(`/atajos/${file}`);
+    expect(r.status(), file).toBe(200);
+    expect((await r.body()).subarray(0, 4).toString(), file).toBe("AEA1");
+  }
 
   const res = await page.request.get("/atajos/registrar-gasto.shortcut");
   expect(res.status()).toBe(200);

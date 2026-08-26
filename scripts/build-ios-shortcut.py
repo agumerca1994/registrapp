@@ -120,6 +120,88 @@ def build(base_url: str) -> dict:
     }
 
 
+def build_prompt(base_url: str) -> dict:
+    """El atajo que se cuelga de una automatización.
+
+    iOS **no puede detectar que hiciste un pago** salvo que sea con una tarjeta
+    de Wallet (disparador "Transacción"). Para Naranja X, Personal Pay o el
+    banco, lo más cerca que se llega hoy es el disparador "App → Se cierra": se
+    dispara cada vez que salís de esa app, hayas pagado o no. Por eso este atajo
+    **pregunta en vez de abrir la pantalla directamente**: una automatización
+    que te tira el formulario encima cada vez que cerrás el homebanking se
+    desactiva a la semana.
+
+    (El disparador por notificación —que sí sería detección real de pago— llega
+    recién en iOS 27. Cuando esté, este mismo atajo sirve sin cambios: se le
+    cambia el disparador y listo.)
+    """
+    group = str(uuid.uuid4()).upper()
+    url = f"{base_url.rstrip('/')}/registrar?source=shortcut"
+    menu = "is.workflow.actions.choosefrommenu"
+
+    return {
+        "WFWorkflowClientVersion": "4018.0.4",
+        "WFWorkflowMinimumClientVersion": 900,
+        "WFWorkflowMinimumClientVersionString": "900",
+        "WFWorkflowIcon": {
+            "WFWorkflowIconGlyphNumber": 59446,
+            "WFWorkflowIconStartColor": 946986751,
+        },
+        "WFWorkflowImportQuestions": [],
+        "WFQuickActionSurfaces": [],
+        "WFWorkflowHasOutputFallback": False,
+        "WFWorkflowHasShortcutInputVariables": False,
+        "WFWorkflowInputContentItemClasses": [],
+        "WFWorkflowOutputContentItemClasses": [],
+        # Sin tipo: no va en la hoja de compartir, lo dispara una automatización.
+        "WFWorkflowTypes": [],
+        "WFWorkflowActions": [
+            # WFControlFlowMode: 0 abre el menú, 1 es cada opción, 2 lo cierra.
+            action(menu, {
+                "GroupingIdentifier": group,
+                "WFControlFlowMode": 0,
+                "WFMenuPrompt": "¿Registrás el gasto?",
+                "WFMenuItems": ["Sí, registrarlo", "Ahora no"],
+            }),
+            action(menu, {
+                "GroupingIdentifier": group,
+                "WFControlFlowMode": 1,
+                "WFMenuItemTitle": "Sí, registrarlo",
+            }),
+            action("is.workflow.actions.openurl", {
+                "WFInput": {
+                    "Value": {"string": url},
+                    "WFSerializationType": "WFTextTokenString",
+                },
+            }),
+            action(menu, {
+                "GroupingIdentifier": group,
+                "WFControlFlowMode": 1,
+                "WFMenuItemTitle": "Ahora no",
+            }),
+            action(menu, {"GroupingIdentifier": group, "WFControlFlowMode": 2}),
+        ],
+    }
+
+
+def sign(payload: dict, out: Path, mode: str) -> None:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(suffix=".shortcut", delete=False) as tmp:
+        plistlib.dump(payload, tmp, fmt=plistlib.FMT_BINARY)
+        unsigned = Path(tmp.name)
+    try:
+        subprocess.run(
+            ["shortcuts", "sign", "--mode", mode, "-i", str(unsigned), "-o", str(out)],
+            check=True,
+        )
+    finally:
+        unsigned.unlink(missing_ok=True)
+    # El temporal nace en 600 y `shortcuts sign` hereda esos permisos: sin esto
+    # el archivo queda ilegible para el servidor web y la descarga da 403.
+    out.chmod(0o644)
+    print(f"firmado ({mode}): {out}  [{out.stat().st_size} bytes]")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base-url", default=DEFAULT_BASE)
@@ -127,32 +209,17 @@ def main() -> int:
     ap.add_argument("--mode", default="anyone", choices=["anyone", "people-who-know-me"])
     args = ap.parse_args()
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-
-    with tempfile.NamedTemporaryFile(suffix=".shortcut", delete=False) as tmp:
-        plistlib.dump(build(args.base_url), tmp, fmt=plistlib.FMT_BINARY)
-        unsigned = Path(tmp.name)
-
     try:
-        subprocess.run(
-            ["shortcuts", "sign", "--mode", args.mode, "-i", str(unsigned), "-o", str(args.out)],
-            check=True,
-        )
+        sign(build(args.base_url), args.out, args.mode)
+        sign(build_prompt(args.base_url), args.out.with_name("registrar-gasto-preguntar.shortcut"), args.mode)
     except FileNotFoundError:
         print("error: hace falta el CLI `shortcuts` de macOS para firmar.", file=sys.stderr)
         return 1
     except subprocess.CalledProcessError as e:
         print(f"error: `shortcuts sign` falló ({e.returncode}).", file=sys.stderr)
         return e.returncode
-    finally:
-        unsigned.unlink(missing_ok=True)
 
-    # El temporal nace en 600 y `shortcuts sign` hereda esos permisos: sin esto
-    # el archivo queda ilegible para el servidor web y la descarga da 403.
-    args.out.chmod(0o644)
-
-    print(f"firmado ({args.mode}): {args.out}  [{args.out.stat().st_size} bytes]")
-    print(f"apunta a: {args.base_url.rstrip('/')}/registrar?source=shortcut&text=...")
+    print(f"apuntan a: {args.base_url.rstrip('/')}/registrar")
     return 0
 
 
