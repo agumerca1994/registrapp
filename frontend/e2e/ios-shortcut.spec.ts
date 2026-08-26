@@ -39,7 +39,10 @@ test("las instrucciones del Atajo se muestran sólo en iPhone", async ({ browser
   await expect(
     onPhone.getByRole("heading", { name: /Compartir un comprobante desde el iPhone/ })
   ).toBeVisible();
-  await expect(onPhone.getByText(/Extraer texto de la imagen/)).toBeVisible();
+  // El camino que se ofrece primero es la descarga; los pasos manuales quedan
+  // plegados detrás, así que ese texto NO tiene que estar visible de entrada.
+  await expect(onPhone.getByRole("link", { name: /Descargar el atajo/ })).toBeVisible();
+  await expect(onPhone.getByText(/Extraer texto de la imagen/)).toHaveCount(0);
   await iphone.close();
 
   // En Android la app aparece sola en el menú de compartir, así que estas
@@ -49,4 +52,31 @@ test("las instrucciones del Atajo se muestran sólo en iPhone", async ({ browser
   await elsewhere.goto("/settings");
   await expect(elsewhere.getByText(/Compartir un comprobante desde el iPhone/)).toHaveCount(0);
   await desktop.close();
+});
+
+test("el archivo del atajo se descarga firmado", async ({ browser }) => {
+  const iphone = await browser.newContext({
+    ...devices["iPhone 14"],
+    storageState: "e2e/.auth/user.json",
+  });
+  const page = await iphone.newPage();
+  await page.goto("/settings");
+  await expect(page.getByRole("link", { name: /Descargar el atajo/ })).toBeVisible();
+
+  const res = await page.request.get("/atajos/registrar-gasto.shortcut");
+  expect(res.status()).toBe(200);
+  // `AEA1` es Apple Encrypted Archive: el formato de un atajo **firmado**. Sin
+  // firma, iOS 15+ sólo lo importa si el usuario activa "Permitir atajos no
+  // fiables" en Ajustes, que es un interruptor global que no se le puede pedir
+  // a nadie. Si este assert se cae, la descarga dejó de servir para algo.
+  const body = await res.body();
+  expect(body.subarray(0, 4).toString()).toBe("AEA1");
+
+  // Los pasos manuales quedan como respaldo, plegados: son once y compiten con
+  // el botón, que es lo que casi todo el mundo debería usar.
+  await expect(page.getByText(/Abrí la app/)).toHaveCount(0);
+  await page.getByRole("button", { name: /Armalo a mano/ }).click();
+  await expect(page.getByText(/Abrí la app/)).toBeVisible();
+
+  await iphone.close();
 });

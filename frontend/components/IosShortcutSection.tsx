@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Smartphone } from "lucide-react";
+import { ChevronDown, Download, Smartphone } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -36,6 +36,7 @@ export function IosShortcutSection() {
   // Sin esto, el HTML del servidor y el del cliente difieren y React tira un
   // error de hidratación. Es el mismo apaño que usan los gráficos.
   const [mounted, setMounted] = useState(false);
+  const [manual, setManual] = useState(false);
   const [origin, setOrigin] = useState("");
 
   useEffect(() => {
@@ -64,6 +65,35 @@ export function IosShortcutSection() {
         gasto se cargue casi solo. El texto lo lee el propio iPhone.
       </p>
 
+      {/* El camino rápido. El archivo va firmado con `shortcuts sign --mode
+          anyone` (ver scripts/build-ios-shortcut.py): sin firma, iOS 15+ exige
+          activar "Permitir atajos no fiables" en Ajustes, que es un
+          interruptor global y escondido que no se le puede pedir a nadie. */}
+      <a
+        href="/atajos/registrar-gasto.shortcut"
+        download="Registrar gasto.shortcut"
+        className="flex items-center justify-center gap-2 w-full rounded-full border-2 border-ink bg-primary text-primary-foreground px-4 py-3 text-sm font-medium shadow-chip transition-transform active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+      >
+        <Download className="w-4 h-4" />
+        Descargar el atajo
+      </a>
+      <p className="text-[11px] text-muted-foreground -mt-1">
+        Se abre en la app <strong>Atajos</strong> y sólo tenés que tocar{" "}
+        <strong>Añadir atajo</strong>. Si en vez de abrirse te lo guarda en{" "}
+        <strong>Archivos</strong>, tocalo desde ahí.
+      </p>
+
+      <button
+        type="button"
+        onClick={() => setManual(v => !v)}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+      >
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${manual ? "rotate-180" : ""}`} />
+        {manual ? "Ocultar los pasos manuales" : "¿No te funcionó? Armalo a mano"}
+      </button>
+
+      {manual && (
+        <div className="space-y-4 border-l-2 border-border pl-4">
       <div className="space-y-2">
         <p className="text-xs font-medium text-muted-foreground">
           1. Copiá esta dirección (la vas a necesitar en el paso 7)
@@ -117,6 +147,9 @@ export function IosShortcutSection() {
         </li>
         <li>Guardá con <strong>Listo</strong>.</li>
       </ol>
+
+        </div>
+      )}
 
       <div className="rounded-lg bg-accent/60 px-3 py-2.5 space-y-1">
         <p className="text-xs font-medium text-foreground">Cómo se usa</p>
