@@ -13,7 +13,7 @@ from starlette.routing import Route
 from app.routers import (
     auth, income, expenses, macro, dashboard, mortgage,
     shared_expenses, whatsapp, credit_cards, contacts, reminders, currency,
-    notifications, directory,
+    notifications, directory, receipts,
 )
 from app.routers.internal_logs import router as internal_logs_router
 from app.core.config import settings
@@ -195,6 +195,7 @@ def _is_expected_auth_noise(request: Request, response) -> bool:
 app.include_router(auth.router)
 app.include_router(income.router)
 app.include_router(expenses.router)
+app.include_router(receipts.router)
 app.include_router(macro.router)
 app.include_router(dashboard.router)
 app.include_router(mortgage.router)
