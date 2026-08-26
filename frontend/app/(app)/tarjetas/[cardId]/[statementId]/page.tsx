@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, Fragment, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
-import { formatARS, formatDate, formatUSD, parseAmount, getErrorMessage, pickCategoryColor, foldText } from "@/lib/utils";
+import { formatARS, formatDate, formatUSD, parseAmount, getErrorMessage, pickCategoryColor, foldText, cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, ChevronLeft, X, ExternalLink, Users2, SlidersHorizontal } from "lucide-react";
+import { Plus, ChevronLeft, X, ExternalLink, Users2, SlidersHorizontal, MoreVertical, Trash2 } from "lucide-react";
 import { Card as UiCard } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { FIELD, SelectField, DateField } from "@/components/ui/form";
 import { ParticipantPicker, type PickedParticipant } from "@/components/ParticipantPicker";
@@ -53,20 +54,84 @@ const EMPTY_ITEM = {
   currency: "ARS" as "ARS" | "USD",
 };
 
-function itemTypeBadge(item: CardItem) {
-  if (item.item_type === "single") return null;
-  if (item.item_type === "recurring") return (
-    <Chip tone="violet">Recurrente</Chip>
-  );
-  if (item.item_type === "installment") {
+// Los chips de una fila. Un pago unico no lleva ninguno: marcar lo normal no
+// informa nada y deja la columna llena de ruido; el chip se reserva para lo
+// que cambia como hay que leer el gasto (cuotas, recurrencia, reparto).
+// `compact` es la version de mobile, donde los chips van dentro de la columna
+// de descripcion: al tamano normal dos chips no entran en la misma linea y
+// cada fila crecia dos renglones.
+function itemChips(item: CardItem, compact = false): ReactNode[] {
+  const size = compact ? "px-2 py-0.5 text-[11px]" : "";
+  const chips: ReactNode[] = [];
+  if (item.item_type === "recurring") {
+    chips.push(<Chip key="tipo" tone="violet" className={size}>Recurrente</Chip>);
+  } else if (item.item_type === "installment") {
     const isChild = !!item.installment_group_id;
-    return (
-      <Chip tone={isChild ? "amber" : "violet"}>
+    chips.push(
+      <Chip key="tipo" tone={isChild ? "amber" : "violet"} className={size}>
         Cuota {item.installment_number}/{item.installment_count}
       </Chip>
     );
   }
-  return null;
+  if (item.shared_expense_id) {
+    chips.push(<Chip key="compartido" tone="emerald" className={size}>Compartido</Chip>);
+  }
+  return chips;
+}
+
+const MENU_ITEM =
+  "flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full outline-none cursor-pointer";
+
+// Las acciones de la fila viven detras del menu: son tres, dos dependen del
+// tipo de item, y sueltas en la fila corrian la columna del monto segun que
+// item fuera. "Ver original" y "Eliminar" son excluyentes por el backend: una
+// cuota hija responde 400 ("Para eliminar, ve al resumen de la cuota 1").
+function ItemActionsMenu({ item, onShare, onDelete, onOriginal }: {
+  item: CardItem;
+  onShare: () => void;
+  onDelete: () => void;
+  onOriginal: () => void;
+}) {
+  const isChild = !!item.installment_group_id;
+  const shared = !!item.shared_expense_id;
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button title="Acciones" aria-label={`Acciones de ${item.description}`}
+          className="p-1.5 rounded-lg text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors outline-none">
+          <MoreVertical className="w-4 h-4" />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content align="end" sideOffset={4}
+          className="bg-card border rounded-xl shadow-lg p-1 w-52 z-50">
+          {isChild ? (
+            <DropdownMenu.Item asChild>
+              <button onClick={onOriginal} className={MENU_ITEM}>
+                <ExternalLink className="w-4 h-4 text-muted-foreground" /> Ver original
+              </button>
+            </DropdownMenu.Item>
+          ) : (
+            <>
+              <DropdownMenu.Item asChild disabled={shared}>
+                <button onClick={onShare} disabled={shared}
+                  className={cn(MENU_ITEM, "disabled:cursor-default disabled:text-muted-foreground disabled:hover:bg-transparent")}>
+                  <Users2 className={`w-4 h-4 ${shared ? "text-primary" : "text-muted-foreground"}`} />
+                  {shared ? "Ya compartido" : "Compartir gasto"}
+                </button>
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator className="h-px bg-border my-1" />
+              <DropdownMenu.Item asChild>
+                <button onClick={onDelete} className={cn(MENU_ITEM, "text-destructive")}>
+                  <Trash2 className="w-4 h-4" /> Eliminar gasto
+                </button>
+              </DropdownMenu.Item>
+            </>
+          )}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
 }
 
 
@@ -813,56 +878,75 @@ export default function StatementDetailPage() {
         </FilterBar>
       )}
 
-      {/* Items list */}
-      <UiCard className="p-0 md:p-0 divide-y">
+      {/* Items list — tabla de cuatro columnas: descripcion | chips | monto |
+          menu. Las columnas se declaran en la grilla del contenedor y no en
+          cada fila, que es lo unico que hace que monto y menu queden
+          alineados entre filas aunque los chips de cada una midan distinto.
+          En mobile la columna de chips se apaga y los chips bajan dentro de
+          la descripcion — el mismo pliegue que usa la fecha en Egresos, sin
+          el cual el monto fijo deja la descripcion en dos palabras. */}
+      <UiCard className="p-0 md:p-0">
         {statement.items.length === 0 ? (
           <p className="p-6 text-sm text-muted-foreground">No hay items en este resumen.</p>
         ) : visibleItems.length === 0 ? (
           <p className="p-6 text-sm text-muted-foreground">Ningún item coincide con la búsqueda/filtro.</p>
         ) : (
-          visibleItems.map((item) => (
-            <div key={item.id} className="flex items-center gap-2 px-4 py-3">
-              <button
-                onClick={() => item.installment_group_id
-                  ? router.push(`/tarjetas/${cardId}/${item.installment_root_statement_id}`)
-                  : setEditItem(item)
-                }
-                className="flex items-center gap-2 flex-1 min-w-0 text-left"
-              >
-                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.category.color || "#6366f1" }} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium text-foreground truncate">{item.description}</span>
-                    {itemTypeBadge(item)}
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] px-4">
+            {visibleItems.map((item, idx) => {
+              const chips = itemChips(item);
+              // Las celdas se estiran a la altura de la fila (sin items-center
+              // en la grilla), asi el borde superior de las cuatro cae en la
+              // misma linea y el separador es uno solo.
+              const cell = `flex items-center py-3 ${idx > 0 ? "border-t" : ""}`;
+              const openOriginal = () => router.push(`/tarjetas/${cardId}/${item.installment_root_statement_id}`);
+              return (
+                <Fragment key={item.id}>
+                  <button
+                    onClick={() => item.installment_group_id ? openOriginal() : setEditItem(item)}
+                    className={`${cell} gap-2 min-w-0 pr-3 text-left`}
+                  >
+                    {/* Alineada con el titulo, no con el centro de la celda:
+                        con los chips abajo en mobile la fila crece y la
+                        pelotita quedaba flotando a la altura de un chip. */}
+                    <div className="w-2.5 h-2.5 rounded-full shrink-0 self-start mt-[5px]" style={{ backgroundColor: item.category.color || "#6366f1" }} />
+                    <div className="flex-1 min-w-0">
+                      <span className="block text-sm font-medium text-foreground truncate">{item.description}</span>
+                      <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5">
+                        <span className="min-w-0 text-xs text-muted-foreground/70 truncate">{item.category.name}</span>
+                        <span className="text-xs text-muted-foreground/40">|</span>
+                        {/* El anio de dos digitos solo en mobile: con la fecha
+                            completa, la categoria se quedaba en tres letras. */}
+                        <span className="text-xs text-muted-foreground/70 shrink-0 sm:hidden">{formatDate(item.item_date).replace(/\/\d{2}(\d{2})$/, "/$1")}</span>
+                        <span className="text-xs text-muted-foreground/70 shrink-0 hidden sm:inline">{formatDate(item.item_date)}</span>
+                      </div>
+                      {chips.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1 mt-1.5 sm:hidden">{itemChips(item, true)}</div>
+                      )}
+                    </div>
+                  </button>
+                  {/* Hasta tres chips: crece con el contenido, con el tope
+                      puesto para que no se coma la descripcion. */}
+                  <div className={`${cell} hidden sm:flex flex-wrap justify-end gap-1 pr-3 max-w-[17rem]`}>{chips}</div>
+                  {/* Ancho fijo de 18ch, el mismo de Egresos: a 14px son 166px y
+                      "$ 999.999.999.999,99" mide 154, asi que el maximo entra
+                      entero. En mobile el cuerpo baja a 12px — 143px de ancho,
+                      donde ese mismo maximo mide 132 — porque a 14px la columna
+                      se llevaba media pantalla y dejaba la descripcion en 126px. */}
+                  <div className={`${cell} justify-end pr-1 sm:pr-2`}>
+                    <span className="w-[18ch] text-xs sm:text-sm font-semibold text-rose-600 text-right truncate">{item.currency === "USD" ? formatUSD(item.amount) : formatARS(item.amount)}</span>
                   </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs text-muted-foreground/70">{item.category.name}</span>
-                    <span className="text-xs text-muted-foreground/40">|</span>
-                    <span className="text-xs text-muted-foreground/70">{formatDate(item.item_date)}</span>
+                  <div className={`${cell} justify-end`}>
+                    <ItemActionsMenu
+                      item={item}
+                      onShare={() => setShareItem(item)}
+                      onDelete={() => setDeleteItem(item)}
+                      onOriginal={openOriginal}
+                    />
                   </div>
-                </div>
-              </button>
-              <span className="w-[18ch] shrink-0 text-sm font-semibold text-rose-600 text-right truncate">{item.currency === "USD" ? formatUSD(item.amount) : formatARS(item.amount)}</span>
-              {!item.installment_group_id && (
-                <button
-                  onClick={() => !item.shared_expense_id && setShareItem(item)}
-                  title={item.shared_expense_id ? "Ya compartido" : "Compartir gasto"}
-                  className={`p-1.5 rounded-lg transition-colors shrink-0 ${
-                    item.shared_expense_id ? "text-primary cursor-default" :
-                    "text-muted-foreground/40 hover:text-primary hover:bg-accent"
-                  }`}
-                >
-                  <Users2 className="w-4 h-4" />
-                </button>
-              )}
-              {item.installment_group_id && (
-                <span className="flex items-center gap-1 text-xs text-primary shrink-0 px-1">
-                  <ExternalLink className="w-3 h-3" />
-                  <span className="hidden sm:inline">Original</span>
-                </span>
-              )}
-            </div>
-          ))
+                </Fragment>
+              );
+            })}
+          </div>
         )}
         {visibleItems.length > 0 && (() => {
           const arsTotal = visibleItems.filter(i => i.currency !== "USD").reduce((s, i) => s + Number(i.amount), 0);
@@ -874,7 +958,7 @@ export default function StatementDetailPage() {
           const fullArs = statement.items.filter(i => i.currency !== "USD").reduce((s, i) => s + Number(i.amount), 0);
           const fullUsd = statement.items.filter(i => i.currency === "USD").reduce((s, i) => s + Number(i.amount), 0);
           return (
-            <div className="flex items-center justify-between px-4 py-3 bg-muted rounded-b-2xl flex-wrap gap-1">
+            <div className="flex items-center justify-between px-4 py-3 bg-muted border-t rounded-b-2xl flex-wrap gap-1">
               <div className="flex flex-col gap-0.5">
                 <span className="text-sm font-medium text-foreground">
                   {filtering ? `Total filtrado (${visibleItems.length} de ${statement.items.length})` : "Total"}
