@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -23,6 +24,7 @@ import {
   SummaryFigure, ChainRow, SummaryTotal,
 } from "@/components/ui/summary-card";
 import { Chip } from "@/components/ui/chip";
+import { Fab } from "@/components/ui/fab";
 import { Button } from "@/components/ui/button";
 
 const DASHBOARD_TOUR_STEPS: Step[] = [
@@ -243,6 +245,7 @@ function PieCustomTooltip({ active, payload, formatValue = formatARS }: any) {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -729,6 +732,18 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* La única puerta a /registrar que funciona en todos lados.
+          Los `shortcuts` del manifest (mantener apretado el ícono) sólo
+          existen en Android, y la hoja de compartir tampoco existe en iOS: sin
+          esto, en un iPhone la pantalla de alta rápida es inalcanzable salvo
+          tipeando la URL. Va en el dashboard porque es el `start_url`, o sea
+          lo primero que se ve al abrir la app.
+
+          Es un `Fab` y no un botón dentro del contenido a propósito: en el
+          teléfono el dashboard scrollea, y un botón que se va de pantalla no
+          sirve para la acción principal de la app. */}
+      <Fab label="Registrar gasto" data-tour="dashboard-registrar"
+        onClick={() => router.push("/registrar?source=quick")} />
     </div>
   );
 }
