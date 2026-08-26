@@ -12,7 +12,7 @@ from app.core.firebase import get_current_user
 from app.services import contacts as contacts_service
 from app.services import notify_shared, participants
 from app.models.user import User
-from app.models.expense import ExpenseEntry, ExpenseCategory
+from app.models.expense import EXPENSE_SOURCE_CREDIT_CARD, ExpenseEntry, ExpenseCategory
 from app.models.credit_card import CreditCard, CreditCardStatement, CreditCardItem
 from app.schemas.credit_card import (
     CreditCardCreate, CreditCardUpdate, CreditCardOut,
@@ -111,6 +111,7 @@ async def _create_expense_entry(
         payment_method="tarjeta_credito",
         entity=card.bank,
         currency=currency,
+        source=EXPENSE_SOURCE_CREDIT_CARD,
     )
     db.add(entry)
     await db.flush()

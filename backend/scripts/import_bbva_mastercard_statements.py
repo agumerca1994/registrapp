@@ -396,12 +396,13 @@ async def _get_or_create_usd_category(session, tenant_id: int) -> int:
 
 
 async def _create_expense_entry(session, card, item_date, amount, description, category_id, tenant_id, user_id, currency):
-    from app.models.expense import ExpenseEntry
+    from app.models.expense import EXPENSE_SOURCE_IMPORT, ExpenseEntry
 
     entry = ExpenseEntry(
         tenant_id=tenant_id, user_id=user_id, category_id=category_id,
         amount=amount, description=description, expense_date=item_date,
         payment_method="tarjeta_credito", entity=card.bank, currency=currency,
+        source=EXPENSE_SOURCE_IMPORT,
     )
     session.add(entry)
     await session.flush()

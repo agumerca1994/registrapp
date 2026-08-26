@@ -1,4 +1,4 @@
-from datetime import date as _date
+from datetime import date as _date, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -9,14 +9,17 @@ from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.firebase import get_current_user
 from app.models.user import User
-from app.models.expense import ExpenseCategory, ExpenseEntry
+from app.models.expense import EXPENSE_SOURCE_MANUAL, ExpenseCategory, ExpenseEntry
 from app.models.mortgage import MortgageRecord
 from app.models.shared_expense import SharedExpenseSplit
 from app.services.currency import get_or_create_usd_category
 from app.services.search import fold, fold_term
+from app.services import category_suggest
 from app.schemas.expense import (
     ExpenseCategoryCreate, ExpenseCategoryOut,
     ExpenseEntryCreate, ExpenseEntryUpdate, ExpenseEntryOut,
+    CategorySuggestionOut,
+    RecentCategoryOut,
 )
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
@@ -87,6 +90,81 @@ SORT_COLUMNS = {
     "amount": [ExpenseEntry.currency, ExpenseEntry.amount],
 }
 
+
+
+# Rutas literales antes que cualquier "/categories/{algo}" que se agregue
+# después: FastAPI resuelve por orden de declaración y un path param las
+# comería sin dar error, sólo devolviendo 422 al azar.
+
+@router.get("/categories/recent", response_model=list[RecentCategoryOut])
+async def recent_categories(
+    limit: int = Query(8, ge=1, le=30),
+    days: int = Query(90, ge=1, le=730),
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Las categorías más usadas del hogar, para los chips de /registrar.
+
+    Es un LEFT JOIN y no un INNER a propósito: un hogar recién creado tiene
+    categorías y todavía ningún gasto, y una fila de chips vacía en la pantalla
+    de alta rápida se lee como que la pantalla falló, no como que no hay datos.
+    Con LEFT JOIN aparecen igual, ordenadas por nombre.
+    """
+    user = await _get_db_user(firebase_user, db)
+    since = _date.today() - timedelta(days=days)
+
+    used = func.count(ExpenseEntry.id)
+    last_used = func.max(ExpenseEntry.expense_date)
+    stmt = (
+        select(ExpenseCategory.id, ExpenseCategory.name, ExpenseCategory.color,
+               used.label("use_count"))
+        .select_from(ExpenseCategory)
+        .outerjoin(
+            ExpenseEntry,
+            (ExpenseEntry.category_id == ExpenseCategory.id)
+            & (ExpenseEntry.expense_date >= since),
+        )
+        .where(ExpenseCategory.tenant_id == user.tenant_id)
+        # Agrupar por columnas planas. Si alguna vez se agrega acá un bucket
+        # date_trunc(), tiene que ir .group_by(text("1")) — asyncpg le asigna
+        # índices $N distintos al SELECT y al GROUP BY y Postgres lo rechaza.
+        .group_by(ExpenseCategory.id, ExpenseCategory.name, ExpenseCategory.color)
+        .order_by(used.desc(), last_used.desc().nullslast(), ExpenseCategory.name)
+        .limit(limit)
+    )
+    rows = (await db.execute(stmt)).all()
+    return [
+        RecentCategoryOut(id=r.id, name=r.name, color=r.color, use_count=r.use_count)
+        for r in rows
+    ]
+
+
+@router.get("/categories/suggest", response_model=CategorySuggestionOut | None)
+async def suggest_category_for(
+    description: str = Query(..., min_length=1, max_length=255),
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Categoría probable para una descripción, o `null`.
+
+    **No la llames por tecleo.** Va on-blur del campo descripción o cuando
+    vuelve el lector de comprobantes; colgada del onChange convierte una
+    consulta por gasto en una por letra.
+
+    Devuelve 200 con `null` cuando no hay nada parecido, nunca 404: "no
+    encontré" es una respuesta normal acá, y un código de estado distinto
+    obligaría a cada llamador a tratar el caso común como un error.
+    """
+    user = await _get_db_user(firebase_user, db)
+    hit = await category_suggest.suggest_category(db, user.tenant_id, description)
+    if hit is None:
+        return None
+    return CategorySuggestionOut(
+        category_id=hit.category_id,
+        category_name=hit.category_name,
+        score=round(hit.score, 4),
+        matched_description=hit.matched_description,
+    )
 
 @router.get("/entries", response_model=list[ExpenseEntryOut])
 async def list_entries(
@@ -173,9 +251,22 @@ async def create_entry(
             raise HTTPException(status_code=422, detail="category_id es requerido para gastos en ARS")
     else:
         await assert_owns_category(data["category_id"], user.tenant_id, db)
-    entry = ExpenseEntry(**data, tenant_id=user.tenant_id, user_id=user.id)
+    # `source` viene del body pero ya pasó por el validador de
+    # `ExpenseEntryCreate`, que sólo deja pasar las superficies de alta por
+    # usuario y manda cualquier otra cosa a "manual". Un cliente no puede
+    # reclamar desde acá que un gasto lo generó el importador o una tarjeta.
+    data["source"] = data.get("source") or EXPENSE_SOURCE_MANUAL
+    entry = ExpenseEntry(
+        **data,
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+    )
     db.add(entry)
     await db.commit()
+    # El corpus de sugerencias acaba de cambiar. Es best-effort: si alguien
+    # agrega un escritor y se olvida de esto, el gasto nuevo tarda hasta
+    # CACHE_TTL en poder ser sugerido — nunca produce un dato incorrecto.
+    category_suggest.invalidate(user.tenant_id)
     result = await db.scalar(
         select(ExpenseEntry)
         .where(ExpenseEntry.id == entry.id)
@@ -201,6 +292,7 @@ async def update_entry(
     for field, value in updates.items():
         setattr(entry, field, value)
     await db.commit()
+    category_suggest.invalidate(user.tenant_id)
     result = await db.scalar(
         select(ExpenseEntry).where(ExpenseEntry.id == entry_id).options(selectinload(ExpenseEntry.category))
     )
@@ -235,3 +327,4 @@ async def delete_entry(
 
     await db.delete(entry)
     await db.commit()
+    category_suggest.invalidate(user.tenant_id)

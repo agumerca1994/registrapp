@@ -17,7 +17,7 @@ from app.services import contacts as contacts_service
 from app.services import notify_shared, participants, push, whatsapp
 from app.models.contact import TenantContact
 from app.models.credit_card import CreditCardItem
-from app.models.expense import ExpenseCategory, ExpenseEntry
+from app.models.expense import EXPENSE_SOURCE_SHARED_SPLIT, ExpenseCategory, ExpenseEntry
 from app.models.shared_expense import SharedExpense, SharedExpenseSplit
 from app.models.user import User
 from app.schemas.shared_expense import (
@@ -247,6 +247,7 @@ async def _accept_split(user: User, shared: SharedExpense, split: SharedExpenseS
         description=shared.title,
         expense_date=shared.expense_date,
         notes=f"Gasto compartido #{shared.id}",
+        source=EXPENSE_SOURCE_SHARED_SPLIT,
     )
     db.add(entry)
     await db.flush()
@@ -377,6 +378,7 @@ async def create_shared_expense(
                 description=body.title,
                 expense_date=body.expense_date,
                 notes=f"Gasto compartido #{shared.id}",
+                source=EXPENSE_SOURCE_SHARED_SPLIT,
             )
             db.add(entry)
             await db.flush()

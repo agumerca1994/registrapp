@@ -68,6 +68,42 @@ export function FieldLabel({ children, hint }: { children: React.ReactNode; hint
 }
 
 /**
+ * ARS / USD, el par de píldoras segmentadas que abre todo formulario de plata.
+ *
+ * Existe como componente y no como ocho líneas copiadas porque ya estaba
+ * inline en `/expenses`, en el alta de ítems de tarjeta y en `/divisas`, y la
+ * regla que este repo aprendió tres veces (`resolve_participant`,
+ * `ParticipantPicker`, `services/currency`) es que lo que varía entre pantallas
+ * es un parámetro, no una segunda implementación. Una cuarta copia en
+ * `/registrar` habría sido la que se desincroniza.
+ *
+ * La moneda es del formulario entero, no de un campo: por eso va arriba de
+ * todo y por eso ningún label lleva "$" — el símbolo pegado a una etiqueta
+ * miente en cuanto el usuario toca USD.
+ */
+export function CurrencyToggle({ value, onChange, className = "" }: {
+  value: "ARS" | "USD";
+  onChange: (value: "ARS" | "USD") => void;
+  className?: string;
+}) {
+  return (
+    <div className={`flex gap-2 ${className}`} role="group" aria-label="Moneda">
+      {(["ARS", "USD"] as const).map(cur => (
+        <button key={cur} type="button" aria-pressed={value === cur}
+          onClick={() => onChange(cur)}
+          className={`flex-1 py-1.5 text-xs rounded-full border-2 font-medium transition-colors ${
+            value === cur
+              ? "border-ink bg-primary text-primary-foreground"
+              : "border-transparent text-muted-foreground hover:bg-accent"
+          }`}>
+          {cur === "ARS" ? "$ ARS" : "U$D"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
  * The app's select: a form-shaped trigger over the shared `Listbox`.
  * `placeholder` becomes the empty option and stays grey until something is
  * chosen, so an unset field never reads as a value the user picked.

@@ -240,7 +240,7 @@ async def backfill_shared_invite_claims(
     for splits whose WhatsApp invite never arrived (bug already fixed) but whose
     identity is confidently known from other records.
     """
-    from app.models.expense import ExpenseEntry
+    from app.models.expense import EXPENSE_SOURCE_SHARED_SPLIT, ExpenseEntry
     from app.models.shared_expense import SharedExpense, SharedExpenseSplit
     from app.models.user import User
     from app.routers.shared_expenses import _get_or_create_shared_category
@@ -282,6 +282,7 @@ async def backfill_shared_invite_claims(
             description=shared.title,
             expense_date=shared.expense_date,
             notes=f"Gasto compartido #{shared.id}",
+            source=EXPENSE_SOURCE_SHARED_SPLIT,
         )
         db.add(entry)
         await db.flush()

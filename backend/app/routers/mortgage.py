@@ -10,7 +10,7 @@ from app.core.database import get_db, AsyncSessionLocal
 from app.core.firebase import get_current_user
 from app.models.user import User
 from app.models.mortgage import MortgageLoan, MortgageRecord
-from app.models.expense import ExpenseCategory, ExpenseEntry
+from app.models.expense import EXPENSE_SOURCE_MORTGAGE, ExpenseCategory, ExpenseEntry
 from app.models.macro_variable import MacroVariable
 from app.schemas.mortgage import (
     MortgageLoanCreate, MortgageLoanUpdate, MortgageLoanOut,
@@ -159,6 +159,7 @@ async def _sync_loan_cuotas(loan: MortgageLoan, user_id: int, db: AsyncSession) 
                     description=f"Cuota hipotecaria{' ' + loan.description if loan.description else ''}",
                     expense_date=payment_date,
                     notes=f"{uva_units} UVAs" if uva_units else None,
+                    source=EXPENSE_SOURCE_MORTGAGE,
                 )
                 db.add(expense)
                 await db.flush()

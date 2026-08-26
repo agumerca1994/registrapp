@@ -11,7 +11,7 @@ import { Card as UiCard } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { FIELD, SelectField, DateField } from "@/components/ui/form";
+import { CurrencyToggle, FIELD, SelectField, DateField } from "@/components/ui/form";
 import { ParticipantPicker, type PickedParticipant } from "@/components/ParticipantPicker";
 import {
   FilterBar, FilterRow, FilterPanel, SortChip, FilterChip, PillSelect,
@@ -736,15 +736,9 @@ export default function StatementDetailPage() {
           <p className="text-sm font-medium text-foreground">Nuevo item</p>
 
           {/* Currency toggle — always at top */}
-          <div className="flex gap-2">
-            {(["ARS", "USD"] as const).map(cur => (
-              <button key={cur} type="button"
-                onClick={() => setForm(p => ({ ...p, currency: cur, category_id: cur === "USD" ? "" : p.category_id, item_type: cur === "USD" ? "single" : p.item_type }))}
-                className={`flex-1 py-1.5 text-xs rounded-full border-2 font-medium transition-colors ${form.currency === cur ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent"}`}>
-                {cur === "ARS" ? "$ ARS" : "U$D"}
-              </button>
-            ))}
-          </div>
+          <CurrencyToggle
+            value={form.currency}
+            onChange={cur => setForm(p => ({ ...p, currency: cur, category_id: cur === "USD" ? "" : p.category_id, item_type: cur === "USD" ? "single" : p.item_type }))} />
           {form.currency === "USD" && (
             <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
               Se agrega automáticamente a la categoría <strong>Consumo en dólares</strong>

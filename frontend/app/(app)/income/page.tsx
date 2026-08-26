@@ -18,7 +18,7 @@ import type { Step } from "react-joyride";
 import { Card } from "@/components/ui/card";
 import { Fab } from "@/components/ui/fab";
 import { Button } from "@/components/ui/button";
-import { FIELD, FormGrid, SelectField, DateField } from "@/components/ui/form";
+import { CurrencyToggle, FIELD, FormGrid, SelectField, DateField } from "@/components/ui/form";
 
 const INCOME_TOUR_STEPS: Step[] = [
   {
@@ -637,15 +637,9 @@ export default function IncomePage() {
           <form onSubmit={handleSubmit} className="space-y-3">
           {/* Same ARS/USD toggle position as the expense form. A USD income
               also adds to the dollar holding, not just to the USD balance. */}
-          <div className="flex gap-2 mb-1">
-            {(["ARS", "USD"] as const).map(cur => (
-              <button key={cur} type="button"
-                onClick={() => setForm(p => ({ ...p, currency: cur }))}
-                className={`flex-1 py-1.5 text-xs rounded-full border-2 font-medium transition-colors ${form.currency === cur ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent"}`}>
-                {cur === "ARS" ? "$ ARS" : "U$D"}
-              </button>
-            ))}
-          </div>
+          <CurrencyToggle className="mb-1"
+            value={form.currency}
+            onChange={cur => setForm(p => ({ ...p, currency: cur }))} />
           {form.currency === "USD" && (
             <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
               Se suma a tu <strong>tenencia en dólares</strong> y al balance en USD, no al balance en pesos.

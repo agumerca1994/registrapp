@@ -10,6 +10,7 @@ import { PrivacyProvider } from "@/contexts/PrivacyContext";
 import { PendingSharedProvider } from "@/contexts/PendingSharedContext";
 import { PendingSharedDialog } from "@/components/PendingSharedDialog";
 import { syncPushToken } from "@/lib/push";
+import { stashPendingRoute, takePendingRoute } from "@/lib/pending-route";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { firebaseUser, appUser, loading } = useAuth();
@@ -17,9 +18,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (loading) return;
-    if (!firebaseUser) router.replace("/login");
-    else if (!appUser || appUser.whatsapp_gate_pending) router.replace("/onboarding");
+    if (!firebaseUser) {
+      // Guardar a dónde iba antes de mandarlo a loguearse. Sin esto, un deep
+      // link con datos en el querystring —que es exactamente lo que produce la
+      // hoja de compartir y el Atajo de iOS— llega, rebota a /login y vuelve al
+      // dashboard con el gasto perdido: el usuario compartió un comprobante y
+      // no pasó nada, sin ningún error que lo explique.
+      //
+      // Es la misma forma que `pendingInviteToken`, que existe por el mismo
+      // motivo. sessionStorage y no localStorage a propósito: si esto sobrevive
+      // al cierre del navegador, la próxima sesión arranca saltando a una
+      // pantalla que el usuario ya no pidió.
+      stashPendingRoute();
+      router.replace("/login");
+    } else if (!appUser || appUser.whatsapp_gate_pending) {
+      router.replace("/onboarding");
+    }
   }, [firebaseUser, appUser, loading, router]);
+
+  // Y al volver con sesión, retomarlo. Se consume una sola vez.
+  useEffect(() => {
+    if (!appUser || appUser.whatsapp_gate_pending) return;
+    const target = takePendingRoute();
+    if (target) router.replace(target);
+  }, [appUser, router]);
 
   // FCM rota el token cuando quiere y deja de entregar al viejo sin avisar. Si
   // nadie lo vuelve a registrar, los avisos se cortan en algún momento y no hay

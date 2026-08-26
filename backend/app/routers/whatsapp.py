@@ -12,9 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.expense import ExpenseCategory, ExpenseEntry
+from app.models.expense import EXPENSE_SOURCE_WHATSAPP, ExpenseCategory, ExpenseEntry
 from app.models.user import User
 from app.services.participants import find_user_by_phone
+from app.services import category_suggest
 
 router = APIRouter(prefix="/webhook", tags=["webhook"])
 logger = logging.getLogger(__name__)
@@ -203,9 +204,11 @@ async def whatsapp_webhook(
             amount=amount,
             description=cat_name,
             expense_date=date.today(),
+            source=EXPENSE_SOURCE_WHATSAPP,
         )
         db.add(entry)
         await db.commit()
+        category_suggest.invalidate(user.tenant_id)
     except Exception as e:
         logger.error(f"WA expense save error: {e}")
         await db.rollback()
