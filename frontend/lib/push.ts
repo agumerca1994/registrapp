@@ -3,6 +3,7 @@
 import { getApps, initializeApp } from "firebase/app";
 import { getMessaging, getToken, isSupported, onMessage } from "firebase/messaging";
 import api from "@/lib/api";
+import { ensureServiceWorker } from "@/lib/sw";
 
 /**
  * Notificaciones push (Firebase Cloud Messaging).
@@ -34,7 +35,6 @@ export type PushState =
   | "granted";
 
 const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
-const SW_PATH = "/firebase-messaging-sw.js";
 const LAST_TOKEN_KEY = "registrapp:pushToken";
 
 function firebaseConfig() {
@@ -121,15 +121,10 @@ async function messagingOrNull() {
   return getMessaging(app);
 }
 
-async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
-  if (!("serviceWorker" in navigator)) return null;
-  const cfg = firebaseConfig();
-  // La config va por query string porque el SW es un archivo estático y no ve
-  // process.env. El scope se fija en "/" para que el aviso pueda abrir
-  // cualquier ruta de la app.
-  const qs = new URLSearchParams(cfg as Record<string, string>).toString();
-  return navigator.serviceWorker.register(`${SW_PATH}?${qs}`, { scope: "/" });
-}
+// El registro se mudó a `lib/sw.ts`: el mismo service worker también recibe lo
+// que llega por la hoja de compartir, y esa parte tiene que registrarse aunque
+// nadie haya aceptado notificaciones. Dos funciones de registro produciendo la
+// misma URL era exactamente la forma de que un día dejaran de producirla.
 
 /**
  * Pide el permiso y registra el dispositivo.
@@ -156,7 +151,7 @@ export async function enablePush(): Promise<PushState> {
       return "granted";
     }
 
-    const registration = await registerServiceWorker();
+    const registration = await ensureServiceWorker();
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
       ...(registration ? { serviceWorkerRegistration: registration } : {}),

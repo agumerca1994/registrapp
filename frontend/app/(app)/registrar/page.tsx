@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { CurrencyToggle, DateField, FIELD, FieldLabel } from "@/components/ui/form";
 import CategoryChips, { type CategoryLite } from "@/components/CategoryChips";
 import NewCategoryModal from "@/components/NewCategoryModal";
+import { takeSharedPayload } from "@/lib/pending-draft";
 
 /**
  * Alta rápida: un gasto en un paso.
@@ -118,11 +119,20 @@ function RegistrarForm() {
   // usuario carga otro gasto sin recargar, el segundo ya no vino de la hoja de
   // compartir.
   const sourceRef = useRef<string>("quick");
+  // Guarda de una sola ejecución para el efecto que consume lo compartido.
+  // Ver el comentario largo abajo: no es paranoia, es un bug que se comió un
+  // comprobante entero.
+  const sharedHandled = useRef(false);
 
   // ── Prellenado por querystring ─────────────────────────────────────────────
   useEffect(() => {
     const src = params.get("source");
     if (src && SOURCE_WHITELIST.has(src)) sourceRef.current = src;
+    // La hoja de compartir de Android no manda `source` —el manifest sólo
+    // puede declarar title/text/url—, así que se infiere de su presencia.
+    else if (params.get("text") || params.get("title") || params.get("url")) {
+      sourceRef.current = "share_target";
+    }
 
     const cur = params.get("currency");
     if (cur === "USD" || cur === "ARS") setCurrency(cur);
@@ -258,6 +268,66 @@ function RegistrarForm() {
     fd.append("file", f);
     readReceipt(fd);
   };
+
+  // ── Lo que llegó por la hoja de compartir ──────────────────────────────────
+  // Dos caminos, y el orden importa. El bueno es IndexedDB: el service worker
+  // interceptó el POST de Android y dejó ahí el archivo, porque un archivo no
+  // entra en una URL. El otro es el querystring, que es lo que rescata la ruta
+  // de contención cuando el SW no estaba registrado — sólo texto.
+  //
+  // Todo se manda al lector del servidor en vez de interpretarse acá: arreglar
+  // el parseo tiene que ser un deploy, no depender de que cada persona
+  // actualice algo en su teléfono.
+  // **Corre una sola vez, y lo que lee se aplica sí o sí.** `takeSharedPayload`
+  // es una lectura *destructiva*: devuelve el comprobante y lo borra. La
+  // primera versión de esto tenía la guarda `cancelled` de manual, y con
+  // StrictMode —que en desarrollo monta, desmonta y vuelve a montar— la primera
+  // pasada consumía el comprobante, se marcaba cancelada y lo tiraba; la
+  // segunda no encontraba nada. Resultado: compartías un comprobante, la app
+  // abría, y el formulario salía vacío sin un solo error. El `ref` es lo que
+  // garantiza que el efecto se ejecute una vez sola, y por eso acá no hay
+  // ninguna guarda que pueda descartar lo ya leído.
+  useEffect(() => {
+    if (sharedHandled.current) return;
+    sharedHandled.current = true;
+
+    (async () => {
+      const payload = await takeSharedPayload();
+
+      if (payload) {
+        sourceRef.current = "share_target";
+        const fd = new FormData();
+        const file = payload.files[0];
+        if (file?.blob) {
+          fd.append("file", file.blob, file.name || "comprobante");
+        }
+        const text = [payload.title, payload.text, payload.url]
+          .filter(Boolean).join("\n").trim();
+        if (text) fd.append("text", text);
+        // El lector prioriza el texto sobre el archivo, así que si vinieron los
+        // dos gana el texto — que es más confiable que cualquier cosa que
+        // podamos sacar de un archivo.
+        if (file?.blob || text) { readReceipt(fd); return; }
+      }
+
+      const fromQuery = ["title", "text", "url"]
+        .map(k => params.get(k)).filter(Boolean).join("\n").trim();
+      if (fromQuery) {
+        const fd = new FormData();
+        fd.append("text", fromQuery);
+        readReceipt(fd);
+        return;
+      }
+
+      // La ruta de contención avisa cuando lo compartido era un archivo y se
+      // perdió en el redirect. Decirlo es mejor que abrir un formulario vacío
+      // que parece que ignoró lo que compartiste.
+      if (params.get("shared") === "lost") {
+        setReadNote("No pudimos recibir el archivo. Adjuntalo acá abajo o cargalo a mano.");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Guardar ────────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {

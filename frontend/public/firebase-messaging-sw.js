@@ -62,3 +62,93 @@ self.addEventListener("notificationclick", (event) => {
     })
   );
 });
+
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Hoja de compartir de Android (Web Share Target)
+ *
+ * Cuando alguien comparte un comprobante con RegistrApp, el sistema hace un
+ * POST multipart a /registrar/share y **el que lo recibe es este service
+ * worker**, no la página. Acá no hay forma de llamar a la API: el ID token de
+ * Firebase vive en el contexto de la página. Así que esto guarda lo compartido
+ * en IndexedDB, responde con un redirect a /registrar, y la página lo levanta
+ * y lo sube con la sesión de siempre.
+ *
+ * Tres reglas que no hay que aflojar:
+ *
+ * - **El handler es angosto**: sólo POST a esa ruta exacta. El scope es "/" y
+ *   la app no tiene historia offline; ponerse a cachear acá es cómo se shippea
+ *   un bundle viejo que después nadie puede limpiar.
+ * - **Va fuera del `if (config.projectId)`** de arriba. Si esto viviera adentro,
+ *   un registro sin config de Firebase dejaría la hoja de compartir muerta sin
+ *   ningún síntoma.
+ * - **Nunca dejar el POST sin respuesta.** Si algo falla, igual se redirige a
+ *   /registrar: quedarse sin responder deja a la persona mirando un error del
+ *   navegador después de compartir, que es el peor final posible para esto.
+ *
+ * El esquema de IndexedDB está duplicado en frontend/lib/pending-draft.ts
+ * porque este archivo es estático y no puede importar de lib/. Si cambia acá,
+ * cambia allá.
+ * ────────────────────────────────────────────────────────────────────────── */
+const SHARE_PATH = "/registrar/share";
+const SHARE_DB = "registrapp";
+const SHARE_DB_VERSION = 1;
+const SHARE_STORE = "shared";
+const SHARE_KEY = "pending";
+
+function openShareDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(SHARE_DB, SHARE_DB_VERSION);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(SHARE_STORE)) {
+        req.result.createObjectStore(SHARE_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function putSharedPayload(payload) {
+  return openShareDb().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction(SHARE_STORE, "readwrite");
+        tx.objectStore(SHARE_STORE).put(payload, SHARE_KEY);
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+      })
+  );
+}
+
+async function handleShare(request) {
+  try {
+    const form = await request.formData();
+    const files = [];
+    for (const entry of form.getAll("receipt")) {
+      if (entry && typeof entry === "object" && "name" in entry) {
+        files.push({ name: entry.name, type: entry.type, blob: entry });
+      }
+    }
+    await putSharedPayload({
+      files,
+      text: form.get("text") || "",
+      title: form.get("title") || "",
+      url: form.get("url") || "",
+      ts: Date.now(),
+    });
+  } catch (err) {
+    // Se registra y se sigue: el redirect es lo que no puede faltar.
+    console.warn("share target: no se pudo guardar lo compartido", err);
+  }
+  // URL absoluta: `Response.redirect` exige una URL válida y con una relativa
+  // puede levantar excepción, que acá significa dejar el POST sin respuesta.
+  const target = new URL("/registrar?source=share_target&shared=1", self.location.origin);
+  return Response.redirect(target.href, 303);
+}
+
+self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+  if (event.request.method !== "POST" || url.pathname !== SHARE_PATH) return;
+  event.respondWith(handleShare(event.request));
+});

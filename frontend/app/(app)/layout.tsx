@@ -10,6 +10,7 @@ import { PrivacyProvider } from "@/contexts/PrivacyContext";
 import { PendingSharedProvider } from "@/contexts/PendingSharedContext";
 import { PendingSharedDialog } from "@/components/PendingSharedDialog";
 import { syncPushToken } from "@/lib/push";
+import { ensureServiceWorker } from "@/lib/sw";
 import { stashPendingRoute, takePendingRoute } from "@/lib/pending-route";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -49,6 +50,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!appUser) return;
     syncPushToken().catch(() => {});
+  }, [appUser]);
+
+  // El service worker se registra SIEMPRE, no sólo con permiso de push. El
+  // mismo SW recibe lo que llega por la hoja de compartir de Android, y antes
+  // el registro vivía adentro de `enablePush()`: en un teléfono que había dicho
+  // que no a las notificaciones el SW no existía, así que compartir un
+  // comprobante no hacía nada — sin error, y sólo para esas personas.
+  // Es idempotente y usa la misma URL exacta que el push (ver lib/sw.ts).
+  useEffect(() => {
+    if (!appUser) return;
+    ensureServiceWorker().catch(() => {});
   }, [appUser]);
 
   if (loading || !appUser || appUser.whatsapp_gate_pending) return null;
