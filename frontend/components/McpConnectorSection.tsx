@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/utils";
-import { Check, Copy, KeyRound, Plug, Trash2 } from "lucide-react";
+import { KeyRound, Plug, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Card } from "@/components/ui/card";
 import { FIELD, SelectField } from "@/components/ui/form";
 import { Chip } from "@/components/ui/chip";
@@ -56,23 +57,6 @@ function relative(iso: string | null): string {
 
 function shortDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString("es-AR") : "—";
-}
-
-function CopyButton({ value, label = "Copiar" }: { value: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <Button
-      variant="outline"
-      onClick={() => {
-        navigator.clipboard.writeText(value);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }}
-    >
-      {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-      {copied ? "Copiado!" : label}
-    </Button>
-  );
 }
 
 export default function McpConnectorSection() {

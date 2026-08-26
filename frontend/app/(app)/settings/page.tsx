@@ -11,6 +11,7 @@ import { Copy, Check, MessageCircle, CheckCircle2, Unlink, UserPlus, Trash2 } fr
 import { COUNTRIES } from "@/lib/countries";
 import WhatsAppVerifyForm from "@/components/WhatsAppVerifyForm";
 import McpConnectorSection from "@/components/McpConnectorSection";
+import { IosShortcutSection } from "@/components/IosShortcutSection";
 import { resetAllTours } from "@/components/ProductTour";
 import { Card } from "@/components/ui/card";
 import { FIELD, SelectField } from "@/components/ui/form";
@@ -415,6 +416,8 @@ export default function SettingsPage() {
       <PushNotificationsSection />
 
       <WhatsAppSection />
+
+      <IosShortcutSection />
 
       <McpConnectorSection />
 
