@@ -199,6 +199,25 @@ export default function ExpensesPage() {
   useEffect(() => { load(); },
     [year, month, debouncedSearch, categoryFilter, currencyFilter, dateFrom, dateTo, sort, order]);
 
+  // `?nuevo=1` abre "Nuevo egreso" al llegar. Es la puerta del `+` del
+  // dashboard: cargar un gasto desde el inicio usa este mismo formulario, no una
+  // segunda pantalla de alta. La marca se borra de la URL enseguida para que
+  // recargar o volver atrás no reabra el modal.
+  //
+  // Se lee `window.location` en vez de `useSearchParams` a propósito: este
+  // último obliga a envolver la página entera en un límite de Suspense para
+  // que el build pueda prerenderizarla, y acá sólo hace falta mirar una vez.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("nuevo") !== "1") return;
+    setEditId(null);
+    setForm(newEntryForm());
+    setShowForm(true);
+    router.replace("/expenses");
+    // Sólo al montar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Tap cycle: inactive -> asc -> desc -> inactive (back to the default).
   const toggleSort = (key: SortKey) => {
     if (sort !== key) { setSort(key); setOrder("asc"); return; }

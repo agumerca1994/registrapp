@@ -732,18 +732,17 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* La única puerta a /registrar que funciona en todos lados.
-          Los `shortcuts` del manifest (mantener apretado el ícono) sólo
-          existen en Android, y la hoja de compartir tampoco existe en iOS: sin
-          esto, en un iPhone la pantalla de alta rápida es inalcanzable salvo
-          tipeando la URL. Va en el dashboard porque es el `start_url`, o sea
-          lo primero que se ve al abrir la app.
+      {/* Cargar un egreso desde el inicio, con el formulario de siempre: lleva a
+          /expenses y abre "Nuevo egreso" (ver `?nuevo=1` en esa pantalla). Hubo
+          una pantalla de alta aparte, /registrar, y se prefirió no tener dos
+          formularios para lo mismo.
 
-          Es un `Fab` y no un botón dentro del contenido a propósito: en el
-          teléfono el dashboard scrollea, y un botón que se va de pantalla no
-          sirve para la acción principal de la app. */}
+          Va en el dashboard porque es el `start_url`, lo primero que se ve al
+          abrir la app, y es un `Fab` y no un botón dentro del contenido porque
+          en el teléfono el dashboard scrollea y un botón que se va de pantalla
+          no sirve para la acción principal. */}
       <Fab label="Registrar gasto" data-tour="dashboard-registrar"
-        onClick={() => router.push("/registrar?source=quick")} />
+        onClick={() => router.push("/expenses?nuevo=1")} />
     </div>
   );
 }

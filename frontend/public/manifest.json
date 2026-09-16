@@ -26,8 +26,8 @@
     {
       "name": "Registrar gasto",
       "short_name": "Registrar",
-      "description": "Cargar un gasto en un paso",
-      "url": "/registrar?source=quick",
+      "description": "Cargar un egreso",
+      "url": "/expenses?nuevo=1",
       "icons": [
         {
           "src": "/icon",
