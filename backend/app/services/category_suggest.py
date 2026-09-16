@@ -10,8 +10,8 @@ request.
 importador la haya inventado. Es el mismo razonamiento que ya aplicaron
 `services/currency.py` y `services/participants.py`: en el momento en que dos
 pantallas necesitan la misma regla, tener dos implementaciones garantiza que una
-derive. La consumen `/registrar`, el bot de WhatsApp, el lector de comprobantes
-y —cuando exista— el importador, vía `suggest_categories_bulk`.
+derive. Hoy la consume `/registrar`; cuando exista, el importador la va a usar
+vía `suggest_categories_bulk`.
 
 Qué se puede esperar, para que nadie la sobrevenda en pantalla: acierta con
 comercios repetidos (el supermercado de siempre, las suscripciones) y no acierta
@@ -241,7 +241,7 @@ async def suggest_category(
     """La categoría del gasto histórico más parecido, o None.
 
     Ojo con dónde se llama desde el frontend: **no va por tecleo.** Dispara
-    on-blur del campo descripción y cuando vuelve el lector de comprobantes.
+    on-blur del campo descripción y cuando la descripción llega prellenada.
     Colgarla del onChange convierte una consulta por gasto en una por letra, y
     ninguna caché arregla un patrón de llamada equivocado.
     """

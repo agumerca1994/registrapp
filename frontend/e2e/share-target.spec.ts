@@ -1,7 +1,4 @@
 import { test, expect } from "@playwright/test";
-import fs from "fs";
-import os from "os";
-import path from "path";
 
 /**
  * La hoja de compartir de Android (Web Share Target).
@@ -81,56 +78,55 @@ test("el service worker se registra aunque no haya permiso de push", async ({ pa
   expect(info.script).toContain("apiKey=");
 });
 
-test("compartir texto llena el formulario", async ({ page }) => {
+/** Lo que quedó en IndexedDB para la página, o null si ya se consumió. */
+async function pendingPayload(page: import("@playwright/test").Page) {
+  return page.evaluate(() => new Promise(resolve => {
+    const req = indexedDB.open("registrapp", 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains("shared")) req.result.createObjectStore("shared");
+    };
+    req.onsuccess = () => {
+      const get = req.result.transaction("shared", "readonly").objectStore("shared").get("pending");
+      get.onsuccess = () => resolve(get.result ?? null);
+      get.onerror = () => resolve("error");
+    };
+    req.onerror = () => resolve("error");
+  }));
+}
+
+/**
+ * La app ya no lee comprobantes (se eliminó el lector, 2026-09). La hoja de
+ * compartir sigue existiendo, así que lo que se comprueba ahora es que llegar
+ * por ahí no deje a la persona a oscuras: abre el formulario, dice que hay que
+ * cargarlo a mano, y no deja lo compartido colgado en IndexedDB.
+ */
+const AVISO = /Llegaste desde un comprobante/;
+
+test("compartir texto abre el formulario y avisa que se carga a mano", async ({ page }) => {
   await page.goto("/registrar");
   await page.evaluate(async () => { await navigator.serviceWorker.ready; });
 
   await share(page, { text: RECIBO });
   await page.waitForURL(/\/registrar\?.*shared=1/);
 
-  await expect(page.getByLabel("Monto")).toHaveValue("45.000,00");
-  await expect(page.getByPlaceholder("Dónde fue")).toHaveValue("MARIA LOPEZ");
-  await expect(page.getByText("20 de agosto")).toBeVisible();
+  await expect(page.getByText(AVISO)).toBeVisible();
+  await expect(page.getByLabel("Monto")).toHaveValue("");
+  expect(await pendingPayload(page)).toBeNull();
 });
 
-test("compartir un archivo llena el formulario", async ({ page, browser }) => {
-  // Un PDF de verdad: es lo que el manifest declara aceptar y lo que emiten
-  // los bancos. Un archivo no entra en una URL, así que éste es exactamente el
-  // camino que el service worker existe para cubrir — lo deja en IndexedDB y
-  // la página lo sube con la sesión de Firebase, que el SW no tiene.
-  const ctx = await browser.newContext();
-  const tmp = await ctx.newPage();
-  await tmp.setContent(`<html><body style="font-family:sans-serif;padding:40px">
-    <h2>Comprobante de transferencia</h2>
-    <p>Importe: $ 45.000,00</p>
-    <p>Destinatario: MARIA LOPEZ</p>
-    <p>CBU: 0170099220000067797370</p>
-    <p>Fecha: 20/08/2026</p>
-  </body></html>`);
-  const pdf = await tmp.pdf({ format: "A4" });
-  await ctx.close();
-
+test("compartir un archivo abre el formulario y no lo deja colgado", async ({ page }) => {
   await page.goto("/registrar");
   await page.evaluate(async () => { await navigator.serviceWorker.ready; });
-  await page.evaluate((bytes) => {
-    const dt = new DataTransfer();
-    dt.items.add(new File([new Uint8Array(bytes)], "comprobante.pdf", { type: "application/pdf" }));
-    const form = document.createElement("form");
-    form.method = "POST";
-    form.action = "/registrar/share";
-    form.enctype = "multipart/form-data";
-    const input = document.createElement("input");
-    input.type = "file";
-    input.name = "receipt";
-    input.files = dt.files;
-    form.append(input);
-    document.body.append(form);
-    form.submit();
-  }, Array.from(pdf));
 
+  // Un archivo no entra en una URL: es el camino que el service worker cubre
+  // guardándolo en IndexedDB. Aunque ya nadie lo lea, la página lo tiene que
+  // consumir, o queda ocupando espacio hasta que vence.
+  await share(page, { file: { name: "comprobante.pdf", type: "application/pdf", body: "%PDF-1.4" } });
   await page.waitForURL(/\/registrar\?.*shared=1/);
-  await expect(page.getByLabel("Monto")).toHaveValue("45.000,00");
-  await expect(page.getByPlaceholder("Dónde fue")).toHaveValue("MARIA LOPEZ");
+
+  await expect(page.getByText(AVISO)).toBeVisible();
+  await expect(page.getByLabel("Monto")).toHaveValue("");
+  expect(await pendingPayload(page)).toBeNull();
 });
 
 test("sin service worker, la ruta de contención igual abre el formulario", async ({ page }) => {
@@ -145,8 +141,6 @@ test("sin service worker, la ruta de contención igual abre el formulario", asyn
   await share(page, { text: RECIBO });
   await page.waitForURL(/\/registrar\?/);
 
-  // Llega por querystring en vez de IndexedDB, pero llega.
   await expect(page.getByRole("heading", { name: "Registrar gasto" })).toBeVisible();
-  await expect(page.getByLabel("Monto")).toHaveValue("45.000,00");
-  await expect(page.getByPlaceholder("Dónde fue")).toHaveValue("MARIA LOPEZ");
+  await expect(page.getByText(AVISO)).toBeVisible();
 });

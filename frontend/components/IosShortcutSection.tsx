@@ -19,10 +19,14 @@ import { isIOS } from "@/lib/push";
  *
  * Dos decisiones de diseño que vale la pena no deshacer:
  *
- * - **El Atajo hace lo mínimo: extraer el texto y abrir una URL.** Todo el
- *   parseo vive del lado del servidor. Un error de parseo se arregla con un
- *   deploy; un error adentro de un Atajo ya instalado en el teléfono de otra
- *   persona no se arregla nunca.
+ * - **El Atajo hace lo mínimo: extraer el texto y abrir una URL.** Cualquier
+ *   interpretación de ese texto tiene que vivir en la app, no en el Atajo: un
+ *   error se arregla con un deploy, uno adentro de un Atajo ya instalado en el
+ *   teléfono de otra persona no se arregla nunca.
+ *
+ *   **Ojo si se reactiva:** el lector de comprobantes que interpretaba ese
+ *   texto se eliminó (2026-09). Hoy el Atajo abre /registrar con el texto en
+ *   la URL y la pantalla sólo avisa que hay que cargar el gasto a mano.
  * - **El OCR lo hace iOS, gratis y en el dispositivo.** La acción "Extraer
  *   texto de la imagen" usa el framework Vision de Apple. Es la razón por la
  *   que en iPhone se puede leer una captura de un pago con QR y en Android
@@ -61,8 +65,8 @@ export function IosShortcutSection() {
       <p className="text-sm text-muted-foreground">
         En iPhone, RegistrApp no puede aparecer sola en el menú de compartir —
         Safari no lo permite. Con un atajo que armás una vez, vas a poder sacarle
-        una captura al comprobante, tocar <strong>Compartir</strong> y que el
-        gasto se cargue casi solo. El texto lo lee el propio iPhone.
+        una captura al comprobante, tocar <strong>Compartir</strong> y abrir
+        directo la pantalla para registrar el gasto.
       </p>
 
       {/* El camino rápido. El archivo va firmado con `shortcuts sign --mode
@@ -164,11 +168,6 @@ export function IosShortcutSection() {
         La primera vez te va a pedir iniciar sesión en Safari, aunque ya la tengas
         abierta en la app instalada: en iPhone son dos sesiones separadas y no hay
         forma de unirlas. Es una sola vez.
-      </p>
-
-      <p className="text-[11px] text-muted-foreground">
-        ¿Tenés el comprobante en PDF? No hace falta el atajo: abrí RegistrApp,
-        tocá el <strong>+</strong> del inicio y usá <strong>Subir PDF</strong>.
       </p>
 
       {/* ── Automatización ─────────────────────────────────────────────────

@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
-import { CalendarDays, Check, ClipboardPaste, FileText, Undo2, X } from "lucide-react";
+import { CalendarDays, Check, Undo2 } from "lucide-react";
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { formatARS, formatUSD, parseAmount, pickCategoryColor } from "@/lib/utils";
@@ -57,23 +57,6 @@ function todayISO() {
   return format(new Date(), "yyyy-MM-dd");
 }
 
-/**
- * Un número del backend, escrito como lo escribe la gente acá.
- *
- * El lector devuelve `Decimal` serializado ("45000.00") y meterlo crudo en el
- * campo se ve mal justo donde importa: la persona tiene que revisar el importe
- * de un vistazo antes de guardar, y "45000.00" no es como lee un monto.
- *
- * No usa `formatARS` a propósito: ése antepone el símbolo y —lo importante— se
- * enmascara con "ocultar montos", y enmascarar el campo que estás por editar lo
- * haría imposible de corregir.
- */
-function toArsInput(value: string | number): string {
-  const n = Number(value);
-  if (!isFinite(n)) return String(value);
-  return n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 /** Una fecha del querystring sólo se acepta en ISO y si existe de verdad. */
 function sanitizeDate(raw: string | null): string {
   if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return todayISO();
@@ -102,10 +85,7 @@ function RegistrarForm() {
   const [recentIds, setRecentIds] = useState<number[]>([]);
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
 
-  const [pasteOpen, setPasteOpen] = useState(false);
-  const [pasted, setPasted] = useState("");
-  const [reading, setReading] = useState(false);
-  const [readNote, setReadNote] = useState<string | null>(null);
+  const [sharedNote, setSharedNote] = useState<string | null>(null);
   const [showDate, setShowDate] = useState(false);
   const [showCatForm, setShowCatForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -114,7 +94,6 @@ function RegistrarForm() {
   const [undoing, setUndoing] = useState(false);
 
   const amountRef = useRef<HTMLInputElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   // De qué canal vino, para la columna `source`. Se congela al montar: si el
   // usuario carga otro gasto sin recargar, el segundo ya no vino de la hoja de
   // compartir.
@@ -200,130 +179,32 @@ function RegistrarForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Leer un comprobante ────────────────────────────────────────────────────
-  // El lector devuelve un BORRADOR: llena lo que pudo y deja el resto en
-  // blanco. Nunca guarda, y nunca pisa lo que la persona ya escribió — si
-  // corregiste el monto a mano y después pegás el comprobante, gana lo tuyo.
-  const applyDraft = (res: {
-    draft: { amount?: string | number | null; date?: string | null;
-             description?: string | null; currency?: "ARS" | "USD" | null;
-             error?: string | null };
-    suggested_category_id?: number | null;
-    suggested_category_name?: string | null;
-    suggested_from?: string | null;
-  }) => {
-    const d = res.draft;
-    const got: string[] = [];
-    if (d.amount != null && !amount) { setAmount(toArsInput(d.amount)); got.push("el monto"); }
-    if (d.currency) setCurrency(d.currency);
-    if (d.date) { setExpenseDate(d.date); if (d.date !== todayISO()) got.push("la fecha"); }
-    if (d.description && !description) { setDescription(d.description); got.push("el comercio"); }
-    if (res.suggested_category_id != null) {
-      setSuggestion({
-        category_id: res.suggested_category_id,
-        category_name: res.suggested_category_name ?? "",
-        score: 0,
-        matched_description: res.suggested_from ?? "",
-      });
-      setCategoryId(prev => (prev ? prev : String(res.suggested_category_id)));
-    }
-    // El aviso dice qué se leyó y qué no. Un "listo" que no distingue entre
-    // "saqué todo" y "no saqué nada" hace que nadie revise.
-    if (d.error) setReadNote(d.error);
-    else if (got.length) setReadNote(`Leímos ${got.join(", ")}. Revisá antes de guardar.`);
-    else setReadNote("No sacamos nada nuevo del comprobante.");
-  };
-
-  const readReceipt = async (payload: FormData) => {
-    setReading(true);
-    setReadNote(null);
-    setError(null);
-    try {
-      const { data } = await api.post("/receipts/parse", payload);
-      applyDraft(data);
-      setPasteOpen(false);
-      setPasted("");
-    } catch {
-      // El backend contesta 200 aun con un comprobante ilegible, así que acá
-      // sólo se cae la red. Tampoco es un error de la pantalla: el formulario
-      // sigue ahí para cargarlo a mano.
-      setReadNote("No pudimos leer el comprobante. Cargalo a mano.");
-    } finally {
-      setReading(false);
-    }
-  };
-
-  const handlePaste = () => {
-    if (!pasted.trim()) return;
-    const fd = new FormData();
-    fd.append("text", pasted);
-    readReceipt(fd);
-  };
-
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    e.target.value = "";          // permite volver a elegir el mismo archivo
-    if (!f) return;
-    const fd = new FormData();
-    fd.append("file", f);
-    readReceipt(fd);
-  };
-
   // ── Lo que llegó por la hoja de compartir ──────────────────────────────────
-  // Dos caminos, y el orden importa. El bueno es IndexedDB: el service worker
-  // interceptó el POST de Android y dejó ahí el archivo, porque un archivo no
-  // entra en una URL. El otro es el querystring, que es lo que rescata la ruta
-  // de contención cuando el SW no estaba registrado — sólo texto.
+  // La app ya no lee comprobantes, pero la hoja de compartir de Android y el
+  // Atajo de iOS siguen trayendo gente acá con uno. Dos cosas se siguen haciendo:
   //
-  // Todo se manda al lector del servidor en vez de interpretarse acá: arreglar
-  // el parseo tiene que ser un deploy, no depender de que cada persona
-  // actualice algo en su teléfono.
-  // **Corre una sola vez, y lo que lee se aplica sí o sí.** `takeSharedPayload`
-  // es una lectura *destructiva*: devuelve el comprobante y lo borra. La
-  // primera versión de esto tenía la guarda `cancelled` de manual, y con
-  // StrictMode —que en desarrollo monta, desmonta y vuelve a montar— la primera
-  // pasada consumía el comprobante, se marcaba cancelada y lo tiraba; la
-  // segunda no encontraba nada. Resultado: compartías un comprobante, la app
-  // abría, y el formulario salía vacío sin un solo error. El `ref` es lo que
-  // garantiza que el efecto se ejecute una vez sola, y por eso acá no hay
-  // ninguna guarda que pueda descartar lo ya leído.
+  // - **Consumir el payload de IndexedDB.** El service worker lo sigue dejando
+  //   ahí; si nadie lo lee, queda colgado hasta que vence y ocupa espacio sin
+  //   motivo.
+  // - **Decir que hay que cargarlo a mano.** Un formulario vacío después de
+  //   compartir se lee como que la app ignoró lo que mandaste.
+  //
+  // Corre una sola vez (el `ref`) porque `takeSharedPayload` es destructiva: con
+  // StrictMode una primera pasada que consume y se descarta dejaba a la segunda
+  // sin nada. Ya no se pierde un dato por eso, pero sí se perdería el aviso.
   useEffect(() => {
     if (sharedHandled.current) return;
     sharedHandled.current = true;
 
     (async () => {
       const payload = await takeSharedPayload();
+      const fromShareSheet = !!payload && (payload.files.length > 0 || !!payload.text || !!payload.title);
+      const fromQuery = ["title", "text", "url"].some(k => params.get(k));
+      const lost = params.get("shared") === "lost";
 
-      if (payload) {
-        sourceRef.current = "share_target";
-        const fd = new FormData();
-        const file = payload.files[0];
-        if (file?.blob) {
-          fd.append("file", file.blob, file.name || "comprobante");
-        }
-        const text = [payload.title, payload.text, payload.url]
-          .filter(Boolean).join("\n").trim();
-        if (text) fd.append("text", text);
-        // El lector prioriza el texto sobre el archivo, así que si vinieron los
-        // dos gana el texto — que es más confiable que cualquier cosa que
-        // podamos sacar de un archivo.
-        if (file?.blob || text) { readReceipt(fd); return; }
-      }
-
-      const fromQuery = ["title", "text", "url"]
-        .map(k => params.get(k)).filter(Boolean).join("\n").trim();
-      if (fromQuery) {
-        const fd = new FormData();
-        fd.append("text", fromQuery);
-        readReceipt(fd);
-        return;
-      }
-
-      // La ruta de contención avisa cuando lo compartido era un archivo y se
-      // perdió en el redirect. Decirlo es mejor que abrir un formulario vacío
-      // que parece que ignoró lo que compartiste.
-      if (params.get("shared") === "lost") {
-        setReadNote("No pudimos recibir el archivo. Adjuntalo acá abajo o cargalo a mano.");
+      if (fromShareSheet) sourceRef.current = "share_target";
+      if (fromShareSheet || fromQuery || lost) {
+        setSharedNote("Llegaste desde un comprobante. Completá los datos a mano.");
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -387,7 +268,7 @@ function RegistrarForm() {
     setAmount("");
     setDescription("");
     setSuggestion(null);
-    setReadNote(null);
+    setSharedNote(null);
     setCategoryId("");
     setExpenseDate(todayISO());
     sourceRef.current = "quick";
@@ -449,55 +330,11 @@ function RegistrarForm() {
     <div className="max-w-md mx-auto">
       <h1 className="text-lg font-semibold text-foreground mb-3">Registrar gasto</h1>
       <Card>
-        {/* 0. El comprobante, si lo tenés. Es un atajo, no un paso: la pantalla
-            funciona igual sin tocarlo, y por eso va arriba pero discreto. */}
-        <div className="mb-4 space-y-2">
-          {!pasteOpen ? (
-            <div className="flex gap-2">
-              <button type="button" onClick={() => setPasteOpen(true)} disabled={reading}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full border-2 border-dashed border-border px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground">
-                <ClipboardPaste className="w-3.5 h-3.5" />
-                Pegar comprobante
-              </button>
-              <button type="button" onClick={() => fileRef.current?.click()} disabled={reading}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full border-2 border-dashed border-border px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground">
-                <FileText className="w-3.5 h-3.5" />
-                Subir PDF
-              </button>
-              <input ref={fileRef} type="file" accept="application/pdf,.pdf"
-                className="hidden" onChange={handleFile} />
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <FieldLabel>Pegá el texto del comprobante</FieldLabel>
-                <button type="button" onClick={() => { setPasteOpen(false); setPasted(""); }}
-                  className="text-muted-foreground hover:text-foreground p-1" aria-label="Cerrar">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <textarea
-                autoFocus rows={4}
-                className={`${FIELD} font-mono text-xs`}
-                placeholder={"Transferencia enviada\n$ 12.500,50\nPara Juan Pérez\n26/08/2026"}
-                value={pasted}
-                onChange={e => setPasted(e.target.value)}
-              />
-              <Button type="button" variant="outline" className="w-full"
-                onClick={handlePaste} disabled={reading || !pasted.trim()}>
-                {reading ? "Leyendo..." : "Leer comprobante"}
-              </Button>
-            </div>
-          )}
-          {reading && !pasteOpen && (
-            <p className="text-xs text-muted-foreground text-center">Leyendo el comprobante...</p>
-          )}
-          {readNote && (
-            <p className="text-[11px] text-muted-foreground bg-accent/50 rounded-lg px-3 py-2">
-              {readNote}
-            </p>
-          )}
-        </div>
+        {sharedNote && (
+          <p className="mb-4 text-[11px] text-muted-foreground bg-accent/50 rounded-lg px-3 py-2">
+            {sharedNote}
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* 1. Monto. Grande y con el foco puesto: es la respuesta que la

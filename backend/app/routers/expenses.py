@@ -147,9 +147,9 @@ async def suggest_category_for(
 ):
     """Categoría probable para una descripción, o `null`.
 
-    **No la llames por tecleo.** Va on-blur del campo descripción o cuando
-    vuelve el lector de comprobantes; colgada del onChange convierte una
-    consulta por gasto en una por letra.
+    **No la llames por tecleo.** Va on-blur del campo descripción o cuando la
+    descripción llega prellenada; colgada del onChange convierte una consulta
+    por gasto en una por letra.
 
     Devuelve 200 con `null` cuando no hay nada parecido, nunca 404: "no
     encontré" es una respuesta normal acá, y un código de estado distinto
