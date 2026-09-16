@@ -10,6 +10,12 @@ import { test, expect, devices } from "@playwright/test";
  * arreglarlo con un deploy en vez de pedirle a cada usuario que rehaga su atajo.
  */
 
+// La sección de Configuración está detrás de un feature flag (lib/features.ts).
+// playwright.config.ts le pasa al dev server el mismo valor que ve este
+// proceso, así que los dos lados coinciden. Ojo con `reuseExistingServer`: un
+// `npm run dev` que ya estaba corriendo conserva su propio entorno.
+const IOS_SHORTCUT_ON = process.env.NEXT_PUBLIC_FEATURE_IOS_SHORTCUT === "true";
+
 // El texto tal como lo entrega "Extraer texto de la imagen" sobre una captura
 // de Mercado Pago.
 const OCR = `Transferencia enviada
@@ -30,6 +36,7 @@ test("el Atajo aterriza en /registrar con el gasto cargado", async ({ page }) =>
 });
 
 test("las instrucciones del Atajo se muestran sólo en iPhone", async ({ browser }) => {
+  test.skip(!IOS_SHORTCUT_ON, "flag apagado: la sección del Atajo está en pausa");
   const iphone = await browser.newContext({
     ...devices["iPhone 14"],
     storageState: "e2e/.auth/user.json",
@@ -55,6 +62,7 @@ test("las instrucciones del Atajo se muestran sólo en iPhone", async ({ browser
 });
 
 test("el archivo del atajo se descarga firmado", async ({ browser }) => {
+  test.skip(!IOS_SHORTCUT_ON, "flag apagado: la sección del Atajo está en pausa");
   const iphone = await browser.newContext({
     ...devices["iPhone 14"],
     storageState: "e2e/.auth/user.json",
@@ -87,5 +95,22 @@ test("el archivo del atajo se descarga firmado", async ({ browser }) => {
   await page.getByRole("button", { name: /Armalo a mano/ }).click();
   await expect(page.getByText(/Abrí la app/)).toBeVisible();
 
+  await iphone.close();
+});
+
+test("con el flag apagado, la sección del Atajo no aparece", async ({ browser }) => {
+  test.skip(IOS_SHORTCUT_ON, "flag prendido: lo cubren los tests de arriba");
+  // En iPhone, que es donde se mostraría. Si apareciera acá, la pausa no pausa.
+  const iphone = await browser.newContext({
+    ...devices["iPhone 14"],
+    storageState: "e2e/.auth/user.json",
+  });
+  const page = await iphone.newPage();
+  await page.goto("/settings");
+  await expect(page.getByRole("heading", { name: "Configuración" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /Compartir un comprobante desde el iPhone/ })
+  ).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /Descargar el atajo/ })).toHaveCount(0);
   await iphone.close();
 });

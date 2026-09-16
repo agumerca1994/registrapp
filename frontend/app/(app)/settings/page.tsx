@@ -12,6 +12,7 @@ import { COUNTRIES } from "@/lib/countries";
 import WhatsAppVerifyForm from "@/components/WhatsAppVerifyForm";
 import McpConnectorSection from "@/components/McpConnectorSection";
 import { IosShortcutSection } from "@/components/IosShortcutSection";
+import { features } from "@/lib/features";
 import { resetAllTours } from "@/components/ProductTour";
 import { Card } from "@/components/ui/card";
 import { FIELD, SelectField } from "@/components/ui/form";
@@ -417,7 +418,8 @@ export default function SettingsPage() {
 
       <WhatsAppSection />
 
-      <IosShortcutSection />
+      {/* En pausa detrás de un flag: ver lib/features.ts. */}
+      {features.iosShortcut && <IosShortcutSection />}
 
       <McpConnectorSection />
 
