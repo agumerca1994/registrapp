@@ -87,16 +87,57 @@ export function CurrencyToggle({ value, onChange, className = "" }: {
   className?: string;
 }) {
   return (
-    <div className={`flex gap-2 ${className}`} role="group" aria-label="Moneda">
-      {(["ARS", "USD"] as const).map(cur => (
-        <button key={cur} type="button" aria-pressed={value === cur}
-          onClick={() => onChange(cur)}
+    <SegmentedToggle
+      ariaLabel="Moneda"
+      value={value}
+      onChange={onChange}
+      className={className}
+      options={[
+        { value: "ARS", label: "$ ARS" },
+        { value: "USD", label: "U$D" },
+      ]}
+    />
+  );
+}
+
+export interface SegmentedOption<T extends string> {
+  value: T;
+  label: React.ReactNode;
+  disabled?: boolean;
+}
+
+/**
+ * Un control segmentado: dos o tres píldoras de las que se elige una.
+ *
+ * Es la forma de `CurrencyToggle` generalizada, porque la misma tira de botones
+ * ya estaba copiada a mano en varios lados (el tipo de ítem en tarjetas, la
+ * división en compartidos) y el formulario unificado de egresos suma más. Las
+ * clases son exactamente las de `CurrencyToggle`, que ahora lo envuelve: así no
+ * cambia ni un píxel de las pantallas que ya lo usan.
+ *
+ * Una opción deshabilitada se muestra igual pero apagada, en vez de
+ * desaparecer: "En cuotas" que se esconde al elegir dólares deja a la persona
+ * preguntándose dónde quedó.
+ */
+export function SegmentedToggle<T extends string>({ value, onChange, options, ariaLabel, className = "" }: {
+  value: T;
+  onChange: (value: T) => void;
+  options: SegmentedOption<T>[];
+  ariaLabel: string;
+  className?: string;
+}) {
+  return (
+    <div className={`flex gap-2 ${className}`} role="group" aria-label={ariaLabel}>
+      {options.map(opt => (
+        <button key={opt.value} type="button" aria-pressed={value === opt.value}
+          disabled={opt.disabled}
+          onClick={() => onChange(opt.value)}
           className={`flex-1 py-1.5 text-xs rounded-full border-2 font-medium transition-colors ${
-            value === cur
+            value === opt.value
               ? "border-ink bg-primary text-primary-foreground"
               : "border-transparent text-muted-foreground hover:bg-accent"
-          }`}>
-          {cur === "ARS" ? "$ ARS" : "U$D"}
+          }${opt.disabled ? " opacity-40 pointer-events-none" : ""}`}>
+          {opt.label}
         </button>
       ))}
     </div>
