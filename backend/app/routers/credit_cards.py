@@ -515,23 +515,21 @@ async def list_items(
     return result.all()
 
 
-@router.post("/statements/{stmt_id}/items", response_model=CreditCardItemOut, status_code=status.HTTP_201_CREATED)
-async def create_item(
-    stmt_id: int,
+async def _create_item_in_statement(
+    stmt: CreditCardStatement,
+    card: CreditCard,
     body: CreditCardItemCreate,
-    firebase_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    user = await _get_db_user(firebase_user, db)
-    stmt = await db.scalar(
-        select(CreditCardStatement)
-        .where(CreditCardStatement.id == stmt_id)
-        .options(selectinload(CreditCardStatement.card))
-    )
-    if not stmt or stmt.tenant_id != user.tenant_id:
-        raise HTTPException(status_code=404, detail="Resumen no encontrado")
+    user: User,
+    db: AsyncSession,
+) -> CreditCardItem:
+    """Crea un ítem en `stmt`, su egreso espejo y, si es en cuotas, las cuotas
+    futuras en los resúmenes que correspondan. **Sólo hace flush, nunca commit.**
 
-    card = stmt.card
+    Existe para que el alta desde un resumen (`create_item`) y el alta desde el
+    formulario unificado de egresos (`create_item_for_card`) sean la misma
+    implementación: la segunda además puede compartir el ítem en la misma
+    transacción, y eso sólo es posible si nadie confirma a mitad de camino.
+    """
     cuota_label = ""
     if body.item_type == "installment":
         cuota_label = f" ({body.installment_number}/{body.installment_count})"
@@ -540,8 +538,7 @@ async def create_item(
     if body.currency == "USD":
         category_id = await get_or_create_usd_category(user.tenant_id, db)
     elif category_id is None:
-        from fastapi import HTTPException as _HTTPException
-        raise _HTTPException(status_code=422, detail="category_id es requerido para gastos en ARS")
+        raise HTTPException(status_code=422, detail="category_id es requerido para gastos en ARS")
     else:
         await assert_owns_category(category_id, user.tenant_id, db)
 
@@ -553,7 +550,7 @@ async def create_item(
     )
 
     item = CreditCardItem(
-        statement_id=stmt_id,
+        statement_id=stmt.id,
         description=body.description,
         category_id=category_id,
         item_date=body.item_date,
@@ -576,18 +573,22 @@ async def create_item(
                 card, future_date.year, future_date.month, user.tenant_id, db
             )
             future_item_date = _next_month_date(body.item_date, offset)
+            # La categoría ya resuelta y no `body.category_id`: hoy da lo mismo
+            # porque las cuotas son sólo en pesos, pero es la que se validó.
             future_entry = await _create_expense_entry(
                 card, future_item_date, body.amount,
                 f"{body.description} ({cuota_n}/{body.installment_count})",
-                body.category_id, user.tenant_id, user.id, db,
+                category_id, user.tenant_id, user.id, db,
+                currency=body.currency,
             )
             future_item = CreditCardItem(
                 statement_id=future_stmt.id,
                 description=body.description,
-                category_id=body.category_id,
+                category_id=category_id,
                 item_date=future_item_date,
                 item_type="installment",
                 amount=body.amount,
+                currency=body.currency,
                 installment_count=body.installment_count,
                 installment_number=cuota_n,
                 purchase_total=body.purchase_total,
@@ -595,15 +596,41 @@ async def create_item(
                 expense_entry_id=future_entry.id,
             )
             db.add(future_item)
+        # Las cuotas hijas tienen que existir en la sesión antes de que alguien
+        # las busque por `installment_group_id` (compartir en la misma
+        # transacción lo hace).
+        await db.flush()
 
-    await db.commit()
+    return item
 
-    result = await db.scalar(
+
+async def _load_item_out(item_id: int, db: AsyncSession) -> CreditCardItem:
+    return await db.scalar(
         select(CreditCardItem)
-        .where(CreditCardItem.id == item.id)
+        .where(CreditCardItem.id == item_id)
         .options(selectinload(CreditCardItem.category))
     )
-    return result
+
+
+@router.post("/statements/{stmt_id}/items", response_model=CreditCardItemOut, status_code=status.HTTP_201_CREATED)
+async def create_item(
+    stmt_id: int,
+    body: CreditCardItemCreate,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await _get_db_user(firebase_user, db)
+    stmt = await db.scalar(
+        select(CreditCardStatement)
+        .where(CreditCardStatement.id == stmt_id)
+        .options(selectinload(CreditCardStatement.card))
+    )
+    if not stmt or stmt.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404, detail="Resumen no encontrado")
+
+    item = await _create_item_in_statement(stmt, stmt.card, body, user, db)
+    await db.commit()
+    return await _load_item_out(item.id, db)
 
 
 @router.patch("/items/{item_id}", response_model=CreditCardItemOut)
@@ -694,41 +721,27 @@ async def delete_item(
     await db.commit()
 
 
-@router.post("/items/{item_id}/share", response_model=list[SharedExpenseOut])
-async def share_item(
-    item_id: int,
+async def _share_item_in_tx(
+    item: CreditCardItem,
+    card: CreditCard,
     body: ShareCreditCardItemBody,
-    firebase_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    # Import local para esquivar el ciclo shared_expenses <-> credit_cards.
-    # La resolución de participantes ya no se importa: vive en
-    # services/participants.py y este router la usa desde ahí.
-    # Ya no queda nada por importar del otro router: participantes, avisos y
-    # agenda viven en services/, así que el ciclo shared_expenses <-> credit_cards
-    # desapareció del todo.
-    import secrets
-    from datetime import datetime, timedelta
+    user: User,
+    db: AsyncSession,
+) -> tuple[list[int], dict]:
+    """Comparte `item` (y sus cuotas hijas) sin confirmar ni avisar.
 
-    user = await _get_db_user(firebase_user, db)
+    Devuelve los ids de los `SharedExpense` creados y los argumentos para
+    `notify_shared.notify_share`, que **se llama recién después del commit**.
+    Antes el aviso salía dentro del loop, antes de confirmar, y eso rompía la
+    transacción: el push borra dispositivos muertos con su propio `commit`
+    (`services/push._drop_tokens`), así que un solo dispositivo muerto dejaba la
+    mitad del compartir guardada, y el aviso podía salir aunque después fallara.
 
-    item = await db.scalar(
-        select(CreditCardItem)
-        .where(CreditCardItem.id == item_id)
-        .options(
-            selectinload(CreditCardItem.statement).selectinload(CreditCardStatement.card),
-            selectinload(CreditCardItem.shared_expense),
-        )
-    )
-    if not item or item.statement.tenant_id != user.tenant_id:
-        raise HTTPException(status_code=404, detail="Ítem no encontrado")
-
-    if item.shared_expense:
-        raise HTTPException(status_code=400, detail="Este ítem ya fue compartido")
-
-    if item.item_type == "installment" and item.installment_group_id is not None:
-        raise HTTPException(status_code=400, detail="Para compartir cuotas, hacelo desde la cuota 1")
-
+    Recibe `card` explícito y no lo lee de `item.statement.card`: con un ítem
+    recién creado en la misma sesión esa relación no está cargada y leerla
+    tira `MissingGreenlet`. Los chequeos de "ya compartido" y "cuota hija"
+    quedan en quien llama, que es quien sabe si el ítem es nuevo.
+    """
     total_splits = sum(s.amount for s in body.splits)
     if abs(total_splits - item.amount) > Decimal("0.01"):
         raise HTTPException(
@@ -765,15 +778,15 @@ async def share_item(
             CreditCardStatement.month,
         ).where(CreditCardStatement.id.in_(statement_ids))
     )).all()
-    card = item.statement.card
     due_dates = {
         sid: due or estimate_due_date_py(year, month, card.due_day)
         for sid, due, year, month in stmt_rows
     }
 
-    created_shared_ids = []
+    created_shared_ids: list[int] = []
     cuotas_count = len(items_to_share)
     root_shared_id: int | None = None
+    notify_kwargs: dict = {}
 
     # Only the root cuota (idx 0) mints invite tokens and queues notifications —
     # sharing an installment purchase must send ONE WhatsApp for the whole plan,
@@ -804,10 +817,10 @@ async def share_item(
         pending_wa_notify = []
 
         for split_in in body.splits:
-            # `mint_token=not is_root` invertido: sólo la cuota raíz acuña token,
-            # una invitación por plan y no una por cuota. Es un parámetro y no
-            # una rama duplicada — la duplicación anterior fue justo lo que
-            # produjo los dos bugs que este refactor arregla.
+            # `mint_token=is_root`: sólo la cuota raíz acuña token, una
+            # invitación por plan y no una por cuota. Es un parámetro y no una
+            # rama duplicada — la duplicación anterior fue justo lo que produjo
+            # dos bugs.
             r = await participants.resolve_participant(
                 creator=user,
                 db=db,
@@ -857,11 +870,9 @@ async def share_item(
 
         if is_root:
             await db.flush()
-            # Mismo servicio que /shared. Antes acá sólo se mandaba WhatsApp:
-            # compartir la cuota de una tarjeta no le llegaba a nadie que no
-            # tuviera el número vinculado.
-            await notify_shared.notify_share(
-                db,
+            # Se guardan los argumentos y se avisa DESPUÉS del commit (ver el
+            # docstring). Mismo servicio que /shared.
+            notify_kwargs = dict(
                 creator=user,
                 title=item.description,
                 total_amount=target_item.amount,
@@ -873,12 +884,47 @@ async def share_item(
 
         created_shared_ids.append(shared.id)
 
-    await db.commit()
+    return created_shared_ids, notify_kwargs
 
+
+async def _load_shared_out(shared_ids: list[int], user: User, db: AsyncSession):
+    from app.routers.shared_expenses import _out
     results = await db.scalars(
         select(SharedExpense)
-        .where(SharedExpense.id.in_(created_shared_ids))
+        .where(SharedExpense.id.in_(shared_ids))
         .options(selectinload(SharedExpense.splits))
     )
-    from app.routers.shared_expenses import _out
     return [_out(shared, user) for shared in results.all()]
+
+
+@router.post("/items/{item_id}/share", response_model=list[SharedExpenseOut])
+async def share_item(
+    item_id: int,
+    body: ShareCreditCardItemBody,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await _get_db_user(firebase_user, db)
+
+    item = await db.scalar(
+        select(CreditCardItem)
+        .where(CreditCardItem.id == item_id)
+        .options(
+            selectinload(CreditCardItem.statement).selectinload(CreditCardStatement.card),
+            selectinload(CreditCardItem.shared_expense),
+        )
+    )
+    if not item or item.statement.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404, detail="Ítem no encontrado")
+
+    if item.shared_expense:
+        raise HTTPException(status_code=400, detail="Este ítem ya fue compartido")
+
+    if item.item_type == "installment" and item.installment_group_id is not None:
+        raise HTTPException(status_code=400, detail="Para compartir cuotas, hacelo desde la cuota 1")
+
+    shared_ids, notify_kwargs = await _share_item_in_tx(item, item.statement.card, body, user, db)
+    await db.commit()
+    if notify_kwargs:
+        await notify_shared.notify_share(db, **notify_kwargs)
+    return await _load_shared_out(shared_ids, user, db)
