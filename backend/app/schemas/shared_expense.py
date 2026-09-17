@@ -1,5 +1,7 @@
 ﻿from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
+
 from pydantic import BaseModel, model_validator
 
 
@@ -13,7 +15,13 @@ class SplitIn(BaseModel):
 class SharedExpenseCreate(BaseModel):
     title: str
     total_amount: Decimal
-    category_id: int
+    # Opcional sólo en dólares: sin categoría cae en "Consumo en dólares", igual
+    # que un egreso suelto. En pesos el router la exige.
+    category_id: int | None = None
+    # Hasta ahora este alta era siempre en pesos; el compartido en dólares sólo
+    # existía compartiendo un ítem de tarjeta. El default mantiene a /shared,
+    # que no manda moneda, exactamente como estaba.
+    currency: Literal["ARS", "USD"] = "ARS"
     split_type: str
     expense_date: date
     # When None, defaults to expense_date (the common case: paid the same day).

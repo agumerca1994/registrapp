@@ -20,6 +20,8 @@ from app.models.credit_card import CreditCardItem
 from app.models.expense import EXPENSE_SOURCE_SHARED_SPLIT, ExpenseCategory, ExpenseEntry
 from app.models.shared_expense import SharedExpense, SharedExpenseSplit
 from app.models.user import User
+from app.routers.expenses import assert_owns_category
+from app.services.currency import get_or_create_usd_category
 from app.schemas.shared_expense import (
     ConvertToArsBody,
     InviteInfoOut,
@@ -313,12 +315,27 @@ async def create_shared_expense(
 ):
     user = await _get_db_user(firebase_user, db)
 
+    # La categoría se resuelve igual que en `POST /expenses/entries`: en dólares
+    # es opcional y cae en "Consumo en dólares", en pesos es obligatoria, y la
+    # que venga tiene que ser del hogar. Antes este endpoint escribía el
+    # `category_id` del cliente sin mirarlo, y como el egreso del creador trae la
+    # categoría embebida, se podían leer categorías de otros hogares.
+    if body.category_id is None:
+        if body.currency == "USD":
+            category_id = await get_or_create_usd_category(user.tenant_id, db)
+        else:
+            raise HTTPException(status_code=422, detail="category_id es requerido para gastos en ARS")
+    else:
+        await assert_owns_category(body.category_id, user.tenant_id, db)
+        category_id = body.category_id
+
     shared = SharedExpense(
         tenant_id=user.tenant_id,
         created_by_user_id=user.id,
         title=body.title,
         total_amount=body.total_amount,
-        category_id=body.category_id,
+        currency=body.currency,
+        category_id=category_id,
         split_type=body.split_type,
         expense_date=body.expense_date,
         payment_date=body.payment_date or body.expense_date,
@@ -373,8 +390,9 @@ async def create_shared_expense(
             entry = ExpenseEntry(
                 tenant_id=user.tenant_id,
                 user_id=user.id,
-                category_id=body.category_id,
+                category_id=category_id,
                 amount=split_in.amount,
+                currency=body.currency,
                 description=body.title,
                 expense_date=body.expense_date,
                 notes=f"Gasto compartido #{shared.id}",
@@ -395,6 +413,7 @@ async def create_shared_expense(
         total_amount=body.total_amount,
         notify=notify_pairs,
         invites=pending_wa_invites,
+        currency=body.currency,
     )
 
     result = await db.scalar(

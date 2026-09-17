@@ -63,33 +63,39 @@ async def send_wa_msg(phone: str, msg: str) -> None:
         logger.warning(f"WhatsApp send error to {phone}: {e}")
 
 
-async def send_whatsapp_invite(phone: str, creator_name: str, title: str, amount, token: str, cuotas_count: int = 1) -> None:
+def _money(amount, currency: str = "ARS") -> str:
+    """Un monto con su símbolo. Antes todo salía con "$", también los gastos en
+    dólares, y el invitado leía un importe en pesos que no era."""
+    return f"U$D {amount}" if currency == "USD" else f"${amount}"
+
+
+async def send_whatsapp_invite(phone: str, creator_name: str, title: str, amount, token: str, cuotas_count: int = 1, currency: str = "ARS") -> None:
     link = f"{settings.FRONTEND_URL}/invite/{token}"
     if cuotas_count > 1:
         msg = (
             f"Hola! {creator_name} te invito a compartir un gasto: '{title}' "
-            f"en {cuotas_count} cuotas de ${amount} c/u.\n\nEntra al link para ver el detalle y aceptarlas:\n{link}"
+            f"en {cuotas_count} cuotas de {_money(amount, currency)} c/u.\n\nEntra al link para ver el detalle y aceptarlas:\n{link}"
         )
     else:
         msg = (
             f"Hola! {creator_name} te invito a compartir un gasto: '{title}' "
-            f"por ${amount}.\n\nEntra al link para verlo y aceptarlo:\n{link}"
+            f"por {_money(amount, currency)}.\n\nEntra al link para verlo y aceptarlo:\n{link}"
         )
     await send_wa_msg(phone, msg)
 
 
-async def send_whatsapp_member_notify(phone: str, creator_name: str, title: str, total_amount, split_amount, cuotas_count: int = 1) -> None:
+async def send_whatsapp_member_notify(phone: str, creator_name: str, title: str, total_amount, split_amount, cuotas_count: int = 1, currency: str = "ARS") -> None:
     app_url = f"{settings.FRONTEND_URL}/shared"
     if cuotas_count > 1:
         msg = (
             f"Hola! {creator_name} te compartio el gasto '{title}' "
-            f"en {cuotas_count} cuotas de ${total_amount} c/u.\nTu parte por cuota: ${split_amount}.\n"
+            f"en {cuotas_count} cuotas de {_money(total_amount, currency)} c/u.\nTu parte por cuota: {_money(split_amount, currency)}.\n"
             f"Ingresa a la app para aceptarlas: {app_url}"
         )
     else:
         msg = (
             f"Hola! {creator_name} te compartio el gasto '{title}' "
-            f"por ${total_amount}.\nTu parte: ${split_amount}.\n"
+            f"por {_money(total_amount, currency)}.\nTu parte: {_money(split_amount, currency)}.\n"
             f"Ingresa a la app para aceptarlo: {app_url}"
         )
     await send_wa_msg(phone, msg)

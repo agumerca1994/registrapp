@@ -868,6 +868,7 @@ async def share_item(
                 notify=pending_wa_notify,
                 invites=pending_wa_invites,
                 cuotas_count=cuotas_count,
+                currency=target_item.currency,
             )
 
         created_shared_ids.append(shared.id)

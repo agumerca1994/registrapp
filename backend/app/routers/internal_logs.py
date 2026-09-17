@@ -283,6 +283,8 @@ async def backfill_shared_invite_claims(
             expense_date=shared.expense_date,
             notes=f"Gasto compartido #{shared.id}",
             source=EXPENSE_SOURCE_SHARED_SPLIT,
+            # Sin esto un split en dólares se reclamaba como si fuera en pesos.
+            currency=shared.currency,
         )
         db.add(entry)
         await db.flush()
@@ -416,7 +418,7 @@ async def resend_shared_invite(
     creator = await db.get(User, shared.created_by_user_id)
     creator_name = (creator.display_name or creator.email) if creator else "Alguien"
 
-    await _send_whatsapp_invite(split.invite_email, creator_name, shared.title, shared.total_amount, split.invite_token)
+    await _send_whatsapp_invite(split.invite_email, creator_name, shared.title, shared.total_amount, split.invite_token, currency=shared.currency)
 
     return {"status": "sent", "split_id": split_id, "phone": split.invite_email}
 

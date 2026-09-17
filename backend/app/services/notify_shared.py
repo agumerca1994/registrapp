@@ -45,6 +45,7 @@ async def notify_share(
     notify: list[tuple[int, Decimal]],
     invites: list[tuple[str, str]],
     cuotas_count: int = 1,
+    currency: str = "ARS",
 ) -> None:
     """Avisa a participantes registrados (`notify`) e invitados (`invites`).
 
@@ -81,7 +82,7 @@ async def notify_share(
     for phone, token in (invites if wa_allowed else []):
         try:
             await whatsapp.send_whatsapp_invite(
-                phone, creator_name, title, total_amount, token, cuotas_count
+                phone, creator_name, title, total_amount, token, cuotas_count, currency
             )
         except Exception:
             logger.exception("notify_share: falló la invitación por WhatsApp de '%s'", title)
@@ -95,7 +96,7 @@ async def notify_share(
             if wa_allowed and member and member.whatsapp_phone and member.whatsapp_notifications:
                 await whatsapp.send_whatsapp_member_notify(
                     member.whatsapp_phone, creator_name, title,
-                    total_amount, split_amount, cuotas_count,
+                    total_amount, split_amount, cuotas_count, currency,
                 )
         except Exception:
             logger.exception("notify_share: falló el WhatsApp a user %s", uid)
