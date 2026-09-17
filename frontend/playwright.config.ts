@@ -34,7 +34,30 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/user.json" },
+      testIgnore: [/visual\.spec\.ts/, /new-expense\.spec\.ts/],
       dependencies: ["setup"],
+    },
+    // Los flujos que crean datos corren aparte y antes que los visuales. Con
+    // todo en un mismo proyecto y `fullyParallel`, una captura podía salir con
+    // la tarjeta o el gasto de un flujo a medias en pantalla.
+    {
+      name: "flows",
+      use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/user.json" },
+      testMatch: /new-expense\.spec\.ts/,
+      dependencies: ["setup"],
+    },
+    // Los visuales van últimos. Dependen de los otros dos a propósito: si un
+    // flujo falla, sacar capturas encima de datos a medio borrar no dice nada.
+    {
+      name: "visual",
+      use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/user.json" },
+      testMatch: /visual\.spec\.ts/,
+      dependencies: ["chromium", "flows"],
+      // Las capturas de referencia se guardaron cuando este spec corría en el
+      // proyecto "chromium", y el nombre del proyecto es parte del archivo
+      // (`dashboard-chromium-darwin.png`). Sin fijarlo, al pasar a su propio
+      // proyecto todas quedarían "faltantes".
+      snapshotPathTemplate: "{testDir}/{testFilePath}-snapshots/{arg}-chromium{-snapshotSuffix}{ext}",
     },
   ],
 });
