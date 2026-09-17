@@ -17,7 +17,7 @@ from app.models.credit_card import CreditCard, CreditCardStatement, CreditCardIt
 from app.schemas.credit_card import (
     CreditCardCreate, CreditCardUpdate, CreditCardOut,
     StatementCreate, StatementUpdate, StatementOut, StatementCalendarOut,
-    CreditCardItemCreate, CreditCardItemUpdate, CreditCardItemOut,
+    CreditCardItemCreate, CreditCardItemUpdate, CreditCardItemOut, CardItemCreateForCard,
     ForExpenseOut,
 )
 from app.models.shared_expense import SharedExpense, SharedExpenseSplit
@@ -895,6 +895,62 @@ async def _load_shared_out(shared_ids: list[int], user: User, db: AsyncSession):
         .options(selectinload(SharedExpense.splits))
     )
     return [_out(shared, user) for shared in results.all()]
+
+
+@router.post("/{card_id}/items", response_model=CreditCardItemOut, status_code=status.HTTP_201_CREATED)
+async def create_item_for_card(
+    card_id: int,
+    body: CardItemCreateForCard,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Alta de un gasto con tarjeta desde el formulario unificado de egresos.
+
+    A diferencia de `create_item`, no necesita un resumen abierto: lo busca o
+    lo crea por período. Y puede compartir el ítem en el mismo request, **en
+    una sola transacción**: o queda el ítem compartido, o no queda nada. Se
+    descartó que el frontend encadene dos requests porque, si fallaba el
+    segundo, quedaba un ítem sin compartir que la persona creía compartido.
+    """
+    user = await _get_db_user(firebase_user, db)
+    card = await db.get(CreditCard, card_id)
+    if not card or card.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404, detail="Tarjeta no encontrada")
+
+    # "Recurrente" no se ofrece desde acá: hoy sólo `finalize_statement` la
+    # copia al mes siguiente y el frontend nunca lo llama, así que prometería
+    # una repetición que no pasa.
+    if body.item_type not in ("single", "installment"):
+        raise HTTPException(status_code=400, detail="Sólo se pueden cargar gastos en un pago o en cuotas")
+
+    # Validar lo compartido ANTES de escribir nada, así un error de la división
+    # no deja resúmenes creados de más.
+    if body.share is not None:
+        if len(body.share.splits) < 2:
+            raise HTTPException(status_code=400, detail="Para compartir hace falta al menos otra persona")
+        total_splits = sum(sp.amount for sp in body.share.splits)
+        if abs(total_splits - body.amount) > Decimal("0.01"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"La suma de los montos ({total_splits}) no coincide con el monto del ítem ({body.amount})",
+            )
+
+    stmt = await _find_or_create_statement(card, body.year, body.month, user.tenant_id, db)
+    item = await _create_item_in_statement(stmt, card, body, user, db)
+
+    shared_ids: list[int] = []
+    notify_kwargs: dict = {}
+    if body.share is not None:
+        shared_ids, notify_kwargs = await _share_item_in_tx(item, card, body.share, user, db)
+
+    await db.commit()
+    if notify_kwargs:
+        await notify_shared.notify_share(db, **notify_kwargs)
+
+    out = CreditCardItemOut.model_validate(await _load_item_out(item.id, db))
+    if shared_ids:
+        out = out.model_copy(update={"shared_expense_id": shared_ids[0]})
+    return out
 
 
 @router.post("/items/{item_id}/share", response_model=list[SharedExpenseOut])

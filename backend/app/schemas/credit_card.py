@@ -1,6 +1,8 @@
 from datetime import date, datetime
 from decimal import Decimal
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
+
+from app.schemas.shared_expense import ShareCreditCardItemBody
 
 
 class CreditCardCreate(BaseModel):
@@ -71,6 +73,22 @@ class CreditCardItemCreate(BaseModel):
         return self
 
 
+class CardItemCreateForCard(CreditCardItemCreate):
+    """Alta de un ítem eligiendo tarjeta y período, sin tener un resumen abierto.
+
+    La usa el formulario unificado de egresos. El resumen se busca o se crea por
+    `(tarjeta, year, month)`: RegistrApp no conoce el día de cierre de cada
+    tarjeta, así que el período lo elige la persona, igual que cuando entra a
+    un resumen para agregar un ítem.
+
+    `share` permite compartirlo en el mismo request, y eso es lo que hace que
+    "con tarjeta y compartido" se guarde todo o nada.
+    """
+    year: int = Field(ge=2000, le=2100)
+    month: int = Field(ge=1, le=12)
+    share: ShareCreditCardItemBody | None = None
+
+
 class CreditCardItemUpdate(BaseModel):
     description: str | None = None
     category_id: int | None = None
@@ -90,6 +108,7 @@ class CreditCardItemOut(BaseModel):
     model_config = {"from_attributes": True}
 
     id: int
+    statement_id: int
     description: str
     category_id: int
     item_date: date
