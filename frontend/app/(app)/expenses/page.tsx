@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
-import { formatARS, formatDate, formatUSD, parseAmount, pickCategoryColor } from "@/lib/utils";
+import { formatARS, formatDate, formatUSD } from "@/lib/utils";
 import { Trash2, Pencil, X, ChevronRight, CreditCard, ExternalLink, CalendarDays, ChevronLeft, Search, SlidersHorizontal, MoreVertical } from "lucide-react";
 import {
   FilterBar, FilterRow, FilterPanel, SortChip, FilterChip, PillSelect,
@@ -18,8 +18,8 @@ import ProductTour from "@/components/ProductTour";
 import type { Step } from "react-joyride";
 import { Card } from "@/components/ui/card";
 import { Fab } from "@/components/ui/fab";
-import { CurrencyToggle, FIELD, FormGrid, SelectField, DateField } from "@/components/ui/form";
-import NewCategoryModal from "@/components/NewCategoryModal";
+import ExpenseFormModal, { type ExpenseSaved } from "@/components/expense/ExpenseFormModal";
+import { newDraft } from "@/components/expense/submit";
 import { Button } from "@/components/ui/button";
 
 const EXPENSES_TOUR_STEPS: Step[] = [
@@ -38,12 +38,6 @@ interface ExpenseEntry {
   payment_method?: string; entity?: string; currency?: string;
   category: Category;
 }
-
-const EMPTY_FORM = { category_id: "", amount: "", description: "", expense_date: "", notes: "", currency: "ARS" as "ARS" | "USD" };
-
-// A new entry defaults to today — the overwhelmingly common case, and it saves
-// the user a trip through the calendar to pick the date they're standing on.
-const newEntryForm = () => ({ ...EMPTY_FORM, expense_date: format(new Date(), "yyyy-MM-dd") });
 
 type SortKey = "date" | "category" | "amount";
 const SORT_LABELS: Record<SortKey, string> = {
@@ -135,11 +129,12 @@ export default function ExpensesPage() {
   const router = useRouter();
   const [entries, setEntries] = useState<ExpenseEntry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [editId, setEditId] = useState<number | null>(null);
-  const [showCatForm, setShowCatForm] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [loading, setLoading] = useState(false);
+  // El formulario unificado (components/expense). `key` cambia en cada
+  // apertura para que siempre arranque limpio: fecha de hoy, efectivo, sin
+  // compartir.
+  const [formState, setFormState] = useState<null | { mode: "create" } | { mode: "edit"; entry: ExpenseEntry }>(null);
+  const [formKey, setFormKey] = useState(0);
+  const [notice, setNotice] = useState<ExpenseSaved | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [detailEntry, setDetailEntry] = useState<ExpenseEntry | null>(null);
@@ -210,9 +205,7 @@ export default function ExpensesPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("nuevo") !== "1") return;
-    setEditId(null);
-    setForm(newEntryForm());
-    setShowForm(true);
+    openCreate();
     router.replace("/expenses");
     // Sólo al montar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -225,43 +218,16 @@ export default function ExpensesPage() {
     setSort(null);
   };
 
-  const openEdit = (entry: ExpenseEntry) => {
-    setEditId(entry.id);
-    setForm({
-      category_id: String(entry.category_id), amount: String(entry.amount),
-      description: entry.description || "", expense_date: entry.expense_date, notes: entry.notes || "",
-      currency: (entry.currency as "ARS" | "USD") || "ARS",
-    });
-    setShowForm(true);
-  };
+  const openCreate = () => { setFormKey(k => k + 1); setFormState({ mode: "create" }); };
+  const openEdit = (entry: ExpenseEntry) => { setFormKey(k => k + 1); setFormState({ mode: "edit", entry }); };
+  const closeForm = () => setFormState(null);
 
-  const closeForm = () => { setShowForm(false); setEditId(null); setForm(EMPTY_FORM); };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    const payload: Record<string, unknown> = {
-      amount: parseAmount(form.amount),
-      description: form.description,
-      expense_date: form.expense_date,
-      notes: form.notes,
-      currency: form.currency,
-    };
-    if (form.category_id) payload.category_id = parseInt(form.category_id);
-    if (editId) await api.patch(`/expenses/entries/${editId}`, payload);
-    else await api.post("/expenses/entries", payload);
+  const handleSaved = async (result: ExpenseSaved) => {
     closeForm();
+    // Un egreso simple se ve en la lista; los de tarjeta y los compartidos
+    // además tienen otra casa, y el aviso dice dónde quedaron.
+    setNotice(result.kind === "simple" ? null : result);
     await load();
-    setLoading(false);
-  };
-
-  // Selects the category it just created, so the form the user was filling
-  // picks up where they left off instead of making them find it in the combo.
-  const handleAddCat = async (cat: { name: string; color: string; is_fixed: boolean }) => {
-    const { data } = await api.post("/expenses/categories", cat);
-    setShowCatForm(false);
-    await load();
-    setForm(p => ({ ...p, category_id: String(data.id) }));
   };
 
   const handleDelete = async (id: number) => {
@@ -351,65 +317,54 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={closeForm}>
-          <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg p-5 max-h-[92vh] overflow-y-auto"
-            onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-foreground">{editId ? "Editar egreso" : "Nuevo egreso"}</h3>
-            <button type="button" onClick={closeForm} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+      {formState && (
+        <ExpenseFormModal
+          key={formKey}
+          mode={formState.mode}
+          editId={formState.mode === "edit" ? formState.entry.id : undefined}
+          initial={formState.mode === "edit" ? {
+            ...newDraft(formState.entry.expense_date, null),
+            category_id: String(formState.entry.category_id),
+            // El backend manda "500.00"; en el campo se ve como se escribe acá.
+            amount: Number(formState.entry.amount).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+            description: formState.entry.description || "",
+            notes: formState.entry.notes || "",
+            currency: (formState.entry.currency as "ARS" | "USD") || "ARS",
+          } : undefined}
+          categories={categories}
+          onCategoriesChanged={load}
+          onSaved={handleSaved}
+          onClose={closeForm}
+        />
+      )}
+
+      {notice && notice.kind !== "simple" && (
+        <Card className="flex items-start gap-3" role="status">
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <p className="text-sm text-foreground">
+              {notice.kind === "card"
+                ? <>Cargado en el resumen de <span className="font-medium">{notice.periodName}</span> de <span className="font-medium">{notice.cardName}</span>{notice.shared ? " y compartido." : "."}</>
+                : <>Gasto compartido con {notice.people} {notice.people === 1 ? "persona" : "personas"}.</>}
+            </p>
+            <div className="flex flex-wrap gap-3 text-xs font-medium">
+              {notice.kind === "card" && (
+                <button type="button" className="text-primary hover:underline"
+                  onClick={() => router.push(`/tarjetas/${notice.card_id}/${notice.statement_id}`)}>
+                  Ver resumen
+                </button>
+              )}
+              {(notice.kind === "shared" || notice.shared) && (
+                <button type="button" className="text-primary hover:underline" onClick={() => router.push("/shared")}>
+                  Ver en Compartidos
+                </button>
+              )}
+            </div>
           </div>
-          <form onSubmit={handleSubmit} className="space-y-3">
-          <CurrencyToggle className="mb-1"
-            value={form.currency}
-            onChange={cur => setForm(p => ({ ...p, currency: cur }))} />
-          <FormGrid>
-            {/* USD expenses get a real category too — a trip paid in dollars
-                belongs in "Viajes", not in a currency bucket. Leaving it empty
-                falls back to "Consumo en dólares". */}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">
-                Categoría
-                {form.currency === "USD" && (
-                  <span className="font-normal text-muted-foreground/80"> — opcional</span>
-                )}
-              </label>
-              <div className="flex gap-1.5">
-                <SelectField className="flex-1" required={form.currency === "ARS"}
-                  value={form.category_id}
-                  onChange={v => setForm(p => ({ ...p, category_id: v }))}
-                  placeholder={form.currency === "USD" ? "Consumo en dólares" : "Categoría"}
-                  options={categories.map(c => ({ value: String(c.id), label: c.name }))} />
-                <button type="button" title="Nueva categoría"
-                  onClick={() => setShowCatForm(true)}
-                  className="mt-1 px-2.5 border-2 border-ink rounded-lg text-muted-foreground hover:bg-accent shrink-0 text-lg leading-none">+</button>
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Fecha</label>
-              <DateField required
-                value={form.expense_date} onChange={v => setForm(p => ({ ...p, expense_date: v }))} />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Monto</label>
-              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
-                value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} required />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Descripción (opcional)</label>
-              <input className={FIELD}
-                value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
-            </div>
-          </FormGrid>
-          <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? "Guardando..." : "Guardar"}
-            </Button>
-          </div>
-          </form>
-          </Card>
-        </div>
+          <button type="button" onClick={() => setNotice(null)} aria-label="Cerrar aviso"
+            className="p-1 text-muted-foreground hover:text-foreground shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        </Card>
       )}
 
       {/* Same bar as /tarjetas and /ingresos — see components/ui/filters.tsx.
@@ -548,16 +503,7 @@ export default function ExpensesPage() {
         })()}
       </Card>
 
-      <Fab label="Registrar egreso" data-tour="expenses-add"
-        onClick={() => { setEditId(null); setForm(newEntryForm()); setShowForm(true); }} />
-
-      {showCatForm && (
-        <NewCategoryModal
-          initialColor={pickCategoryColor(categories.map(c => c.color))}
-          onSave={handleAddCat}
-          onClose={() => setShowCatForm(false)}
-        />
-      )}
+      <Fab label="Registrar egreso" data-tour="expenses-add" onClick={openCreate} />
 
       {detailEntry && (
         <EntryDetailModal
