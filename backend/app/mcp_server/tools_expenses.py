@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.mcp_server.context import current_caller, tool_session
-from app.mcp_server.instance import mcp
+from app.mcp_server.instance import READ_ONLY, mcp
 from app.mcp_server.params import MAX_LIMIT, clamp, parse_range
 from app.mcp_server.serialize import f0, guard, pct
 from app.services import analytics
@@ -42,7 +42,7 @@ def _shape(result: dict, *, currency: str, group_by: str) -> dict:
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def list_expenses(
     date_from: str,
     date_to: str,

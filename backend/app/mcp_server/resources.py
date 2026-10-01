@@ -17,9 +17,13 @@ Un **hogar** (tenant) agrupa a varias personas. Todo lo que devuelve este
 conector es del hogar completo, nunca de una sola persona.
 
 ## Ingresos
-Se registran por mes con neto, bruto y deducciones, asociados a una **fuente**
-(sueldo, bonus, aguinaldo, inversiones, otros). Siempre en pesos: la app no
-registra ingresos en dólares.
+Cada ingreso tiene un **neto** (lo cobrado) y pertenece a una **fuente**
+(sueldo, bonus, aguinaldo, inversiones, otros), en ARS o USD — nunca se suman
+entre sí. Cada fuente puede definir **campos de detalle** (bruto, cargas
+sociales, ganancias, bonos…) con un tipo: `add` suma al neto, `subtract` resta,
+`info` se guarda pero no entra en la cuenta. Un ingreso guarda un monto por
+campo. `bruto`/`deducciones` son totales derivados: Σ add y Σ subtract.
+Quitar un campo lo archiva; los ingresos viejos conservan sus montos.
 
 ## Gastos
 Una sola tabla de gastos concentra todo, tenga el origen que tenga:
@@ -119,4 +123,23 @@ def evaluar_compra(descripcion: str, monto: float, cuotas: int = 1) -> str:
         f"mes ya cargado de compromisos.\n"
         f"4. Dame una recomendación clara: si conviene, en cuántas cuotas, y qué "
         f"mes sería el más ajustado. Si no conviene, decilo sin vueltas."
+    )
+
+
+@mcp.prompt()
+def cargar_recibo() -> str:
+    """Carga o corrige un ingreso a partir de un recibo de sueldo adjunto."""
+    return (
+        "Te paso un recibo de sueldo. Cargalo en RegistrApp.\n\n"
+        "1. Leé del recibo: empleador, período, fecha de pago, neto cobrado y cada "
+        "concepto con su monto (remunerativos, no remunerativos, descuentos).\n"
+        "2. Con get_taxonomy elegí la fuente que corresponde y mirá sus campos. Si "
+        "no hay fuente para ese empleador, proponé crearla con create_income_source.\n"
+        "3. Con list_income (group_by=\"none\", rango del mes) fijate si ese recibo "
+        "ya está cargado. Si está, compará campo por campo y mostrá diferencias.\n"
+        "4. Armá la carga con save_income_entry en dry_run: neto en amount, cada "
+        "concepto en items con el nombre del campo. Si un concepto no tiene campo, "
+        "proponé agregarlo en new_fields con su tipo (add/subtract/info).\n"
+        "5. Mostrame la vista previa y las advertencias, y guardá sólo cuando te "
+        "confirme."
     )

@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from app.mcp_server.context import current_caller, tool_session
-from app.mcp_server.instance import mcp
+from app.mcp_server.instance import READ_ONLY, mcp
 from app.mcp_server.params import MAX_SERIES_MONTHS, check_month, clamp
 from app.mcp_server.serialize import f, f0, guard
 from app.services import analytics
@@ -15,7 +15,7 @@ DEFAULT_MACRO_COLUMNS = ["inflation_monthly_pct", "uva_value", "usd_blue"]
 MAX_MACRO_COLUMNS = 6
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def get_usd_position(year: int | None = None, month: int | None = None) -> dict[str, Any]:
     """Tenencia en dólares del hogar y movimientos de divisas del mes.
 
@@ -86,7 +86,7 @@ async def get_usd_position(year: int | None = None, month: int | None = None) ->
     })
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def get_macro(months: int = 12, variables: list[str] | None = None) -> dict[str, Any]:
     """Variables macroeconómicas argentinas, mes a mes.
 

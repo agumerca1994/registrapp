@@ -14,7 +14,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.mcp_server.context import current_caller, tool_session
-from app.mcp_server.instance import mcp
+from app.mcp_server.instance import READ_ONLY, mcp
 from app.mcp_server.params import clamp
 from app.mcp_server.serialize import f, f0, guard, pct
 from app.services import analytics
@@ -22,7 +22,7 @@ from app.services import analytics
 MAX_INSTALLMENT_ROWS = 10
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def get_upcoming_commitments(months_ahead: int = 6) -> dict[str, Any]:
     """Todo lo que el hogar ya tiene comprometido en los próximos meses.
 
@@ -130,7 +130,7 @@ async def get_upcoming_commitments(months_ahead: int = 6) -> dict[str, Any]:
     })
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def get_budget_baseline(months: int = 6, include_current: bool = False) -> dict[str, Any]:
     """Base para armar un presupuesto mensual.
 
@@ -244,7 +244,7 @@ async def get_budget_baseline(months: int = 6, include_current: bool = False) ->
     })
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def simulate_purchase(
     amount: float,
     currency: str = "ARS",

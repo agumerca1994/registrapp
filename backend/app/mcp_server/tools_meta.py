@@ -2,9 +2,10 @@
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.mcp_server.context import current_caller, tool_session
-from app.mcp_server.instance import mcp
+from app.mcp_server.instance import READ_ONLY, mcp
 from app.mcp_server.serialize import f, f0, guard
 from app.models.credit_card import CreditCard
 from app.models.expense import ExpenseCategory
@@ -13,7 +14,7 @@ from app.services import analytics
 from app.services.currency import get_tenant_rate_type
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def get_taxonomy() -> dict[str, Any]:
     """Catálogo del hogar: categorías de gasto, fuentes de ingreso y tarjetas.
 
@@ -33,6 +34,7 @@ async def get_taxonomy() -> dict[str, Any]:
         sources = (await db.execute(
             select(IncomeSource)
             .where(IncomeSource.tenant_id == tid)
+            .options(selectinload(IncomeSource.fields))
             .order_by(IncomeSource.name)
         )).scalars().all()
 
@@ -55,6 +57,12 @@ async def get_taxonomy() -> dict[str, Any]:
                 "name": s.name,
                 "income_type": s.income_type.value if s.income_type else None,
                 "is_active": s.is_active,
+                # Los campos de detalle activos: con estos nombres se cargan
+                # los ítems de un recibo en `save_income_entry`.
+                "fields": [
+                    {"id": fl.id, "name": fl.name, "kind": fl.kind}
+                    for fl in s.fields if fl.is_active
+                ],
             }
             for s in sources
         ],
@@ -67,11 +75,12 @@ async def get_taxonomy() -> dict[str, Any]:
         "notes": [
             "is_fixed marca las categorías que el usuario declaró como gasto fijo.",
             "Los gastos en USD siempre caen en la categoría 'Consumo en dólares'.",
+            "fields.kind: add suma al neto, subtract resta, info no entra en la cuenta.",
         ],
     })
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def get_month_summary(year: int, month: int) -> dict[str, Any]:
     """Resumen de un mes: ingresos, gastos, balance y contexto macro.
 

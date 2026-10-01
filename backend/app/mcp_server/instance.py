@@ -5,12 +5,29 @@ decorators never create an import cycle.
 """
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from mcp.types import ToolAnnotations
 
 from app.core.config import settings
 
 INSTRUCTIONS = """\
 RegistrApp es una app de finanzas personales de un hogar argentino. Este conector
-es de SOLO LECTURA: ninguna herramienta modifica, crea ni borra datos.
+consulta todo el hogar y además puede CARGAR, EDITAR Y BORRAR INGRESOS (con su
+detalle por campo: bruto, cargas sociales, ganancias, bonos…), por ejemplo a
+partir de un recibo de sueldo. Gastos, tarjetas y el resto son sólo lectura.
+
+Reglas para escribir — no hay excepciones:
+
+- Toda herramienta de escritura arranca en dry_run=true y devuelve una vista
+  previa sin guardar nada. Mostrásela al usuario (qué se crea o cambia, el antes
+  y el después, y las `warnings`) y repetí con dry_run=false SÓLO si confirma.
+- Antes de cargar un recibo, buscá si ese mes ya está cargado (`list_income` con
+  group_by="none" trae ids y detalle). Si existe, proponé editarlo con entry_id
+  en vez de crear un duplicado; si difiere del recibo, mostrá las diferencias.
+- `amount` es el NETO cobrado. Los ítems van en positivo: el tipo del campo
+  (add/subtract/info) decide si suma o resta. Usá los nombres de campo de
+  `get_taxonomy`; si el recibo trae un concepto que la fuente no tiene, proponé
+  agregarlo (new_fields) en vez de meterlo en otro campo.
+- Si no estás seguro de un monto o de a qué campo va, preguntá antes de escribir.
 
 Reglas del dominio que tenés que respetar al interpretar los números:
 
@@ -53,3 +70,7 @@ mcp = FastMCP(
         allowed_origins=settings.mcp_allowed_origins,
     ),
 )
+
+# Las herramientas de consulta lo declaran para que el cliente no pida
+# confirmación al leer; las de escritura (tools_income_write) declaran lo contrario.
+READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)

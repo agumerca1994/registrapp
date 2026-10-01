@@ -91,8 +91,9 @@ backend/app/
   services/   # currency.py  — RATE_TYPES, USD holding formula, USD category helper
               # analytics.py — tenant-scoped aggregations, auth-free (dashboard + MCP)
               # search.py    — accent-folded LIKE shared by the list endpoints' search boxes
+              # income.py    — income writes (fields, items, derived bruto/deducciones), shared by router + MCP
               # oauth_provider.py, mcp_tokens.py, rate_limit.py — MCP connector auth
-  mcp_server/ # Read-only MCP connector served at /mcp (see "Conector MCP" below)
+  mcp_server/ # MCP connector served at /mcp — reads everything, writes only income (see "Conector MCP" below)
 ```
 
 All routers follow the pattern: `Depends(get_current_user)` + `Depends(get_db)` → `_get_db_user()` → query with `tenant_id`. `routers/dashboard.py` is now a thin shell: its schemas (`MonthSummary`, `HistoryPoint`, re-exported for back-compat) and all its queries live in `services/analytics.py` as plain `(db, tenant_id, ...)` functions, so the MCP connector can reuse them without a Firebase token. Put new aggregations there, not in a router.
@@ -312,7 +313,7 @@ La clave única es `(tenant_id, person_key)`, y **`person_key` es el gemelo back
 The root `mcp/server.py` (a FastMCP stdio server registered in `.mcp.json` as `registrapp-logs`) wraps the `/internal/logs*` endpoints as Claude Code tools (`recent_errors`, `search_logs`, `logs_by_module`, `log_summary`), authenticating with `MCP_INTERNAL_KEY` against the same `INTERNAL_LOG_KEY`. It only covers the log endpoints — the other `/internal/*` diagnostics above are called directly with `curl` + the same key. **It is an ops tool and has nothing to do with the user-facing MCP connector below** — different server, different auth, different audience.
 
 ### Conector MCP (`/mcp`) — la app como fuente de datos para una IA
-End users connect their household to Claude (web, Desktop, Code) and ask about their own finances. **Read-only by design: no tool in `backend/app/mcp_server/` writes anything.** Scope is the whole household (`tenant_id`), like the rest of the app.
+End users connect their household to Claude (web, Desktop, Code) and ask about their own finances. **Reads everything; writes only income** (entries, their detail items, and source fields — `tools_income_write.py`). Scope is the whole household (`tenant_id`), like the rest of the app. **There is no write scope on purpose**: the user chose that every connection (OAuth and PAT) can write, so `registrapp:read` is still the only scope and the consent page / Settings say "Lectura + ingresos". Adding one later means whitelisting it in `oauth_provider.authorize`, the registration options and both metadata documents, and checking it in the write tools.
 
 **Transport** (`app/mcp_server/instance.py` + `transport.py`): a stateless `FastMCP` served at the exact route `/mcp`, `mcp==1.29.0` pinned (later releases rename `FastMCP` → `MCPServer` and change `streamable_http_app()`'s signature). Three things break it if touched:
 - It's registered as `Route("/mcp", endpoint=<asgi app>)`, **not** `app.mount("/mcp", ...)` — mounting answers `POST /mcp` with a 307 to `/mcp/`, which gives the RFC 8707 canonical resource two spellings.
@@ -335,7 +336,13 @@ What the SDK does *not* do and lives in our code: validating the `resource` indi
 - `mcp_cors_middleware` handles CORS for `/mcp`, `/oauth/*` and `/.well-known/*` separately, because the global `CORSMiddleware` sends `allow_credentials=True` and a browser refuses to pair that with `*` — while claude.ai probes discovery from arbitrary origins with no cookies. This is why `ALLOWED_ORIGINS` does **not** need `claude.ai` added.
 - `_is_expected_auth_noise` keeps `AppLog` from filling up: an unauthenticated 401 on `/mcp` **is** the normal first step of OAuth discovery, so every client that connects would otherwise log one.
 
-**Tools** (`app/mcp_server/tools_*.py`, all read-only, built on `services/analytics.py`): `get_taxonomy`, `get_month_summary`, `list_expenses`, `list_income`, `compare_periods`, `get_series`, `get_upcoming_commitments`, `get_budget_baseline`, `simulate_purchase`, `get_usd_position`, `get_macro`. Plus two resources (`registrapp://schema`, `registrapp://taxonomy`) and three prompts (`analisis_mensual`, `armar_presupuesto`, `evaluar_compra`).
+**Tools** (`app/mcp_server/tools_*.py`): read-only ones, built on `services/analytics.py` and annotated `READ_ONLY` (`readOnlyHint`) — `get_taxonomy` (income sources carry their active `fields`), `get_month_summary`, `list_expenses`, `list_income` (`group_by="none"` returns each entry's `id` and `items`), `compare_periods`, `get_series`, `get_upcoming_commitments`, `get_budget_baseline`, `simulate_purchase`, `get_usd_position`, `get_macro`. Write ones, in `tools_income_write.py`: `save_income_entry` (create/edit with detail matched by field *name*, accent/case-insensitive; `new_fields` adds missing fields; neto computed from the detail when omitted), `delete_income_entry` (`destructiveHint`), `create_income_source`, `update_income_source_fields`. Plus two resources (`registrapp://schema`, `registrapp://taxonomy`) and four prompts (`analisis_mensual`, `armar_presupuesto`, `evaluar_compra`, `cargar_recibo`).
+
+Rules the write tools encode, and that any new one must keep:
+- **`dry_run=True` by default, and the preview is the real write rolled back** — same service calls, then `db.rollback()`. A preview computed separately from the write is one that can disagree with it. The instructions tell the assistant to show it and only repeat with `dry_run=false` after the user confirms.
+- **No logic of their own**: they call `services/income.py` (`assert_owns_source`, `apply_items`, `sync_fields`, `ensure_field`…), the same functions `routers/income.py` uses. Those raise `HTTPException`; the tools convert to `ToolError`.
+- **Warnings, not blocks**: a neto that doesn't match the detail, or another entry of the same source in the same month (the likely duplicate when loading a payslip twice), come back in `warnings`.
+- **Every applied write is audited** as an `AppLog` row (`level="INFO"`, `logger_name="mcp.write"`, before/after in `extra`, plus the client name) — written directly, since `DBLogHandler` only keeps WARNING+. Writes are capped at 120/hour per household (`rate_limit.check`).
 
 Two rules the tools encode and that any new tool must respect:
 - **Aggregate by default.** `list_expenses` groups by category unless asked otherwise (~1 KB instead of ~28 KB of raw rows). `serialize.guard()` is the backstop: past ~48 KB it drops detail arrays, keeps the aggregates, and explains how to re-query. Amounts serialize as `float`, never `Decimal` (which produces an `anyOf: [number, string]` output schema and a stringified value).

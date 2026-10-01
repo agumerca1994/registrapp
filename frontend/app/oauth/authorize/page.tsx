@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AlertCircle, Eye, Loader2, Lock, Plug } from "lucide-react";
+import { AlertCircle, Eye, Loader2, Pencil, Plug } from "lucide-react";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -145,9 +145,10 @@ function AuthorizeInner() {
           </p>
         </div>
         <div className="flex items-start gap-2">
-          <Lock className="w-4 h-4 mt-0.5 text-primary shrink-0" />
+          <Pencil className="w-4 h-4 mt-0.5 text-primary shrink-0" />
           <p className="text-sm text-foreground">
-            <strong>No va a poder</strong> modificar, crear ni borrar nada.
+            <strong>Va a poder cargar, editar y borrar ingresos</strong>, siempre con una
+            vista previa que tenés que confirmar. Lo demás es sólo lectura.
           </p>
         </div>
       </div>
@@ -162,7 +163,7 @@ function AuthorizeInner() {
         <div className="flex flex-wrap gap-1 pt-1">
           {info.scopes.map(s => (
             <Chip key={s} tone="emerald">
-              {s === "registrapp:read" ? "Solo lectura" : s}
+              {s === "registrapp:read" ? "Lectura + ingresos" : s}
             </Chip>
           ))}
         </div>

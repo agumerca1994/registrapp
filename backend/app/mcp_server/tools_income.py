@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.mcp_server.context import current_caller, tool_session
-from app.mcp_server.instance import mcp
+from app.mcp_server.instance import READ_ONLY, mcp
 from app.mcp_server.params import (
     MAX_LIMIT, MAX_SERIES_MONTHS, check_month, clamp, parse_range,
 )
@@ -28,7 +28,7 @@ _USD_COLUMN_BY_RATE = {
 }
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def list_income(
     date_from: str,
     date_to: str,
@@ -49,7 +49,9 @@ async def list_income(
         currency: "ARS" o "USD". La mayoría de los hogares sólo tiene ARS.
         source: Nombre (o parte) de la fuente de ingreso.
         income_type: "salary", "bonus", "aguinaldo", "investment" u "other".
-        group_by: "month", "source" o "none".
+        group_by: "month", "source" o "none". Con "none" cada ingreso trae su
+            `id` y el detalle por campo (`items`): es lo que hay que usar
+            para comparar un recibo con lo cargado antes de editarlo.
         limit: Máximo de filas cuando group_by es "none".
     """
     start, end = parse_range(date_from, date_to)
@@ -82,6 +84,7 @@ async def list_income(
                     "neto": f0(e["neto"]),
                     "bruto": f(e["bruto"]),
                     "deducciones": f(e["deducciones"]),
+                    "items": [{**i, "amount": f0(i["amount"])} for i in e["items"]],
                 }
                 for e in r["entries"]
             ]
@@ -113,7 +116,7 @@ async def _metric_for_month(
     return summary.balance_usd if currency == "USD" else summary.balance
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def compare_periods(
     metric: str,
     year: int,
@@ -198,7 +201,7 @@ async def compare_periods(
     return guard(out)
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def get_series(
     metric: str,
     months: int = 24,

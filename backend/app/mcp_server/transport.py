@@ -26,7 +26,8 @@ from app.mcp_server.instance import mcp
 # Importing these modules is what registers the tools, resources and prompts:
 # the decorators run at import time. Nothing else uses these names.
 from app.mcp_server import (  # noqa: E402,F401
-    resources, tools_expenses, tools_forecast, tools_fx, tools_income, tools_meta,
+    resources, tools_expenses, tools_forecast, tools_fx, tools_income,
+    tools_income_write, tools_meta,
 )
 
 logger = logging.getLogger(__name__)

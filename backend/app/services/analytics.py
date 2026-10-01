@@ -24,6 +24,7 @@ from decimal import Decimal
 from pydantic import BaseModel
 from sqlalchemy import and_, case, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.credit_card import CreditCard, CreditCardItem, CreditCardStatement
 from app.models.expense import ExpenseCategory, ExpenseEntry
@@ -615,11 +616,21 @@ async def income_aggregate(
             select(IncomeEntry, IncomeSource.name)
             .join(IncomeSource, IncomeEntry.source_id == IncomeSource.id)
             .where(*filters)
+            .options(selectinload(IncomeEntry.items))
             .order_by(IncomeEntry.period_date.desc(), IncomeEntry.id.desc())
             .limit(limit)
         )
+        # `id` e `items` hacen falta para que el conector pueda comparar un
+        # recibo contra lo cargado y editar el ingreso correcto.
         entries = [
             {
+                "id": e.id,
+                "source_id": e.source_id,
+                "notes": e.notes,
+                "items": [
+                    {"field_id": i.field_id, "name": i.name, "kind": i.kind, "amount": i.amount}
+                    for i in sorted(e.items, key=lambda i: (i.field.position, i.field_id))
+                ],
                 "period": period_key(e.period_date),
                 "date": e.period_date.isoformat(),
                 "source": src_name,
