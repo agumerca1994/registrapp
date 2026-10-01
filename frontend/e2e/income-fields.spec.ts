@@ -109,7 +109,7 @@ test("detalle por fuente: neto automático y quitar un campo no toca lo cargado"
     await expect(page.getByRole("heading", { name: "Editar fuente" })).toBeVisible();
     const bonoRow = page.getByTestId("source-field-row").filter({ has: page.locator('input[value="Bono"]') });
     await bonoRow.getByTitle("Quitar campo").click();
-    await expect(page.getByText("Quitados — los ingresos ya cargados conservan sus montos:")).toBeVisible();
+    await expect(page.getByText("Quitados", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Guardar" }).click();
     await expect(page.getByRole("heading", { name: "Editar fuente" })).toBeHidden();
 

@@ -114,15 +114,6 @@ export function SourceFormModal({ source, onSaved, onClose }: {
           </FormGrid>
 
           <div className="space-y-2">
-            <div>
-              <p className="text-sm font-medium text-foreground">Detalle <span className="text-muted-foreground font-normal">(opcional)</span></p>
-              <p className="text-xs text-muted-foreground">
-                Sin campos, el ingreso se carga sólo con el neto. Con campos, el neto se calcula
-                como lo que <strong>suma</strong> menos lo que <strong>resta</strong>; <strong>info</strong> se
-                guarda para analizar pero no entra en la cuenta.
-              </p>
-            </div>
-
             {rows.map((r, i) => (
               <div key={r.key} className="rounded-xl border p-2.5 space-y-2" data-testid="source-field-row">
                 <div className="flex items-center gap-1.5">
@@ -150,11 +141,6 @@ export function SourceFormModal({ source, onSaved, onClose }: {
                     value: k, label: KIND_LABELS[k],
                     disabled: r.has_items && k !== r.kind,
                   }))} />
-                {r.has_items && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Ya tiene montos cargados: el tipo queda fijo para no cambiar la cuenta de meses anteriores.
-                  </p>
-                )}
               </div>
             ))}
 
@@ -166,9 +152,7 @@ export function SourceFormModal({ source, onSaved, onClose }: {
 
             {archived.length > 0 && (
               <div className="pt-1 space-y-1">
-                <p className="text-xs text-muted-foreground">
-                  Quitados — los ingresos ya cargados conservan sus montos:
-                </p>
+                <p className="text-xs text-muted-foreground">Quitados</p>
                 {archived.map(r => (
                   <div key={r.key} className="flex items-center justify-between gap-2 text-sm px-2.5 py-1.5 rounded-lg bg-muted">
                     <span className="truncate text-muted-foreground">{r.name} <span className="text-xs">({KIND_LABELS[r.kind]})</span></span>
