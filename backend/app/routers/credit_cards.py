@@ -1,4 +1,3 @@
-from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 
@@ -12,7 +11,7 @@ from app.core.firebase import get_current_user
 from app.services import contacts as contacts_service
 from app.services import notify_shared, participants
 from app.models.user import User
-from app.models.expense import EXPENSE_SOURCE_CREDIT_CARD, ExpenseEntry, ExpenseCategory
+from app.models.expense import ExpenseEntry
 from app.models.credit_card import CreditCard, CreditCardStatement, CreditCardItem
 from app.schemas.credit_card import (
     CreditCardCreate, CreditCardUpdate, CreditCardOut,
@@ -21,9 +20,13 @@ from app.schemas.credit_card import (
     ForExpenseOut,
 )
 from app.models.shared_expense import SharedExpense, SharedExpenseSplit
-from app.routers.expenses import assert_owns_category
 from app.schemas.shared_expense import SharedExpenseOut, ShareCreditCardItemBody
-from app.services.currency import estimate_due_date_py, get_or_create_usd_category
+from app.services.currency import estimate_due_date_py
+from app.services.credit_cards import (
+    next_month_date, find_or_create_statement, create_expense_entry,
+    create_item_in_statement, apply_item_update, delete_item_tree,
+    delete_statement_tree, delete_card_tree,
+)
 
 router = APIRouter(prefix="/credit-cards", tags=["credit-cards"])
 
@@ -57,65 +60,6 @@ def _statement_query(stmt_id: int):
             selectinload(CreditCardStatement.items).selectinload(CreditCardItem.shared_expense),
         )
     )
-
-
-def _next_month_date(d: date, months_ahead: int) -> date:
-    month = d.month + months_ahead
-    year = d.year + (month - 1) // 12
-    month = (month - 1) % 12 + 1
-    day = min(d.day, monthrange(year, month)[1])
-    return date(year, month, day)
-
-
-async def _find_or_create_statement(
-    card: CreditCard, year: int, month: int, tenant_id: int, db: AsyncSession
-) -> CreditCardStatement:
-    stmt = await db.scalar(
-        select(CreditCardStatement).where(
-            CreditCardStatement.card_id == card.id,
-            CreditCardStatement.year == year,
-            CreditCardStatement.month == month,
-        )
-    )
-    if not stmt:
-        stmt = CreditCardStatement(
-            tenant_id=tenant_id,
-            card_id=card.id,
-            year=year,
-            month=month,
-            status="open",
-        )
-        db.add(stmt)
-        await db.flush()
-    return stmt
-
-
-async def _create_expense_entry(
-    card: CreditCard,
-    item_date: date,
-    amount: Decimal,
-    description: str,
-    category_id: int,
-    tenant_id: int,
-    user_id: int,
-    db: AsyncSession,
-    currency: str = "ARS",
-) -> ExpenseEntry:
-    entry = ExpenseEntry(
-        tenant_id=tenant_id,
-        user_id=user_id,
-        category_id=category_id,
-        amount=amount,
-        description=description,
-        expense_date=item_date,
-        payment_method="tarjeta_credito",
-        entity=card.bank,
-        currency=currency,
-        source=EXPENSE_SOURCE_CREDIT_CARD,
-    )
-    db.add(entry)
-    await db.flush()
-    return entry
 
 
 # -- Cards --------------------------------------------------------------------
@@ -184,16 +128,7 @@ async def delete_card(
     if not card:
         raise HTTPException(status_code=404, detail="Tarjeta no encontrada")
 
-    if not keep_expenses:
-        for stmt in card.statements:
-            for item in stmt.items:
-                if item.expense_entry_id:
-                    entry = await db.get(ExpenseEntry, item.expense_entry_id)
-                    if entry:
-                        await db.delete(entry)
-        await db.flush()
-
-    await db.delete(card)
+    await delete_card_tree(card, keep_expenses, db)
     await db.commit()
 
 
@@ -342,15 +277,7 @@ async def delete_statement(
     if not stmt or stmt.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Resumen no encontrado")
 
-    if not keep_expenses:
-        for item in stmt.items:
-            if item.expense_entry_id:
-                entry = await db.get(ExpenseEntry, item.expense_entry_id)
-                if entry:
-                    await db.delete(entry)
-        await db.flush()
-
-    await db.delete(stmt)
+    await delete_statement_tree(stmt, keep_expenses, db)
     await db.commit()
 
 
@@ -395,12 +322,12 @@ async def finalize_statement(
             group_id = item.installment_group_id or item.id
             remaining = total_months - months_done
             for offset in range(1, remaining + 1):
-                future_date = _next_month_date(date(stmt.year, stmt.month, 1), offset)
-                future_stmt = await _find_or_create_statement(
+                future_date = next_month_date(date(stmt.year, stmt.month, 1), offset)
+                future_stmt = await find_or_create_statement(
                     card, future_date.year, future_date.month, user.tenant_id, db
                 )
-                future_item_date = _next_month_date(item.item_date, offset)
-                future_entry = await _create_expense_entry(
+                future_item_date = next_month_date(item.item_date, offset)
+                future_entry = await create_expense_entry(
                     card, future_item_date, item.amount,
                     f"{item.description} ({months_done + offset}/{total_months})",
                     item.category_id, user.tenant_id, user.id, db,
@@ -421,12 +348,12 @@ async def finalize_statement(
                 db.add(future_item)
 
         elif item.item_type == "recurring":
-            future_date = _next_month_date(date(stmt.year, stmt.month, 1), 1)
-            future_stmt = await _find_or_create_statement(
+            future_date = next_month_date(date(stmt.year, stmt.month, 1), 1)
+            future_stmt = await find_or_create_statement(
                 card, future_date.year, future_date.month, user.tenant_id, db
             )
-            future_item_date = _next_month_date(item.item_date, 1)
-            future_entry = await _create_expense_entry(
+            future_item_date = next_month_date(item.item_date, 1)
+            future_entry = await create_expense_entry(
                 card, future_item_date, item.amount,
                 item.description, item.category_id, user.tenant_id, user.id, db,
             )
@@ -515,95 +442,6 @@ async def list_items(
     return result.all()
 
 
-async def _create_item_in_statement(
-    stmt: CreditCardStatement,
-    card: CreditCard,
-    body: CreditCardItemCreate,
-    user: User,
-    db: AsyncSession,
-) -> CreditCardItem:
-    """Crea un ítem en `stmt`, su egreso espejo y, si es en cuotas, las cuotas
-    futuras en los resúmenes que correspondan. **Sólo hace flush, nunca commit.**
-
-    Existe para que el alta desde un resumen (`create_item`) y el alta desde el
-    formulario unificado de egresos (`create_item_for_card`) sean la misma
-    implementación: la segunda además puede compartir el ítem en la misma
-    transacción, y eso sólo es posible si nadie confirma a mitad de camino.
-    """
-    cuota_label = ""
-    if body.item_type == "installment":
-        cuota_label = f" ({body.installment_number}/{body.installment_count})"
-
-    category_id = body.category_id
-    if body.currency == "USD":
-        category_id = await get_or_create_usd_category(user.tenant_id, db)
-    elif category_id is None:
-        raise HTTPException(status_code=422, detail="category_id es requerido para gastos en ARS")
-    else:
-        await assert_owns_category(category_id, user.tenant_id, db)
-
-    entry = await _create_expense_entry(
-        card, body.item_date, body.amount,
-        f"{body.description}{cuota_label}",
-        category_id, user.tenant_id, user.id, db,
-        currency=body.currency,
-    )
-
-    item = CreditCardItem(
-        statement_id=stmt.id,
-        description=body.description,
-        category_id=category_id,
-        item_date=body.item_date,
-        item_type=body.item_type,
-        amount=body.amount,
-        currency=body.currency,
-        installment_count=body.installment_count,
-        installment_number=body.installment_number if body.item_type == "installment" else None,
-        purchase_total=body.purchase_total,
-        expense_entry_id=entry.id,
-    )
-    db.add(item)
-    await db.flush()  # need item.id for installment_group_id
-
-    if body.item_type == "installment" and body.installment_count and body.installment_count > 1:
-        for offset in range(1, body.installment_count):
-            cuota_n = offset + 1
-            future_date = _next_month_date(date(stmt.year, stmt.month, 1), offset)
-            future_stmt = await _find_or_create_statement(
-                card, future_date.year, future_date.month, user.tenant_id, db
-            )
-            future_item_date = _next_month_date(body.item_date, offset)
-            # La categoría ya resuelta y no `body.category_id`: hoy da lo mismo
-            # porque las cuotas son sólo en pesos, pero es la que se validó.
-            future_entry = await _create_expense_entry(
-                card, future_item_date, body.amount,
-                f"{body.description} ({cuota_n}/{body.installment_count})",
-                category_id, user.tenant_id, user.id, db,
-                currency=body.currency,
-            )
-            future_item = CreditCardItem(
-                statement_id=future_stmt.id,
-                description=body.description,
-                category_id=category_id,
-                item_date=future_item_date,
-                item_type="installment",
-                amount=body.amount,
-                currency=body.currency,
-                installment_count=body.installment_count,
-                installment_number=cuota_n,
-                purchase_total=body.purchase_total,
-                installment_group_id=item.id,
-                expense_entry_id=future_entry.id,
-            )
-            db.add(future_item)
-        # Las cuotas hijas tienen que existir en la sesión antes de que alguien
-        # las busque por `installment_group_id` (compartir en la misma
-        # transacción lo hace).
-        await db.flush()
-
-    return item
-
-
 async def _load_item_out(item_id: int, db: AsyncSession) -> CreditCardItem:
     return await db.scalar(
         select(CreditCardItem)
@@ -628,7 +466,7 @@ async def create_item(
     if not stmt or stmt.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Resumen no encontrado")
 
-    item = await _create_item_in_statement(stmt, stmt.card, body, user, db)
+    item = await create_item_in_statement(stmt, stmt.card, body, user, db)
     await db.commit()
     return await _load_item_out(item.id, db)
 
@@ -651,27 +489,8 @@ async def update_item(
     )
     if not item or item.statement.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Item no encontrado")
-    if item.installment_group_id is not None:
-        raise HTTPException(status_code=400, detail="Para editar una cuota, ve al resumen de la cuota 1")
 
-    updates = body.model_dump(exclude_none=True)
-    if "category_id" in updates:
-        await assert_owns_category(updates["category_id"], user.tenant_id, db)
-    for field, value in updates.items():
-        setattr(item, field, value)
-
-    if item.expense_entry_id:
-        entry = await db.get(ExpenseEntry, item.expense_entry_id)
-        if entry:
-            if "description" in updates:
-                entry.description = updates["description"]
-            if "category_id" in updates:
-                entry.category_id = updates["category_id"]
-            if "item_date" in updates:
-                entry.expense_date = updates["item_date"]
-            if "amount" in updates:
-                entry.amount = updates["amount"]
-
+    await apply_item_update(item, body.model_dump(exclude_none=True), user.tenant_id, db)
     await db.commit()
     result = await db.scalar(
         select(CreditCardItem)
@@ -697,27 +516,7 @@ async def delete_item(
     if not item or item.statement.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Item no encontrado")
 
-    if item.installment_group_id is not None:
-        raise HTTPException(status_code=400, detail="Para eliminar, ve al resumen de la cuota 1")
-
-    if item.item_type == "installment" and item.installment_group_id is None:
-        # Root installment: always cascade delete all future cuotas
-        group_items = await db.scalars(
-            select(CreditCardItem).where(CreditCardItem.installment_group_id == item.id)
-        )
-        for gi in group_items.all():
-            if gi.expense_entry_id:
-                entry = await db.get(ExpenseEntry, gi.expense_entry_id)
-                if entry:
-                    await db.delete(entry)
-            await db.delete(gi)
-        await db.flush()
-
-    if item.expense_entry_id:
-        entry = await db.get(ExpenseEntry, item.expense_entry_id)
-        if entry:
-            await db.delete(entry)
-    await db.delete(item)
+    await delete_item_tree(item, db)
     await db.commit()
 
 
@@ -935,8 +734,8 @@ async def create_item_for_card(
                 detail=f"La suma de los montos ({total_splits}) no coincide con el monto del ítem ({body.amount})",
             )
 
-    stmt = await _find_or_create_statement(card, body.year, body.month, user.tenant_id, db)
-    item = await _create_item_in_statement(stmt, card, body, user, db)
+    stmt = await find_or_create_statement(card, body.year, body.month, user.tenant_id, db)
+    item = await create_item_in_statement(stmt, card, body, user, db)
 
     shared_ids: list[int] = []
     notify_kwargs: dict = {}

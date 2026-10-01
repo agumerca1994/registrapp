@@ -1,51 +1,32 @@
 """Write tools for income: load a payslip, fix an entry, shape a source's fields.
 
-Three rules every tool here follows:
-
-- **Preview by default.** `dry_run=True` runs the *real* write — same service
-  code the app uses — and rolls it back. What the preview shows is exactly what
-  `dry_run=False` will store, because it is the same code path, not a
-  simulation that could drift from it.
-- **Same logic as the app.** Ownership checks, field archiving and the derived
-  bruto/deducciones live in `services/income.py`; nothing is reimplemented here.
-- **Every applied write leaves a trace** in `app_logs` (`logger_name="mcp.write"`):
-  a household needs to be able to tell which entries an assistant touched.
+Preview-then-apply, audit and the rate limit come from `write_common`. The
+logic itself — ownership checks, field archiving, the derived
+bruto/deducciones — lives in `services/income.py`; nothing is reimplemented here.
 """
 import logging
-import unicodedata
 from decimal import Decimal
 from typing import Any, Literal
 
 from fastapi import HTTPException
 from mcp.server.fastmcp.exceptions import ToolError
-from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
 from sqlalchemy import extract, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.mcp_server.context import McpCaller, current_caller, tool_session
+from app.mcp_server.context import current_caller, tool_session
 from app.mcp_server.instance import mcp
 from app.mcp_server.params import parse_date
 from app.mcp_server.serialize import f0
-from app.models.app_log import AppLog
+from app.mcp_server.write_common import (
+    DESTRUCTIVE, WRITE, audit, finish, fold, http_to_tool, limit_writes,
+)
 from app.models.income import IncomeEntry, IncomeSource, IncomeSourceField, IncomeType
 from app.schemas.income import IncomeEntryItemIn, IncomeSourceFieldIn
-from app.services import rate_limit
 from app.services.income import (
     apply_items, assert_owns_source, ensure_field, entry_out, load_source, sync_fields,
 )
 
 logger = logging.getLogger(__name__)
-
-WRITE_LIMIT_PER_HOUR = 120
-
-PREVIEW_NOTE = (
-    "Vista previa: NO se guardó nada. Mostrale este resultado al usuario y, sólo "
-    "si lo confirma, volvé a llamar con los mismos argumentos y dry_run=false."
-)
-
-WRITE = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False)
-DESTRUCTIVE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False)
 
 FieldKind = Literal["add", "subtract", "info"]
 
@@ -67,17 +48,6 @@ class RenameFieldArg(BaseModel):
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
-
-def _fold(s: str) -> str:
-    """Accent- and case-insensitive key, the Python twin of `services/search.fold`."""
-    nfd = unicodedata.normalize("NFD", s.strip().lower())
-    return " ".join("".join(c for c in nfd if unicodedata.category(c) != "Mn").split())
-
-
-def _limit(caller: McpCaller) -> None:
-    if not rate_limit.check(f"mcp_write:{caller.tenant_id}", WRITE_LIMIT_PER_HOUR, 3600):
-        raise ToolError("Demasiadas escrituras en la última hora; probá más tarde.")
-
 
 def _dec(v: float) -> Decimal:
     return Decimal(str(round(v, 2)))
@@ -117,44 +87,14 @@ def _fields_dict(source: IncomeSource) -> list[dict[str, Any]]:
     ]
 
 
-async def _audit(db: AsyncSession, caller: McpCaller, tool: str, message: str, extra: dict) -> None:
-    db.add(AppLog(
-        level="INFO",
-        logger_name="mcp.write",
-        message=f"{tool}: {message}",
-        module="mcp_server",
-        request_path="/mcp",
-        user_id=caller.user_id,
-        tenant_id=caller.tenant_id,
-        extra={"tool": tool, "client": caller.client_name, **extra},
-    ))
-
-
-async def _finish(db: AsyncSession, dry_run: bool, result: dict, audit) -> dict:
-    """Rollback for a preview, audit + commit for the real thing."""
-    result["dry_run"] = dry_run
-    if dry_run:
-        await db.rollback()
-        result["note"] = PREVIEW_NOTE
-    else:
-        await audit()
-        await db.commit()
-        result["note"] = "Guardado."
-    return result
-
-
-def _http_to_tool(exc: HTTPException) -> ToolError:
-    return ToolError(str(exc.detail))
-
-
 def _resolve_field(
     name: str, fields: list[IncomeSourceField], allowed_archived: set[int],
 ) -> IncomeSourceField:
-    key = _fold(name)
-    active = [fl for fl in fields if fl.is_active and _fold(fl.name) == key]
+    key = fold(name)
+    active = [fl for fl in fields if fl.is_active and fold(fl.name) == key]
     if active:
         return active[0]
-    archived = [fl for fl in fields if not fl.is_active and _fold(fl.name) == key and fl.id in allowed_archived]
+    archived = [fl for fl in fields if not fl.is_active and fold(fl.name) == key and fl.id in allowed_archived]
     if archived:
         return archived[0]
     available = ", ".join(fl.name for fl in fields if fl.is_active) or "(ninguno)"
@@ -213,7 +153,7 @@ async def save_income_entry(
 
     async with tool_session() as db:
         caller = await current_caller(db)
-        _limit(caller)
+        limit_writes(caller)
         try:
             before = None
             entry: IncomeEntry | None = None
@@ -233,8 +173,8 @@ async def save_income_entry(
 
             created_fields: list[str] = []
             for nf in new_fields or []:
-                key = _fold(nf.name)
-                if any(fl.is_active and _fold(fl.name) == key for fl in source.fields):
+                key = fold(nf.name)
+                if any(fl.is_active and fold(fl.name) == key for fl in source.fields):
                     continue
                 await ensure_field(source.id, nf.name.strip(), nf.kind, db)
                 created_fields.append(f"{nf.name.strip()} ({nf.kind})")
@@ -334,14 +274,14 @@ async def save_income_entry(
                 "warnings": warnings,
             }
             saved_id = saved.id
-            return await _finish(db, dry_run, result, lambda: _audit(
+            return await finish(db, dry_run, result, lambda: audit(
                 db, caller, "save_income_entry",
                 f"{action} ingreso {saved_id} ({after['source']}, {after['period_date']}, neto {after['neto']})",
                 {"entry_id": saved_id, "action": action, "before": before, "after": after},
             ))
         except HTTPException as exc:
             await db.rollback()
-            raise _http_to_tool(exc)
+            raise http_to_tool(exc)
 
 
 @mcp.tool(annotations=DESTRUCTIVE)
@@ -357,14 +297,14 @@ async def delete_income_entry(entry_id: int, dry_run: bool = True) -> dict[str, 
     """
     async with tool_session() as db:
         caller = await current_caller(db)
-        _limit(caller)
+        limit_writes(caller)
         entry = await db.get(IncomeEntry, entry_id)
         if entry is None or entry.tenant_id != caller.tenant_id:
             raise ToolError(f"No existe el ingreso {entry_id} en este hogar")
         snapshot = _entry_dict(await entry_out(entry_id, db))
         await db.delete(entry)
         await db.flush()
-        return await _finish(db, dry_run, {"action": "delete", "entry": snapshot}, lambda: _audit(
+        return await finish(db, dry_run, {"action": "delete", "entry": snapshot}, lambda: audit(
             db, caller, "delete_income_entry",
             f"borrado ingreso {entry_id} ({snapshot['source']}, {snapshot['period_date']}, neto {snapshot['neto']})",
             {"entry_id": entry_id, "before": snapshot},
@@ -398,14 +338,14 @@ async def create_income_source(
 
     async with tool_session() as db:
         caller = await current_caller(db)
-        _limit(caller)
+        limit_writes(caller)
         existing = (await db.scalars(
             select(IncomeSource).where(IncomeSource.tenant_id == caller.tenant_id)
         )).all()
-        clash = next((s for s in existing if _fold(s.name) == _fold(name)), None)
+        clash = next((s for s in existing if fold(s.name) == fold(name)), None)
         if clash:
             raise ToolError(f"Ya existe la fuente «{clash.name}» (id {clash.id}); usá esa.")
-        names = [_fold(fl.name) for fl in fields or []]
+        names = [fold(fl.name) for fl in fields or []]
         if len(set(names)) != len(names):
             raise ToolError("Hay dos campos con el mismo nombre")
 
@@ -424,7 +364,7 @@ async def create_income_source(
             },
         }
         sid = loaded.id
-        return await _finish(db, dry_run, result, lambda: _audit(
+        return await finish(db, dry_run, result, lambda: audit(
             db, caller, "create_income_source", f"fuente {sid} «{name.strip()}»",
             {"source_id": sid, "after": result["source"]},
         ))
@@ -454,7 +394,7 @@ async def update_income_source_fields(
     """
     async with tool_session() as db:
         caller = await current_caller(db)
-        _limit(caller)
+        limit_writes(caller)
         try:
             source = await load_source(source_id, caller.tenant_id, db)
             before = _fields_dict(source)
@@ -470,11 +410,11 @@ async def update_income_source_fields(
                 if not fl.is_active or fl.id in removes:
                     continue
                 incoming.append(IncomeSourceFieldIn(id=fl.id, name=renames.get(fl.id, fl.name), kind=fl.kind))
-            existing_names = {_fold(i.name) for i in incoming}
+            existing_names = {fold(i.name) for i in incoming}
             for nf in add or []:
-                if _fold(nf.name) in existing_names:
+                if fold(nf.name) in existing_names:
                     raise ToolError(f"La fuente ya tiene un campo «{nf.name}»")
-                existing_names.add(_fold(nf.name))
+                existing_names.add(fold(nf.name))
                 incoming.append(IncomeSourceFieldIn(name=nf.name, kind=nf.kind))
 
             await sync_fields(source, incoming, db)
@@ -482,10 +422,10 @@ async def update_income_source_fields(
             after_src = await load_source(source_id, caller.tenant_id, db)
             after = _fields_dict(after_src)
             result = {"action": "update_source_fields", "source": after_src.name, "before": before, "after": after}
-            return await _finish(db, dry_run, result, lambda: _audit(
+            return await finish(db, dry_run, result, lambda: audit(
                 db, caller, "update_income_source_fields", f"campos de fuente {source_id}",
                 {"source_id": source_id, "before": before, "after": after},
             ))
         except HTTPException as exc:
             await db.rollback()
-            raise _http_to_tool(exc)
+            raise http_to_tool(exc)
