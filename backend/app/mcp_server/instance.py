@@ -11,9 +11,12 @@ from app.core.config import settings
 
 INSTRUCTIONS = """\
 RegistrApp es una app de finanzas personales de un hogar argentino. Este conector
-consulta todo el hogar y además puede CARGAR, EDITAR Y BORRAR INGRESOS (con su
-detalle por campo: bruto, cargas sociales, ganancias, bonos…), por ejemplo a
-partir de un recibo de sueldo. Gastos, tarjetas y el resto son sólo lectura.
+consulta todo el hogar y además puede CARGAR, EDITAR Y BORRAR:
+- INGRESOS, con su detalle por campo (bruto, cargas sociales, ganancias, bonos…),
+  por ejemplo a partir de un recibo de sueldo;
+- TARJETAS DE CRÉDITO: tarjetas, resúmenes (fechas de cierre y vencimiento) e
+  ítems, por ejemplo comparando un resumen del banco con lo cargado.
+Los gastos manuales, gastos compartidos, divisas e hipoteca son sólo lectura.
 
 Reglas para escribir — no hay excepciones:
 
@@ -27,6 +30,12 @@ Reglas para escribir — no hay excepciones:
   (add/subtract/info) decide si suma o resta. Usá los nombres de campo de
   `get_taxonomy`; si el recibo trae un concepto que la fuente no tiene, proponé
   agregarlo (new_fields) en vez de meterlo en otro campo.
+- Para un resumen de tarjeta: `get_card_statement` trae lo cargado con ids.
+  Compará renglón por renglón con el del banco y presentá tres listas (falta,
+  sobra, difiere) antes de proponer cambios. Una cuota (n/N) ya puede estar
+  cargada desde el resumen donde empezó el plan: no la vuelvas a crear.
+- Los ítems compartidos no se borran ni cambian de monto desde acá; las cuotas
+  2..N se editan o borran desde la cuota 1 (`root_item_id`).
 - Si no estás seguro de un monto o de a qué campo va, preguntá antes de escribir.
 
 Reglas del dominio que tenés que respetar al interpretar los números:
