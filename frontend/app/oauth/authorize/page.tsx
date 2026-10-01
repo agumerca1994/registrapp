@@ -147,9 +147,9 @@ function AuthorizeInner() {
         <div className="flex items-start gap-2">
           <Pencil className="w-4 h-4 mt-0.5 text-primary shrink-0" />
           <p className="text-sm text-foreground">
-            <strong>Va a poder cargar, editar y borrar ingresos y tarjetas</strong> (resúmenes
-            e ítems), siempre con una vista previa que tenés que confirmar. Lo demás es
-            sólo lectura.
+            <strong>Va a poder cargar, editar y borrar ingresos, tarjetas y gastos
+            compartidos</strong> (incluido avisarle a quien compartas), siempre con una vista
+            previa que tenés que confirmar. Lo demás es sólo lectura.
           </p>
         </div>
       </div>
@@ -164,7 +164,7 @@ function AuthorizeInner() {
         <div className="flex flex-wrap gap-1 pt-1">
           {info.scopes.map(s => (
             <Chip key={s} tone="emerald">
-              {s === "registrapp:read" ? "Lectura + ingresos y tarjetas" : s}
+              {s === "registrapp:read" ? "Lectura + ingresos, tarjetas y compartidos" : s}
             </Chip>
           ))}
         </div>
