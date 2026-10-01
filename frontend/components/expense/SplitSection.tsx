@@ -9,12 +9,10 @@ import { installmentCount, isInstallment, rowAmounts, shareBase, type ExpenseDra
 /**
  * Con quién se comparte y cuánto pone cada uno.
  *
- * **Deuda consciente:** `/shared` y `ShareItemModal` (resumen de tarjeta)
- * tienen cada uno su propia lógica de división, con dos defectos que ésta no
- * tiene — `/shared` lee "15.000" como 15 y ninguno de los dos cierra el resto
- * de centavos igual que el backend. Quedaron sin tocar porque el formulario
- * unificado sólo reemplaza el alta del `+`. Esta sección usa `lib/split.ts`,
- * que es a donde deberían migrar.
+ * La división sale toda de `lib/split.ts`, igual que en `/shared` y en
+ * `ShareItemModal` (resumen de tarjeta): las tres pantallas tenían su propia
+ * lógica y las tres tenían el mismo tipo de defecto, un resto de centavos que
+ * no cerraba con lo que exige el backend.
  *
  * El picker de participantes no se renderiza acá: vive fuera del `<form>` del
  * modal, porque su buscador no frena el Enter y adentro del form guardaría el

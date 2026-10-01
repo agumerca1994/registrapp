@@ -27,6 +27,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -101,6 +102,16 @@ async def find_user_by_email(email: str, db: AsyncSession) -> User | None:
     return await db.scalar(select(User).where(func.lower(User.email) == email.strip().lower()))
 
 
+async def user_exists(user_id: int, db: AsyncSession) -> bool:
+    """Que el `user_id` que mandó el cliente corresponda a una cuenta real.
+
+    Al revés que las búsquedas por mail/teléfono de arriba, un fallo acá sí
+    tiene que ser ruidoso: no hay contacto con el que armar una invitación, así
+    que no queda ninguna forma sensata de degradar el participante.
+    """
+    return await db.scalar(select(User.id).where(User.id == user_id)) is not None
+
+
 def invite_lookup_values(user: User) -> list[str]:
     """What an unclaimed invite's `invite_email` (which holds an email OR a
     normalized phone) could contain for this user. Lowercased — the creator
@@ -160,10 +171,21 @@ async def resolve_participant(
     `mint_token=False` es para las cuotas hijas de un plan: se acuña un solo
     token por plan, en la cuota raíz. Es un parámetro y no una rama duplicada
     justamente para que no vuelva a divergir.
+
+    Un `user_id` que no existe es un 404 y no un 500: sin este chequeo el entero
+    del cliente viajaba sin mirarse hasta el FK de `shared_expense_splits`, y el
+    `flush()` explotaba con `IntegrityError`. Desde la app no pasaba —los
+    participantes se eligen de una lista— pero cualquier otro cliente del
+    endpoint recibía un error interno en vez de saber qué hizo mal.
     """
     r = ResolvedParticipant(member_name=member_name, user_id=user_id)
 
     if user_id is not None:
+        # A propósito **no** se exige que sea del mismo hogar: compartir con
+        # alguien de otra casa es el caso normal, y ahí el `user_id` sale de la
+        # agenda, que guarda usuarios de cualquier tenant.
+        if not await user_exists(user_id, db):
+            raise HTTPException(status_code=404, detail="Participante no encontrado")
         r.is_creator = user_id == creator.id
         if not r.is_creator:
             r.notify_user_id = user_id

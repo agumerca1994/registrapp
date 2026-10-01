@@ -6,10 +6,12 @@
  * rechaza cualquier división cuya suma no coincida con el total (±0,01). Con
  * centavos, el resto se asigna explícitamente y la suma coincide siempre.
  *
- * Lo usa el formulario unificado de egresos (`components/expense/`). `/shared`
- * y `ShareItemModal` todavía tienen su propia lógica —con un `parseAmt` que lee
- * "15.000" como 15 y sin ajuste de resto— y quedaron afuera por decisión del
- * usuario; cuando se toquen, deberían pasar a usar esto.
+ * Lo usan los tres formularios que dividen plata: el unificado de egresos
+ * (`components/expense/`), `/shared` (alta y edición) y `ShareItemModal` (el
+ * resumen de tarjeta). Cada uno tenía su propia lógica y las tres derivaron:
+ * `/shared` leía "15.000" como 15 y repartía con `total / n` redondeado, y
+ * `ShareItemModal` cerraba el resto a mano por otro camino. Si aparece un
+ * cuarto formulario, importa de acá — no vuelvas a escribirlo.
  */
 
 export function toCents(amount: number): number {
@@ -23,9 +25,9 @@ export function fromCents(cents: number): number {
 /**
  * `total` dividido en `n` partes iguales, con el resto de centavos en la última.
  *
- * El resto va a la última fila y no se reparte, a propósito: es lo que ya hace
- * `ShareItemModal`, y la persona puede ver de un vistazo quién pone el centavo
- * de más.
+ * El resto va a la última fila y no se reparte, a propósito: así la persona ve
+ * de un vistazo quién pone el centavo de más. Era ya la convención de
+ * `ShareItemModal` antes de que migrara acá.
  */
 export function equalSplit(total: number, n: number): number[] {
   if (n <= 0) return [];

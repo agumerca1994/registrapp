@@ -8,7 +8,8 @@ import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, Layers, C
 
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
-import { formatARS, formatUSD, getErrorMessage, pickCategoryColor } from "@/lib/utils";
+import { formatARS, formatUSD, getErrorMessage, parseAmount, pickCategoryColor } from "@/lib/utils";
+import { equalSplit, fromCents, remainder, sumMatches, toCents } from "@/lib/split";
 import { useAuth } from "@/contexts/AuthContext";
 import { ParticipantPicker, type PickedParticipant } from "@/components/ParticipantPicker";
 import { usePendingShared } from "@/contexts/PendingSharedContext";
@@ -111,10 +112,6 @@ interface ParticipantRow {
   invite_phone_local: string;
 }
 
-function parseAmt(s: string): number {
-  return parseFloat(s.replace(",", ".")) || 0;
-}
-
 function fmtDate(d: string) {
   try { return format(new Date(d + "T12:00:00"), "d MMM yyyy", { locale: es }); }
   catch { return d; }
@@ -131,13 +128,27 @@ function fmtDateShort(d: string) {
   catch { return d; }
 }
 
+/**
+ * Reparte lo que queda del total entre las filas que el usuario no fijó a mano.
+ *
+ * Pasa por `equalSplit` (centavos, resto a la última fila) y no por
+ * `remaining / autoCount`, que es lo que hacía antes: con tres personas y
+ * $100, ese cálculo escribía 33,33 en las tres y la suma daba 99,99, o sea un
+ * formulario que se veía bien y el backend rechazaba.
+ */
 function redistAuto(parts: ParticipantRow[], total: number): ParticipantRow[] {
-  const manualSum = parts.filter(p => p.manual).reduce((s, p) => s + parseAmt(p.amount), 0);
-  const remaining = Math.max(0, total - manualSum);
-  const autoCount = parts.filter(p => !p.manual).length;
-  if (autoCount === 0) return parts;
-  const perAuto = (remaining / autoCount).toFixed(2);
-  return parts.map(p => p.manual ? p : { ...p, amount: perAuto });
+  const manualCents = parts
+    .filter(p => p.manual)
+    .reduce((s, p) => s + toCents(parseAmount(p.amount)), 0);
+  const remaining = fromCents(Math.max(0, toCents(total) - manualCents));
+  const autoIdx = parts.flatMap((p, i) => (p.manual ? [] : [i]));
+  if (autoIdx.length === 0) return parts;
+  const shares = equalSplit(remaining, autoIdx.length);
+  const byIdx = new Map(autoIdx.map((i, k) => [i, shares[k]]));
+  return parts.map((p, i) => {
+    const share = byIdx.get(i);
+    return share === undefined ? p : { ...p, amount: share.toFixed(2) };
+  });
 }
 
 // Deterministic color per person (same name/key always gets the same tone),
@@ -222,8 +233,11 @@ function EditExpenseModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const total = parseAmt(totalAmount);
-  const splitsSum = Object.values(splitAmounts).reduce((s, v) => s + parseAmt(v), 0);
+  const total = parseAmount(totalAmount);
+  // En el orden de `expense.splits`, que es el que se manda en el PATCH.
+  const splitValues = expense.splits.map(sp => parseAmount(splitAmounts[sp.id] ?? ""));
+  const splitsSum = splitValues.reduce((s, v) => s + v, 0);
+  const splitsClose = sumMatches(total, splitValues);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -234,13 +248,18 @@ function EditExpenseModal({
       payment_date: paymentDate,
     };
     if (unlocked) {
-      if (Math.abs(splitsSum - total) > 0.02) {
-        setError(`La suma (${formatARS(splitsSum)}) no coincide con el total (${formatARS(total)})`);
+      // Misma tolerancia que el backend (±0,01, o sea exacto en centavos): el
+      // ±0,02 de antes dejaba salir divisiones que el PATCH rechazaba.
+      if (!sumMatches(total, splitValues)) {
+        const left = remainder(total, splitValues);
+        setError(left > 0
+          ? `Faltan ${fmtByCurrency(left, expense.currency)} por asignar`
+          : `Sobran ${fmtByCurrency(-left, expense.currency)}: la división supera el total`);
         return;
       }
       body.total_amount = total;
       body.category_id = parseInt(categoryId);
-      body.splits = expense.splits.map(s => ({ split_id: s.id, amount: parseAmt(splitAmounts[s.id]) }));
+      body.splits = expense.splits.map((sp, i) => ({ split_id: sp.id, amount: splitValues[i] }));
     }
     setSaving(true);
     try {
@@ -315,8 +334,8 @@ function EditExpenseModal({
                     </div>
                   ))}
                 </div>
-                <p className={`text-xs mt-1.5 ${Math.abs(splitsSum - total) > 0.02 ? "text-destructive" : "text-muted-foreground"}`}>
-                  Distribuido: {formatARS(splitsSum)} / Total: {formatARS(total)}
+                <p className={`text-xs mt-1.5 ${splitsClose ? "text-muted-foreground" : "text-destructive"}`}>
+                  Distribuido: {fmtByCurrency(splitsSum, expense.currency)} / Total: {fmtByCurrency(total, expense.currency)}
                 </p>
               </div>
             </>
@@ -401,7 +420,7 @@ function ConvertToArsModal({
     setRateType("personalizado");
   }
 
-  const rateNum = parseAmt(rate);
+  const rateNum = parseAmount(rate);
 
   async function handleConfirm() {
     setError("");
@@ -519,7 +538,7 @@ export default function SharedExpensesPage() {
   const [personYear, setPersonYear] = useState(now.getFullYear());
   const [personMonth, setPersonMonth] = useState(now.getMonth() + 1);
 
-  const total = parseAmt(totalAmount);
+  const total = parseAmount(totalAmount);
 
   const loadCategories = async () => {
     try {
@@ -562,16 +581,17 @@ export default function SharedExpensesPage() {
   }, [totalAmount, splitType]);
 
   // --- Valores derivados ---
-  const equalShare = participants.length > 0 && total > 0
-    ? (total / participants.length).toFixed(2) : "0.00";
+  // Una parte por fila, no un solo número repetido: `equalSplit` le deja el
+  // resto de centavos a la última, que es lo que hace que la suma dé el total.
+  const equalShares = total > 0 ? equalSplit(total, participants.length) : [];
 
   const manualSum = splitType === "custom"
-    ? participants.filter(p => p.manual).reduce((s, p) => s + parseAmt(p.amount), 0)
+    ? participants.filter(p => p.manual).reduce((s, p) => s + parseAmount(p.amount), 0)
     : 0;
   const assignedSum = splitType === "custom"
-    ? participants.reduce((s, p) => s + parseAmt(p.amount), 0)
+    ? participants.reduce((s, p) => s + parseAmount(p.amount), 0)
     : 0;
-  const overBudget = splitType === "custom" && total > 0 && manualSum > total + 0.01;
+  const overBudget = splitType === "custom" && total > 0 && toCents(manualSum) > toCents(total);
 
   // --- Helpers de participantes ---
   function updateParticipant(idx: number, patch: Partial<ParticipantRow>) {
@@ -679,19 +699,25 @@ export default function SharedExpensesPage() {
     if (overBudget) {
       setFormError("La division supera el monto total"); return;
     }
-    const splits = participants.map(p => ({
+    const splits = participants.map((p, idx) => ({
       user_id: p.type === "member" ? p.user_id : null,
       member_name: p.member_name,
-      amount: splitType === "equal" ? parseFloat(equalShare) : parseAmt(p.amount),
+      amount: splitType === "equal" ? (equalShares[idx] ?? 0) : parseAmount(p.amount),
       invite_contact: p.type === "external"
         ? (p.invite_method === "email" && p.invite_email.trim() ? p.invite_email.trim()
           : p.invite_method === "whatsapp" && p.invite_phone_local.trim() ? buildPhone(p.invite_phone_prefix, p.invite_phone_local)
           : undefined)
         : undefined,
     }));
-    const sumAmts = splits.reduce((s, x) => s + x.amount, 0);
-    if (Math.abs(sumAmts - total) > 0.02) {
-      setFormError(`La suma (${formatARS(sumAmts)}) no coincide con el total (${formatARS(total)})`);
+    // Exacto, no ±0,02: el backend rebota cualquier división que no cierre
+    // dentro de ±0,01, así que la tolerancia vieja sólo cambiaba un error claro
+    // acá por un 422 del servidor.
+    const amounts = splits.map(x => x.amount);
+    if (!sumMatches(total, amounts)) {
+      const left = remainder(total, amounts);
+      setFormError(left > 0
+        ? `Faltan ${formatARS(left)} por asignar`
+        : `Sobran ${formatARS(-left)}: la división supera el total`);
       return;
     }
     if (splits.some(s => !s.member_name.trim())) {
@@ -1153,7 +1179,7 @@ export default function SharedExpensesPage() {
                           onChange={e => setManualAmount(idx, e.target.value)}
                           className={`${FIELD} ${!p.manual ? "text-muted-foreground italic" : ""}`}
                         />
-                        {!p.manual && parseAmt(p.amount) > 0 && (
+                        {!p.manual && parseAmount(p.amount) > 0 && (
                           <p className="text-xs text-primary mt-0.5">sugerencia</p>
                         )}
                       </div>
@@ -1161,7 +1187,7 @@ export default function SharedExpensesPage() {
                       <div className="flex items-center justify-between px-1">
                         <span className="text-xs text-muted-foreground">Monto</span>
                         <span className="text-sm font-medium text-foreground">
-                          {total > 0 ? formatARS(parseFloat(equalShare)) : "-"}
+                          {total > 0 ? formatARS(equalShares[idx] ?? 0) : "-"}
                         </span>
                       </div>
                     )}
@@ -1172,7 +1198,7 @@ export default function SharedExpensesPage() {
 
             {splitType === "equal" && total > 0 && (
               <p className="text-xs text-muted-foreground mt-1.5">
-                {formatARS(total)} / {participants.length} = {formatARS(parseFloat(equalShare))} por persona
+                {formatARS(total)} / {participants.length} = {formatARS(equalShares[0] ?? 0)} por persona
               </p>
             )}
 

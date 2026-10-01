@@ -13,6 +13,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { CurrencyToggle, FIELD, SelectField, DateField } from "@/components/ui/form";
 import { ParticipantPicker, type PickedParticipant } from "@/components/ParticipantPicker";
+import { equalSplit, remainder, sumMatches, toCents } from "@/lib/split";
 import {
   FilterBar, FilterRow, FilterPanel, SortChip, FilterChip, PillSelect,
   PillDateRange, ClearFilters, CollapsibleSearch,
@@ -182,9 +183,13 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
     ? (item.installment_count || 1) - (item.installment_number || 1) + 1
     : 0;
 
-  const equalShare = participants.length > 0 ? totalAmount / participants.length : 0;
+  // `equalSplit` reparte en centavos y le deja el resto a la última fila, así
+  // que la suma da exactamente el total. Acá vivía el redondeo a mano, que
+  // llegaba al mismo resultado por otro camino; ahora es el mismo código que
+  // usa el formulario unificado.
+  const equalShares = equalSplit(totalAmount, participants.length);
   const customTotal = participants.reduce((s, p) => s + parseAmount(p.amount || "0"), 0);
-  const overBudget = splitType === "custom" && customTotal > totalAmount + 0.01;
+  const overBudget = splitType === "custom" && toCents(customTotal) > toCents(totalAmount);
 
   function updateParticipant(idx: number, patch: Partial<ShareParticipantRow>) {
     setParticipants(prev => prev.map((p, i) => i === idx ? { ...p, ...patch } : p));
@@ -210,11 +215,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
     setError("");
     try {
       const splits = participants.map((p, i) => {
-        const amount = splitType === "equal"
-          ? (i === participants.length - 1
-            ? parseFloat((totalAmount - parseFloat(equalShare.toFixed(2)) * (participants.length - 1)).toFixed(2))
-            : parseFloat(equalShare.toFixed(2)))
-          : parseAmount(p.amount || "0");
+        const amount = splitType === "equal" ? equalShares[i] : parseAmount(p.amount || "0");
         return {
           user_id: p.type === "external" ? null : p.user_id,
           member_name: p.member_name,
@@ -222,12 +223,15 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
           ...(p.type === "external" && p.contact.trim() ? { invite_contact: p.contact.trim() } : {}),
         };
       });
-      if (splitType === "custom") {
-        const sum = splits.reduce((s, sp) => s + sp.amount, 0);
-        if (Math.abs(sum - totalAmount) > 0.02) {
-          setError("La suma no coincide con el total");
-          setSharing(false); return;
-        }
+      // Exacto, no ±0,02: el backend rechaza cualquier división que no cierre
+      // dentro de ±0,01, así que la tolerancia vieja dejaba pasar al servidor
+      // divisiones que él iba a rebotar con un 422 genérico.
+      if (splitType === "custom" && !sumMatches(totalAmount, splits.map(sp => sp.amount))) {
+        const left = remainder(totalAmount, splits.map(sp => sp.amount));
+        setError(left > 0
+          ? `Faltan ${formatARS(left)} por asignar`
+          : `Sobran ${formatARS(-left)}: la división supera el total`);
+        setSharing(false); return;
       }
       await api.post("/credit-cards/items/" + item.id + "/share", { splits, split_type: splitType });
       onDone();
@@ -327,7 +331,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                     <div className="flex items-center justify-between px-1">
                       <span className="text-xs text-muted-foreground">Monto</span>
                       <span className="text-sm font-medium text-foreground">
-                        {totalAmount > 0 ? formatARS(equalShare) : "-"}
+                        {totalAmount > 0 ? formatARS(equalShares[idx] ?? 0) : "-"}
                       </span>
                     </div>
                   )}
@@ -337,7 +341,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
 
             {splitType === "equal" && totalAmount > 0 && participants.length > 1 && (
               <p className="text-xs text-muted-foreground mt-1.5">
-                {formatARS(totalAmount)} / {participants.length} = {formatARS(equalShare)} por persona
+                {formatARS(totalAmount)} / {participants.length} = {formatARS(equalShares[0] ?? 0)} por persona
               </p>
             )}
 

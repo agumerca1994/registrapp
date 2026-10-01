@@ -175,7 +175,8 @@ test("con tarjeta y compartido", async ({ page, request }) => {
   try {
     await openForm(page);
     await pickOption(page, form(page).getByRole("combobox").first(), category);
-    // "15.000" con punto de miles: es justo lo que el formulario de /shared lee como 15.
+    // "15.000" con punto de miles: `parseAmount` lo lee como 15000. El
+    // `parseAmt` propio que tenía /shared lo leía como 15 — ya no existe.
     await page.getByLabel("Monto").fill("15.000");
     await page.getByLabel("Descripción").fill(desc);
     await toggle(page, "Pago", "Tarjeta");
