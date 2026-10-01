@@ -10,15 +10,18 @@ from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile,
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, extract, func, or_
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.core.database import get_db
 from app.core.firebase import get_current_user
 from app.models.user import User
-from app.models.income import IncomeSource, IncomeEntry, IncomeType
+from app.models.income import (
+    IncomeSource, IncomeEntry, IncomeType, IncomeSourceField, IncomeEntryItem,
+)
 from app.services.search import fold, fold_term
 from app.schemas.income import (
-    IncomeSourceCreate, IncomeSourceOut,
-    IncomeEntryCreate, IncomeEntryUpdate, IncomeEntryOut,
+    IncomeSourceCreate, IncomeSourceUpdate, IncomeSourceOut, IncomeSourceFieldIn,
+    IncomeEntryCreate, IncomeEntryUpdate, IncomeEntryOut, IncomeEntryItemIn,
 )
 
 router = APIRouter(prefix="/income", tags=["income"])
@@ -46,6 +49,170 @@ async def _assert_owns_source(source_id: int, tenant_id: int, db: AsyncSession) 
     )
     if owned is None:
         raise HTTPException(status_code=404, detail="Fuente no encontrada")
+
+
+# ── Campos de detalle ──────────────────────────────────────────────────────────
+
+async def _load_source(source_id: int, tenant_id: int, db: AsyncSession) -> IncomeSource:
+    source = await db.scalar(
+        select(IncomeSource)
+        .where(IncomeSource.id == source_id, IncomeSource.tenant_id == tenant_id)
+        .options(selectinload(IncomeSource.fields))
+        .execution_options(populate_existing=True)
+    )
+    if source is None:
+        raise HTTPException(status_code=404, detail="Fuente no encontrada")
+    return source
+
+
+async def _fields_with_items(field_ids: list[int], db: AsyncSession) -> set[int]:
+    if not field_ids:
+        return set()
+    rows = await db.scalars(
+        select(IncomeEntryItem.field_id)
+        .where(IncomeEntryItem.field_id.in_(field_ids))
+        .distinct()
+    )
+    return set(rows.all())
+
+
+async def _source_out(sources: list[IncomeSource], db: AsyncSession) -> list[IncomeSource]:
+    """Prepara las fuentes para `IncomeSourceOut`.
+
+    Deja los campos activos más los archivados que todavía tienen ítems (hacen
+    falta para mostrar y editar ingresos viejos; el formulario los ofrece sólo
+    a esos ingresos), y marca `has_items` en cada uno.
+    """
+    used = await _fields_with_items([f.id for s in sources for f in s.fields], db)
+    for s in sources:
+        for f in s.fields:
+            f.has_items = f.id in used
+        # set_committed_value: filtrar la colección para la respuesta sin que
+        # SQLAlchemy lo tome como "sacar estos campos de la fuente".
+        set_committed_value(s, "fields", [f for f in s.fields if f.is_active or f.has_items])
+    return sources
+
+
+async def _sync_fields(
+    source: IncomeSource, incoming: list[IncomeSourceFieldIn], db: AsyncSession,
+) -> None:
+    """Reconcilia la lista completa de campos que manda el formulario.
+
+    Con `id` → renombrar/reordenar (y reactivar si estaba archivado); sin `id` →
+    crear; existente que no viene → archivar. **Nunca se borra**: los ingresos
+    ya cargados conservan sus montos. El tipo de un campo con ítems no cambia,
+    porque reinterpretaría en silencio la cuenta de meses ya cerrados.
+    """
+    by_id = {f.id: f for f in source.fields}
+    used = await _fields_with_items(list(by_id), db)
+    seen: set[int] = set()
+    for pos, f_in in enumerate(incoming):
+        if f_in.id is not None:
+            field = by_id.get(f_in.id)
+            if field is None:
+                raise HTTPException(status_code=400, detail="Campo inexistente en esta fuente")
+            if field.kind != f_in.kind and field.id in used:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"«{field.name}» ya tiene montos cargados: su tipo no se puede cambiar",
+                )
+            field.name = f_in.name
+            field.kind = f_in.kind
+            field.position = pos
+            field.is_active = True
+            seen.add(field.id)
+        else:
+            db.add(IncomeSourceField(
+                source_id=source.id, name=f_in.name, kind=f_in.kind, position=pos,
+            ))
+    for fid, field in by_id.items():
+        if fid not in seen:
+            field.is_active = False
+
+
+async def _apply_items(
+    entry: IncomeEntry, items: list[IncomeEntryItemIn], db: AsyncSession,
+) -> None:
+    """Reemplaza el detalle de un ingreso y deriva `bruto`/`deducciones`.
+
+    Cada campo tiene que ser de la fuente del ingreso — cubre también el caso de
+    cambiarle la fuente a un ingreso que ya tenía detalle. Se aceptan campos
+    archivados: editar un ingreso viejo no puede obligar a perder sus montos.
+
+    `bruto = Σ add` y `deducciones = Σ subtract` se siguen escribiendo para que
+    `analytics.income_aggregate` y el conector MCP no tengan que saber de campos.
+    """
+    field_ids = [i.field_id for i in items]
+    if len(set(field_ids)) != len(field_ids):
+        raise HTTPException(status_code=400, detail="Un campo aparece dos veces en el detalle")
+    fields: dict[int, IncomeSourceField] = {}
+    if field_ids:
+        rows = await db.scalars(
+            select(IncomeSourceField).where(
+                IncomeSourceField.id.in_(field_ids),
+                IncomeSourceField.source_id == entry.source_id,
+            )
+        )
+        fields = {f.id: f for f in rows.all()}
+        if len(fields) != len(field_ids):
+            raise HTTPException(
+                status_code=400, detail="El detalle tiene campos que no son de esta fuente",
+            )
+
+    await db.execute(
+        IncomeEntryItem.__table__.delete().where(IncomeEntryItem.entry_id == entry.id)
+    )
+    add = sub = Decimal("0")
+    has_add = has_sub = False
+    for i in items:
+        db.add(IncomeEntryItem(entry_id=entry.id, field_id=i.field_id, amount=i.amount))
+        kind = fields[i.field_id].kind
+        if kind == "add":
+            add += i.amount
+            has_add = True
+        elif kind == "subtract":
+            sub += i.amount
+            has_sub = True
+    entry.bruto = add if has_add else None
+    entry.deducciones = sub if has_sub else None
+
+
+async def _ensure_field(source_id: int, name: str, kind: str, db: AsyncSession) -> int:
+    """El campo `name` de la fuente, creándolo (o reactivándolo) si hace falta.
+
+    Lo usa el import: sus columnas de bruto y deducciones tienen que caer en el
+    mismo modelo de detalle que la carga a mano, no en columnas sueltas.
+    """
+    field = await db.scalar(
+        select(IncomeSourceField).where(
+            IncomeSourceField.source_id == source_id,
+            IncomeSourceField.name == name,
+            IncomeSourceField.kind == kind,
+        )
+    )
+    if field is None:
+        last = await db.scalar(
+            select(func.max(IncomeSourceField.position))
+            .where(IncomeSourceField.source_id == source_id)
+        )
+        field = IncomeSourceField(
+            source_id=source_id, name=name, kind=kind,
+            position=(last + 1) if last is not None else 0,
+        )
+        db.add(field)
+        await db.flush()
+    else:
+        field.is_active = True
+    return field.id
+
+
+async def _entry_out(entry_id: int, db: AsyncSession) -> IncomeEntry:
+    return await db.scalar(
+        select(IncomeEntry)
+        .where(IncomeEntry.id == entry_id)
+        .options(selectinload(IncomeEntry.source), selectinload(IncomeEntry.items))
+        .execution_options(populate_existing=True)
+    )
 
 
 # ── Import helpers ─────────────────────────────────────────────────────────────
@@ -124,12 +291,14 @@ async def list_sources(
 ):
     user = await _get_db_user(firebase_user, db)
     result = await db.scalars(
-        select(IncomeSource).where(
+        select(IncomeSource)
+        .where(
             IncomeSource.tenant_id == user.tenant_id,
             IncomeSource.is_active == True,
         )
+        .options(selectinload(IncomeSource.fields))
     )
-    return result.all()
+    return await _source_out(list(result.all()), db)
 
 
 @router.post("/sources", response_model=IncomeSourceOut, status_code=status.HTTP_201_CREATED)
@@ -139,11 +308,37 @@ async def create_source(
     db: AsyncSession = Depends(get_db),
 ):
     user = await _get_db_user(firebase_user, db)
-    source = IncomeSource(**body.model_dump(), tenant_id=user.tenant_id)
+    source = IncomeSource(**body.model_dump(exclude={"fields"}), tenant_id=user.tenant_id)
     db.add(source)
+    await db.flush()
+    for pos, f in enumerate(body.fields):
+        db.add(IncomeSourceField(source_id=source.id, name=f.name, kind=f.kind, position=pos))
     await db.commit()
-    await db.refresh(source)
-    return source
+    source = await _load_source(source.id, user.tenant_id, db)
+    return (await _source_out([source], db))[0]
+
+
+@router.patch("/sources/{source_id}", response_model=IncomeSourceOut)
+async def update_source(
+    source_id: int,
+    body: IncomeSourceUpdate,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await _get_db_user(firebase_user, db)
+    source = await _load_source(source_id, user.tenant_id, db)
+    if body.name is not None:
+        name = body.name.strip()
+        if not name:
+            raise HTTPException(status_code=422, detail="La fuente necesita un nombre")
+        source.name = name
+    if body.income_type is not None:
+        source.income_type = body.income_type
+    if body.fields is not None:
+        await _sync_fields(source, body.fields, db)
+    await db.commit()
+    source = await _load_source(source_id, user.tenant_id, db)
+    return (await _source_out([source], db))[0]
 
 
 # ── Entries ────────────────────────────────────────────────────────────────────
@@ -183,7 +378,7 @@ async def list_entries(
         select(IncomeEntry)
         .join(IncomeEntry.source)
         .where(IncomeEntry.tenant_id == user.tenant_id)
-        .options(selectinload(IncomeEntry.source))
+        .options(selectinload(IncomeEntry.source), selectinload(IncomeEntry.items))
     )
     if year:
         stmt = stmt.where(extract("year", IncomeEntry.period_date) == year)
@@ -222,18 +417,15 @@ async def create_entry(
     db: AsyncSession = Depends(get_db),
 ):
     user = await _get_db_user(firebase_user, db)
-    data = body.model_dump()
-    if data.get("source_id") is not None:
-        await _assert_owns_source(data["source_id"], user.tenant_id, db)
-    entry = IncomeEntry(**data, tenant_id=user.tenant_id, user_id=user.id)
-    db.add(entry)
-    await db.commit()
-    result = await db.scalar(
-        select(IncomeEntry)
-        .where(IncomeEntry.id == entry.id)
-        .options(selectinload(IncomeEntry.source))
+    await _assert_owns_source(body.source_id, user.tenant_id, db)
+    entry = IncomeEntry(
+        **body.model_dump(exclude={"items"}), tenant_id=user.tenant_id, user_id=user.id,
     )
-    return result
+    db.add(entry)
+    await db.flush()
+    await _apply_items(entry, body.items, db)
+    await db.commit()
+    return await _entry_out(entry.id, db)
 
 
 @router.patch("/entries/{entry_id}", response_model=IncomeEntryOut)
@@ -247,16 +439,19 @@ async def update_entry(
     entry = await db.get(IncomeEntry, entry_id)
     if not entry or entry.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
-    updates = body.model_dump(exclude_none=True)
+    updates = body.model_dump(exclude_none=True, exclude={"items"})
+    source_changed = "source_id" in updates and updates["source_id"] != entry.source_id
     if "source_id" in updates:
         await _assert_owns_source(updates["source_id"], user.tenant_id, db)
     for field, value in updates.items():
         setattr(entry, field, value)
+    if body.items is not None:
+        await _apply_items(entry, body.items, db)
+    elif source_changed:
+        # Sin detalle nuevo, el viejo pertenece a la otra fuente: no puede quedar.
+        await _apply_items(entry, [], db)
     await db.commit()
-    result = await db.scalar(
-        select(IncomeEntry).where(IncomeEntry.id == entry_id).options(selectinload(IncomeEntry.source))
-    )
-    return result
+    return await _entry_out(entry_id, db)
 
 
 @router.delete("/entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -347,6 +542,11 @@ async def import_run(
     content = await _read_capped(file)
     data, columns = _parse_file(content, file.filename or "")
 
+    bruto_field = await _ensure_field(source.id, "Bruto", "add", db) if bruto_col else None
+    deducc_field = (
+        await _ensure_field(source.id, "Deducciones", "subtract", db) if deducciones_col else None
+    )
+
     imported = 0
     skipped = 0
     errors: list[str] = []
@@ -387,16 +587,22 @@ async def import_run(
                 if raw:
                     notes = raw
 
-            db.add(IncomeEntry(
+            entry = IncomeEntry(
                 tenant_id=user.tenant_id,
                 user_id=user.id,
                 source_id=source.id,
-                bruto=Decimal(str(round(bruto_v, 2))) if bruto_v is not None else None,
-                deducciones=Decimal(str(round(deducc_v, 2))) if deducc_v is not None else None,
                 amount=amount_dec,
                 period_date=period,
                 notes=notes,
-            ))
+            )
+            db.add(entry)
+            await db.flush()
+            items = []
+            if bruto_field and bruto_v is not None:
+                items.append(IncomeEntryItemIn(field_id=bruto_field, amount=Decimal(str(round(bruto_v, 2)))))
+            if deducc_field and deducc_v is not None:
+                items.append(IncomeEntryItemIn(field_id=deducc_field, amount=Decimal(str(round(deducc_v, 2)))))
+            await _apply_items(entry, items, db)
             imported += 1
         except Exception as exc:
             errors.append(f"Fila {i}: {exc}")

@@ -5,8 +5,8 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
-import { formatARS, formatDate, parseAmount, getErrorMessage } from "@/lib/utils";
-import { Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle, ChevronRight, CalendarDays, ChevronLeft, Search, SlidersHorizontal, MoreVertical } from "lucide-react";
+import { formatARS, formatUSD, formatDate, parseAmount, getErrorMessage } from "@/lib/utils";
+import { Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle, ChevronRight, CalendarDays, ChevronLeft, Search, SlidersHorizontal, MoreVertical, Settings2, ListTree } from "lucide-react";
 import {
   FilterBar, FilterRow, FilterPanel, SortChip, FilterChip, PillSelect,
   PillDateRange, ClearFilters, CollapsibleSearch,
@@ -19,11 +19,16 @@ import { Card } from "@/components/ui/card";
 import { Fab } from "@/components/ui/fab";
 import { Button } from "@/components/ui/button";
 import { CurrencyToggle, FIELD, FormGrid, SelectField, DateField } from "@/components/ui/form";
+import {
+  INCOME_TYPE_LABELS, KIND_LABELS, detailNet,
+  type IncomeSource, type IncomeEntry, type SourceField, type EntryItem,
+} from "@/components/income/types";
+import { SourceFormModal, SourcesListModal } from "@/components/income/SourceFormModal";
 
 const INCOME_TOUR_STEPS: Step[] = [
   {
     target: "[data-tour='income-add']",
-    content: "Con este botón registrás un nuevo ingreso: sueldo u otra entrada, con bruto/deducciones/neto.",
+    content: "Con este botón registrás un nuevo ingreso: sueldo u otra entrada. Si la fuente tiene campos de detalle (bruto, ganancias, bonos…), el neto se calcula solo.",
     placement: "bottom",
     skipBeacon: true,
   },
@@ -34,23 +39,22 @@ const INCOME_TOUR_STEPS: Step[] = [
   },
 ];
 
-interface IncomeSource { id: number; name: string; income_type: string; }
-interface IncomeEntry {
-  id: number; source_id: number;
-  bruto: number | null; deducciones: number | null; amount: number;
-  period_date: string; notes?: string; currency?: string;
-  source: IncomeSource;
-}
-
-const INCOME_TYPE_LABELS: Record<string, string> = {
-  salary: "Sueldo", bonus: "Bono", aguinaldo: "Aguinaldo",
-  investment: "Inversión", other: "Otro",
-};
-
+// `items` es field_id → monto tal como se tipeó; sólo viajan los que tienen valor.
 const EMPTY_FORM = {
-  source_id: "", bruto: "", deducciones: "", amount: "",
+  source_id: "", amount: "", items: {} as Record<string, string>,
   period_date: "", notes: "", currency: "ARS" as "ARS" | "USD",
 };
+
+/** Los campos que el formulario ofrece para una fuente: los activos, más los
+ *  archivados que este ingreso ya tiene cargados — editar un ingreso viejo no
+ *  puede hacerle perder montos de un campo que la fuente ya no usa. */
+function fieldsForForm(source: IncomeSource | undefined, items: Record<string, string>): SourceField[] {
+  return (source?.fields ?? [])
+    .filter(f => f.is_active || (items[f.id] ?? "") !== "")
+    .sort((a, b) => Number(b.is_active) - Number(a.is_active) || a.position - b.position);
+}
+
+const KIND_SIGN: Record<string, string> = { add: "+", subtract: "−", info: "·" };
 
 // A new entry defaults to today — the overwhelmingly common case, and it saves
 // the user a trip through the calendar to pick the date they're standing on.
@@ -61,54 +65,28 @@ const SORT_LABELS: Record<SortKey, string> = {
   date: "Fecha", source: "Fuente", amount: "Monto",
 };
 
-// ── New source modal ───────────────────────────────────────────────────────────
-
-// Opened from the `+` next to the Fuente combo inside the entry form, the way
-// a card statement offers "nueva categoría" next to its own combo: creating the
-// thing you're missing shouldn't cost you the form you already started filling.
-function NewSourceModal({ onSave, onClose }: {
-  onSave: (src: { name: string; income_type: string }) => Promise<void>;
-  onClose: () => void;
-}) {
-  const [form, setForm] = useState({ name: "", income_type: "salary" });
-  const [saving, setSaving] = useState(false);
-  return (
-    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-foreground">Nueva fuente</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
-        </div>
-        <form onSubmit={async e => { e.preventDefault(); setSaving(true); await onSave(form); setSaving(false); }} className="space-y-3">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Nombre</label>
-            <input className={FIELD} placeholder="Sueldo" autoFocus
-              value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Tipo</label>
-            <SelectField
-              value={form.income_type}
-              onChange={v => setForm(p => ({ ...p, income_type: v }))}
-              options={Object.entries(INCOME_TYPE_LABELS).map(([v, l]) => ({ value: v, label: l }))} />
-          </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-            <Button type="submit" disabled={saving}>{saving ? "Guardando..." : "Crear"}</Button>
-          </div>
-        </form>
-      </Card>
-    </div>
-  );
-}
-
 // ── Entry detail modal ─────────────────────────────────────────────────────────
 
 function EntryDetailModal({
-  entry, onEdit, onDelete, onClose,
+  entry, fieldOrder, onEdit, onDelete, onClose,
 }: {
-  entry: IncomeEntry; onEdit: () => void; onDelete: () => void; onClose: () => void;
+  entry: IncomeEntry; fieldOrder: Map<number, number>;
+  onEdit: () => void; onDelete: () => void; onClose: () => void;
 }) {
+  const fmt = entry.currency === "USD" ? formatUSD : formatARS;
+  const items = [...(entry.items ?? [])].sort(
+    (a, b) => (fieldOrder.get(a.field_id) ?? 0) - (fieldOrder.get(b.field_id) ?? 0),
+  );
+  const groups: { label: string; rows: EntryItem[] }[] = [
+    { label: "Suma", rows: items.filter(i => i.kind === "add") },
+    { label: "Resta", rows: items.filter(i => i.kind === "subtract") },
+    { label: "Informativo", rows: items.filter(i => i.kind === "info") },
+  ];
+  // Lo que el detalle no explica del neto: un campo que no se cargó, un
+  // redondeo del recibo… Se muestra en vez de esconderlo, así el desglose
+  // nunca aparenta cerrar cuando no cierra.
+  const hasMath = items.some(i => i.kind !== "info");
+  const gap = hasMath ? Math.round((Number(entry.amount) - detailNet(items)) * 100) / 100 : 0;
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
       <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
@@ -126,21 +104,31 @@ function EntryDetailModal({
             <span className="text-muted-foreground">Tipo</span>
             <span className="font-medium">{INCOME_TYPE_LABELS[entry.source.income_type]}</span>
           </div>
-          {entry.bruto != null && (
-            <div className="flex justify-between py-2">
-              <span className="text-muted-foreground">Bruto</span>
-              <span className="font-medium">{formatARS(entry.bruto)}</span>
+          {groups.filter(g => g.rows.length > 0).map(g => (
+            <div key={g.label} className="py-2 space-y-1" data-testid={`detail-group-${g.label}`}>
+              <span className="block text-[11px] uppercase tracking-wide text-muted-foreground">{g.label}</span>
+              {g.rows.map(i => (
+                <div key={i.field_id} className="flex justify-between gap-4">
+                  <span className="text-muted-foreground truncate">
+                    {i.name}
+                    {!i.field_active && <span className="text-[11px] ml-1">(quitado de la fuente)</span>}
+                  </span>
+                  <span className={`font-medium shrink-0 ${i.kind === "subtract" ? "text-rose-600" : ""}`}>
+                    {i.kind === "subtract" ? "− " : ""}{fmt(i.amount)}
+                  </span>
+                </div>
+              ))}
             </div>
-          )}
-          {entry.deducciones != null && (
+          ))}
+          {gap !== 0 && (
             <div className="flex justify-between py-2">
-              <span className="text-muted-foreground">Deducciones</span>
-              <span className="font-medium text-rose-600">− {formatARS(entry.deducciones)}</span>
+              <span className="text-muted-foreground">Sin detallar</span>
+              <span className="font-medium text-amber-600">{gap < 0 ? "− " : ""}{fmt(Math.abs(gap))}</span>
             </div>
           )}
           <div className="flex justify-between py-2">
             <span className="font-medium text-foreground">Neto</span>
-            <span className="font-bold text-emerald-600 text-base">{formatARS(entry.amount)}</span>
+            <span className="font-bold text-emerald-600 text-base">{fmt(entry.amount)}</span>
           </div>
           {entry.notes && (
             <div className="flex justify-between py-2 gap-4">
@@ -411,7 +399,11 @@ export default function IncomePage() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [showSourceForm, setShowSourceForm] = useState(false);
+  // `source` ausente = alta. `fromForm`: se abrió desde el formulario de
+  // ingreso, así que al guardar la fuente queda elegida ahí.
+  const [sourceModal, setSourceModal] = useState<{ source?: IncomeSource; fromForm: boolean } | null>(null);
+  const [showSourcesList, setShowSourcesList] = useState(false);
+  const [formError, setFormError] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -480,25 +472,52 @@ export default function IncomePage() {
     if (order === "asc") { setOrder("desc"); return; }
     setSort(null);
   };
-  const updateBrutoOrDed = (key: "bruto" | "deducciones", value: string) => {
+  const formSource = sources.find(s => String(s.id) === form.source_id);
+  const formFields = fieldsForForm(formSource, form.items);
+  const filledRows = formFields
+    .filter(f => (form.items[f.id] ?? "").trim() !== "")
+    .map(f => ({ kind: f.kind, amount: form.items[f.id] }));
+  const hasMath = filledRows.some(r => r.kind !== "info");
+  const computedNet = detailNet(filledRows);
+  // Neto pisado a mano que no coincide con el detalle: se avisa, no se bloquea
+  // — el recibo puede traer un concepto que no está entre los campos.
+  const netGap = hasMath && form.amount.trim() !== ""
+    ? Math.round((parseAmount(form.amount) - computedNet) * 100) / 100
+    : 0;
+
+  const fmtForm = form.currency === "USD" ? formatUSD : formatARS;
+
+  const recalc = (items: Record<string, string>, fields: SourceField[]) => {
+    const rows = fields
+      .filter(f => (items[f.id] ?? "").trim() !== "")
+      .map(f => ({ kind: f.kind, amount: items[f.id] }));
+    if (!rows.some(r => r.kind !== "info")) return "";
+    return Math.max(0, detailNet(rows)).toFixed(2);
+  };
+
+  const updateItem = (fieldId: number, value: string) => {
     setForm(prev => {
-      const next = { ...prev, [key]: value };
-      if (!netoManual.current) {
-        const b = parseAmount(key === "bruto" ? value : prev.bruto);
-        const d = parseAmount(key === "deducciones" ? value : prev.deducciones);
-        next.amount = b > 0 || d > 0 ? String(Math.max(0, b - d)) : "";
-      }
+      const items = { ...prev.items, [fieldId]: value };
+      const next = { ...prev, items };
+      if (!netoManual.current) next.amount = recalc(items, fieldsForForm(formSource, items));
       return next;
     });
   };
 
+  // Cambiar de fuente descarta el detalle: sus campos son de la otra.
+  const changeSource = (id: string) =>
+    setForm(prev => ({
+      ...prev, source_id: id, items: {},
+      amount: netoManual.current ? prev.amount : "",
+    }));
+
   const openEdit = (entry: IncomeEntry) => {
     netoManual.current = true;
     setEditId(entry.id);
+    setFormError("");
     setForm({
       source_id: String(entry.source_id),
-      bruto: entry.bruto != null ? String(entry.bruto) : "",
-      deducciones: entry.deducciones != null ? String(entry.deducciones) : "",
+      items: Object.fromEntries((entry.items ?? []).map(i => [String(i.field_id), String(i.amount)])),
       amount: String(entry.amount),
       period_date: entry.period_date,
       notes: entry.notes || "",
@@ -511,36 +530,62 @@ export default function IncomePage() {
     setShowForm(false);
     setEditId(null);
     setForm(EMPTY_FORM);
+    setFormError("");
     netoManual.current = false;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setFormError("");
     const payload = {
       source_id: parseInt(form.source_id),
-      bruto: form.bruto ? parseAmount(form.bruto) : null,
-      deducciones: form.deducciones ? parseAmount(form.deducciones) : null,
       amount: parseAmount(form.amount),
       currency: form.currency,
       period_date: form.period_date,
       notes: form.notes || null,
+      items: formFields
+        .filter(f => (form.items[f.id] ?? "").trim() !== "")
+        .map(f => ({ field_id: f.id, amount: parseAmount(form.items[f.id]) })),
     };
-    if (editId) await api.patch(`/income/entries/${editId}`, payload);
-    else await api.post("/income/entries", payload);
-    closeForm();
-    await load();
-    setLoading(false);
+    try {
+      if (editId) await api.patch(`/income/entries/${editId}`, payload);
+      else await api.post("/income/entries", payload);
+      closeForm();
+      await load();
+    } catch (err) {
+      // El formulario queda abierto con lo cargado: perderlo por un error del
+      // servidor obliga a tipear de nuevo un recibo entero.
+      setFormError(getErrorMessage(err, "No se pudo guardar el ingreso"));
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Selects the source it just created, so the form the user was filling picks
-  // up where they left off instead of making them find it in the combo.
-  const handleAddSource = async (src: { name: string; income_type: string }) => {
-    const { data } = await api.post("/income/sources", src);
-    setShowSourceForm(false);
+  // Al crear desde el formulario de ingreso, la fuente nueva queda elegida, así
+  // el usuario sigue donde estaba en vez de buscarla en el combo. Al editar la
+  // que está elegida, el detalle ya cargado se conserva para los campos que
+  // siguen existiendo.
+  const handleSourceSaved = async (src: IncomeSource) => {
+    const ctx = sourceModal;
+    setSourceModal(null);
     await load();
-    setForm(p => ({ ...p, source_id: String(data.id) }));
+    if (ctx?.fromForm) {
+      setForm(p => {
+        if (p.source_id === String(src.id)) {
+          const keep = new Set((src.fields ?? []).map(f => String(f.id)));
+          const items = Object.fromEntries(Object.entries(p.items).filter(([k]) => keep.has(k)));
+          return { ...p, items };
+        }
+        return { ...p, source_id: String(src.id), items: {}, amount: netoManual.current ? p.amount : "" };
+      });
+    }
   };
+
+  // Orden de los campos para el detalle: el de la fuente, no el de la base.
+  const fieldOrder = new Map<number, number>(
+    sources.flatMap(s => (s.fields ?? []).map(f => [f.id, f.position] as [number, number])),
+  );
 
   const handleDelete = async (id: number) => {
     if (!confirm("¿Eliminar este ingreso?")) return;
@@ -613,6 +658,12 @@ export default function IncomePage() {
                 </DropdownMenu.Item>
                 <DropdownMenu.Separator className="h-px bg-border my-1" />
                 <DropdownMenu.Item asChild>
+                  <button onClick={() => setShowSourcesList(true)}
+                    className="flex items-center justify-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full outline-none cursor-pointer">
+                    <ListTree className="w-4 h-4 text-muted-foreground" /> Fuentes
+                  </button>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item asChild>
                   <button onClick={() => setShowImport(true)}
                     className="flex items-center justify-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full outline-none cursor-pointer">
                     <Upload className="w-4 h-4 text-muted-foreground" /> Importar
@@ -651,10 +702,17 @@ export default function IncomePage() {
               <div className="flex gap-1.5">
                 <SelectField className="flex-1" required
                   value={form.source_id}
-                  onChange={v => setForm(p => ({ ...p, source_id: v }))}
+                  onChange={changeSource}
                   placeholder="Fuente de ingreso"
                   options={sources.map(s => ({ value: String(s.id), label: `${s.name} (${INCOME_TYPE_LABELS[s.income_type]})` }))} />
-                <button type="button" onClick={() => setShowSourceForm(true)} title="Nueva fuente"
+                {formSource && (
+                  <button type="button" onClick={() => setSourceModal({ source: formSource, fromForm: true })}
+                    title="Configurar campos de la fuente" aria-label="Configurar campos de la fuente"
+                    className="mt-1 px-2 border rounded-lg text-muted-foreground hover:bg-accent shrink-0">
+                    <Settings2 className="w-4 h-4" />
+                  </button>
+                )}
+                <button type="button" onClick={() => setSourceModal({ fromForm: true })} title="Nueva fuente"
                   className="mt-1 px-2.5 border rounded-lg text-muted-foreground hover:bg-accent shrink-0 text-lg leading-none">+</button>
               </div>
             </div>
@@ -663,35 +721,52 @@ export default function IncomePage() {
               <DateField required
                 value={form.period_date} onChange={v => setForm(p => ({ ...p, period_date: v }))} />
             </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Bruto (opcional)</label>
-              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
-                value={form.bruto} onChange={e => updateBrutoOrDed("bruto", e.target.value)} />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Deducciones (opcional)</label>
-              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
-                value={form.deducciones} onChange={e => updateBrutoOrDed("deducciones", e.target.value)} />
-            </div>
+            {/* Los campos de detalle son de la fuente (se configuran con el
+                engranaje); una fuente sin campos es Fuente + Neto y nada más. */}
+            {formFields.map(f => (
+              <div key={f.id}>
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1 min-w-0">
+                  <span className={`shrink-0 font-bold ${f.kind === "subtract" ? "text-rose-600" : f.kind === "add" ? "text-emerald-600" : ""}`}
+                    title={KIND_LABELS[f.kind]}>{KIND_SIGN[f.kind]}</span>
+                  <span className="truncate">{f.name}</span>
+                  {!f.is_active && <span className="shrink-0 font-normal">(quitado)</span>}
+                  <span className="shrink-0 font-normal">(opcional)</span>
+                </label>
+                <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
+                  aria-label={f.name}
+                  value={form.items[f.id] ?? ""} onChange={e => updateItem(f.id, e.target.value)} />
+              </div>
+            ))}
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-muted-foreground">
                 Neto
-                {!netoManual.current && form.bruto && (
+                {!netoManual.current && hasMath && (
                   <span className="text-muted-foreground font-normal ml-1">— calculado automáticamente</span>
                 )}
               </label>
               <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
+                aria-label="Neto"
                 value={form.amount}
                 onFocus={() => { netoManual.current = true; }}
                 onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}
                 required />
+              {netoManual.current && netGap !== 0 && (
+                <p className="mt-1 text-xs text-amber-700" data-testid="net-gap">
+                  El detalle da {fmtForm(computedNet)}; el neto difiere en {netGap < 0 ? "− " : ""}{fmtForm(Math.abs(netGap))}.{" "}
+                  <button type="button" className="underline"
+                    onClick={() => { netoManual.current = false; setForm(p => ({ ...p, amount: Math.max(0, computedNet).toFixed(2) })); }}>
+                    Usar el del detalle
+                  </button>
+                </p>
+              )}
             </div>
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-muted-foreground">Notas (opcional)</label>
-              <input className={FIELD}
+              <input className={FIELD} aria-label="Notas"
                 value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
             </div>
           </FormGrid>
+          {formError && <p className="text-sm text-destructive">{formError}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
             <Button type="submit" disabled={loading}>
@@ -813,21 +888,33 @@ export default function IncomePage() {
       </Card>
 
       <Fab label="Registrar ingreso" data-tour="income-add"
-        onClick={() => { setEditId(null); setForm(newEntryForm()); netoManual.current = false; setShowForm(true); }} />
+        onClick={() => { setEditId(null); setForm(newEntryForm()); setFormError(""); netoManual.current = false; setShowForm(true); }} />
 
       {detailEntry && (
         <EntryDetailModal
           entry={detailEntry}
+          fieldOrder={fieldOrder}
           onEdit={() => { setDetailEntry(null); openEdit(detailEntry); }}
           onDelete={() => handleDelete(detailEntry.id)}
           onClose={() => setDetailEntry(null)}
         />
       )}
 
-      {showSourceForm && (
-        <NewSourceModal
-          onSave={handleAddSource}
-          onClose={() => setShowSourceForm(false)}
+      {showSourcesList && (
+        <SourcesListModal
+          sources={sources}
+          onEdit={src => setSourceModal({ source: src, fromForm: false })}
+          onNew={() => setSourceModal({ fromForm: false })}
+          onClose={() => setShowSourcesList(false)}
+        />
+      )}
+
+      {sourceModal && (
+        <SourceFormModal
+          key={sourceModal.source?.id ?? "new"}
+          source={sourceModal.source}
+          onSaved={handleSourceSaved}
+          onClose={() => setSourceModal(null)}
         />
       )}
 

@@ -34,7 +34,7 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/user.json" },
-      testIgnore: [/visual\.spec\.ts/, /new-expense\.spec\.ts/],
+      testIgnore: [/visual\.spec\.ts/, /new-expense\.spec\.ts/, /income-fields\.spec\.ts/],
       dependencies: ["setup"],
     },
     // Los flujos que crean datos corren aparte y antes que los visuales. Con
@@ -43,7 +43,7 @@ export default defineConfig({
     {
       name: "flows",
       use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/user.json" },
-      testMatch: /new-expense\.spec\.ts/,
+      testMatch: /(new-expense|income-fields)\.spec\.ts/,
       dependencies: ["setup"],
     },
     // Los visuales van últimos. Dependen de los otros dos a propósito: si un
