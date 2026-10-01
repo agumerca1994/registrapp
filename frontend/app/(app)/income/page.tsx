@@ -77,11 +77,10 @@ function EntryDetailModal({
   const items = [...(entry.items ?? [])].sort(
     (a, b) => (fieldOrder.get(a.field_id) ?? 0) - (fieldOrder.get(b.field_id) ?? 0),
   );
-  const groups: { label: string; rows: EntryItem[] }[] = [
-    { label: "Suma", rows: items.filter(i => i.kind === "add") },
-    { label: "Resta", rows: items.filter(i => i.kind === "subtract") },
-    { label: "Informativo", rows: items.filter(i => i.kind === "info") },
-  ];
+  // Primero lo que suma, después lo que resta, al final lo informativo; el
+  // signo y el color dicen cuál es cuál.
+  const KIND_ORDER: Record<string, number> = { add: 0, subtract: 1, info: 2 };
+  const rows: EntryItem[] = [...items].sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
   // Lo que el detalle no explica del neto: un campo que no se cargó, un
   // redondeo del recibo… Se muestra en vez de esconderlo, así el desglose
   // nunca aparenta cerrar cuando no cierra.
@@ -104,20 +103,17 @@ function EntryDetailModal({
             <span className="text-muted-foreground">Tipo</span>
             <span className="font-medium">{INCOME_TYPE_LABELS[entry.source.income_type]}</span>
           </div>
-          {groups.filter(g => g.rows.length > 0).map(g => (
-            <div key={g.label} className="py-2 space-y-1" data-testid={`detail-group-${g.label}`}>
-              <span className="block text-[11px] uppercase tracking-wide text-muted-foreground">{g.label}</span>
-              {g.rows.map(i => (
-                <div key={i.field_id} className="flex justify-between gap-4">
-                  <span className="text-muted-foreground truncate">
-                    {i.name}
-                    {!i.field_active && <span className="text-[11px] ml-1">(quitado de la fuente)</span>}
-                  </span>
-                  <span className={`font-medium shrink-0 ${i.kind === "subtract" ? "text-rose-600" : ""}`}>
-                    {i.kind === "subtract" ? "− " : ""}{fmt(i.amount)}
-                  </span>
-                </div>
-              ))}
+          {rows.map(i => (
+            <div key={i.field_id} className="flex justify-between gap-4 py-2">
+              <span className="text-muted-foreground truncate">
+                {i.name}
+                {!i.field_active && <span className="text-[11px] ml-1">(quitado de la fuente)</span>}
+              </span>
+              <span className={`font-medium shrink-0 ${
+                i.kind === "add" ? "text-emerald-600" : i.kind === "subtract" ? "text-rose-600" : ""
+              }`}>
+                {i.kind === "add" ? "+ " : i.kind === "subtract" ? "− " : ""}{fmt(i.amount)}
+              </span>
             </div>
           ))}
           {gap !== 0 && (
@@ -128,7 +124,7 @@ function EntryDetailModal({
           )}
           <div className="flex justify-between py-2">
             <span className="font-medium text-foreground">Neto</span>
-            <span className="font-bold text-emerald-600 text-base">{fmt(entry.amount)}</span>
+            <span className="font-bold text-foreground text-base">{fmt(entry.amount)}</span>
           </div>
           {entry.notes && (
             <div className="flex justify-between py-2 gap-4">
