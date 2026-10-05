@@ -59,7 +59,19 @@ def detect_and_parse(pdf_bytes: bytes) -> ParseResult:
         # Archivo corrupto, no-PDF, o un PDF del que no se puede extraer
         # texto (escaneado): para el embudo es lo mismo — no hay texto.
         return ParseResult(status="no_text")
+    return _parse_pages(pages)
 
+
+def detect_and_parse_text(text: str) -> ParseResult:
+    """Igual que `detect_and_parse` pero desde texto plano ya extraído.
+
+    Es la entrada del conector MCP: el cliente de IA ya sabe leer el PDF y
+    puede pasar su texto; acá deciden los mismos parsers y el mismo control
+    de totales que en la app. El texto se trata como una sola página."""
+    return _parse_pages([text or ""])
+
+
+def _parse_pages(pages: list[str]) -> ParseResult:
     movements = pages_with_movements(pages)
     est_tokens = sum(len(pages[i]) for i in movements) // 4
     lines = pages_to_lines(pages)

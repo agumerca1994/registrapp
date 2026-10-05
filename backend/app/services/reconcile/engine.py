@@ -36,7 +36,7 @@ from app.services import category_suggest
 from app.services.credit_cards import find_or_create_statement
 from app.services.reconcile import matching, period, rules
 from app.services.reconcile.matching import AppItem, BankItem
-from app.services.statement_parsers import detect_and_parse
+from app.services.statement_parsers import detect_and_parse, detect_and_parse_text
 
 # Orden de presentación de los grupos (el reporte y el apply lo siguen).
 GROUP_ORDER = [
@@ -83,12 +83,19 @@ async def start_session(
     db: AsyncSession,
     *,
     user,
-    pdf_bytes: bytes,
+    pdf_bytes: bytes | None = None,
+    text: str | None = None,
     channel: str = "app",
     card_id: int | None = None,
 ) -> ReconciliationSession:
-    """Lee el PDF y arma la sesión. **Sólo flush, nunca commit.**"""
-    result = detect_and_parse(pdf_bytes)
+    """Lee el resumen (PDF, o su texto ya extraído — lo que manda el conector
+    MCP) y arma la sesión. **Sólo flush, nunca commit.**"""
+    if pdf_bytes is not None:
+        result = detect_and_parse(pdf_bytes)
+        input_kind = "pdf"
+    else:
+        result = detect_and_parse_text(text or "")
+        input_kind = "text"
 
     session = ReconciliationSession(
         tenant_id=user.tenant_id,
@@ -107,7 +114,7 @@ async def start_session(
             tenant_id=user.tenant_id,
             user_id=user.id,
             channel=channel,
-            input_kind="pdf",
+            input_kind=input_kind,
             outcome="needs_ai",
             reason=result.status,
             pages_total=result.pages_total,
@@ -164,7 +171,7 @@ async def start_session(
         tenant_id=user.tenant_id,
         user_id=user.id,
         channel=channel,
-        input_kind="pdf",
+        input_kind=input_kind,
         outcome=outcome,
         reason=reason,
         bank_detected=result.bank_id,

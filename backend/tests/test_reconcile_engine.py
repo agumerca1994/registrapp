@@ -200,3 +200,43 @@ async def test_missing_cuota_applies_with_scope_item_semantics(db):
     # Sólo la cuota 3/12 del resumen conciliado — nada propagado.
     assert len(cuotas) == 1
     assert cuotas[0].installment_number == 3
+
+
+BBVA_AGO = __import__("pathlib").Path(__file__).parent / "fixtures" / "private" / "bbva_2026-08_lines.txt"
+
+
+@pytest.mark.skipif(not BBVA_AGO.exists(), reason="fixture privado ausente")
+async def test_start_session_from_text_real_statement(db):
+    """El resumen real de agosto entra como texto (el camino del conector MCP)
+    y el motor lo lleva hasta una sesión que cierra: resumen nuevo creado en
+    2026-08 con todos los ítems como faltantes."""
+    category_suggest.invalidate(1)
+    card = CreditCard(tenant_id=1, user_id=1, bank="BBVA", alias="Visa Black", last_4_digits="4919")
+    db.add(card)
+    await db.flush()
+
+    from app.services.reconcile.engine import start_session
+
+    session = await start_session(db, user=USER, text=BBVA_AGO.read_text(encoding="utf-8"))
+
+    assert session.status == "ready"
+    assert session.bank_id == "bbva"
+    assert (session.period_year, session.period_month) == (2026, 8)
+    # Única tarjeta: elegida sola; resumen nuevo creado con las fechas del PDF.
+    stmt = await db.get(CreditCardStatement, session.statement_id)
+    assert stmt.card_id == card.id
+    assert stmt.closing_date == date(2026, 8, 27)
+
+    actions = (await db.scalars(select(ReconciliationAction))).all()
+    missing = [a for a in actions if a.klass == "missing"]
+    assert len(missing) == 31  # todo faltante: el resumen de la app nace vacío
+    # La diferencia es exactamente la suma de faltantes → cierra en ambas monedas.
+    assert Decimal(session.totals["ARS"]["unexplained"]) == 0
+    assert Decimal(session.totals["USD"]["unexplained"]) == 0
+
+    # El embudo registró el intento como resuelto por código.
+    from app.models.reconciliation import CaptureEvent
+    ev = await db.scalar(select(CaptureEvent).order_by(CaptureEvent.id.desc()))
+    assert ev.outcome == "parsed_code"
+    assert ev.input_kind == "text"
+    assert ev.bank_detected == "bbva"
