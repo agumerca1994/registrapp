@@ -52,9 +52,10 @@ MSG_HELP = (
     "No te entendí 🤔\n\n"
     "Podés mandarme:\n"
     "• Un gasto: *12 lucas verdulería* · *15000 supermercado* · *usd 20 regalo ayer*\n"
-    "• El *PDF del resumen* de tu tarjeta, y lo comparo con lo cargado\n"
+    "• El *PDF del resumen* de tu tarjeta, y dejo tus datos al día\n"
+    "• El *PDF de un comprobante* de pago o transferencia\n"
     "• *deshacer* — borra lo último que cargué\n"
-    "• *editar monto 13000* / *editar categoría súper*"
+    "• *editar monto / categoría / descripción …*"
 )
 MSG_NEEDS_AI_MEDIA = (
     "Por ahora no puedo leer {what} por acá. Analizarlas con IA va a ser "
@@ -781,7 +782,7 @@ async def _apply_all_groups(db: AsyncSession, user: User, session_id: int) -> li
     session = await db.get(ReconciliationSession, session_id)
     if session is None or session.tenant_id != user.tenant_id:
         await db.commit()
-        return ["No encontré esa conciliación."]
+        return ["No encontré ese resumen."]
 
     label_map = {
         "dates": "fechas completadas", "missing": "cargados",
@@ -809,7 +810,7 @@ async def _apply_all_groups(db: AsyncSession, user: User, session_id: int) -> li
     else:
         lines = ["No había nada aplicable todavía."]
     if session.status == "closed":
-        lines.append("🏁 *Conciliación finalizada*: el resumen quedó igual al del banco.")
+        lines.append("🏁 *Resumen al día*: tus datos quedaron iguales a los del banco.")
         lines.append(f"Detalle: {await _conciliar_link(db, user, session_id)}")
     elif skipped_total:
         lines.append(

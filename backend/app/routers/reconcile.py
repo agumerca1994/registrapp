@@ -175,6 +175,55 @@ async def list_sessions(
     return result
 
 
+@router.get("/pending")
+async def list_pending(
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Resúmenes subidos que todavía piden una decisión: alimentan el puntito
+    de Tarjetas y la tarjeta "Resúmenes por revisar". Devuelve las filas (no
+    un conteo) por el mismo motivo que /shared-expenses/pending: el panel
+    necesita los datos y el puntito el número, y dos endpoints contestando
+    "cuántos hay" es el par que se desincroniza.
+
+    Declarada ANTES de /{session_id}: Starlette matchea en orden y "pending"
+    caería en el parámetro entero como un 422.
+    """
+    user = await _get_db_user(firebase_user, db)
+    sessions = (await db.scalars(
+        select(ReconciliationSession)
+        .where(
+            ReconciliationSession.tenant_id == user.tenant_id,
+            ReconciliationSession.status.in_(("ready", "unexplained", "applied", "needs_choice")),
+        )
+        .order_by(ReconciliationSession.created_at.desc())
+        .limit(20)
+    )).all()
+    result = []
+    for s in sessions:
+        pending = (await db.scalars(
+            select(ReconciliationAction.id).where(
+                ReconciliationAction.session_id == s.id,
+                ReconciliationAction.status == ACTION_PROPOSED,
+            )
+        )).all()
+        # needs_choice no tiene acciones todavía, pero sí pide una decisión.
+        if not pending and s.status != "needs_choice":
+            continue
+        parsed = s.parsed or {}
+        result.append({
+            "id": s.id,
+            "status": s.status,
+            "bank": parsed.get("bank"),
+            "card_id": s.card_id,
+            "period_year": s.period_year,
+            "period_month": s.period_month,
+            "pending_count": len(pending),
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+        })
+    return result
+
+
 @router.get("/{session_id}")
 async def get_session(
     session_id: int,
