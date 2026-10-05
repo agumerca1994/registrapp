@@ -97,3 +97,16 @@ def test_superscript_cents_do_not_leak_into_plain_amounts():
     text = "Comprobante de transferencia\nEnviaste $ 15.000 a\nDestinatario: JUAN PEREZ\nCBU: 011"
     r = parse_transfer_receipt([text])
     assert r.amount == Decimal("15000")
+
+
+def test_amount_line_without_dollar_sign():
+    """El caso real de Personal Pay: la capa de texto pierde el "$" del monto
+    grande y queda "3.60000" pelado en su propia línea."""
+    text = PERSONAL_PAY_RECEIPT.replace("$3.60000", "3.60000")
+    r = parse_transfer_receipt([text])
+    assert r is not None
+    assert r.amount == Decimal("3600.00")
+    # Y un CBU o el código de operación no se confunden con un monto.
+    assert parse_transfer_receipt([
+        "Compraste en Kiosco\nCBU 0110599520000012345678\nOperacion 123456"
+    ]) is None

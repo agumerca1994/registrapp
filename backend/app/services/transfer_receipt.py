@@ -36,6 +36,13 @@ _AMOUNT_RE = re.compile(r"\$\s*([\d.]{1,13}(?:,\d{1,2})?)")
 # tiene que ser una agrupación de miles VÁLIDA completa; los dos dígitos que
 # sobran son los centavos ("$15.000" liso no matchea: no le sobra nada).
 _AMOUNT_SUPERSCRIPT_RE = re.compile(r"\$\s*(\d{1,3}(?:\.\d{3})+)(\d{2})(?!\d)")
+# El monto grande estilizado puede perder el "$" en la capa de texto (caso
+# real: Personal Pay extrae "3.60000" pelado). Sin el "$" sólo se acepta una
+# LÍNEA ENTERA con formato de monto — un CBU o un código de operación no
+# tienen puntos de miles, así que no confunden.
+_LINE_AMOUNT_SUPER_RE = re.compile(r"^(\d{1,3}(?:\.\d{3})+)(\d{2})$")   # 3.60000 → 3.600,00
+_LINE_AMOUNT_RE = re.compile(r"^(\d{1,3}(?:\.\d{3})*,\d{2})$")           # 1.234,56
+_LINE_AMOUNT_MILES_RE = re.compile(r"^(\d{1,3}(?:\.\d{3})+)$")            # 15.000
 _USD_RE = re.compile(r"(?<!\w)(u\$s|usd|u\$d)(?!\w)", re.IGNORECASE)
 _DATE_NUM_RE = re.compile(r"(\d{1,2})[/-](\d{1,2})[/-](\d{4})")
 # "5 de octubre de 2026", "05 de Octubre 2026"
@@ -132,6 +139,17 @@ def parse_transfer_receipt(pages_text: list[str]) -> ReceiptDraft | None:
         masked = masked[: m.start()] + " " * (m.end() - m.start()) + masked[m.end():]
     amounts.extend(a for raw in _AMOUNT_RE.findall(masked) if (a := _parse_amount(raw)))
     if not amounts:
+        # Sin "$" a la vista: líneas que son un monto y nada más.
+        for ln in lines:
+            m = _LINE_AMOUNT_SUPER_RE.match(ln)
+            if m:
+                value = _parse_amount(f"{m.group(1)},{m.group(2)}")
+            else:
+                m2 = _LINE_AMOUNT_RE.match(ln) or _LINE_AMOUNT_MILES_RE.match(ln)
+                value = _parse_amount(m2.group(1)) if m2 else None
+            if value is not None:
+                amounts.append(value)
+    if not amounts:
         return None
     amount = max(amounts)
 
@@ -159,4 +177,7 @@ def diagnose(pages_text: list[str]) -> dict:
         "amounts_found": amounts,
         "lines": len([ln for ln in text.split("\n") if ln.strip()]),
         "chars": len(text),
+        # Muestra acotada del texto plegado: los metadatos solos no alcanzaron
+        # (el caso del "$" perdido se adivinó dos veces antes de verlo).
+        "sample": fold_text(text)[:300],
     }
