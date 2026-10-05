@@ -232,8 +232,8 @@ export default function ConciliarDetailPage() {
         {error && (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
         )}
-        <Button variant="outline" onClick={() => router.push("/tarjetas")}>
-          <ChevronLeft className="w-4 h-4" /> Volver a Tarjetas
+        <Button variant="outline" onClick={() => router.push("/tarjetas/resumenes")}>
+          <ChevronLeft className="w-4 h-4" /> Volver a resúmenes
         </Button>
       </div>
     );
@@ -264,7 +264,7 @@ export default function ConciliarDetailPage() {
   return (
     <div className="max-w-4xl space-y-4 md:space-y-6">
       <div className="flex items-center gap-3">
-        <button onClick={() => router.push("/tarjetas")} aria-label="Volver"
+        <button onClick={() => router.push("/tarjetas/resumenes")} aria-label="Volver"
           className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">
           <ChevronLeft className="w-5 h-5" />
         </button>

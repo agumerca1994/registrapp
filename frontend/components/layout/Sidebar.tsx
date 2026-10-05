@@ -35,6 +35,14 @@ const MOBILE_TAB_HREFS = ["/dashboard", "/income", "/expenses", "/tarjetas"];
 const mobileTabs = nav.filter((item) => MOBILE_TAB_HREFS.includes(item.href));
 const moreItems = nav.filter((item) => !MOBILE_TAB_HREFS.includes(item.href));
 
+// Activo también en las subrutas (/tarjetas/resumenes, /tarjetas/3/12): una
+// pantalla que cuelga de una sección no puede dejar la navegación sin nada
+// marcado. El "/" final evita que /income marque algo como /incomes.
+function isNavActive(pathname: string | null, href: string): boolean {
+  if (!pathname) return false;
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
 // Ámbar y no rojo: es lo que la app ya usa para "pendiente" (el chip de
 // /shared), y esto no es un error, es una decisión esperando. El anillo del
 // color de la tarjeta lo despega tanto del fondo blanco como del violeta del
@@ -128,7 +136,7 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
             data-tour={tour}
             className={cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-              pathname === href
+              isNavActive(pathname, href)
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-accent"
             )}
@@ -201,7 +209,7 @@ function MoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bo
                 onClick={() => onOpenChange(false)}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                  pathname === href
+                  isNavActive(pathname, href)
                     ? "bg-primary text-primary-foreground"
                     : "text-foreground hover:bg-accent"
                 )}
@@ -240,7 +248,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { appUser } = useAuth();
   const pendingHrefs = usePendingHrefs();
-  const isMoreActive = moreItems.some((item) => item.href === pathname);
+  const isMoreActive = moreItems.some((item) => isNavActive(pathname, item.href));
 
   return (
     <>
@@ -264,7 +272,7 @@ export default function Sidebar() {
         style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
       >
         {mobileTabs.map(({ href, label, icon: Icon, tour }) => {
-          const active = pathname === href;
+          const active = isNavActive(pathname, href);
           return (
             <Link
               key={href}

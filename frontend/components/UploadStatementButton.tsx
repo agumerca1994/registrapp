@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FileSearch, Loader2, X } from "lucide-react";
 import api from "@/lib/api";
@@ -14,8 +15,16 @@ import { Button } from "@/components/ui/button";
  *
  * Con `cardId` el backend ya sabe de qué tarjeta es y se saltea la pregunta.
  * `pulse` marca que hay resúmenes esperando revisión.
+ *
+ * Con `href` no sube nada: es un link con el mismo aspecto (lo usa /tarjetas
+ * para llevar a /tarjetas/resumenes, donde están el historial y la subida —
+ * abrir el selector de archivos de una dejaba el historial inalcanzable).
+ * `primary` es la variante de llamado principal: botón lleno y el texto
+ * visible también en el teléfono.
  */
-export function UploadStatementButton({ cardId, pulse = false }: { cardId?: number; pulse?: boolean }) {
+export function UploadStatementButton({
+  cardId, pulse = false, href, primary = false,
+}: { cardId?: number; pulse?: boolean; href?: string; primary?: boolean }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -46,21 +55,35 @@ export function UploadStatementButton({ cardId, pulse = false }: { cardId?: numb
     if (file) upload(file);
   };
 
+  const icon = uploading
+    ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+    : <FileSearch className="w-4 h-4 shrink-0" />;
+  const label = <span className={primary ? undefined : "hidden sm:inline"}>
+    {uploading ? "Leyendo el PDF..." : "Subir resumen"}
+  </span>;
+
   return (
     <div className="relative shrink-0">
-      <input ref={input} type="file" accept="application/pdf" className="hidden" onChange={onPick} />
-      <Button
-        variant="outline"
-        onClick={() => input.current?.click()}
-        disabled={uploading}
-        title="Subir el PDF del resumen del banco"
-        aria-label="Subir resumen"
-      >
-        {uploading
-          ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-          : <FileSearch className="w-4 h-4 shrink-0" />}
-        <span className="hidden sm:inline">{uploading ? "Leyendo el PDF..." : "Subir resumen"}</span>
-      </Button>
+      {href ? (
+        <Button asChild variant={primary ? "primary" : "outline"}>
+          <Link href={href} title="Subir un resumen o ver los ya subidos" aria-label="Subir resumen">
+            {icon}{label}
+          </Link>
+        </Button>
+      ) : (
+        <>
+          <input ref={input} type="file" accept="application/pdf" className="hidden" onChange={onPick} />
+          <Button
+            variant={primary ? "primary" : "outline"}
+            onClick={() => input.current?.click()}
+            disabled={uploading}
+            title="Subir el PDF del resumen del banco"
+            aria-label="Subir resumen"
+          >
+            {icon}{label}
+          </Button>
+        </>
+      )}
       {pulse && !uploading && (
         <span aria-hidden="true" className="pointer-events-none absolute -top-1 -right-1 flex w-3 h-3">
           <span className="absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 animate-ping motion-reduce:animate-none" />

@@ -57,10 +57,24 @@ MSG_HELP = (
     "• *deshacer* — borra lo último que cargué\n"
     "• *editar monto / categoría / descripción …*"
 )
-MSG_NEEDS_AI_MEDIA = (
-    "Por ahora no puedo leer {what} por acá. Analizarlas con IA va a ser "
-    "parte del plan Pro (próximamente) — respondé *me interesa* y te avisamos.\n"
-    "Mientras tanto podés cargar el gasto como texto: *12 lucas verdulería*."
+# Una imagen casi siempre es un comprobante compartido como captura: muchas
+# apps (Mercado Pago, los bancos) comparten la imagen por default. El PDF sí
+# se lee en código, así que lo primero que dice el mensaje es cómo mandarlo —
+# un aviso que sólo ofrece el plan Pro deja al usuario sin salida (caso real:
+# una transferencia enviada como captura terminó en "pasate de plan").
+MSG_NEEDS_AI_IMAGE = (
+    "📷 Me llegó una *imagen*, y por ahora sólo puedo leer comprobantes en *PDF*.\n\n"
+    "En la app de tu banco o billetera buscá *Compartir comprobante* → *PDF* "
+    "(o *Descargar PDF*) y mandámelo de nuevo. También podés escribirlo: "
+    "*15000 transferencia juan*.\n\n"
+    "Leer imágenes con IA va a ser parte del plan Pro (próximamente) — "
+    "respondé *me interesa* y te avisamos."
+)
+MSG_NEEDS_AI_AUDIO = (
+    "🎙️ Por ahora no puedo escuchar audios. Escribime el gasto como te salga: "
+    "*12 lucas verdulería*.\n\n"
+    "Entender audios con IA va a ser parte del plan Pro (próximamente) — "
+    "respondé *me interesa* y te avisamos."
 )
 
 _EDIT_RE = re.compile(r"^editar\s+(monto|categor[ií]a|descripci[oó]n)\s+(.+)$", re.IGNORECASE)
@@ -384,12 +398,11 @@ async def _pending_group_counts(db: AsyncSession, session_id: int) -> dict[str, 
 async def _handle_unsupported_media(
     db: AsyncSession, user: User, inbound: InboundMessage
 ) -> list[str]:
-    what = "imágenes" if inbound.kind == "image" else "audios"
     await record_event(
         db, tenant_id=user.tenant_id, user_id=user.id, channel="whatsapp",
         input_kind=inbound.kind, outcome="needs_ai", reason=inbound.kind,
     )
-    reply = MSG_NEEDS_AI_MEDIA.format(what=what)
+    reply = MSG_NEEDS_AI_IMAGE if inbound.kind == "image" else MSG_NEEDS_AI_AUDIO
     _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id)
     _remember(db, user.id, "out", "text", text=reply, pending={"type": "interest"})
     await db.commit()

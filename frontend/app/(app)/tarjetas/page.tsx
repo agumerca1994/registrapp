@@ -236,17 +236,20 @@ function DeleteCardModal({
 type SortField = "titular" | "bank" | null;
 
 /**
- * Los resúmenes subidos que todavía esperan algo. Es la única puerta de vuelta
- * a una revisión a medias ahora que no hay una sección propia en la
- * navegación: sin esto, cerrar la pantalla de revisión la perdía.
+ * Los resúmenes subidos que todavía esperan algo, a un toque desde Tarjetas.
+ * El historial completo (también los que ya están al día) vive en
+ * /tarjetas/resumenes, adonde lleva "Ver todos" y el botón "Subir resumen".
  */
 function PendingStatementsCard() {
   const { pending } = usePendingStatements();
   if (pending.length === 0) return null;
   return (
     <UiCard className="p-0 md:p-0 divide-y">
-      <div className="px-4 py-3">
-        <h3 className="font-semibold text-foreground text-sm md:text-base">Resúmenes por revisar</h3>
+      <div className="flex items-center gap-2 px-4 py-3">
+        <h3 className="font-semibold text-foreground text-sm md:text-base truncate">Resúmenes por revisar</h3>
+        <Link href="/tarjetas/resumenes" className="ml-auto shrink-0 text-sm font-medium text-primary hover:underline">
+          Ver todos
+        </Link>
       </div>
       {pending.map((p) => {
         const label = [p.bank, periodLabel(p.period_year, p.period_month)].filter(Boolean).join(" · ")
@@ -358,7 +361,7 @@ export default function TarjetasPage() {
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Tarjetas de crédito</h2>
         <div className="flex items-center gap-2 shrink-0">
-          {features.reconcile && <UploadStatementButton pulse={pendingStatements > 0} />}
+          {features.reconcile && <UploadStatementButton href="/tarjetas/resumenes" pulse={pendingStatements > 0} />}
           <Button onClick={() => { setEditCard(null); setShowModal(true); }}>
             <Plus className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Nueva tarjeta</span>
