@@ -35,8 +35,9 @@ function sharedBy(exp: PendingShared): string {
  * navegación y la sección sigue donde estaba.
  */
 export function PendingSharedDialog() {
-  const { pending, accept, reject } = usePendingShared();
-  const [dismissed, setDismissed] = useState(false);
+  // `dismissed` vive en el contexto para que el carrusel de novedades sepa si
+  // este aviso está a la vista y no se encime.
+  const { pending, accept, reject, dialogDismissed: dismissed, dismissDialog } = usePendingShared();
   const [index, setIndex] = useState(0);
   // La guía de producto y este aviso pueden dispararse los dos en el primer
   // ingreso y se encimarían. Gana la guía, que corre una sola vez y justamente
@@ -58,10 +59,10 @@ export function PendingSharedDialog() {
   }, [pending.length, index]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDismissed(true); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") dismissDialog(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [dismissDialog]);
 
   if (dismissed || tourRunning || pending.length === 0) return null;
 
@@ -89,7 +90,7 @@ export function PendingSharedDialog() {
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
-      onClick={() => setDismissed(true)}
+      onClick={() => dismissDialog()}
       role="dialog"
       aria-modal="true"
       aria-label="Gastos compartidos por confirmar"
@@ -104,7 +105,7 @@ export function PendingSharedDialog() {
             {pending.length === 1 ? "Te compartieron un gasto" : "Gastos por confirmar"}
           </h3>
           <button
-            onClick={() => setDismissed(true)}
+            onClick={() => dismissDialog()}
             aria-label="Cerrar"
             className="text-muted-foreground hover:text-foreground p-1 -m-1 shrink-0"
           >

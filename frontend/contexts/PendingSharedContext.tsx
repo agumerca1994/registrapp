@@ -41,6 +41,14 @@ export interface PendingShared {
 interface Ctx {
   pending: PendingShared[];
   count: number;
+  /** `true` una vez que la primera consulta volvió (bien o mal). Antes de eso
+   *  `count` vale 0 sin significar "no hay": el carrusel de novedades espera a
+   *  esto para no ganarle la carrera al aviso de pendientes. */
+  loaded: boolean;
+  /** El usuario cerró el aviso de pendientes en esta sesión. Vive acá y no en
+   *  el diálogo para que otro overlay sepa si el aviso está a la vista. */
+  dialogDismissed: boolean;
+  dismissDialog: () => void;
   /** Vuelve a preguntar al backend. La llama /shared después de aceptar o
    *  rechazar, para que el puntito no quede encendido de más. */
   refresh: () => Promise<void>;
@@ -51,6 +59,9 @@ interface Ctx {
 const PendingSharedContext = createContext<Ctx>({
   pending: [],
   count: 0,
+  loaded: false,
+  dialogDismissed: false,
+  dismissDialog: () => {},
   refresh: async () => {},
   accept: async () => {},
   reject: async () => {},
@@ -58,6 +69,9 @@ const PendingSharedContext = createContext<Ctx>({
 
 export function PendingSharedProvider({ children }: { children: React.ReactNode }) {
   const [pending, setPending] = useState<PendingShared[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [dialogDismissed, setDialogDismissed] = useState(false);
+  const dismissDialog = useCallback(() => setDialogDismissed(true), []);
 
   const refresh = useCallback(async () => {
     try {
@@ -67,6 +81,8 @@ export function PendingSharedProvider({ children }: { children: React.ReactNode 
       // Un fallo acá no puede romper la pantalla: lo único que se pierde es el
       // aviso, y la sección sigue estando donde estaba.
       setPending([]);
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
@@ -85,7 +101,7 @@ export function PendingSharedProvider({ children }: { children: React.ReactNode 
 
   return (
     <PendingSharedContext.Provider
-      value={{ pending, count: pending.length, refresh, accept, reject }}
+      value={{ pending, count: pending.length, loaded, dialogDismissed, dismissDialog, refresh, accept, reject }}
     >
       {children}
     </PendingSharedContext.Provider>

@@ -13,6 +13,7 @@ import { PrivacyProvider } from "@/contexts/PrivacyContext";
 import { PendingSharedProvider } from "@/contexts/PendingSharedContext";
 import { PendingStatementsProvider } from "@/contexts/PendingStatementsContext";
 import { PendingSharedDialog } from "@/components/PendingSharedDialog";
+import { WhatsNewCarousel } from "@/components/WhatsNewCarousel";
 import { syncPushToken } from "@/lib/push";
 import { ensureServiceWorker } from "@/lib/sw";
 import { stashPendingRoute, takePendingRoute } from "@/lib/pending-route";
@@ -115,6 +116,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </main>
         </div>
         <PendingSharedDialog />
+        {/* Cede ante el aviso de pendientes y ante una guía corriendo: nunca
+            dos overlays a la vez (ver el componente). */}
+        <WhatsNewCarousel />
       </PendingStatementsProvider>
       </PendingSharedProvider>
     </PrivacyProvider>

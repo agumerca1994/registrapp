@@ -14,6 +14,7 @@ import McpConnectorSection from "@/components/McpConnectorSection";
 import { IosShortcutSection } from "@/components/IosShortcutSection";
 import { features } from "@/lib/features";
 import { resetAllTours } from "@/components/ProductTour";
+import { WHATS_NEW_KEY } from "@/components/WhatsNewCarousel";
 import { Card } from "@/components/ui/card";
 import { FIELD, SelectField } from "@/components/ui/form";
 import { Chip } from "@/components/ui/chip";
@@ -202,6 +203,17 @@ function WhatsAppSection() {
 
   const isLinked = !!appUser?.whatsapp_phone;
 
+  // `/settings#whatsapp` (el "Vincular WhatsApp" de las novedades) tiene que
+  // aterrizar acá. El salto nativo al ancla no alcanza: ScrollToTop corre
+  // después, en el layout, y devuelve #main-content arriba de todo.
+  useEffect(() => {
+    if (window.location.hash !== "#whatsapp") return;
+    const t = window.setTimeout(() => {
+      document.getElementById("whatsapp")?.scrollIntoView({ block: "start" });
+    }, 100);
+    return () => window.clearTimeout(t);
+  }, []);
+
   const unlink = async () => {
     setLoading(true); setError("");
     try {
@@ -215,7 +227,7 @@ function WhatsAppSection() {
   };
 
   return (
-    <Card className="p-6 space-y-4">
+    <Card id="whatsapp" className="p-6 space-y-4 scroll-mt-20 md:scroll-mt-8">
       <div>
         <div className="flex items-center gap-2 mb-1">
           <MessageCircle className="w-5 h-5 text-emerald-600" />
@@ -430,7 +442,12 @@ export default function SettingsPage() {
         <p className="text-sm text-muted-foreground">¿Necesitás ayuda? Reiniciá la guía de funcionalidades.</p>
         <Button
           variant="outline"
-          onClick={() => { resetAllTours(APP_TOUR_IDS); window.location.href = "/dashboard"; }}
+          onClick={() => {
+            resetAllTours(APP_TOUR_IDS);
+            // Las novedades también vuelven a verse.
+            try { localStorage.removeItem(WHATS_NEW_KEY); } catch { /* storage bloqueado */ }
+            window.location.href = "/dashboard";
+          }}
         >
           Reiniciar guía
         </Button>
