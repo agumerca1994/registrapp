@@ -602,12 +602,14 @@ async def whatsapp_webhook_config(
                 "status_code": resp.status_code if resp is not None else None,
                 "body": body,
             }
-    # El secret no se devuelve: sólo si la URL configurada lo incluye.
+    # El secret no se devuelve, venga donde venga: en la URL (?secret=) o en
+    # los headers configurados (x-webhook-secret). Lo que importa es saber
+    # QUE está, no cuál es.
     wh = results.get("webhook", {}).get("body")
-    if isinstance(wh, dict) and isinstance(wh.get("url"), str):
-        url = wh["url"]
-        if "secret=" in url:
-            base, _, _tail = url.partition("secret=")
+    if isinstance(wh, dict):
+        if isinstance(wh.get("url"), str) and "secret=" in wh["url"]:
+            base, _, _tail = wh["url"].partition("secret=")
             wh["url"] = base + "secret=***"
-        wh["secret_in_url"] = "secret=***" in wh["url"]
+        if isinstance(wh.get("headers"), dict):
+            wh["headers"] = {k: "***" for k in wh["headers"]}
     return results
