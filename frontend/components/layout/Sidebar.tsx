@@ -8,10 +8,11 @@ import * as Dialog from "@radix-ui/react-dialog";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import { features } from "@/lib/features";
 import {
   LayoutDashboard, TrendingUp, TrendingDown, BarChart3,
   Home, LogOut, Settings, MoreHorizontal, Users2, CreditCard, CalendarDays,
-  CircleUserRound, ArrowLeftRight,
+  CircleUserRound, ArrowLeftRight, FileSearch,
 } from "lucide-react";
 import pkg from "../../package.json";
 
@@ -22,6 +23,10 @@ const nav = [
   { href: "/divisas", label: "Divisas", icon: ArrowLeftRight, tour: "nav-divisas" },
   { href: "/shared", label: "Gastos compartidos", icon: Users2, tour: "nav-shared" },
   { href: "/tarjetas", label: "Tarjetas", icon: CreditCard, tour: "nav-tarjetas" },
+  // Detrás del flag: fuera de MOBILE_TAB_HREFS, así cae solo en la hoja "Más".
+  ...(features.reconcile
+    ? [{ href: "/conciliar", label: "Conciliar", icon: FileSearch }]
+    : []),
   { href: "/calendario", label: "Calendario de pagos", icon: CalendarDays, tour: "nav-calendario" },
   { href: "/mortgage", label: "Hipoteca", icon: Home },
   { href: "/macro", label: "Variables macro", icon: BarChart3 },

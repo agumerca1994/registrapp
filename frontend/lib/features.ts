@@ -29,4 +29,11 @@ export const features = {
    * roto.
    */
   iosShortcut: on(process.env.NEXT_PUBLIC_FEATURE_IOS_SHORTCUT),
+
+  /**
+   * Conciliación de resúmenes de tarjeta: subir el PDF del banco y comparar
+   * contra lo cargado (/conciliar). Apagarlo esconde la entrada de navegación
+   * y la pantalla; el backend queda accesible igual.
+   */
+  reconcile: on(process.env.NEXT_PUBLIC_FEATURE_RECONCILE),
 } as const;

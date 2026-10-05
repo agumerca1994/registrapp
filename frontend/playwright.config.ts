@@ -24,6 +24,7 @@ export default defineConfig({
       // Mismo valor que ve el proceso de tests, para que los que dependen del
       // flag salteen o corran de acuerdo a lo que el server realmente muestra.
       NEXT_PUBLIC_FEATURE_IOS_SHORTCUT: process.env.NEXT_PUBLIC_FEATURE_IOS_SHORTCUT ?? "false",
+      NEXT_PUBLIC_FEATURE_RECONCILE: process.env.NEXT_PUBLIC_FEATURE_RECONCILE ?? "false",
     },
   },
   projects: [
