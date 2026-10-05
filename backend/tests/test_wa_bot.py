@@ -275,3 +275,25 @@ async def test_description_offer_yields_to_new_expense(db):
     assert len(entries) == 2
     first = next(e for e in entries if e.description == "chucherias")
     assert first.description == "chucherias"  # la oferta no lo tocó
+
+
+async def test_category_answer_learns_merchant_rule(db):
+    """El caso real: contestar la categoría guarda la regla, y el mismo
+    comercio vuelve sugerido aunque la descripción se haya reescrito."""
+    from app.services import category_suggest
+
+    category_suggest.invalidate(1)
+    await _cat(db, "Varios")
+    await _cat(db, "Super")
+    await wa_bot.handle(db, USER, _in("3600 maremtisas067 compras", wa_id="W1"))
+    await wa_bot.handle(db, USER, _in("varios", wa_id="W2"))
+    # La descripción se reescribe (lo que rompía la sugerencia por historial).
+    await wa_bot.handle(db, USER, _in("mantel para el quincho", wa_id="W3"))
+
+    category_suggest.invalidate(1)
+    replies = await wa_bot.handle(db, USER, _in("5000 maremtisas067 compras", wa_id="W4"))
+    assert "(sugerida)" in replies[0]
+    assert "Varios" in replies[0]
+    entries = (await db.scalars(select(ExpenseEntry).order_by(ExpenseEntry.id))).all()
+    varios = await db.scalar(select(ExpenseCategory).where(ExpenseCategory.name == "Varios"))
+    assert entries[-1].category_id == varios.id

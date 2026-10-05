@@ -493,6 +493,7 @@ async def _do_pending_category_by_name(
         db, tenant_id=user.tenant_id, user_id=user.id, draft=draft, category_id=cat.id,
         payment_method=(pending["draft"] or {}).get("pm"),
     )
+    await _learn_merchant_rule(db, user.tenant_id, draft.term, cat.id)
     row.pending = None
     _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text,
               ref_type="expense", ref_id=entry.id)
@@ -572,14 +573,33 @@ async def _capture_draft(
               ref_type="expense", ref_id=entry.id)
     await db.commit()
 
-    suffix = " (sugerida)" if pick.source == "suggest" else ""
+    suffix = " (sugerida)" if pick.source in ("suggest", "rule") else ""
     when = "" if entry.expense_date == datetime.now().date() else f" · {entry.expense_date.strftime('%d/%m')}"
     base = f"✅ {_fmt_amount(draft)} · {entry.description} — {pick.category_name}{suffix}{when}"
-    if pick.source == "suggest":
+    if pick.source in ("suggest", "rule"):
         reply = _offer_description(db, user, entry, base)
         await db.commit()
         return [reply]
     return [base + "\nRespondé *deshacer*, o *editar monto/categoría/descripción …*"]
+
+
+async def _learn_merchant_rule(
+    db: AsyncSession, tenant_id: int, term: str, category_id: int
+) -> None:
+    """Contestar la pregunta de categoría ES la regla comercio→categoría.
+
+    La sugerencia por historial se rompe apenas el usuario reescribe la
+    descripción (caso real: "Maremtisas067" → "mantel para el quincho" y el
+    mismo comprobante volvió a preguntar). La regla es durable y, como todo
+    lo de `capture_rules`, sólo produce una sugerencia visible y editable —
+    nunca se aplica sin mostrarse. Sin descripción en el payload a propósito:
+    la del primer gasto no tiene por qué valer para el próximo."""
+    from app.services.reconcile import rules as capture_rules
+
+    await capture_rules.save_rule(
+        db, tenant_id, capture_rules.KIND_MERCHANT_CATEGORY,
+        capture_rules.merchant_key(term), {"category_id": category_id},
+    )
 
 
 def _offer_description(db: AsyncSession, user: User, entry, base_line: str) -> str:
@@ -730,6 +750,7 @@ async def _do_pending_answer(
             db, tenant_id=user.tenant_id, user_id=user.id, draft=draft, category_id=cat.id,
             payment_method=(pending["draft"] or {}).get("pm"),
         )
+        await _learn_merchant_rule(db, user.tenant_id, draft.term, cat.id)
         row.pending = None
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text,
                   ref_type="expense", ref_id=entry.id)
