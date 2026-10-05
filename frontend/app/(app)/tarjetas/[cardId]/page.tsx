@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { FIELD, FormGrid, SelectField, DateField } from "@/components/ui/form";
 import { StatementPaper } from "@/components/StatementPaper";
 import { BankLogo } from "@/components/ui/bank-logo";
+import { features } from "@/lib/features";
+import { UploadStatementButton } from "@/components/UploadStatementButton";
 
 const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -269,6 +271,7 @@ export default function CardDetailPage() {
           <h2 className="text-xl md:text-2xl font-display font-bold text-foreground truncate">{card.alias}</h2>
           <p className="text-sm text-muted-foreground">{card.bank}{card.last_4_digits ? ` •••• ${card.last_4_digits}` : ""}</p>
         </div>
+        {features.reconcile && <UploadStatementButton cardId={card.id} />}
         <Button onClick={() => setShowNewStmt(true)} className="shrink-0">
           <Plus className="w-4 h-4 shrink-0" />
           <span className="hidden sm:inline">Crear resumen</span>

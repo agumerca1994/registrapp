@@ -4,15 +4,15 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePendingShared } from "@/contexts/PendingSharedContext";
+import { usePendingStatements } from "@/contexts/PendingStatementsContext";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
-import { features } from "@/lib/features";
 import {
   LayoutDashboard, TrendingUp, TrendingDown, BarChart3,
   Home, LogOut, Settings, MoreHorizontal, Users2, CreditCard, CalendarDays,
-  CircleUserRound, ArrowLeftRight, FileSearch,
+  CircleUserRound, ArrowLeftRight,
 } from "lucide-react";
 import pkg from "../../package.json";
 
@@ -23,10 +23,6 @@ const nav = [
   { href: "/divisas", label: "Divisas", icon: ArrowLeftRight, tour: "nav-divisas" },
   { href: "/shared", label: "Gastos compartidos", icon: Users2, tour: "nav-shared" },
   { href: "/tarjetas", label: "Tarjetas", icon: CreditCard, tour: "nav-tarjetas" },
-  // Detrás del flag: fuera de MOBILE_TAB_HREFS, así cae solo en la hoja "Más".
-  ...(features.reconcile
-    ? [{ href: "/conciliar", label: "Conciliar", icon: FileSearch }]
-    : []),
   { href: "/calendario", label: "Calendario de pagos", icon: CalendarDays, tour: "nav-calendario" },
   { href: "/mortgage", label: "Hipoteca", icon: Home },
   { href: "/macro", label: "Variables macro", icon: BarChart3 },
@@ -53,8 +49,19 @@ function NavDot({ className = "" }: { className?: string }) {
 }
 
 // Un solo lugar decide qué ítem lleva el aviso, así el sidebar, la hoja "Más"
-// y la tab bar no pueden discrepar.
-const PENDING_HREF = "/shared";
+// y la tab bar no pueden discrepar: /shared por los gastos compartidos
+// esperando decisión, /tarjetas por los resúmenes subidos a medio revisar.
+// Cada componente que pinta el puntito llama a este hook (no lo recibe por
+// props): las pantallas llegan como children de los providers y React no las
+// re-renderiza cuando cambia su estado.
+function usePendingHrefs(): Set<string> {
+  const { count: sharedCount } = usePendingShared();
+  const { count: statementsCount } = usePendingStatements();
+  const hrefs = new Set<string>();
+  if (sharedCount > 0) hrefs.add("/shared");
+  if (statementsCount > 0) hrefs.add("/tarjetas");
+  return hrefs;
+}
 
 const BUILD_DATE = process.env.NEXT_PUBLIC_BUILD_DATE
   ? new Date(process.env.NEXT_PUBLIC_BUILD_DATE).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })
@@ -101,7 +108,7 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
   // Hay que llamar al hook acá, no leer el contexto por otro lado: las
   // pantallas llegan como children del provider y React no las re-renderiza
   // cuando cambia su estado. Esto es lo que suscribe al puntito.
-  const { count: pendingCount } = usePendingShared();
+  const pendingHrefs = usePendingHrefs();
 
   return (
     <>
@@ -128,9 +135,7 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
           >
             <Icon className="w-4 h-4" />
             <span className="flex-1 min-w-0">{label}</span>
-            {href === PENDING_HREF && pendingCount > 0 && (
-              <NavDot />
-            )}
+            {pendingHrefs.has(href) && <NavDot />}
           </Link>
         ))}
       </nav>
@@ -174,7 +179,7 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
 function MoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const pathname = usePathname();
   const { appUser, firebaseUser, logout } = useAuth();
-  const { count: pendingCount } = usePendingShared();
+  const pendingHrefs = usePendingHrefs();
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -203,7 +208,7 @@ function MoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bo
               >
                 <Icon className="w-4 h-4" />
                 <span className="flex-1 min-w-0">{label}</span>
-                {href === PENDING_HREF && pendingCount > 0 && <NavDot />}
+                {pendingHrefs.has(href) && <NavDot />}
               </Link>
             ))}
 
@@ -234,7 +239,7 @@ export default function Sidebar() {
   const [moreOpen, setMoreOpen] = useState(false);
   const pathname = usePathname();
   const { appUser } = useAuth();
-  const { count: pendingCount } = usePendingShared();
+  const pendingHrefs = usePendingHrefs();
   const isMoreActive = moreItems.some((item) => item.href === pathname);
 
   return (
@@ -270,7 +275,11 @@ export default function Sidebar() {
                 active ? "text-primary bg-accent" : "text-muted-foreground"
               )}
             >
-              <Icon className="w-5 h-5" />
+              {/* Mismo criterio que el de "Más": el puntito sobre el icono. */}
+              <span className="relative">
+                <Icon className="w-5 h-5" />
+                {pendingHrefs.has(href) && <NavDot className="absolute -top-0.5 -right-1" />}
+              </span>
               {label}
             </Link>
           );
@@ -286,7 +295,9 @@ export default function Sidebar() {
               icono es lo que se mira, y colgarlo del texto descentra el tab. */}
           <span className="relative">
             <MoreHorizontal className="w-5 h-5" />
-            {pendingCount > 0 && <NavDot className="absolute -top-0.5 -right-1" />}
+            {moreItems.some((item) => pendingHrefs.has(item.href)) && (
+              <NavDot className="absolute -top-0.5 -right-1" />
+            )}
           </span>
           Más
         </button>

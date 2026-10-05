@@ -6,9 +6,9 @@ import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { formatARS, formatDate, formatUSD, parseAmount, getErrorMessage, pickCategoryColor, foldText, cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import Link from "next/link";
-import { Plus, ChevronLeft, X, ExternalLink, Users2, SlidersHorizontal, MoreVertical, Trash2, FileSearch } from "lucide-react";
+import { Plus, ChevronLeft, X, ExternalLink, Users2, SlidersHorizontal, MoreVertical, Trash2 } from "lucide-react";
 import { features } from "@/lib/features";
+import { UploadStatementButton } from "@/components/UploadStatementButton";
 import { Card as UiCard } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -728,12 +728,7 @@ export default function StatementDetailPage() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {features.reconcile && (
-            <Button variant="outline" asChild>
-              <Link href="/conciliar" title="Conciliar con el PDF del banco">
-                <FileSearch className="w-4 h-4 shrink-0" />
-                <span className="hidden sm:inline">Conciliar con el PDF del banco</span>
-              </Link>
-            </Button>
+            <UploadStatementButton cardId={cardId} />
           )}
           <Button onClick={() => setShowAddForm(true)}>
             <Plus className="w-4 h-4 shrink-0" />

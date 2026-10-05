@@ -11,6 +11,7 @@ import { ScrollToTop } from "@/components/ScrollToTop";
 import { ErrorReporter } from "@/components/ErrorReporter";
 import { PrivacyProvider } from "@/contexts/PrivacyContext";
 import { PendingSharedProvider } from "@/contexts/PendingSharedContext";
+import { PendingStatementsProvider } from "@/contexts/PendingStatementsContext";
 import { PendingSharedDialog } from "@/components/PendingSharedDialog";
 import { syncPushToken } from "@/lib/push";
 import { ensureServiceWorker } from "@/lib/sw";
@@ -104,6 +105,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           navegación y el aviso del primer ingreso tienen que leer los mismos
           pendientes, y la navegación está en todas las pantallas. */}
       <PendingSharedProvider>
+      <PendingStatementsProvider>
         <div className="flex min-h-screen bg-background">
           <Sidebar />
           <ScrollToTop />
@@ -113,6 +115,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </main>
         </div>
         <PendingSharedDialog />
+      </PendingStatementsProvider>
       </PendingSharedProvider>
     </PrivacyProvider>
   );

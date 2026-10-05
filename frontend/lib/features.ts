@@ -31,9 +31,10 @@ export const features = {
   iosShortcut: on(process.env.NEXT_PUBLIC_FEATURE_IOS_SHORTCUT),
 
   /**
-   * Conciliación de resúmenes de tarjeta: subir el PDF del banco y comparar
-   * contra lo cargado (/conciliar). Apagarlo esconde la entrada de navegación
-   * y la pantalla; el backend queda accesible igual.
+   * "Subir resumen": subir el PDF del banco y que la app proponga los cambios
+   * para que lo cargado coincida (revisión en /conciliar/[id]). Apagarlo
+   * esconde los botones de Tarjetas, el aviso de pendientes y la pantalla; el
+   * backend queda accesible igual.
    */
   reconcile: on(process.env.NEXT_PUBLIC_FEATURE_RECONCILE),
 } as const;

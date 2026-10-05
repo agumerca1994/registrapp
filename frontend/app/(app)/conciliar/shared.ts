@@ -131,8 +131,8 @@ export const STATUS_CHIP: Record<SessionStatus, { label: string; tone: "neutral"
   needs_choice: { label: "Falta elegir", tone: "amber" },
   needs_ai: { label: "No se pudo leer", tone: "neutral" },
   unexplained: { label: "No cierra", tone: "rose" },
-  applied: { label: "Aplicada en parte", tone: "violet" },
-  closed: { label: "Conciliada", tone: "emerald" },
+  applied: { label: "En curso", tone: "violet" },
+  closed: { label: "Al día", tone: "emerald" },
 };
 
 export const GROUP_LABELS: Record<string, string> = {

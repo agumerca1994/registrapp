@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import api from "@/lib/api";
-import { CreditCard, Plus, X, SlidersHorizontal } from "lucide-react";
+import { CreditCard, Plus, X, SlidersHorizontal, ChevronRight } from "lucide-react";
 import { Card as UiCard } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { FIELD, FormGrid, SelectField } from "@/components/ui/form";
 import {
   FilterBar, FilterRow, FilterPanel, SortChip, FilterChip, PillSelect,
@@ -13,6 +15,10 @@ import {
 } from "@/components/ui/filters";
 import { CreditCardVisual } from "@/components/CreditCardVisual";
 import { ARGENTINE_BANKS } from "@/lib/banks";
+import { features } from "@/lib/features";
+import { UploadStatementButton } from "@/components/UploadStatementButton";
+import { usePendingStatements } from "@/contexts/PendingStatementsContext";
+import { periodLabel } from "@/app/(app)/conciliar/shared";
 
 const OTRO = "__otro__";
 
@@ -229,8 +235,43 @@ function DeleteCardModal({
 
 type SortField = "titular" | "bank" | null;
 
+/**
+ * Los resúmenes subidos que todavía esperan algo. Es la única puerta de vuelta
+ * a una revisión a medias ahora que no hay una sección propia en la
+ * navegación: sin esto, cerrar la pantalla de revisión la perdía.
+ */
+function PendingStatementsCard() {
+  const { pending } = usePendingStatements();
+  if (pending.length === 0) return null;
+  return (
+    <UiCard className="p-0 md:p-0 divide-y">
+      <div className="px-4 py-3">
+        <h3 className="font-semibold text-foreground text-sm md:text-base">Resúmenes por revisar</h3>
+      </div>
+      {pending.map((p) => {
+        const label = [p.bank, periodLabel(p.period_year, p.period_month)].filter(Boolean).join(" · ")
+          || "Resumen sin identificar";
+        const chip = p.status === "needs_choice"
+          ? "Falta elegir"
+          : `${p.pending_count} por revisar`;
+        return (
+          <Link key={p.id} href={`/conciliar/${p.id}`}
+            className="flex items-center gap-2 px-4 py-3 hover:bg-accent transition-colors group">
+            <span className="text-sm font-medium text-foreground truncate min-w-0 group-hover:text-primary transition-colors">
+              {label}
+            </span>
+            <Chip tone="amber" className="ml-auto shrink-0">{chip}</Chip>
+            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+          </Link>
+        );
+      })}
+    </UiCard>
+  );
+}
+
 export default function TarjetasPage() {
   const router = useRouter();
+  const { count: pendingStatements } = usePendingStatements();
   const [cards, setCards] = useState<Card[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -316,11 +357,16 @@ export default function TarjetasPage() {
     <div className="max-w-4xl space-y-4 md:space-y-6">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Tarjetas de crédito</h2>
-        <Button onClick={() => { setEditCard(null); setShowModal(true); }}>
-          <Plus className="w-4 h-4 shrink-0" />
-          <span className="hidden sm:inline">Nueva tarjeta</span>
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          {features.reconcile && <UploadStatementButton pulse={pendingStatements > 0} />}
+          <Button onClick={() => { setEditCard(null); setShowModal(true); }}>
+            <Plus className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Nueva tarjeta</span>
+          </Button>
+        </div>
       </div>
+
+      {features.reconcile && <PendingStatementsCard />}
 
       {cards.length === 0 ? (
         <UiCard className="p-8 text-center text-muted-foreground">

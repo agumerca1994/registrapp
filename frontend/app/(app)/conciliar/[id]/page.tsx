@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { features } from "@/lib/features";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
+import { usePendingStatements } from "@/contexts/PendingStatementsContext";
 import { formatDate, getErrorMessage } from "@/lib/utils";
 import { Check, ChevronLeft, CreditCard, Loader2, Plus, Undo2, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -53,6 +54,9 @@ export default function ConciliarDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
+  // Aplicar o deshacer cambia qué queda pendiente: el puntito de Tarjetas
+  // tiene que enterarse.
+  const { refresh: refreshPending } = usePendingStatements();
 
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -145,6 +149,7 @@ export default function ConciliarDetailPage() {
       setApplyMsg(prev => ({ ...prev, [klass]: parts.join(" · ") }));
       setError(null);
       await load();
+      refreshPending();
     } catch (e) {
       setError(getErrorMessage(e));
     } finally {
@@ -159,6 +164,7 @@ export default function ConciliarDetailPage() {
       setApplyMsg({});
       setError(null);
       await load();
+      refreshPending();
     } catch (e) {
       setError(getErrorMessage(e));
     } finally {
@@ -196,6 +202,7 @@ export default function ConciliarDetailPage() {
       setSelCard(null); setSelStmt(null); setSaveCardRule(false);
       setNewCardOpen(false); setNewCardAlias(""); setNewCardLast4("");
       setError(null);
+      refreshPending(); // deja de faltar elegir: cambia el chip en Tarjetas
     } catch (e) {
       setError(getErrorMessage(e));
     } finally {
@@ -225,8 +232,8 @@ export default function ConciliarDetailPage() {
         {error && (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
         )}
-        <Button variant="outline" onClick={() => router.push("/conciliar")}>
-          <ChevronLeft className="w-4 h-4" /> Volver a Conciliar
+        <Button variant="outline" onClick={() => router.push("/tarjetas")}>
+          <ChevronLeft className="w-4 h-4" /> Volver a Tarjetas
         </Button>
       </div>
     );
@@ -257,12 +264,12 @@ export default function ConciliarDetailPage() {
   return (
     <div className="max-w-4xl space-y-4 md:space-y-6">
       <div className="flex items-center gap-3">
-        <button onClick={() => router.push("/conciliar")} aria-label="Volver"
+        <button onClick={() => router.push("/tarjetas")} aria-label="Volver"
           className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">
           <ChevronLeft className="w-5 h-5" />
         </button>
         <div className="flex-1 min-w-0">
-          <h2 className="text-xl md:text-2xl font-display font-bold text-foreground truncate">Conciliación</h2>
+          <h2 className="text-xl md:text-2xl font-display font-bold text-foreground truncate">Revisar resumen</h2>
           <p className="text-sm text-muted-foreground truncate">
             {title}
             {session.card_label && <span> · {session.card_label}</span>}
@@ -386,7 +393,7 @@ export default function ConciliarDetailPage() {
         <>
           {session.totals && (
             <SummaryCard>
-              <SummaryHeader title={`Conciliación · ${title}`}
+              <SummaryHeader title={`Revisar resumen · ${title}`}
                 open={showDetail} onToggle={() => setShowDetail(v => !v)} />
               {(["ARS", "USD"] as const).map(cur => {
                 const totals = session.totals?.[cur];
