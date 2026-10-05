@@ -560,3 +560,54 @@ async def set_tenant_plan(
     tenant.plan = plan
     await db.commit()
     return {"tenant_id": tenant.id, "plan": tenant.plan}
+
+
+@router.get("/whatsapp-webhook-config")
+async def whatsapp_webhook_config(
+    _: None = Depends(_require_internal_key),
+) -> dict[str, Any]:
+    """La config del webhook de la instancia de Evolution, vista desde el
+    backend (que es quien tiene las credenciales).
+
+    Existe por un incidente real: la instancia se re-vinculó y el webhook
+    quedó sin configurar — Evolution conectada, lookup resolviendo números, y
+    ni un evento llegando a /webhook/whatsapp, sin un solo log en ningún
+    lado. Esto contesta en segundos "¿el webhook está apuntando a donde debe,
+    con MESSAGES_UPSERT, y sin 'webhook by events'?" (esa opción le agrega
+    /messages-upsert a la URL y pega en una ruta que no existe).
+    """
+    import httpx
+
+    from app.core.config import settings as _settings
+
+    if not _settings.EVOLUTION_API_URL or not _settings.EVOLUTION_INSTANCE:
+        return {"configured": False, "detail": "EVOLUTION_API_URL/INSTANCE sin configurar"}
+
+    results: dict[str, Any] = {}
+    async with httpx.AsyncClient(timeout=10) as client:
+        for label, path in (
+            ("webhook", f"/webhook/find/{_settings.EVOLUTION_INSTANCE}"),
+            ("instance", f"/instance/connectionState/{_settings.EVOLUTION_INSTANCE}"),
+        ):
+            try:
+                resp = await client.get(
+                    f"{_settings.EVOLUTION_API_URL}{path}",
+                    headers={"apikey": _settings.EVOLUTION_API_KEY},
+                )
+                body = resp.json() if resp.status_code < 500 else resp.text[:300]
+            except Exception as e:  # la respuesta cruda es el diagnóstico
+                body = f"error: {e}"
+                resp = None
+            results[label] = {
+                "status_code": resp.status_code if resp is not None else None,
+                "body": body,
+            }
+    # El secret no se devuelve: sólo si la URL configurada lo incluye.
+    wh = results.get("webhook", {}).get("body")
+    if isinstance(wh, dict) and isinstance(wh.get("url"), str):
+        url = wh["url"]
+        if "secret=" in url:
+            base, _, _tail = url.partition("secret=")
+            wh["url"] = base + "secret=***"
+        wh["secret_in_url"] = "secret=***" in wh["url"]
+    return results
