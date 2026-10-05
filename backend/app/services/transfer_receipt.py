@@ -21,11 +21,21 @@ from app.services.quick_capture import MAX_AMOUNT
 from app.services.search import fold_text
 from app.services.statement_parsers.common import MONTHS
 
-# Tiene que parecer un comprobante (grupo A) de una operación (grupo B).
-_A_HINTS = ("comprobante", "transferiste", "enviaste", "pago enviado", "le enviaste", "transferencia enviada")
-_B_HINTS = ("transferencia", "cbu", "cvu", "alias", "operacion", "pago", "monto")
+# Tiene que parecer un comprobante (grupo A: la acción) de una operación
+# (grupo B: la jerga). El grupo A separa transferencias de compras — un pago
+# con billetera ("Compraste en…", Personal Pay/MP) es un gasto igual, pero
+# no es una transferencia y el medio de pago no debe decir que lo es.
+_A_TRANSFER = ("transferiste", "enviaste", "pago enviado", "le enviaste", "transferencia enviada", "comprobante de transferencia")
+_A_PURCHASE = ("compraste", "pagaste", "compra realizada", "pago realizado")
+_B_HINTS = ("transferencia", "cbu", "cvu", "alias", "operacion", "pago", "monto", "comprobante")
 
 _AMOUNT_RE = re.compile(r"\$\s*([\d.]{1,13}(?:,\d{1,2})?)")
+# Centavos en superíndice pegados al monto: la capa de texto de Personal Pay
+# (y recibos parecidos) imprime "$3.60000" para $3.600,00. Sin este caso, la
+# regex normal lo lee como 360.000 — cien veces el gasto real. El grupo 1
+# tiene que ser una agrupación de miles VÁLIDA completa; los dos dígitos que
+# sobran son los centavos ("$15.000" liso no matchea: no le sobra nada).
+_AMOUNT_SUPERSCRIPT_RE = re.compile(r"\$\s*(\d{1,3}(?:\.\d{3})+)(\d{2})(?!\d)")
 _USD_RE = re.compile(r"(?<!\w)(u\$s|usd|u\$d)(?!\w)", re.IGNORECASE)
 _DATE_NUM_RE = re.compile(r"(\d{1,2})[/-](\d{1,2})[/-](\d{4})")
 # "5 de octubre de 2026", "05 de Octubre 2026"
@@ -33,7 +43,14 @@ _DATE_WORDS_RE = re.compile(
     r"(\d{1,2})\s+de\s+([a-záéíóú]+)(?:\s+de)?\s+(\d{4})", re.IGNORECASE
 )
 _LABELS = ("para", "destinatario", "beneficiario", "a nombre de", "titular", "nombre")
-_NAME_RE = re.compile(r"^[A-Za-zÁÉÍÓÚÑáéíóúñ][A-Za-zÁÉÍÓÚÑáéíóúñ .'-]{2,59}$")
+# Dígitos permitidos adentro: los nombres de comercio los traen ("Kiosco24").
+_NAME_RE = re.compile(r"^[A-Za-zÁÉÍÓÚÑáéíóúñ][A-Za-z0-9ÁÉÍÓÚÑáéíóúñ .'-]{2,59}$")
+# El otro formato de contraparte: en la misma frase de la acción
+# ("Compraste en X", "Le transferiste a X", "Pagaste a X").
+_INLINE_PARTY_RE = re.compile(
+    r"(?:compraste en|pagaste a|le transferiste a|le enviaste a|enviaste a|transferiste a)\s+(.{3,60})",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -42,6 +59,7 @@ class ReceiptDraft:
     currency: str
     receipt_date: date | None
     counterparty: str | None
+    kind: str = "transferencia"  # "transferencia" | "pago" (compra con billetera)
 
 
 def _parse_amount(raw: str) -> Decimal | None:
@@ -73,7 +91,12 @@ def _find_date(text: str) -> date | None:
     return None
 
 
-def _find_counterparty(lines: list[str]) -> str | None:
+def _find_counterparty(lines: list[str], full_text: str) -> str | None:
+    m = _INLINE_PARTY_RE.search(full_text)
+    if m:
+        value = m.group(1).strip().rstrip(".")
+        if _NAME_RE.match(value):
+            return value
     for i, line in enumerate(lines):
         folded = fold_text(line)
         for label in _LABELS:
@@ -92,12 +115,22 @@ def parse_transfer_receipt(pages_text: list[str]) -> ReceiptDraft | None:
     lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
     low = fold_text(text)
 
-    if not (any(h in low for h in _A_HINTS) and any(h in low for h in _B_HINTS)):
+    is_transfer = any(h in low for h in _A_TRANSFER)
+    is_purchase = any(h in low for h in _A_PURCHASE)
+    if not ((is_transfer or is_purchase) and any(h in low for h in _B_HINTS)):
         return None
 
-    # El monto de la operación es el más grande del documento: los demás
-    # (comisiones, saldos parciales) son menores o cero.
-    amounts = [a for raw in _AMOUNT_RE.findall(text) if (a := _parse_amount(raw))]
+    # Primero los montos con centavos en superíndice, y se tapan sus spans
+    # para que la regex normal no los relea mal; después el resto. El monto
+    # de la operación es el más grande (comisiones y saldos son menores).
+    amounts: list[Decimal] = []
+    masked = text
+    for m in list(_AMOUNT_SUPERSCRIPT_RE.finditer(text)):
+        value = _parse_amount(f"{m.group(1)},{m.group(2)}")
+        if value is not None:
+            amounts.append(value)
+        masked = masked[: m.start()] + " " * (m.end() - m.start()) + masked[m.end():]
+    amounts.extend(a for raw in _AMOUNT_RE.findall(masked) if (a := _parse_amount(raw)))
     if not amounts:
         return None
     amount = max(amounts)
@@ -108,5 +141,6 @@ def parse_transfer_receipt(pages_text: list[str]) -> ReceiptDraft | None:
         amount=amount,
         currency=currency,
         receipt_date=_find_date(text),
-        counterparty=_find_counterparty(lines),
+        counterparty=_find_counterparty(lines, text),
+        kind="transferencia" if is_transfer else "pago",
     )

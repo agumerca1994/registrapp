@@ -283,7 +283,10 @@ async def _handle_pdf(db: AsyncSession, user: User, inbound: InboundMessage) -> 
                 term=receipt.counterparty or "Transferencia",
                 legacy=False,
             )
-            return await _capture_draft(db, user, inbound, draft, payment_method="transferencia")
+            return await _capture_draft(
+                db, user, inbound, draft,
+                payment_method="transferencia" if receipt.kind == "transferencia" else None,
+            )
 
     _remember(db, user.id, "in", "pdf", wa_id=inbound.wa_id)
     session = await reconcile_service.start_session(

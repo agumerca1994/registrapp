@@ -61,3 +61,39 @@ def test_statement_text_is_not_a_receipt():
 def test_random_text_is_not_a_receipt():
     assert parse_transfer_receipt(["Hola, te paso la lista del súper: $ 5.000 de carne"]) is None
     assert parse_transfer_receipt(["Comprobante de transferencia sin monto visible"]) is None
+
+
+PERSONAL_PAY_RECEIPT = """personal pay
+Compraste en Kioscomar067
+$3.60000
+Fecha 05/10/2026
+Hora 14:02 hs.
+Código de la
+operación
+#AAAA0000BBBB1111CCCC2222DDDD3333E
+Tipo de pago Pago CT
+"""
+
+
+def test_personal_pay_purchase_receipt():
+    """El caso real que falló: compra con billetera (no transferencia) y los
+    centavos en superíndice pegados al monto — "$3.60000" es $3.600,00, no
+    $360.000 (leerlo mal era un gasto 100 veces más grande)."""
+    r = parse_transfer_receipt([PERSONAL_PAY_RECEIPT])
+    assert r is not None
+    assert r.amount == Decimal("3600.00")
+    assert r.receipt_date == date(2026, 10, 5)
+    assert r.counterparty == "Kioscomar067"
+    assert r.kind == "pago"
+
+
+def test_transfer_kind_is_preserved():
+    assert parse_transfer_receipt([MP_RECEIPT]).kind == "transferencia"
+    assert parse_transfer_receipt([BANK_RECEIPT]).kind == "transferencia"
+
+
+def test_superscript_cents_do_not_leak_into_plain_amounts():
+    # "$15.000" liso no es un monto con centavos pegados: no le sobra nada.
+    text = "Comprobante de transferencia\nEnviaste $ 15.000 a\nDestinatario: JUAN PEREZ\nCBU: 011"
+    r = parse_transfer_receipt([text])
+    assert r.amount == Decimal("15000")
