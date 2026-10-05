@@ -205,3 +205,18 @@ async def test_auth_link_tokens_single_use_and_expiry(db):
     row.expires_at = datetime.now() - timedelta(minutes=1)
     await db.flush()
     assert await auth_links.redeem_token(db, expired) is None
+
+
+async def test_pending_category_answered_by_name(db):
+    from app.services import category_suggest
+
+    category_suggest.invalidate(1)
+    await _cat(db, "Supermercado")
+    await _cat(db, "Farmacia")
+    await wa_bot.handle(db, USER, _in("12 lucas cosas del chino", wa_id="W1"))
+
+    replies = await wa_bot.handle(db, USER, _in("farmacia", wa_id="W2"))
+    assert "✅" in replies[0]
+    entry = await db.scalar(select(ExpenseEntry))
+    cat = await db.scalar(select(ExpenseCategory).where(ExpenseCategory.name == "Farmacia"))
+    assert entry.category_id == cat.id

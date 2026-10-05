@@ -169,6 +169,7 @@ async def create_quick_expense(
     draft: QuickDraft,
     category_id: int,
     description: str | None = None,
+    payment_method: str | None = None,
 ) -> ExpenseEntry:
     """Crea el gasto. **Sólo flush** — el commit es del caller (el bot commitea
     y recién después responde, la regla de avisar-después-de-commitear)."""
@@ -180,6 +181,7 @@ async def create_quick_expense(
         description=(description or draft.term)[:255],
         expense_date=draft.expense_date,
         currency=draft.currency,
+        payment_method=payment_method,
         source=EXPENSE_SOURCE_WHATSAPP,
     )
     db.add(entry)

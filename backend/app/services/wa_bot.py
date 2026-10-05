@@ -249,12 +249,43 @@ def _fmt_total(totals: dict | None, cur: str, key: str) -> str:
 async def _handle_pdf(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
     from app.services.whatsapp import download_media_base64
 
-    _remember(db, user.id, "in", "pdf", wa_id=inbound.wa_id)
     pdf = await download_media_base64(inbound.media_key, inbound.raw_message)
     if pdf is None:
+        _remember(db, user.id, "in", "pdf", wa_id=inbound.wa_id)
         await db.commit()
         return ["No pude descargar el PDF 😕 Probá mandarlo de nuevo."]
 
+    # Un PDF puede ser el resumen de la tarjeta (→ conciliación) o el
+    # comprobante de UNA transferencia/pago (→ gasto directo, preguntando la
+    # categoría si hace falta). Lo decide el texto: si ningún parser de
+    # resúmenes lo reconoce, se prueba como comprobante antes de rendirse.
+    from app.services.statement_parsers import REGISTRY
+    from app.services.statement_parsers.common import extract_pages_text, pages_to_lines
+    from app.services.transfer_receipt import parse_transfer_receipt
+
+    try:
+        pages = extract_pages_text(pdf)
+        pdf_lines = pages_to_lines(pages)
+    except Exception:
+        pages, pdf_lines = [], []
+
+    if pdf_lines and not any(m.detect(pdf_lines) for m in REGISTRY):
+        receipt = parse_transfer_receipt(pages)
+        if receipt is not None:
+            await record_event(
+                db, tenant_id=user.tenant_id, user_id=user.id, channel="whatsapp",
+                input_kind="pdf", outcome="parsed_code", bank_detected="transferencia",
+            )
+            draft = quick_capture.QuickDraft(
+                amount=receipt.amount,
+                currency=receipt.currency,
+                expense_date=receipt.receipt_date or datetime.now().date(),
+                term=receipt.counterparty or "Transferencia",
+                legacy=False,
+            )
+            return await _capture_draft(db, user, inbound, draft, payment_method="transferencia")
+
+    _remember(db, user.id, "in", "pdf", wa_id=inbound.wa_id)
     session = await reconcile_service.start_session(
         db, user=user, pdf_bytes=pdf, channel="whatsapp"
     )
@@ -370,7 +401,48 @@ async def _handle_text(db: AsyncSession, user: User, inbound: InboundMessage) ->
         if handled is not None:
             return handled
 
+    handled = await _do_pending_category_by_name(db, user, inbound)
+    if handled is not None:
+        return handled
+
     return await _do_expense(db, user, inbound)
+
+
+async def _do_pending_category_by_name(
+    db: AsyncSession, user: User, inbound: InboundMessage
+) -> list[str] | None:
+    """La pregunta de categoría también acepta el nombre escrito ("súper").
+    Sólo consume el texto si coincide con una categoría existente — cualquier
+    otra cosa sigue su camino normal (puede ser un gasto nuevo)."""
+    row = await _open_pending(db, user.id)
+    if row is None:
+        return None
+    pending = row.pending or {}
+    if pending.get("type") not in ("category_pick", "category_name"):
+        return None
+
+    from app.services.search import fold_text
+
+    cats = (await db.scalars(
+        select(ExpenseCategory).where(ExpenseCategory.tenant_id == user.tenant_id)
+    )).all()
+    cat = next((c for c in cats if fold_text(c.name) == fold_text(inbound.text)), None)
+    if cat is None:
+        return None
+
+    draft = _draft_from_dict(pending["draft"])
+    entry = await quick_capture.create_quick_expense(
+        db, tenant_id=user.tenant_id, user_id=user.id, draft=draft, category_id=cat.id,
+        payment_method=(pending["draft"] or {}).get("pm"),
+    )
+    row.pending = None
+    _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text,
+              ref_type="expense", ref_id=entry.id)
+    await db.commit()
+    return [
+        f"✅ {_fmt_amount(draft)} · {entry.description} — {cat.name}\n"
+        "Respondé *deshacer* o *editar monto …*"
+    ]
 
 
 async def _do_expense(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
@@ -384,6 +456,18 @@ async def _do_expense(db: AsyncSession, user: User, inbound: InboundMessage) -> 
         await db.commit()
         return [MSG_HELP]
 
+    return await _capture_draft(db, user, inbound, draft)
+
+
+async def _capture_draft(
+    db: AsyncSession,
+    user: User,
+    inbound: InboundMessage,
+    draft: quick_capture.QuickDraft,
+    payment_method: str | None = None,
+) -> list[str]:
+    """La mitad común de capturar un gasto (texto libre o comprobante):
+    resolver categoría, preguntar si hace falta, guardar y responder."""
     # En USD la categoría es siempre "Consumo en dólares" (regla del dominio).
     if draft.currency == "USD":
         category_id = await get_or_create_usd_category(user.tenant_id, db)
@@ -408,15 +492,15 @@ async def _do_expense(db: AsyncSession, user: User, inbound: InboundMessage) -> 
         options = pick.options
         if not options:
             reply = "No encontré una categoría para eso. Decime el nombre de la categoría."
-            pending = {"type": "category_name", "draft": _draft_dict(draft)}
+            pending = {"type": "category_name", "draft": _draft_dict(draft, payment_method)}
         else:
             listed = "\n".join(f"{i+1}️⃣ {name}" for i, name in enumerate(options))
             reply = (
                 f"¿En qué categoría va *{draft.term}* ({_fmt_amount(draft)})?\n{listed}\n"
                 "Respondé el número, o el nombre de otra categoría."
             )
-            pending = {"type": "category_pick", "draft": _draft_dict(draft), "options": options}
-        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+            pending = {"type": "category_pick", "draft": _draft_dict(draft, payment_method), "options": options}
+        _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id, text=inbound.text or None)
         _remember(db, user.id, "out", "text", text=reply, pending=pending)
         await db.commit()
         return [reply]
@@ -424,8 +508,9 @@ async def _do_expense(db: AsyncSession, user: User, inbound: InboundMessage) -> 
     entry = await quick_capture.create_quick_expense(
         db, tenant_id=user.tenant_id, user_id=user.id, draft=draft,
         category_id=pick.category_id, description=pick.description,
+        payment_method=payment_method,
     )
-    _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text,
+    _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id, text=inbound.text or None,
               ref_type="expense", ref_id=entry.id)
     await db.commit()
 
@@ -437,10 +522,11 @@ async def _do_expense(db: AsyncSession, user: User, inbound: InboundMessage) -> 
     ]
 
 
-def _draft_dict(draft: quick_capture.QuickDraft) -> dict:
+def _draft_dict(draft: quick_capture.QuickDraft, payment_method: str | None = None) -> dict:
     return {
         "amount": str(draft.amount), "currency": draft.currency,
         "date": draft.expense_date.isoformat(), "term": draft.term,
+        "pm": payment_method,
     }
 
 
@@ -564,6 +650,7 @@ async def _do_pending_answer(
         draft = _draft_from_dict(pending["draft"])
         entry = await quick_capture.create_quick_expense(
             db, tenant_id=user.tenant_id, user_id=user.id, draft=draft, category_id=cat.id,
+            payment_method=(pending["draft"] or {}).get("pm"),
         )
         row.pending = None
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text,
@@ -597,23 +684,45 @@ async def _apply_all_groups(db: AsyncSession, user: User, session_id: int) -> li
         await db.commit()
         return ["No encontré esa conciliación."]
 
-    applied_total = 0
+    label_map = {
+        "dates": "fechas completadas", "missing": "cargados",
+        "double_count": "montos sumados corregidos", "amount_diff": "montos corregidos",
+        "usd_fix": "USD corregidos", "rounding": "redondeos corregidos",
+        "surplus": "sobrantes borrados",
+    }
+    applied_by_klass: dict[str, int] = {}
     skipped_total = 0
     for klass in reconcile_service.GROUP_ORDER:
         counts = await _pending_group_counts(db, session.id)
         if klass not in counts:
             continue
         result = await reconcile_service.apply_group(db, session, user, klass)
-        applied_total += result["applied"]
+        if result["applied"]:
+            applied_by_klass[klass] = result["applied"]
         skipped_total += len(result["skipped"])
     await db.commit()
 
-    lines = [f"✅ Apliqué {applied_total} correcciones."]
-    if skipped_total:
+    # El mensaje de cierre del doc: qué se hizo, qué queda, y si terminó.
+    applied_total = sum(applied_by_klass.values())
+    if applied_total:
+        detail = " · ".join(f"{n} {label_map.get(k, k)}" for k, n in applied_by_klass.items())
+        lines = [f"✅ Listo: {detail}."]
+    else:
+        lines = ["No había nada aplicable todavía."]
+    if session.status == "closed":
+        lines.append("🏁 *Conciliación finalizada*: el resumen quedó igual al del banco.")
+        lines.append(f"Detalle: {await _conciliar_link(db, user, session_id)}")
+    elif skipped_total:
         lines.append(
-            f"Quedaron {skipped_total} sin aplicar (les falta categoría u otra decisión): "
+            f"Quedaron {skipped_total} sin aplicar (les falta elegir categoría): "
             f"{await _conciliar_link(db, user, session_id)}"
         )
     else:
-        lines.append(f"Detalle: {await _conciliar_link(db, user, session_id)}")
+        remaining = await _pending_group_counts(db, session.id)
+        if remaining:
+            det = " · ".join(f"{n} {k}" for k, n in remaining.items())
+            lines.append(f"Pendiente: {det} — {await _conciliar_link(db, user, session_id)}")
+        else:
+            lines.append(f"Detalle: {await _conciliar_link(db, user, session_id)}")
+    await db.commit()
     return ["\n".join(lines)]

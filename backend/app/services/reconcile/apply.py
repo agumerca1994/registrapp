@@ -33,6 +33,7 @@ from app.models.reconciliation import (
     ReconciliationAction,
     ReconciliationSession,
     SESSION_APPLIED,
+    SESSION_CLOSED,
 )
 from app.schemas.credit_card import CreditCardItemCreate
 from app.services.credit_cards import (
@@ -207,6 +208,11 @@ async def apply_group(
     await db.flush()
 
     remaining = await _pending_summary(db, session)
+    # Sin nada propuesto pendiente, la conciliación está terminada: el estado
+    # lo dice acá, centralizado, así la app, el bot y el MCP lo ven igual.
+    if applied and not remaining:
+        session.status = SESSION_CLOSED
+        await db.flush()
     return {
         "applied": len(applied),
         "skipped": skipped,
