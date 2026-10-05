@@ -36,6 +36,7 @@ from app.core.database import Base  # noqa: E402
 from app.models.credit_card import CreditCard, CreditCardItem, CreditCardStatement  # noqa: E402
 from app.models.expense import ExpenseCategory, ExpenseEntry  # noqa: E402
 from app.models.shared_expense import SharedExpense  # noqa: E402
+from app.models.wa_message import WaMessage  # noqa: E402
 from app.models.reconciliation import (  # noqa: E402
     CaptureEvent,
     CaptureRule,
@@ -57,6 +58,7 @@ _TABLES = [
     ReconciliationAction.__table__,
     CaptureRule.__table__,
     CaptureEvent.__table__,
+    WaMessage.__table__,
 ]
 
 

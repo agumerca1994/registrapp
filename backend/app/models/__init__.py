@@ -14,6 +14,7 @@ from app.models.currency_operation import CurrencyOperation
 from app.models.mcp_auth import (
     McpAuthCode, McpOAuthAuthorization, McpOAuthClient, McpToken,
 )
+from app.models.wa_message import WaMessage
 from app.models.reconciliation import (
     CaptureEvent, CaptureRule, ReconciliationAction, ReconciliationSession,
 )
@@ -33,4 +34,5 @@ __all__ = [
     "CurrencyOperation",
     "McpOAuthClient", "McpOAuthAuthorization", "McpAuthCode", "McpToken",
     "ReconciliationSession", "ReconciliationAction", "CaptureRule", "CaptureEvent",
+    "WaMessage",
 ]

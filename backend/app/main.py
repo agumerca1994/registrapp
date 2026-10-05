@@ -56,6 +56,18 @@ async def _daily_mcp_cleanup():
         logger.error(f"MCP cleanup failed: {e}")
 
 
+async def _daily_wa_purge():
+    # La memoria del bot de WhatsApp dura 7 días por diseño (ver wa_bot).
+    from app.core.database import AsyncSessionLocal
+    from app.services.wa_bot import purge_old_messages
+    try:
+        async with AsyncSessionLocal() as db:
+            removed = await purge_old_messages(db)
+        logger.info(f"WA memory purge removed {removed} rows")
+    except Exception as e:
+        logger.error(f"WA memory purge failed: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
@@ -73,6 +85,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(_daily_reminder_check, "cron", hour=9, minute=2)
     if settings.MCP_ENABLED:
         scheduler.add_job(_daily_mcp_cleanup, "cron", hour=9, minute=3)
+    scheduler.add_job(_daily_wa_purge, "cron", hour=9, minute=4)
     scheduler.start()
 
     if settings.MCP_ENABLED:

@@ -63,6 +63,48 @@ async def send_wa_msg(phone: str, msg: str) -> None:
         logger.warning(f"WhatsApp send error to {phone}: {e}")
 
 
+async def download_media_base64(message_key: dict, raw_message: dict | None = None) -> bytes | None:
+    """Baja el adjunto de un mensaje entrante vía Evolution
+    (`/chat/getBase64FromMediaMessage/{instance}`) y devuelve los bytes.
+
+    Nunca levanta excepción: None significa "no se pudo", y el cuerpo de la
+    respuesta queda en el log — la lección de siempre con Evolution es que un
+    2xx a medias o un rechazo sin loguear deja el reporte "no me anda" sin un
+    solo rastro. Se manda la key entera y el message crudo porque las
+    versiones de Evolution difieren en cuál de los dos exigen.
+    """
+    if not settings.EVOLUTION_API_URL or not settings.EVOLUTION_INSTANCE:
+        logger.info("Evolution API not configured, skipping media download")
+        return None
+    body: dict = {"message": {"key": message_key}, "convertToMp4": False}
+    if raw_message:
+        body["message"]["message"] = raw_message
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{settings.EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/{settings.EVOLUTION_INSTANCE}",
+                json=body,
+                headers={"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"},
+            )
+            if resp.status_code >= 400:
+                logger.warning(
+                    "WhatsApp media download failed %s: %s", resp.status_code, resp.text[:300]
+                )
+                return None
+            data = resp.json()
+            b64 = data.get("base64") or data.get("media")
+            if not b64:
+                logger.warning("WhatsApp media download sin base64 en la respuesta: %s",
+                               str(data)[:300])
+                return None
+            import base64 as _b64
+
+            return _b64.b64decode(b64)
+    except Exception as e:
+        logger.warning("WhatsApp media download error: %s", e)
+        return None
+
+
 def _money(amount, currency: str = "ARS") -> str:
     """Un monto con su símbolo. Antes todo salía con "$", también los gastos en
     dólares, y el invitado leía un importe en pesos que no era."""
