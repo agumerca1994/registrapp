@@ -225,8 +225,14 @@ async def handle(db: AsyncSession, user: User, inbound: InboundMessage) -> list[
         return [MSG_ERROR]
 
 
-def _conciliar_link(session_id: int) -> str:
-    return f"{settings.FRONTEND_URL}/conciliar/{session_id}"
+async def _conciliar_link(db: AsyncSession, user, session_id: int) -> str:
+    """El link lleva un token de auto-login de un solo uso: se abre donde se
+    abra (incluido el navegador interno de WhatsApp) ya con sesión. Ver
+    services/auth_links.py por el modelo de confianza."""
+    from app.services import auth_links
+
+    token = await auth_links.mint_token(db, user.id)
+    return f"{settings.FRONTEND_URL}/conciliar/{session_id}?wat={token}"
 
 
 # WhatsApp abre los links en su navegador interno, que no comparte sesión con
@@ -274,7 +280,7 @@ async def _handle_pdf(db: AsyncSession, user: User, inbound: InboundMessage) -> 
         reply = (
             "Leí el resumen pero necesito que elijas "
             + ("la tarjeta" if session.reason == "card_ambiguous" else "el período")
-            + f" en la app:\n{_conciliar_link(session.id)}\n{LINK_HINT}"
+            + f" en la app:\n{await _conciliar_link(db, user, session.id)}\n{LINK_HINT}"
         )
         _remember(db, user.id, "out", "text", text=reply, ref_type="reconcile", ref_id=session.id)
         await db.commit()
@@ -310,7 +316,7 @@ async def _handle_pdf(db: AsyncSession, user: User, inbound: InboundMessage) -> 
     else:
         lines.append("✅ Todo coincide — no hay nada para corregir.")
         pending = None
-    lines.append(f"Verlo completo: {_conciliar_link(session.id)}")
+    lines.append(f"Verlo completo: {await _conciliar_link(db, user, session.id)}")
     lines.append(LINK_HINT)
 
     reply = "\n".join(lines)
@@ -574,7 +580,7 @@ async def _do_pending_answer(
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
         if number == 2:
             await db.commit()
-            return [f"Dale — cuando quieras: {_conciliar_link(session_id)}"]
+            return [f"Dale — cuando quieras: {await _conciliar_link(db, user, session_id)}"]
         if number != 1:
             await db.commit()
             return ["Respondé *1* para aplicar o *2* para verlo en la app."]
@@ -606,8 +612,8 @@ async def _apply_all_groups(db: AsyncSession, user: User, session_id: int) -> li
     if skipped_total:
         lines.append(
             f"Quedaron {skipped_total} sin aplicar (les falta categoría u otra decisión): "
-            f"{_conciliar_link(session_id)}"
+            f"{await _conciliar_link(db, user, session_id)}"
         )
     else:
-        lines.append(f"Detalle: {_conciliar_link(session_id)}")
+        lines.append(f"Detalle: {await _conciliar_link(db, user, session_id)}")
     return ["\n".join(lines)]

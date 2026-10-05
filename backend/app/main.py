@@ -61,9 +61,12 @@ async def _daily_wa_purge():
     from app.core.database import AsyncSessionLocal
     from app.services.wa_bot import purge_old_messages
     try:
+        from app.services.auth_links import purge_expired
         async with AsyncSessionLocal() as db:
             removed = await purge_old_messages(db)
-        logger.info(f"WA memory purge removed {removed} rows")
+            tokens = await purge_expired(db)
+            await db.commit()
+        logger.info(f"WA memory purge removed {removed} rows, {tokens} auth tokens")
     except Exception as e:
         logger.error(f"WA memory purge failed: {e}")
 

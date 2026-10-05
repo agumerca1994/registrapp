@@ -37,6 +37,7 @@ from app.models.credit_card import CreditCard, CreditCardItem, CreditCardStateme
 from app.models.expense import ExpenseCategory, ExpenseEntry  # noqa: E402
 from app.models.shared_expense import SharedExpense  # noqa: E402
 from app.models.wa_message import WaMessage  # noqa: E402
+from app.models.auth_link_token import AuthLinkToken  # noqa: E402
 from app.models.reconciliation import (  # noqa: E402
     CaptureEvent,
     CaptureRule,
@@ -59,6 +60,7 @@ _TABLES = [
     CaptureRule.__table__,
     CaptureEvent.__table__,
     WaMessage.__table__,
+    AuthLinkToken.__table__,
 ]
 
 

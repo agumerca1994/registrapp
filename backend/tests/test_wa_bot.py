@@ -183,3 +183,25 @@ async def test_purge_removes_old_rows_only(db):
     assert removed == 1
     remaining = (await db.scalars(select(WaMessage))).all()
     assert all(r.wa_message_id != "OLD" for r in remaining)
+
+
+async def test_auth_link_tokens_single_use_and_expiry(db):
+    from datetime import datetime, timedelta
+
+    from app.services import auth_links
+
+    raw = await auth_links.mint_token(db, 1)
+    assert raw.startswith("wat_")
+    # Un solo uso: el primer canje devuelve el usuario, el segundo nada.
+    assert await auth_links.redeem_token(db, raw) == 1
+    assert await auth_links.redeem_token(db, raw) is None
+    # Inválido y vencido tampoco (misma respuesta — sin oráculo).
+    assert await auth_links.redeem_token(db, "wat_invento") is None
+    expired = await auth_links.mint_token(db, 1)
+    from sqlalchemy import select as _select
+
+    from app.models.auth_link_token import AuthLinkToken
+    row = await db.scalar(_select(AuthLinkToken).order_by(AuthLinkToken.id.desc()))
+    row.expires_at = datetime.now() - timedelta(minutes=1)
+    await db.flush()
+    assert await auth_links.redeem_token(db, expired) is None

@@ -4,7 +4,7 @@ import string
 from datetime import datetime, timedelta
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -622,3 +622,35 @@ async def leave_household(
             other[0].role = UserRole.admin
     await _move_to_new_solo_tenant(user, db)
     await db.commit()
+
+
+# ── Auto-login de los links del bot de WhatsApp ──────────────────────────────
+# El link del bot lleva un token de un solo uso (ver services/auth_links.py);
+# canjearlo devuelve un custom token de Firebase y la página abre sesión con
+# signInWithCustomToken — sin Google, sin popup, sin redirect, que es lo único
+# que funciona dentro del navegador interno de WhatsApp. El 401 es el mismo
+# para inválido, usado y vencido: un código por causa sería un oráculo.
+
+@router.post("/wa-link")
+async def redeem_wa_link(
+    payload: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    from firebase_admin import auth as firebase_auth
+
+    from app.services import auth_links
+    from app.services.rate_limit import enforce
+
+    enforce(request, "wa_link", limit=10, window_seconds=60)
+
+    user_id = await auth_links.redeem_token(db, str(payload.get("token") or ""))
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Link inválido o vencido")
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Link inválido o vencido")
+    await db.commit()  # el used_at queda marcado aunque Firebase falle después
+
+    custom_token = firebase_auth.create_custom_token(user.firebase_uid)
+    return {"custom_token": custom_token.decode() if isinstance(custom_token, bytes) else custom_token}

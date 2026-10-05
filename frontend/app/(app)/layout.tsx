@@ -1,7 +1,10 @@
 ﻿"use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { signInWithCustomToken } from "firebase/auth";
+import api from "@/lib/api";
+import { auth } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import Sidebar from "@/components/layout/Sidebar";
 import { ScrollToTop } from "@/components/ScrollToTop";
@@ -16,10 +19,38 @@ import { stashPendingRoute, takePendingRoute } from "@/lib/pending-route";
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { firebaseUser, appUser, loading } = useAuth();
   const router = useRouter();
+  // `?wat=` es el token de auto-login de los links del bot de WhatsApp: un
+  // solo uso, 15 minutos, canjeable por un custom token de Firebase. Existe
+  // porque esos links se abren en el navegador interno de WhatsApp, donde el
+  // login de Google directamente no funciona. El ref evita el doble canje de
+  // StrictMode — el segundo intento quemaría un 401 contra un token ya usado.
+  const watTried = useRef(false);
 
   useEffect(() => {
     if (loading) return;
     if (!firebaseUser) {
+      const wat = new URLSearchParams(window.location.search).get("wat");
+      if (wat && !watTried.current) {
+        watTried.current = true;
+        (async () => {
+          try {
+            const { data } = await api.post("/auth/wa-link", { token: wat });
+            await signInWithCustomToken(auth, data.custom_token);
+            // El token ya se gastó: fuera de la URL, que no viaje en un
+            // compartir ni quede en el historial.
+            const url = new URL(window.location.href);
+            url.searchParams.delete("wat");
+            window.history.replaceState(null, "", url.pathname + url.search);
+          } catch {
+            // Vencido o ya usado: el camino normal (y en Android el navegador
+            // real comparte sesión con la PWA, así que suele entrar igual).
+            stashPendingRoute();
+            router.replace("/login");
+          }
+        })();
+        return;
+      }
+      if (wat) return; // canje en curso: no rebotar a /login por abajo
       // Guardar a dónde iba antes de mandarlo a loguearse. Sin esto, un deep
       // link con datos en el querystring —que es exactamente lo que produce la
       // hoja de compartir y el Atajo de iOS— llega, rebota a /login y vuelve al
