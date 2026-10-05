@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { isInAppBrowser, isIOS } from "@/lib/browser";
 
 // Pre-login is the one screen with no chrome around it, so it carries the
 // brand itself: a full-bleed violet field instead of the app's off-white
@@ -42,6 +43,12 @@ function BrandMark() {
 export default function LoginPage() {
   const { firebaseUser, appUser, loading, loginWithGoogle } = useAuth();
   const router = useRouter();
+  // En useState con init en efecto y no en render: el UA no existe en SSR.
+  const [inAppBrowser, setInAppBrowser] = useState(false);
+
+  useEffect(() => {
+    setInAppBrowser(isInAppBrowser());
+  }, []);
 
   useEffect(() => {
     if (loading) return;
@@ -76,11 +83,28 @@ export default function LoginPage() {
           Tus finanzas del hogar, claras y al día
         </p>
 
+        {inAppBrowser && (
+          /* El navegador interno de WhatsApp/Instagram rompe el login de
+             Google (pierde el estado del flujo y Firebase muere en una
+             pantalla blanca que no es nuestra). El aviso va ANTES del botón
+             porque después ya no hay dónde avisar. */
+          <div className="mt-10 w-full rounded-xl border-2 border-white/40 bg-white/10 px-4 py-3 text-left text-sm leading-snug">
+            <p className="font-semibold">Estás en el navegador de otra app</p>
+            <p className="mt-1 text-white/85">
+              Acá el ingreso con Google no funciona.{" "}
+              {isIOS()
+                ? "Tocá el botón de compartir y elegí «Abrir en Safari»"
+                : "Tocá el menú ⋮ de arriba y elegí «Abrir en el navegador»"}
+              , o entrá directo desde la app RegistrApp si la tenés instalada.
+            </p>
+          </div>
+        )}
+
         <Button
           variant="outline"
           onClick={loginWithGoogle}
           disabled={entering}
-          className="mt-12 w-full h-14 gap-3 text-base font-semibold"
+          className={`${inAppBrowser ? "mt-5" : "mt-12"} w-full h-14 gap-3 text-base font-semibold`}
         >
           <GoogleIcon />
           {entering ? "Entrando…" : "Ingresa con tu cuenta de Google"}

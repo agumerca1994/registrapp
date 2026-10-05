@@ -229,6 +229,12 @@ def _conciliar_link(session_id: int) -> str:
     return f"{settings.FRONTEND_URL}/conciliar/{session_id}"
 
 
+# WhatsApp abre los links en su navegador interno, que no comparte sesión con
+# la PWA ni con el navegador real — y ahí el login de Google no funciona. La
+# pantalla de login avisa, pero avisarlo acá ahorra el viaje fallido.
+LINK_HINT = "💡 Si te pide iniciar sesión, abrí el link con el menú → *Abrir en el navegador*."
+
+
 def _fmt_total(totals: dict | None, cur: str, key: str) -> str:
     raw = ((totals or {}).get(cur) or {}).get(key)
     return _money(f"{Decimal(raw):,.2f}".replace(",", "@").replace(".", ",").replace("@", "."), cur) if raw else "-"
@@ -268,7 +274,7 @@ async def _handle_pdf(db: AsyncSession, user: User, inbound: InboundMessage) -> 
         reply = (
             "Leí el resumen pero necesito que elijas "
             + ("la tarjeta" if session.reason == "card_ambiguous" else "el período")
-            + f" en la app:\n{_conciliar_link(session.id)}"
+            + f" en la app:\n{_conciliar_link(session.id)}\n{LINK_HINT}"
         )
         _remember(db, user.id, "out", "text", text=reply, ref_type="reconcile", ref_id=session.id)
         await db.commit()
@@ -305,6 +311,7 @@ async def _handle_pdf(db: AsyncSession, user: User, inbound: InboundMessage) -> 
         lines.append("✅ Todo coincide — no hay nada para corregir.")
         pending = None
     lines.append(f"Verlo completo: {_conciliar_link(session.id)}")
+    lines.append(LINK_HINT)
 
     reply = "\n".join(lines)
     _remember(db, user.id, "out", "text", text=reply, ref_type="reconcile",
