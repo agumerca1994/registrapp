@@ -4,11 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight, Check, CheckCircle2, Copy, Coins, FileText, MessageCircle,
-  Receipt, ShieldCheck, Sparkles,
+  Receipt, Sparkles,
 } from "lucide-react";
 import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/contexts/AuthContext";
 import { usePendingShared } from "@/contexts/PendingSharedContext";
 import { useTourRunning } from "@/components/ProductTour";
 import { features } from "@/lib/features";
@@ -75,7 +74,6 @@ function prefersReducedMotion(): boolean {
 }
 
 export function WhatsNewCarousel() {
-  const { appUser } = useAuth();
   const { count, loaded, dialogDismissed } = usePendingShared();
   // Misma compuerta que PendingSharedDialog: se pregunta si hay una guía
   // CORRIENDO, no si quedó alguna sin ver (las `requireDesktop` nunca se
@@ -150,7 +148,6 @@ export function WhatsNewCarousel() {
 
   if (!visible) return null;
 
-  const linked = !!appUser?.whatsapp_phone;
   const last = active === SLIDES - 1;
 
   return (
@@ -166,13 +163,13 @@ export function WhatsNewCarousel() {
           "md:w-[420px] md:h-[85vh] md:max-h-[880px] md:rounded-[28px] md:border-[2.5px] md:border-ink md:shadow-[8px_8px_0_0_#1E1A2E]",
         )}
       >
-        {!last && (
+        {(
           <button
             onClick={() => close()}
             className="absolute right-4 z-10 inline-flex items-center gap-1 rounded-full border-2 border-ink bg-white text-ink px-3 py-1 text-xs font-semibold shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
             style={{ top: "calc(env(safe-area-inset-top) + 14px)" }}
           >
-            Saltar
+            {last ? "Cerrar" : "Saltar"}
           </button>
         )}
 
@@ -209,22 +206,12 @@ export function WhatsNewCarousel() {
           </div>
 
           {last ? (
-            /* Apilados, primario arriba: lado a lado "Vincular WhatsApp" no
-               entraba en media fila y partía en dos renglones. */
-            <div className="flex flex-col gap-2">
-              {linked ? (
-                <>
-                  <Button className="w-full whitespace-nowrap" onClick={() => close("/tarjetas")}>Ir a Tarjetas</Button>
-                  <Button variant="outline" className="w-full" onClick={() => close()}>Listo</Button>
-                </>
-              ) : (
-                <>
-                  <Button className="w-full whitespace-nowrap" onClick={() => close("/settings#whatsapp")}>
-                    <MessageCircle className="w-4 h-4" /> Vincular WhatsApp
-                  </Button>
-                  <Button variant="outline" className="w-full" onClick={() => close("/tarjetas")}>Ir a Tarjetas</Button>
-                </>
-              )}
+            /* "Probar" lleva a Tarjetas, donde está Subir resumen: es el
+               camino que funciona para cualquiera (el chat necesita el
+               WhatsApp vinculado). */
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={() => close("/tarjetas")}>Probar</Button>
+              <Button variant="outline" className="flex-1" onClick={() => close()}>Listo</Button>
             </div>
           ) : (
             <div className="flex gap-2">
@@ -268,8 +255,8 @@ function Band({ children, style, className }: {
   );
 }
 
-function Body({ children }: { children: React.ReactNode }) {
-  return <div className="flex-1 px-6 pt-5 pb-6 space-y-3">{children}</div>;
+function Body({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={cn("flex-1 px-6 pt-5 pb-6 space-y-3", className)}>{children}</div>;
 }
 
 function StepChip({ children }: { children: React.ReactNode }) {
@@ -311,7 +298,7 @@ function SlideHero() {
               <div className="flex items-center gap-1.5">
                 <span className="rounded-md bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 border-2 border-ink">PDF</span>
               </div>
-              <p className="mt-1.5 text-[11px] font-bold leading-tight">Resumen BBVA</p>
+              <p className="mt-1.5 text-[11px] font-bold leading-tight">Resumen de tarjeta</p>
               <div className="mt-2 space-y-1">
                 <div className="h-1.5 rounded-full bg-ink/15 w-full" />
                 <div className="h-1.5 rounded-full bg-ink/15 w-4/5" />
@@ -347,15 +334,21 @@ function SlideHero() {
         </div>
       </Band>
 
-      <Body>
+      <Body className="flex flex-col">
         <Headline>Dejá de cargar gastos a mano</Headline>
         <p className="text-[15px] text-muted-foreground leading-relaxed">
-          Subí el resumen de tu tarjeta o mandá un comprobante: RegistrApp deja tus datos al día.
+          ¿Sabías que ahora podés cargar gastos desde tus resúmenes o comprobantes de compras y
+          transferencias?
         </p>
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Chip>📄 Subí tu resumen</Chip>
-          <Chip tone="emerald">💬 Bot de WhatsApp</Chip>
-          <Chip tone="amber">🧾 Comprobantes</Chip>
+        <p className="text-[15px] text-muted-foreground leading-relaxed">
+          Compartí tus comprobantes y resúmenes con el bot de WhatsApp, o entrá a la app y subí tus
+          resúmenes: el resto lo hace RegistrApp.
+        </p>
+        {/* Al pie, apilados, justo sobre el divisor del pie fijo. Crece en vez
+            de mt-auto: el space-y de Body pisa el margen de los hijos. */}
+        <div className="flex-1 flex flex-col justify-end items-start gap-2 pt-4">
+          <Chip><FileText className="w-3.5 h-3.5 shrink-0" /> Resumen mensual de tu tarjeta</Chip>
+          <Chip tone="amber"><Receipt className="w-3.5 h-3.5 shrink-0" /> Comprobante de transferencia o pagos</Chip>
         </div>
       </Body>
     </Slide>
@@ -377,7 +370,7 @@ function SlideResumen() {
       <Band className="h-[46%] min-h-[320px] bg-[#EEEBFF]" style={DOTS_BG}>
         <div className="absolute inset-x-0 bottom-0 top-[env(safe-area-inset-top)] flex items-center justify-center px-6 pt-6" aria-hidden="true">
           <div className={cn(STICKER, "w-full max-w-[300px] rounded-2xl p-3 space-y-2 -rotate-[1.5deg] shadow-[5px_5px_0_0_#1E1A2E]")}>
-            <p className="text-[12px] font-bold leading-tight">Revisar resumen · BBVA septiembre</p>
+            <p className="text-[12px] font-bold leading-tight">Revisar resumen · Septiembre</p>
             <div className="grid grid-cols-2 gap-1.5">
               <div className="rounded-lg border-2 border-ink bg-[#F1EEFF] px-2 py-1">
                 <p className="text-[9px] font-semibold uppercase tracking-wide text-ink/60">Banco</p>
@@ -409,14 +402,14 @@ function SlideResumen() {
 
       <Body>
         <StepChip>1 · Subí tu resumen</StepChip>
-        <Headline>Subí el PDF. Tus datos quedan al día.</Headline>
+        <Headline>Subí el PDF y tus gastos se cargan en un instante</Headline>
         <ul className="space-y-2 pt-1">
           <Bullet>Carga lo que falta, corrige montos y borra duplicados</Bullet>
           <Bullet>Crea la tarjeta y el resumen si no existen</Bullet>
-          <Bullet>Vos confirmás grupo por grupo — y podés deshacer</Bullet>
+          <Bullet>Vos confirmás y también podés deshacer</Bullet>
         </ul>
         <p className="text-xs text-muted-foreground pt-1">
-          Está en <span className="font-semibold text-foreground">Tarjetas → Subir resumen</span>
+          Encontralo en la sección <span className="font-semibold text-foreground">“Tarjetas”</span>
         </p>
       </Body>
     </Slide>
@@ -480,16 +473,10 @@ function SlideBot() {
         <StepChip>2 · Bot de WhatsApp</StepChip>
         <Headline>Escribile como le escribís a un amigo</Headline>
         <p className="text-[15px] text-muted-foreground leading-relaxed">
-          Mandá un gasto en texto, como te salga, o el PDF de un comprobante o del resumen. El bot lo
-          registra y te pregunta lo que no sabe.
+          Mandá un gasto en texto, como te salga. También podés mandarle en PDF un resumen o el
+          comprobante de una compra, y el bot lo registra automáticamente. Obvio que podés deshacer
+          o editar lo cargado.
         </p>
-        <div className="flex flex-wrap gap-1.5 pt-1">
-          {["deshacer", "editar monto", "editar categoría", "editar descripción"].map(c => (
-            <span key={c} className="rounded-full border-2 border-ink bg-[#F1EEFF] text-ink px-2.5 py-0.5 font-mono text-[11px] font-semibold">
-              {c}
-            </span>
-          ))}
-        </div>
       </Body>
     </Slide>
   );
@@ -498,9 +485,8 @@ function SlideBot() {
 // ── 4 · Cierre ───────────────────────────────────────────────────────────────
 
 const WAYS = [
-  { Icon: FileText, tile: "bg-[#EEEBFF] text-primary", title: "Resumen de tarjeta", line: "En Tarjetas → Subir resumen, o mandalo al bot." },
-  { Icon: MessageCircle, tile: "bg-emerald-100 text-emerald-700", title: "Un gasto por chat", line: "Ej: «12 lucas verdu» o «usd 20 regalo ayer»." },
-  { Icon: Receipt, tile: "bg-amber-100 text-amber-700", title: "Comprobante de pago", line: "Compartí el PDF de Mercado Pago, Personal Pay o tu banco." },
+  { Icon: FileText, tile: "bg-[#EEEBFF] text-primary", title: "Desde la app", line: "Subí tus resúmenes y cargá gastos individuales." },
+  { Icon: MessageCircle, tile: "bg-emerald-100 text-emerald-700", title: "Por chat", line: "Enviá tus comprobantes o un mensaje con el detalle de tu gasto." },
 ] as const;
 
 function SlideCierre() {
@@ -514,7 +500,6 @@ function SlideCierre() {
           {[
             { k: "doc", Icon: FileText, r: "-rotate-[8deg]", bg: "bg-[#EEEBFF] text-[#5B4FE9]" },
             { k: "chat", Icon: MessageCircle, r: "rotate-[4deg] -translate-y-2", bg: "bg-[#D9FDD3] text-emerald-700" },
-            { k: "receipt", Icon: Receipt, r: "rotate-[10deg]", bg: "bg-[#FFF1D6] text-amber-700" },
           ].map(({ k, Icon, r, bg }) => (
             <span key={k} className={cn("w-14 h-14 rounded-2xl border-2 border-ink shadow-[4px_4px_0_0_#1E1A2E] flex items-center justify-center", bg, r)}>
               <Icon className="w-7 h-7" strokeWidth={2.25} />
@@ -525,7 +510,7 @@ function SlideCierre() {
 
       <Body>
         <StepChip>3 · Empezá ya</StepChip>
-        <Headline>Tres formas de cargar sin cargar</Headline>
+        <Headline>Dos formas de cargar sin cargar</Headline>
         <ol className="space-y-2.5 pt-1">
           {WAYS.map(({ Icon, tile, title, line }, i) => (
             <li key={title} className="relative flex items-center gap-3 rounded-2xl border-2 border-ink bg-white text-ink p-3 shadow-chip">
@@ -542,10 +527,6 @@ function SlideCierre() {
             </li>
           ))}
         </ol>
-        <p className="flex items-start gap-2 text-xs text-muted-foreground pt-1">
-          <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-600" />
-          <span>Nada se guarda sin tu confirmación. Siempre podés deshacer.</span>
-        </p>
       </Body>
     </Slide>
   );
