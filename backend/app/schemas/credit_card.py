@@ -66,6 +66,10 @@ class CreditCardItemCreate(BaseModel):
         if self.item_type == "installment":
             if not self.installment_count or self.installment_count < 2:
                 raise ValueError("installment_count debe ser al menos 2")
+            # Un plan puede entrar empezado (cuota 8/12 de un resumen del
+            # banco): n>1 es válido y propaga sólo las cuotas que faltan.
+            if self.installment_number < 1 or self.installment_number > self.installment_count:
+                raise ValueError("installment_number debe estar entre 1 e installment_count")
             if self.purchase_total is None and self.amount:
                 self.purchase_total = self.amount * self.installment_count
             elif self.purchase_total and not self.amount:

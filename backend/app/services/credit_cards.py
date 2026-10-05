@@ -129,9 +129,15 @@ async def create_item_in_statement(
     db.add(item)
     await db.flush()  # need item.id for installment_group_id
 
-    if body.item_type == "installment" and body.installment_count and body.installment_count > 1:
-        for offset in range(1, body.installment_count):
-            cuota_n = offset + 1
+    # Un plan puede entrar empezado (`installment_number > 1`): el resumen del
+    # banco trae "cuota 8/12" y las cuotas 1..7 vivieron en resúmenes que no
+    # están cargados. La cuota que entra es la raíz del grupo y se propagan
+    # sólo las que faltan (n+1..N) — mismo camino que los importadores por
+    # banco, que hasta ahora eran el único lugar que sabía hacerlo.
+    start = body.installment_number or 1
+    if body.item_type == "installment" and body.installment_count and start < body.installment_count:
+        for offset in range(1, body.installment_count - start + 1):
+            cuota_n = start + offset
             future_date = next_month_date(date(stmt.year, stmt.month, 1), offset)
             future_stmt = await find_or_create_statement(
                 card, future_date.year, future_date.month, user.tenant_id, db
@@ -168,18 +174,8 @@ async def create_item_in_statement(
     return item
 
 
-async def apply_item_update(
-    item: CreditCardItem, updates: dict, tenant_id: int, db: AsyncSession,
-) -> None:
-    """Edita un ítem y replica el cambio en su egreso espejo.
-
-    Sólo la cuota raíz se edita: las hijas son copias que la raíz generó, y
-    editarlas sueltas dejaría el plan con montos distintos por cuota.
-    """
-    if item.installment_group_id is not None:
-        raise HTTPException(status_code=400, detail="Para editar una cuota, ve al resumen de la cuota 1")
-    if "category_id" in updates:
-        await assert_owns_category(updates["category_id"], tenant_id, db)
+async def _apply_updates_to_item(item: CreditCardItem, updates: dict, db: AsyncSession) -> None:
+    """Aplica `updates` a un ítem y replica el cambio en su egreso espejo."""
     for field, value in updates.items():
         setattr(item, field, value)
 
@@ -194,6 +190,55 @@ async def apply_item_update(
                 entry.expense_date = updates["item_date"]
             if "amount" in updates:
                 entry.amount = updates["amount"]
+
+
+async def apply_item_update(
+    item: CreditCardItem,
+    updates: dict,
+    tenant_id: int,
+    db: AsyncSession,
+    scope: str = "root",
+) -> None:
+    """Edita un ítem y replica el cambio en su egreso espejo.
+
+    `scope` decide qué puede tocarse, y el default es la regla de siempre:
+
+    - `"root"`: sólo la cuota raíz; editar una hija es 400. Las hijas son
+      copias que la raíz generó, y editarlas sueltas dejaría el plan con
+      montos distintos por cuota.
+    - `"item"`: edita exactamente este ítem, sea raíz o cuota 2..N, sin tocar
+      hermanas. Existe para la conciliación: el banco redondea distinto una
+      cuota puntual y corregirla no puede obligar a reescribir el plan entero.
+    - `"root_and_future"`: edita la raíz y replica monto/descripción/categoría
+      en las cuotas de resúmenes posteriores al mes actual. Las pasadas no se
+      tocan — son meses ya cerrados o conciliados, y reescribirlos en silencio
+      fue un error real (se editó la cuota 1 de agosto y hubo que revertirla).
+    """
+    if scope not in ("root", "item", "root_and_future"):
+        raise ValueError(f"scope inválido: {scope!r}")
+    if scope != "item" and item.installment_group_id is not None:
+        raise HTTPException(status_code=400, detail="Para editar una cuota, ve al resumen de la cuota 1")
+    if "category_id" in updates:
+        await assert_owns_category(updates["category_id"], tenant_id, db)
+
+    await _apply_updates_to_item(item, updates, db)
+
+    if scope == "root_and_future" and item.item_type == "installment":
+        today = date.today()
+        children = await db.scalars(
+            select(CreditCardItem)
+            .join(CreditCardStatement, CreditCardItem.statement_id == CreditCardStatement.id)
+            .where(
+                CreditCardItem.installment_group_id == item.id,
+                (CreditCardStatement.year * 100 + CreditCardStatement.month)
+                > today.year * 100 + today.month,
+            )
+        )
+        # item_date no se propaga: cada cuota tiene la suya (compra + n meses).
+        propagated = {k: v for k, v in updates.items() if k in ("amount", "description", "category_id")}
+        if propagated:
+            for child in children.all():
+                await _apply_updates_to_item(child, propagated, db)
 
 
 async def _delete_entry(entry_id: int | None, db: AsyncSession) -> None:

@@ -1,0 +1,9 @@
+# Dependencias sólo de desarrollo/tests — no van a la imagen de producción.
+# Instalar en el venv local (el mismo .venv-import de los importadores sirve):
+#   .venv-import/bin/pip install -r requirements-dev.txt
+# Correr los tests:
+#   .venv-import/bin/python -m pytest tests
+-r requirements.txt
+pytest==8.3.4
+pytest-asyncio==0.25.0
+aiosqlite==0.20.0

@@ -31,295 +31,32 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-AMOUNT_RE = re.compile(r"(-?\d{1,3}(?:\.\d{3})*,\d{2})\s*$")
-DATE_PREFIX_RE = re.compile(r"^(\d{2})/(\d{2})/(\d{2})\s+(.+)$")
-TARJETA_CUPON_RE = re.compile(r"^(NX \S+|Naranja X)\s+(\d+)\s+(.*)$")
-INSTALLMENT_RE = re.compile(r"(\d{2})/(\d{2})$")
-ZETA_RE = re.compile(r"[Zz]eta$")
-DEBAUT_RE = re.compile(r"Deb\.Aut\.$")
-BARE_CUOTA_RE = re.compile(r"(?<!\d)(\d{2})$")
-
-CONSUMOS_PREFIX = "Consumos tarjeta de crédito de "
-ROW_HEADER = "FECHA TARJETA CUPON DETALLE CUOTA/PLAN $ U$S"
-PAGO_HEADER = "FECHA DETALLE $ U$S"
-
-
-def parse_amount(raw: str) -> Decimal:
-    return Decimal(raw.strip().replace(".", "").replace(",", "."))
-
-
-def parse_short_date(dd: str, mm: str, yy: str) -> date:
-    return date(2000 + int(yy), int(mm), int(dd))
-
-
-def parse_consumo_row(line: str) -> dict | None:
-    m = DATE_PREFIX_RE.match(line)
-    if not m:
-        return None
-    dd, mm, yy, rest = m.groups()
-    try:
-        item_date = parse_short_date(dd, mm, yy)
-    except ValueError:
-        return None
-
-    if rest.startswith("*"):
-        return None  # comisiones/cargos — se procesan aparte como excluidos
-
-    amt_m = AMOUNT_RE.search(rest)
-    if not amt_m:
-        return None
-    amount = parse_amount(amt_m.group(1))
-    remainder = rest[: amt_m.start()].strip()
-    if not remainder:
-        return None
-
-    item_type = "single"
-    installment_number = None
-    installment_count = None
-    zeta_plan = False
-
-    im = INSTALLMENT_RE.search(remainder)
-    if im and int(im.group(1)) <= int(im.group(2)):
-        stripped = remainder[: im.start()].strip()
-        tm_check = TARJETA_CUPON_RE.match(stripped)
-        detalle_check = tm_check.group(3).strip() if tm_check else stripped
-        if detalle_check.upper().startswith("ZETA "):
-            # Línea "ZETA <mes>/<año>" ya consolidada (cuota 2 o 3 de un plan
-            # Zeta): no se importa como ítem propio — es la misma plata que
-            # ya se auto-propaga desde la compra original "(Zeta)" (ver más
-            # abajo), importarla también duplicaría el gasto.
-            return None
-        item_type = "installment"
-        installment_number = int(im.group(1))
-        installment_count = int(im.group(2))
-        remainder = stripped
-    elif ZETA_RE.search(remainder):
-        # Compra recién taggeada "Zeta": Naranja X la divide en 3 cuotas
-        # iguales sin interés — acá se ve el monto TOTAL de la compra, pero
-        # solo se cobra 1/3 este ciclo (confirmado con el usuario contra los
-        # montos reales de las líneas "ZETA <mes>/<año>" de los meses
-        # siguientes). La importamos como cuota 1/3 marcada zeta_plan=True
-        # para que SIEMPRE se propaguen las otras 2 cuotas futuras (Zeta
-        # siempre son exactamente 3, a diferencia de las cuotas normales que
-        # solo se propagan desde el resumen más reciente).
-        remainder = ZETA_RE.sub("", remainder).strip()
-        item_type = "installment"
-        installment_number = 1
-        installment_count = 3
-        amount = (amount / 3).quantize(Decimal("0.01"))
-        zeta_plan = True
-    elif DEBAUT_RE.search(remainder):
-        remainder = DEBAUT_RE.sub("", remainder).strip()
-    else:
-        bm = BARE_CUOTA_RE.search(remainder)
-        if bm:
-            remainder = remainder[: bm.start()].strip()
-
-    tm = TARJETA_CUPON_RE.match(remainder)
-    if tm:
-        cupon = tm.group(2)
-        description = tm.group(3).strip()
-    else:
-        cupon = None
-        description = remainder
-
-    if not description:
-        return None
-
-    return {
-        "date": item_date.isoformat(),
-        "description": description,
-        "cupon": cupon,
-        "amount": str(amount),
-        "currency": "ARS",
-        "item_type": item_type,
-        "installment_number": installment_number,
-        "installment_count": installment_count,
-        "zeta_plan": zeta_plan,
-    }
-
-
-def parse_excluded_row(line: str) -> dict | None:
-    m = DATE_PREFIX_RE.match(line)
-    if not m:
-        return None
-    dd, mm, yy, rest = m.groups()
-    try:
-        item_date = parse_short_date(dd, mm, yy)
-    except ValueError:
-        return None
-    amt_m = AMOUNT_RE.search(rest)
-    if not amt_m:
-        return None
-    amount = parse_amount(amt_m.group(1))
-    description = rest[: amt_m.start()].strip().lstrip("*").strip()
-    if not description:
-        return None
-    return {
-        "date": item_date.isoformat(),
-        "description": description,
-        "amount": str(amount),
-        "currency": "ARS",
-    }
-
-
-def extract_lines(pdf_path: Path) -> list[str]:
-    import pdfplumber
-
-    lines: list[str] = []
-    with pdfplumber.open(str(pdf_path)) as pdf:
-        for page in pdf.pages:
-            text = page.extract_text() or ""
-            lines.extend(text.split("\n"))
-    return [ln.strip() for ln in lines if ln.strip()]
-
-
-def parse_header(lines: list[str]) -> dict:
-    full_text = "\n".join(lines)
-
-    def find(pattern: str) -> str | None:
-        m = re.search(pattern, full_text)
-        return m.group(1) if m else None
-
-    saldo_str = find(r"Tu total a pagar es \$([\d.,]+)")
-    due_full = find(r"y vence el (\d{2}/\d{2}/\d{2})\.")
-    prev_closing_md = find(r"resumen anterior cerró el (\d{2}/\d{2}),")
-    prev_due_md = find(r"venció el (\d{2}/\d{2}), por")
-    closing_md = find(r"resumen actual cerró el (\d{2}/\d{2})\.")
-    next_closing_md = find(r"próximo resumen cierra el (\d{2}/\d{2}),")
-    next_due_md = find(r"y vence el (\d{2}/\d{2})\.")
-
-    meta = {
-        "bank": "Naranja X",
-        "closing_date": None,
-        "due_date": None,
-        "prev_closing_date": None,
-        "prev_due_date": None,
-        "next_closing_date": None,
-        "next_due_date": None,
-        "saldo_actual_ars": str(parse_amount(saldo_str)) if saldo_str else None,
-        "year": None,
-        "month": None,
-    }
-
-    if not due_full or not closing_md:
-        return meta
-
-    due_dd, due_mm, due_yy = due_full.split("/")
-    due_date = date(2000 + int(due_yy), int(due_mm), int(due_dd))
-
-    def with_year_before(md: str, ref: date) -> date:
-        dd, mm = md.split("/")
-        d, m = int(dd), int(mm)
-        year = ref.year if m <= ref.month else ref.year - 1
-        return date(year, m, d)
-
-    def with_year_after(md: str, ref: date) -> date:
-        dd, mm = md.split("/")
-        d, m = int(dd), int(mm)
-        year = ref.year if m >= ref.month else ref.year + 1
-        return date(year, m, d)
-
-    closing_date = with_year_before(closing_md, due_date)
-    meta["closing_date"] = closing_date.isoformat()
-    meta["due_date"] = due_date.isoformat()
-
-    if prev_closing_md:
-        meta["prev_closing_date"] = with_year_before(prev_closing_md, closing_date).isoformat()
-    if prev_due_md:
-        meta["prev_due_date"] = with_year_before(prev_due_md, closing_date).isoformat()
-    if next_closing_md:
-        meta["next_closing_date"] = with_year_after(next_closing_md, closing_date).isoformat()
-    if next_due_md:
-        meta["next_due_date"] = with_year_after(next_due_md, closing_date).isoformat()
-
-    year, month = closing_date.year, closing_date.month
-    if closing_date.day <= 5:
-        month = month - 1 or 12
-        year = year - 1 if closing_date.month == 1 else year
-    meta["year"], meta["month"] = year, month
-
-    return meta
+# El parser vive ahora en app/services/statement_parsers/naranjax.py,
+# compartido con la conciliación in-app. Este script conserva el CLI y la
+# mitad de DB.
+from app.services.statement_parsers.naranjax import (  # noqa: F401 — re-exports
+    AMOUNT_RE,
+    BARE_CUOTA_RE,
+    CONSUMOS_PREFIX,
+    DATE_PREFIX_RE,
+    DEBAUT_RE,
+    INSTALLMENT_RE,
+    PAGO_HEADER,
+    ROW_HEADER,
+    TARJETA_CUPON_RE,
+    ZETA_RE,
+    parse_amount,
+    parse_consumo_row,
+    parse_excluded_row,
+    parse_header,
+    parse_lines,
+    parse_short_date,
+)
+from app.services.statement_parsers.common import extract_lines  # noqa: F401
 
 
 def parse_statement(pdf_path: Path) -> dict:
-    lines = extract_lines(pdf_path)
-    meta = parse_header(lines)
-
-    items: list[dict] = []
-    excluded_fees: list[dict] = []
-    excluded_payments: list[dict] = []
-    mode = None
-    current_cardholder = None
-
-    for line in lines:
-        if line in (ROW_HEADER, PAGO_HEADER):
-            continue
-        if line.startswith(CONSUMOS_PREFIX):
-            current_cardholder = line[len(CONSUMOS_PREFIX):].strip()
-            mode = "consumo"
-            continue
-        if line.startswith("Otros") or line == "Otros cargos:":
-            mode = "otros"
-            continue
-        if line.startswith("Total"):
-            mode = None
-            continue
-        if line.startswith("Pago del resumen anterior"):
-            mode = "pagos"
-            continue
-        if line.startswith("Información legal") or line.startswith("Para que"):
-            mode = None
-            continue
-
-        if mode == "consumo":
-            if DATE_PREFIX_RE.match(line) and line.split(None, 1)[-1].lstrip().startswith("*"):
-                # línea de comisión dentro de la sección de consumos
-                row = parse_excluded_row(line)
-                if row:
-                    excluded_fees.append(row)
-                continue
-            row = parse_consumo_row(line)
-            if row:
-                row["cardholder"] = current_cardholder
-                row["category_id"] = None
-                items.append(row)
-        elif mode == "otros":
-            row = parse_excluded_row(line)
-            if row:
-                excluded_fees.append(row)
-        elif mode == "pagos":
-            row = parse_excluded_row(line)
-            if row:
-                excluded_payments.append(row)
-
-    statements = []
-    for cardholder in sorted({i["cardholder"] for i in items if i["cardholder"]}):
-        cardholder_items = [i for i in items if i["cardholder"] == cardholder]
-        statements.append({
-            "cardholder": cardholder,
-            "year": meta["year"],
-            "month": meta["month"],
-            "closing_date": meta["closing_date"],
-            "due_date": meta["due_date"],
-            "is_latest_statement": False,
-            "card": {
-                "bank": "Naranja X",
-                "hint_last_4": None,
-                "hint_label": "Naranja X",
-                "existing_card_id": None,
-                "create_new": None,
-                "new_alias": None,
-            },
-            "items": cardholder_items,
-        })
-
-    return {
-        "source_file": str(pdf_path),
-        **meta,
-        "statements": statements,
-        "excluded": {"payments": excluded_payments, "fees": excluded_fees},
-    }
+    return {"source_file": str(pdf_path), **parse_lines(extract_lines(pdf_path))}
 
 
 def cmd_extract(args: argparse.Namespace) -> None:

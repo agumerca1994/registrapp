@@ -78,6 +78,17 @@ class CreditCardItem(Base):
         ForeignKey("expense_entries.id", ondelete="SET NULL"), nullable=True
     )
     currency: Mapped[str] = mapped_column(String(3), default="ARS", server_default="ARS")
+
+    # Trazabilidad contra el resumen del banco (conciliación). La descripción
+    # que muestra la app la reescribe el usuario ("Ferreteria - Mercadopago");
+    # éstas guardan lo que imprimió el banco ("MERPAGO*LUCIANOGABRIELCAM") y el
+    # número de cupón, que es lo que permite el match exacto en la próxima
+    # conciliación en vez de depender del monto. `capture_source` dice por
+    # dónde entró el ítem (app / reconcile / whatsapp / import / mcp).
+    bank_description: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    bank_coupon: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    capture_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     statement: Mapped["CreditCardStatement"] = relationship(back_populates="items")

@@ -31,237 +31,32 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-MONTHS = {
-    "ene": 1, "feb": 2, "mar": 3, "abr": 4, "may": 5, "jun": 6,
-    "jul": 7, "ago": 8, "sep": 9, "set": 9, "oct": 10, "nov": 11, "dic": 12,
-}
-
-AMOUNT_RE = re.compile(r"(\d{1,3}(?:\.\d{3})*,\d{2}-?)\s*$")
-AMOUNT_TOKEN_RE = re.compile(r"\d{1,3}(?:\.\d{3})*,\d{2}")
-DATE_PREFIX_RE = re.compile(r"^(\d{2})-(\d{2})-(\d{2})\s+(.+)$")
-DATE_HEADER_RE = re.compile(r"(\d{2})\s+([A-Za-zÁ-Úá-ú]{3})\.?\s+(\d{2})")
-CUPON_RE = re.compile(r"^(\d{4,8})\s+(.*)$")
-CUOTA_RE = re.compile(r"C\.(\d{2})/(\d{2})")
-CARD_TOTAL_RE = re.compile(
-    r"^TARJETA (\d+) Total Consumos de (.+?)\s+\d{1,3}(?:\.\d{3})*,\d{2}\s+\d{1,3}(?:\.\d{3})*,\d{2}$"
+# El parser vive ahora en app/services/statement_parsers/banco_nacion.py,
+# compartido con la conciliación in-app. Este script conserva el CLI y la
+# mitad de DB.
+from app.services.statement_parsers.banco_nacion import (  # noqa: F401 — re-exports
+    AMOUNT_RE,
+    AMOUNT_TOKEN_RE,
+    CARD_TOTAL_RE,
+    CUOTA_RE,
+    CUPON_RE,
+    DATE_HEADER_RE,
+    DATE_PREFIX_RE,
+    MONTHS,
+    PAGOS_PREFIX,
+    parse_amount,
+    parse_consumo_row,
+    parse_fee_row,
+    parse_header,
+    parse_header_date,
+    parse_lines,
+    parse_short_date,
 )
-
-PAGOS_PREFIX = "SU PAGO"
-
-
-def parse_amount(raw: str) -> Decimal:
-    raw = raw.strip()
-    negative = raw.endswith("-")
-    if negative:
-        raw = raw[:-1]
-    val = Decimal(raw.replace(".", "").replace(",", "."))
-    return -val if negative else val
-
-
-def parse_short_date(dd: str, mm: str, yy: str) -> date:
-    return date(2000 + int(yy), int(mm), int(dd))
-
-
-def parse_header_date(dd: str, mon: str, yy: str) -> date:
-    month = MONTHS[mon.strip().lower().rstrip(".")[:3]]
-    return date(2000 + int(yy), month, int(dd))
-
-
-def parse_consumo_row(line: str) -> dict | None:
-    m = DATE_PREFIX_RE.match(line)
-    if not m:
-        return None
-    dd, mm, yy, rest = m.groups()
-    try:
-        item_date = parse_short_date(dd, mm, yy)
-    except ValueError:
-        return None
-
-    amt_m = AMOUNT_RE.search(rest)
-    if not amt_m:
-        return None
-    amount = parse_amount(amt_m.group(1))
-    remainder = rest[: amt_m.start()].strip()
-    if not remainder:
-        return None
-
-    if remainder.startswith(PAGOS_PREFIX) or amount < 0:
-        return {
-            "date": item_date.isoformat(),
-            "description": remainder,
-            "amount": str(amount),
-            "currency": "ARS",
-            "_excluded": "payment",
-        }
-
-    cupon = None
-    cm = CUPON_RE.match(remainder)
-    if cm:
-        cupon = cm.group(1)
-        remainder = cm.group(2)
-
-    item_type = "single"
-    installment_number = None
-    installment_count = None
-    cuota_m = CUOTA_RE.search(remainder)
-    if cuota_m:
-        item_type = "installment"
-        installment_number = int(cuota_m.group(1))
-        installment_count = int(cuota_m.group(2))
-        remainder = CUOTA_RE.sub("", remainder).strip()
-        remainder = re.sub(r"\s{2,}", " ", remainder)
-
-    if not remainder:
-        return None
-
-    return {
-        "date": item_date.isoformat(),
-        "description": remainder,
-        "cupon": cupon,
-        "amount": str(amount),
-        "currency": "ARS",
-        "item_type": item_type,
-        "installment_number": installment_number,
-        "installment_count": installment_count,
-    }
-
-
-def parse_fee_row(line: str) -> dict | None:
-    m = DATE_PREFIX_RE.match(line)
-    if not m:
-        return None
-    dd, mm, yy, rest = m.groups()
-    try:
-        item_date = parse_short_date(dd, mm, yy)
-    except ValueError:
-        return None
-    amt_m = AMOUNT_RE.search(rest)
-    if not amt_m:
-        return None
-    amount = parse_amount(amt_m.group(1))
-    description = rest[: amt_m.start()].strip().lstrip("$").strip()
-    if not description:
-        return None
-    return {"date": item_date.isoformat(), "description": description, "amount": str(amount), "currency": "ARS"}
-
-
-def extract_lines(pdf_path: Path) -> list[str]:
-    import pdfplumber
-
-    lines: list[str] = []
-    with pdfplumber.open(str(pdf_path)) as pdf:
-        for page in pdf.pages:
-            text = page.extract_text() or ""
-            lines.extend(text.split("\n"))
-    return [ln.strip() for ln in lines if ln.strip()]
-
-
-def parse_header(lines: list[str]) -> dict:
-    full_text = "\n".join(lines)
-
-    def find_date(label_pattern: str) -> str | None:
-        m = re.search(label_pattern + r"\s*(\d{2})\s+([A-Za-zÁ-Úá-ú]{3})\.?\s+(\d{2})", full_text)
-        if not m:
-            return None
-        return parse_header_date(m.group(1), m.group(2), m.group(3)).isoformat()
-
-    def find_amount(label_pattern: str) -> str | None:
-        m = re.search(label_pattern + r"\s*\$?\s*([\d.,]+)", full_text)
-        return str(parse_amount(m.group(1))) if m else None
-
-    account_m = re.search(r"N DE CUENTA:\s*(\d+)", full_text)
-
-    meta = {
-        "bank": "Banco Nación",
-        "account_number": account_m.group(1) if account_m else None,
-        "closing_date": find_date(r"CIERRE ACTUAL:"),
-        "due_date": find_date(r"VENCIMIENTO ACTUAL:"),
-        "prev_closing_date": find_date(r"CIERRE ANTERIOR"),
-        "prev_due_date": find_date(r"VTO\. ANTERIOR"),
-        "next_closing_date": find_date(r"PROXIMO CIERRE"),
-        "next_due_date": find_date(r"PROXIMO VTO"),
-        "saldo_actual_ars": find_amount(r"SALDO ACTUAL:"),
-        "year": None,
-        "month": None,
-    }
-
-    if meta["closing_date"]:
-        d = date.fromisoformat(meta["closing_date"])
-        year, month = d.year, d.month
-        if d.day <= 5:
-            month = month - 1 or 12
-            year = year - 1 if d.month == 1 else year
-        meta["year"], meta["month"] = year, month
-
-    return meta
+from app.services.statement_parsers.common import extract_lines  # noqa: F401
 
 
 def parse_statement(pdf_path: Path) -> dict:
-    lines = extract_lines(pdf_path)
-    meta = parse_header(lines)
-
-    items: list[dict] = []
-    excluded_payments: list[dict] = []
-    excluded_fees: list[dict] = []
-    mode = None
-    cardholder = None
-    hint_last_4 = None
-
-    for line in lines:
-        if line.startswith("FECHA COMPROBANTE"):
-            mode = "consumo"
-            continue
-        if line == "SALDO ANTERIOR":
-            continue
-        cm = CARD_TOTAL_RE.match(line)
-        if cm:
-            hint_last_4 = cm.group(1)
-            cardholder = cm.group(2).strip()
-            mode = "fees"
-            continue
-        if line.startswith("SALDO ACTUAL") or line.startswith("PAGO MINIMO"):
-            mode = None
-            continue
-
-        if mode == "consumo":
-            row = parse_consumo_row(line)
-            if row:
-                if row.pop("_excluded", None) == "payment":
-                    excluded_payments.append(row)
-                else:
-                    row["category_id"] = None
-                    items.append(row)
-        elif mode == "fees":
-            row = parse_fee_row(line)
-            if row:
-                excluded_fees.append(row)
-
-    statements = []
-    if items:
-        statements.append({
-            "cardholder": cardholder or "Titular",
-            "year": meta["year"],
-            "month": meta["month"],
-            "closing_date": meta["closing_date"],
-            "due_date": meta["due_date"],
-            "is_latest_statement": False,
-            "card": {
-                "bank": "Banco Nación",
-                "hint_last_4": hint_last_4,
-                "hint_label": "Visa Platinum",
-                "existing_card_id": None,
-                "create_new": None,
-                "new_alias": None,
-            },
-            "items": items,
-        })
-
-    return {
-        "source_file": str(pdf_path),
-        **meta,
-        "statements": statements,
-        "excluded": {"payments": excluded_payments, "fees": excluded_fees},
-    }
+    return {"source_file": str(pdf_path), **parse_lines(extract_lines(pdf_path))}
 
 
 def cmd_extract(args: argparse.Namespace) -> None:

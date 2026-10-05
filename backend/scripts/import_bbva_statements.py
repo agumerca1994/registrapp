@@ -30,257 +30,37 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-MONTHS = {
-    "ene": 1, "feb": 2, "mar": 3, "abr": 4, "may": 5, "jun": 6,
-    "jul": 7, "ago": 8, "set": 9, "sep": 9, "oct": 10, "nov": 11, "dic": 12,
-}
-
-AMOUNT_RE = re.compile(r"(-?\d{1,3}(?:\.\d{3})*,\d{2})\s*$")
-AMOUNT_TOKEN_RE = re.compile(r"-?\d{1,3}(?:\.\d{3})*,\d{2}")
-DATE_PREFIX_RE = re.compile(r"^(\d{2})-([A-Za-zÁ-Úá-ú]{3})-(\d{2})\s+(.+)$")
-DATE_TOKEN_RE = re.compile(r"\d{2}-[A-Za-zÁ-Úá-ú]{3}-\d{2}")
-CUOTA_RE = re.compile(r"C\.(\d{2})/(\d{2})")
-TRAILING_DIGITS_RE = re.compile(r"^(.*?)\s+(\d{5,10})$")
-
-CONSUMOS_PREFIX = "Consumos "
-TOTAL_CONSUMOS_PREFIX = "TOTAL CONSUMOS DE"
-PAGOS_HEADER = "Sus pagos y ajustes realizados"
-IMPUESTOS_HEADER = "Impuestos, cargos e intereses"
-ROW_HEADERS = {
-    "FECHA DESCRIPCIÓN NRO. CUPÓN PESOS DÓLARES",
-    "FECHA DESCRIPCIÓN PESOS DÓLARES",
-}
-
-# La "cuenta" consolidada de BBVA agrupa 2 tarjetas físicas distintas (titular +
-# adicional) bajo un mismo resumen. Cada "Consumos <titular>" del PDF corresponde
-# a una tarjeta real ya cargada en la app, no a la cuenta consolidada.
-CARDHOLDER_CARD_HINTS = {
-    "Miguel A Mercado": {"last_4": "4919", "hint_label": "Visa Black"},
-    "Maria F Diaz": {"last_4": "4901", "hint_label": "Visa Black"},
-}
-
-
-def parse_amount(raw: str) -> Decimal:
-    return Decimal(raw.strip().replace(".", "").replace(",", "."))
-
-
-def parse_short_date(token: str) -> date:
-    dd, mon, yy = token.split("-")
-    month = MONTHS[mon.strip().lower()[:3]]
-    return date(2000 + int(yy), month, int(dd))
-
-
-def parse_row(line: str, with_cupon: bool) -> dict | None:
-    m = DATE_PREFIX_RE.match(line)
-    if not m:
-        return None
-    dd, mon, yy, rest = m.groups()
-    try:
-        item_date = parse_short_date(f"{dd}-{mon}-{yy}")
-    except (KeyError, ValueError):
-        return None
-
-    amt_m = AMOUNT_RE.search(rest)
-    if not amt_m:
-        return None
-    amount = parse_amount(amt_m.group(1))
-    remainder = rest[: amt_m.start()].strip()
-    if not remainder:
-        return None
-
-    cupon = None
-    if with_cupon:
-        cm = TRAILING_DIGITS_RE.match(remainder)
-        if cm:
-            remainder, cupon = cm.group(1).strip(), cm.group(2)
-
-    currency = "USD" if "USD" in remainder.upper() else "ARS"
-
-    item_type = "single"
-    installment_number = None
-    installment_count = None
-    cuota_m = CUOTA_RE.search(remainder)
-    if cuota_m:
-        item_type = "installment"
-        installment_number = int(cuota_m.group(1))
-        installment_count = int(cuota_m.group(2))
-        remainder = CUOTA_RE.sub("", remainder).strip()
-        remainder = re.sub(r"\s{2,}", " ", remainder)
-
-    return {
-        "date": item_date.isoformat(),
-        "description": remainder,
-        "cupon": cupon,
-        "amount": str(amount),
-        "currency": currency,
-        "item_type": item_type,
-        "installment_number": installment_number,
-        "installment_count": installment_count,
-    }
-
-
-def extract_lines(pdf_path: Path) -> list[str]:
-    import pdfplumber
-
-    lines: list[str] = []
-    with pdfplumber.open(str(pdf_path)) as pdf:
-        for page in pdf.pages:
-            text = page.extract_text() or ""
-            lines.extend(text.split("\n"))
-    return [ln.strip() for ln in lines if ln.strip()]
-
-
-def parse_header(lines: list[str]) -> dict:
-    meta = {
-        "bank": "BBVA",
-        "card_label": None,
-        "account_number": None,
-        "closing_date": None,
-        "due_date": None,
-        "prev_closing_date": None,
-        "prev_due_date": None,
-        "next_closing_date": None,
-        "next_due_date": None,
-        "saldo_actual_ars": None,
-        "saldo_actual_usd": None,
-        "year": None,
-        "month": None,
-    }
-
-    for i, line in enumerate(lines):
-        m = re.match(r"^cuenta\s+(\d+)", line, re.IGNORECASE)
-        if m and meta["account_number"] is None:
-            meta["account_number"] = m.group(1)
-            if i > 0:
-                label = re.sub(r"\s*(CONSOLIDADO|INDIVIDUAL)\s*$", "", lines[i - 1]).strip()
-                meta["card_label"] = label
-
-        if (
-            meta["closing_date"] is None
-            and "CIERRE ACTUAL" in line
-            and "VENCIMIENTO ACTUAL" in line
-        ):
-            for j in range(i + 1, min(i + 4, len(lines))):
-                dates = DATE_TOKEN_RE.findall(lines[j])
-                if len(dates) >= 2:
-                    meta["closing_date"] = parse_short_date(dates[0]).isoformat()
-                    meta["due_date"] = parse_short_date(dates[1]).isoformat()
-                    amounts = AMOUNT_TOKEN_RE.findall(lines[j])
-                    if len(amounts) >= 1:
-                        meta["saldo_actual_ars"] = str(parse_amount(amounts[0]))
-                    if len(amounts) >= 2:
-                        meta["saldo_actual_usd"] = str(parse_amount(amounts[1]))
-                    break
-
-        if (
-            meta["prev_closing_date"] is None
-            and "CIERRE ANTERIOR" in line
-            and "VENCIMIENTO ANTERIOR" in line
-            and "PRÓXIMO CIERRE" in line
-        ):
-            for j in range(i + 1, min(i + 4, len(lines))):
-                dates = DATE_TOKEN_RE.findall(lines[j])
-                if len(dates) >= 4:
-                    meta["prev_closing_date"] = parse_short_date(dates[0]).isoformat()
-                    meta["prev_due_date"] = parse_short_date(dates[1]).isoformat()
-                    meta["next_closing_date"] = parse_short_date(dates[2]).isoformat()
-                    meta["next_due_date"] = parse_short_date(dates[3]).isoformat()
-                    break
-
-    if meta["closing_date"]:
-        d = date.fromisoformat(meta["closing_date"])
-        # BBVA cierra algunos ciclos en los primeros días del mes siguiente
-        # (p.ej. cierre 02-Jul para lo que sigue siendo, en la nomenclatura habitual,
-        # el resumen de "Junio"). Si el cierre cae muy temprano en el mes, el período
-        # se asigna al mes anterior — evita que dos resúmenes consecutivos choquen en
-        # el mismo (year, month) cuando uno cierra a fin de mes y el siguiente a
-        # principios del próximo.
-        if d.day <= 5:
-            month = d.month - 1 or 12
-            year = d.year - 1 if d.month == 1 else d.year
-        else:
-            year, month = d.year, d.month
-        meta["year"], meta["month"] = year, month
-
-    return meta
+# El parser vive ahora en app/services/statement_parsers/bbva.py, compartido
+# con la conciliación in-app. Este script conserva el CLI y la mitad de DB.
+from app.services.statement_parsers.bbva import (  # noqa: F401 — re-exports
+    AMOUNT_RE,
+    AMOUNT_TOKEN_RE,
+    CONSUMOS_PREFIX,
+    CUOTA_RE,
+    DATE_PREFIX_RE,
+    DATE_TOKEN_RE,
+    IMPUESTOS_HEADER,
+    MONTHS,
+    PAGOS_HEADER,
+    ROW_HEADERS,
+    TOTAL_CONSUMOS_PREFIX,
+    TRAILING_DIGITS_RE,
+    parse_amount,
+    parse_header,
+    parse_lines,
+    parse_row,
+    parse_short_date,
+)
+from app.services.statement_parsers.bbva import (
+    VISA_CARDHOLDER_HINTS as CARDHOLDER_CARD_HINTS,
+)
+from app.services.statement_parsers.common import extract_lines  # noqa: F401
 
 
 def parse_statement(pdf_path: Path) -> dict:
-    lines = extract_lines(pdf_path)
-    meta = parse_header(lines)
-
-    items: list[dict] = []
-    excluded_payments: list[dict] = []
-    excluded_taxes: list[dict] = []
-    mode = None
-    current_cardholder = None
-
-    for line in lines:
-        if line in ROW_HEADERS:
-            continue
-        if line.startswith(PAGOS_HEADER):
-            mode = "pagos"
-            continue
-        if line.startswith(IMPUESTOS_HEADER):
-            mode = "impuestos"
-            continue
-        if line.startswith(CONSUMOS_PREFIX) and not line.startswith(TOTAL_CONSUMOS_PREFIX):
-            current_cardholder = line[len(CONSUMOS_PREFIX):].strip()
-            mode = "consumo"
-            continue
-        if line.startswith(TOTAL_CONSUMOS_PREFIX):
-            mode = None
-            continue
-        if line.startswith("SALDO ACTUAL") or line.startswith("Legales y avisos"):
-            mode = None
-            continue
-
-        if mode == "consumo":
-            row = parse_row(line, with_cupon=True)
-            if row:
-                row["cardholder"] = current_cardholder
-                row["category_id"] = None
-                items.append(row)
-        elif mode == "pagos":
-            row = parse_row(line, with_cupon=False)
-            if row:
-                excluded_payments.append(row)
-        elif mode == "impuestos":
-            row = parse_row(line, with_cupon=False)
-            if row:
-                excluded_taxes.append(row)
-
-    statements = []
-    for cardholder in sorted({i["cardholder"] for i in items if i["cardholder"]}):
-        hint = CARDHOLDER_CARD_HINTS.get(cardholder, {})
-        cardholder_items = [i for i in items if i["cardholder"] == cardholder]
-        statements.append({
-            "cardholder": cardholder,
-            "year": meta["year"],
-            "month": meta["month"],
-            "closing_date": meta["closing_date"],
-            "due_date": meta["due_date"],
-            "is_latest_statement": False,
-            "card": {
-                "bank": "BBVA",
-                "hint_last_4": hint.get("last_4"),
-                "hint_label": hint.get("hint_label"),
-                "existing_card_id": None,
-                "create_new": None,
-                "new_alias": None,
-            },
-            "items": cardholder_items,
-        })
-
     return {
         "source_file": str(pdf_path),
-        **meta,
-        "account_note": (
-            "La 'cuenta' de BBVA consolida 2 tarjetas físicas distintas (titular + adicional). "
-            "Cada entrada de 'statements' corresponde a una tarjeta real, no a esta cuenta consolidada."
-        ),
-        "statements": statements,
-        "excluded": {"payments": excluded_payments, "taxes_and_fees": excluded_taxes},
+        **parse_lines(extract_lines(pdf_path), hints=CARDHOLDER_CARD_HINTS),
     }
 
 
