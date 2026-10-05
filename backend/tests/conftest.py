@@ -35,15 +35,28 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # no
 from app.core.database import Base  # noqa: E402
 from app.models.credit_card import CreditCard, CreditCardItem, CreditCardStatement  # noqa: E402
 from app.models.expense import ExpenseCategory, ExpenseEntry  # noqa: E402
+from app.models.shared_expense import SharedExpense  # noqa: E402
+from app.models.reconciliation import (  # noqa: E402
+    CaptureEvent,
+    CaptureRule,
+    ReconciliationAction,
+    ReconciliationSession,
+)
 
 # Sólo las tablas que estos tests tocan: `Base.metadata` entera incluye JSONB
-# y otros tipos de Postgres que SQLite no puede crear.
+# y otros tipos de Postgres que SQLite no puede crear. (Las de conciliación
+# declaran sus JSON con `with_variant(JSONB)` justamente para poder estar acá.)
 _TABLES = [
     ExpenseCategory.__table__,
     ExpenseEntry.__table__,
     CreditCard.__table__,
     CreditCardStatement.__table__,
     CreditCardItem.__table__,
+    SharedExpense.__table__,  # la carga el selectinload de shared_expense en reconcile
+    ReconciliationSession.__table__,
+    ReconciliationAction.__table__,
+    CaptureRule.__table__,
+    CaptureEvent.__table__,
 ]
 
 

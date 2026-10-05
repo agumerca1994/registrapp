@@ -38,6 +38,10 @@ class ParseResult:
     data: dict | None = None  # el dict de parse_lines() del banco detectado
     pages_total: int = 0
     pages_with_movements: list[int] = field(default_factory=list)
+    # Qué leería una IA de respaldo (sólo las páginas con movimientos, como
+    # texto), en tokens estimados (~4 caracteres por token). Alimenta el
+    # costo proyectado de `capture_events` aunque la IA no exista todavía.
+    est_input_tokens: int = 0
 
     @property
     def ok(self) -> bool:
@@ -52,9 +56,12 @@ def detect_and_parse(pdf_bytes: bytes) -> ParseResult:
         name = type(exc).__name__
         if "Password" in name or "Encrypt" in name:
             return ParseResult(status="encrypted")
-        raise
+        # Archivo corrupto, no-PDF, o un PDF del que no se puede extraer
+        # texto (escaneado): para el embudo es lo mismo — no hay texto.
+        return ParseResult(status="no_text")
 
     movements = pages_with_movements(pages)
+    est_tokens = sum(len(pages[i]) for i in movements) // 4
     lines = pages_to_lines(pages)
     if not lines:
         return ParseResult(status="no_text", pages_total=len(pages))
@@ -67,10 +74,12 @@ def detect_and_parse(pdf_bytes: bytes) -> ParseResult:
                 data=module.parse_lines(lines),
                 pages_total=len(pages),
                 pages_with_movements=movements,
+                est_input_tokens=est_tokens,
             )
 
     return ParseResult(
         status="no_parser",
         pages_total=len(pages),
         pages_with_movements=movements,
+        est_input_tokens=est_tokens,
     )

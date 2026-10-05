@@ -211,13 +211,23 @@ def parse_lines(
             # "TOTAL CONSUMOS DE <titular> <pesos> <dólares>" — el total que
             # imprime el banco para el bloque que se acaba de cerrar. Es el
             # dato de control: si la suma de los ítems extraídos no coincide,
-            # la lectura falló.
-            if current_cardholder:
+            # la lectura falló. Se ACUMULA por titular, no se pisa: un resumen
+            # real puede traer dos bloques "Consumos <mismo nombre>" (visto en
+            # el de agosto 2026), y los ítems de ambos van al mismo statement.
+            # La línea sólo cuenta si veníamos de consumos — la carátula
+            # repite estos renglones antes de cualquier encabezado "Consumos".
+            if current_cardholder and mode == "consumo":
                 amounts = AMOUNT_TOKEN_RE.findall(line)
-                block_totals[current_cardholder] = {
-                    "ars": str(parse_amount(amounts[0])) if len(amounts) >= 1 else None,
-                    "usd": str(parse_amount(amounts[1])) if len(amounts) >= 2 else None,
+                prev = block_totals.get(current_cardholder)
+                new = {
+                    "ars": parse_amount(amounts[0]) if len(amounts) >= 1 else None,
+                    "usd": parse_amount(amounts[1]) if len(amounts) >= 2 else None,
                 }
+                if prev is not None:
+                    for k in ("ars", "usd"):
+                        if new[k] is not None or prev[k] is not None:
+                            new[k] = (new[k] or 0) + (prev[k] or 0)
+                block_totals[current_cardholder] = new
             mode = None
             continue
         if line.startswith("SALDO ACTUAL") or line.startswith("Legales y avisos"):
@@ -243,6 +253,10 @@ def parse_lines(
     for cardholder in sorted({i["cardholder"] for i in items if i["cardholder"]}):
         hint = hints.get(cardholder, {})
         cardholder_items = [i for i in items if i["cardholder"] == cardholder]
+        bt = block_totals.get(cardholder)
+        block_total = (
+            {k: (str(v) if v is not None else None) for k, v in bt.items()} if bt else None
+        )
         statements.append({
             "cardholder": cardholder,
             "year": meta["year"],
@@ -259,7 +273,7 @@ def parse_lines(
                 "new_alias": None,
             },
             "items": cardholder_items,
-            "block_total": block_totals.get(cardholder),
+            "block_total": block_total,
         })
 
     return {

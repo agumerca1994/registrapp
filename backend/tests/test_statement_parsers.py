@@ -82,6 +82,27 @@ def test_bbva_items_per_cardholder():
     assert maria["items"][0]["installment_count"] == 12
 
 
+def test_bbva_two_blocks_same_cardholder_accumulate():
+    """Un resumen real puede traer dos bloques "Consumos <mismo nombre>":
+    los ítems van al mismo statement y los totales se SUMAN, no se pisan.
+    La carátula además repite los renglones TOTAL antes de todo bloque —
+    sin bloque abierto no cuentan."""
+    lines = [
+        "TOTAL CONSUMOS DE JUAN PEREZ 1.000,00 5,00",  # carátula: se ignora
+        "Consumos Juan Perez",
+        "10-Sep-26 CLARO DEB AUT 123456789 000001 1.000,00",
+        "TOTAL CONSUMOS DE JUAN PEREZ 1.000,00 5,00",
+        "Consumos Juan Perez",
+        "11-Sep-26 JUMBO SM 451 188623 2.500,00",
+        "TOTAL CONSUMOS DE JUAN PEREZ 2.500,00 0,00",
+    ]
+    data = bbva.parse_lines(lines)
+    assert len(data["statements"]) == 1
+    stmt = data["statements"][0]
+    assert len(stmt["items"]) == 2
+    assert stmt["block_total"] == {"ars": "3500.00", "usd": "5.00"}
+
+
 def test_bbva_block_totals_and_excluded():
     data = bbva.parse_lines(BBVA_LINES)
     juan, maria = data["statements"]

@@ -482,3 +482,81 @@ async def log_frontend_error(
     ))
     await db.commit()
     return {"status": "ok"}
+
+
+# --- Embudo de captura (conciliación) ---------------------------------------
+# Cuánto resolvió el código solo y cuánto habría necesitado IA, con el costo
+# proyectado. Es el dato que decide si el respaldo con IA se construye.
+
+@router.get("/capture-stats")
+async def capture_stats(
+    date_from: str | None = Query(default=None, alias="from"),
+    date_to: str | None = Query(default=None, alias="to"),
+    _: None = Depends(_require_internal_key),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    from datetime import datetime
+
+    from app.models.reconciliation import CaptureEvent
+
+    q = select(CaptureEvent)
+    if date_from:
+        q = q.where(CaptureEvent.created_at >= datetime.fromisoformat(date_from))
+    if date_to:
+        q = q.where(CaptureEvent.created_at <= datetime.fromisoformat(date_to))
+    events = (await db.scalars(q.order_by(CaptureEvent.created_at))).all()
+
+    by_outcome: dict[str, int] = {}
+    by_reason: dict[str, int] = {}
+    by_bank: dict[str, int] = {}
+    interested_tenants: set[int] = set()
+    needs_ai_tokens = 0
+    for e in events:
+        by_outcome[e.outcome] = by_outcome.get(e.outcome, 0) + 1
+        if e.outcome == "needs_ai":
+            if e.reason:
+                by_reason[e.reason] = by_reason.get(e.reason, 0) + 1
+            needs_ai_tokens += e.est_input_tokens or 0
+        if e.outcome == "interest":
+            interested_tenants.add(e.tenant_id)
+        if e.bank_detected:
+            by_bank[e.bank_detected] = by_bank.get(e.bank_detected, 0) + 1
+
+    attempts = by_outcome.get("parsed_code", 0) + by_outcome.get("needs_ai", 0)
+    # Haiku 4.5: USD 1 por millón de tokens de entrada; salida estimada en un
+    # 20% de la entrada a USD 5/M. Orden de magnitud, no factura.
+    projected_cost_usd = round(
+        needs_ai_tokens / 1e6 * 1.0 + needs_ai_tokens * 0.2 / 1e6 * 5.0, 4
+    )
+    return {
+        "attempts": attempts,
+        "by_outcome": by_outcome,
+        "needs_ai_pct": round(100 * by_outcome.get("needs_ai", 0) / attempts, 1) if attempts else None,
+        "needs_ai_by_reason": by_reason,
+        "by_bank": by_bank,
+        "interest_events": by_outcome.get("interest", 0),
+        "interested_tenants": len(interested_tenants),
+        "needs_ai_est_input_tokens": needs_ai_tokens,
+        "projected_ai_cost_usd": projected_cost_usd,
+    }
+
+
+@router.patch("/tenants/{tenant_id}/plan")
+async def set_tenant_plan(
+    tenant_id: int,
+    payload: dict[str, Any],
+    _: None = Depends(_require_internal_key),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Setea el plan a mano (free/pro). No hay billing: esto ES el alta."""
+    from app.models.tenant import Tenant
+
+    plan = payload.get("plan")
+    if plan not in ("free", "pro"):
+        raise HTTPException(status_code=422, detail="plan debe ser 'free' o 'pro'")
+    tenant = await db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant no encontrado")
+    tenant.plan = plan
+    await db.commit()
+    return {"tenant_id": tenant.id, "plan": tenant.plan}

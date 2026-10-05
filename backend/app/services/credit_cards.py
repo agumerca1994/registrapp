@@ -85,6 +85,7 @@ async def create_item_in_statement(
     body: CreditCardItemCreate,
     user,
     db: AsyncSession,
+    propagate: bool = True,
 ) -> CreditCardItem:
     """Crea un ítem en `stmt`, su egreso espejo y, si es en cuotas, las cuotas
     futuras en los resúmenes que correspondan. **Sólo hace flush, nunca commit.**
@@ -134,8 +135,11 @@ async def create_item_in_statement(
     # están cargados. La cuota que entra es la raíz del grupo y se propagan
     # sólo las que faltan (n+1..N) — mismo camino que los importadores por
     # banco, que hasta ahora eran el único lugar que sabía hacerlo.
+    # `propagate=False` la crea suelta: lo usa la conciliación de un resumen
+    # viejo, donde las cuotas siguientes pueden existir ya cargadas a mano y
+    # propagarlas duplicaría el plan.
     start = body.installment_number or 1
-    if body.item_type == "installment" and body.installment_count and start < body.installment_count:
+    if propagate and body.item_type == "installment" and body.installment_count and start < body.installment_count:
         for offset in range(1, body.installment_count - start + 1):
             cuota_n = start + offset
             future_date = next_month_date(date(stmt.year, stmt.month, 1), offset)

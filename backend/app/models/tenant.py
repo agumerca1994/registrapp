@@ -13,6 +13,10 @@ class Tenant(Base):
     # Which USD quote to value the household's foreign-currency holding with.
     # One of app.services.currency.RATE_TYPES (minus "personalizado").
     fx_rate_type: Mapped[str] = mapped_column(String(20), default="blue", server_default="blue")
+    # "free" | "pro". No hay billing: se setea a mano vía /internal mientras se
+    # mide el interés en el análisis con IA (ver capture_events). Gatea sólo
+    # los caminos que gastarían plata en IA, nunca una feature ya existente.
+    plan: Mapped[str] = mapped_column(String(10), default="free", server_default="free")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     users: Mapped[list["User"]] = relationship(back_populates="tenant")

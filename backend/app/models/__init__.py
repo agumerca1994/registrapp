@@ -14,6 +14,9 @@ from app.models.currency_operation import CurrencyOperation
 from app.models.mcp_auth import (
     McpAuthCode, McpOAuthAuthorization, McpOAuthClient, McpToken,
 )
+from app.models.reconciliation import (
+    CaptureEvent, CaptureRule, ReconciliationAction, ReconciliationSession,
+)
 
 __all__ = [
     "Tenant", "User",
@@ -29,4 +32,5 @@ __all__ = [
     "DeviceToken",
     "CurrencyOperation",
     "McpOAuthClient", "McpOAuthAuthorization", "McpAuthCode", "McpToken",
+    "ReconciliationSession", "ReconciliationAction", "CaptureRule", "CaptureEvent",
 ]

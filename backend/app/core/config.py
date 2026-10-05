@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     WHATSAPP_WEBHOOK_SECRET: str = ""
     APP_DOMAIN: str = ""
     API_DOMAIN: str = ""
+    # Conciliación de resúmenes (/reconcile). Default prendido: el frontend
+    # tiene su propio flag NEXT_PUBLIC_FEATURE_RECONCILE (apagado por default)
+    # y es el que gobierna si la pantalla existe; éste es el apagador de
+    # emergencia del backend.
+    RECONCILE_ENABLED: bool = True
     FRONTEND_URL: str = "http://localhost:3000"
     INTERNAL_LOG_KEY: str = ""
 
