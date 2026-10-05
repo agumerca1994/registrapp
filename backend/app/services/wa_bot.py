@@ -415,7 +415,55 @@ async def _handle_text(db: AsyncSession, user: User, inbound: InboundMessage) ->
     if handled is not None:
         return handled
 
+    handled = await _do_pending_description(db, user, inbound)
+    if handled is not None:
+        return handled
+
     return await _do_expense(db, user, inbound)
+
+
+_NO_WORDS = {"no", "n", "nop", "no gracias", "listo", "ok", "asi esta", "dejalo", "dejala"}
+
+
+async def _do_pending_description(
+    db: AsyncSession, user: User, inbound: InboundMessage
+) -> list[str] | None:
+    """La respuesta a "¿le agregás una descripción?". Prioridades: un "no" la
+    descarta; algo que parsea como gasto ES un gasto nuevo (la oferta se
+    descarta sola); cualquier otro texto es la descripción."""
+    row = await _open_pending(db, user.id)
+    if row is None or (row.pending or {}).get("type") != "description_offer":
+        return None
+
+    from app.services.search import fold_text
+
+    if fold_text(inbound.text) in _NO_WORDS:
+        row.pending = None
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        await db.commit()
+        return ["👍 Quedó así."]
+
+    # Un número pelado no es una descripción (es alguien contestando una
+    # pregunta que ya no existe) — que siga su camino y la oferta siga viva.
+    if _NUMBER_RE.match(inbound.text):
+        return None
+
+    if quick_capture.parse_quick_text(inbound.text) is not None:
+        row.pending = None  # vino otro gasto: la oferta caduca sola
+        await db.flush()
+        return None
+
+    entry = await db.get(ExpenseEntry, (row.pending or {}).get("entry_id"))
+    row.pending = None
+    if entry is None or entry.tenant_id != user.tenant_id:
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        await db.commit()
+        return ["Ese gasto ya no está — no cambié nada."]
+    entry.description = inbound.text.strip()[:255]
+    _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+    await db.commit()
+    formatted = f"{entry.amount:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
+    return [f"✏️ Listo: {_money(formatted, entry.currency)} · {entry.description}"]
 
 
 async def _do_pending_category_by_name(
@@ -448,11 +496,11 @@ async def _do_pending_category_by_name(
     row.pending = None
     _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text,
               ref_type="expense", ref_id=entry.id)
+    reply = _offer_description(
+        db, user, entry, f"✅ {_fmt_amount(draft)} · {entry.description} — {cat.name}"
+    )
     await db.commit()
-    return [
-        f"✅ {_fmt_amount(draft)} · {entry.description} — {cat.name}\n"
-        "Respondé *deshacer* o *editar monto …*"
-    ]
+    return [reply]
 
 
 async def _do_expense(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
@@ -526,10 +574,23 @@ async def _capture_draft(
 
     suffix = " (sugerida)" if pick.source == "suggest" else ""
     when = "" if entry.expense_date == datetime.now().date() else f" · {entry.expense_date.strftime('%d/%m')}"
-    return [
-        f"✅ {_fmt_amount(draft)} · {entry.description} — {pick.category_name}{suffix}{when}\n"
-        "Respondé *deshacer*, o *editar monto/categoría/descripción …*"
-    ]
+    base = f"✅ {_fmt_amount(draft)} · {entry.description} — {pick.category_name}{suffix}{when}"
+    if pick.source == "suggest":
+        reply = _offer_description(db, user, entry, base)
+        await db.commit()
+        return [reply]
+    return [base + "\nRespondé *deshacer*, o *editar monto/categoría/descripción …*"]
+
+
+def _offer_description(db: AsyncSession, user: User, entry, base_line: str) -> str:
+    """Después de guardar, ofrecer una descripción opcional. Sólo donde la
+    descripción actual es el nombre del comercio o el término crudo (categoría
+    elegida a mano o sugerida) — cuando el usuario ya escribió lo que quería,
+    repreguntar es ruido."""
+    reply = base_line + "\n¿Le agregás una descripción? Escribila, o respondé *no*."
+    _remember(db, user.id, "out", "text", text=reply,
+              pending={"type": "description_offer", "entry_id": entry.id})
+    return reply
 
 
 def _draft_dict(draft: quick_capture.QuickDraft, payment_method: str | None = None) -> dict:
@@ -672,11 +733,11 @@ async def _do_pending_answer(
         row.pending = None
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text,
                   ref_type="expense", ref_id=entry.id)
+        reply = _offer_description(
+            db, user, entry, f"✅ {_fmt_amount(draft)} · {entry.description} — {cat.name}"
+        )
         await db.commit()
-        return [
-            f"✅ {_fmt_amount(draft)} · {entry.description} — {cat.name}\n"
-            "Respondé *deshacer* o *editar monto …*"
-        ]
+        return [reply]
 
     if ptype == "reconcile_apply":
         session_id = pending.get("session_id")

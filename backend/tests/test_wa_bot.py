@@ -229,3 +229,49 @@ async def test_edit_description(db):
     assert "golosinas para el finde" in replies[0]
     entry = await db.scalar(select(ExpenseEntry))
     assert entry.description == "golosinas para el finde"
+
+
+async def test_description_offer_after_category_answer(db):
+    from app.services import category_suggest
+
+    category_suggest.invalidate(1)
+    await _cat(db, "Varios")
+    await _cat(db, "Supermercado")
+    await wa_bot.handle(db, USER, _in("12 lucas cosas del chino", wa_id="W1"))
+    replies = await wa_bot.handle(db, USER, _in("varios", wa_id="W2"))
+    assert "descripción" in replies[0]
+
+    replies = await wa_bot.handle(db, USER, _in("compras para el asado", wa_id="W3"))
+    assert "compras para el asado" in replies[0]
+    entry = await db.scalar(select(ExpenseEntry))
+    assert entry.description == "compras para el asado"
+
+
+async def test_description_offer_dismissed_with_no(db):
+    from app.services import category_suggest
+
+    category_suggest.invalidate(1)
+    await _cat(db, "Varios")
+    await wa_bot.handle(db, USER, _in("12 lucas chucherias", wa_id="W1"))
+    await wa_bot.handle(db, USER, _in("1", wa_id="W2"))
+    replies = await wa_bot.handle(db, USER, _in("no", wa_id="W3"))
+    assert "Quedó así" in replies[0]
+    entry = await db.scalar(select(ExpenseEntry))
+    assert entry.description == "chucherias"
+
+
+async def test_description_offer_yields_to_new_expense(db):
+    from app.services import category_suggest
+
+    category_suggest.invalidate(1)
+    await _cat(db, "Varios")
+    await _cat(db, "Kiosco")
+    await wa_bot.handle(db, USER, _in("12 lucas chucherias", wa_id="W1"))
+    await wa_bot.handle(db, USER, _in("1", wa_id="W2"))
+    # En vez de una descripción llega OTRO gasto: la oferta caduca sola.
+    replies = await wa_bot.handle(db, USER, _in("5000 kiosco", wa_id="W3"))
+    assert "✅" in replies[0]
+    entries = (await db.scalars(select(ExpenseEntry))).all()
+    assert len(entries) == 2
+    first = next(e for e in entries if e.description == "chucherias")
+    assert first.description == "chucherias"  # la oferta no lo tocó
