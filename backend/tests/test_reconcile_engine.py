@@ -240,3 +240,38 @@ async def test_start_session_from_text_real_statement(db):
     assert ev.outcome == "parsed_code"
     assert ev.input_kind == "text"
     assert ev.bank_detected == "bbva"
+
+
+async def test_no_cards_asks_then_new_card_resolves(db):
+    """Resumen de una tarjeta que no existe: cero tarjetas → needs_choice con
+    lista vacía (la pantalla ofrece crearla); creada la tarjeta, resolver con
+    su id llega a ready con el resumen nuevo del período del PDF."""
+    category_suggest.invalidate(1)
+    session = ReconciliationSession(
+        tenant_id=1, user_id=1, channel="app", status="needs_choice",
+        bank_id="bbva", period_year=2026, period_month=9,
+        closing_date=date(2026, 10, 1), due_date=date(2026, 10, 9),
+        parsed={"bank": "BBVA", "card_label": "VISA", "items": BANK_ITEMS,
+                "block_totals": {"ARS": "29830.00"}},
+    )
+    db.add(session)
+    await db.flush()
+
+    await resolve_session(db, session, USER)
+    assert session.status == "needs_choice"
+    assert session.choices == {"cards": []}
+
+    # Lo que hace POST /choose con new_card: crear la tarjeta y resolver.
+    card = CreditCard(tenant_id=1, user_id=1, bank="BBVA", alias="Visa nueva")
+    db.add(card)
+    await db.flush()
+    await resolve_session(db, session, USER, explicit_card_id=card.id)
+
+    assert session.status == "ready"
+    stmt = await db.get(CreditCardStatement, session.statement_id)
+    assert (stmt.year, stmt.month) == (2026, 9)
+    assert stmt.closing_date == date(2026, 10, 1)  # fechas del PDF
+    missing = (await db.scalars(
+        select(ReconciliationAction).where(ReconciliationAction.klass == "missing")
+    )).all()
+    assert len(missing) == 2  # todo faltante: la tarjeta acaba de nacer

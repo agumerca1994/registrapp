@@ -7,7 +7,7 @@ import api from "@/lib/api";
 import { features } from "@/lib/features";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { formatDate, getErrorMessage } from "@/lib/utils";
-import { Check, ChevronLeft, CreditCard, Loader2, Undo2, X } from "lucide-react";
+import { Check, ChevronLeft, CreditCard, Loader2, Plus, Undo2, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,12 @@ export default function ConciliarDetailPage() {
   const [selStmt, setSelStmt] = useState<number | null>(null);
   const [saveCardRule, setSaveCardRule] = useState(false);
   const [choosing, setChoosing] = useState(false);
+  // El resumen puede ser de una tarjeta que todavía no está cargada: el alta
+  // va acá mismo — mandar al usuario a /tarjetas y que vuelva a subir el PDF
+  // es exactamente la fricción que esta pantalla existe para matar.
+  const [newCardOpen, setNewCardOpen] = useState(false);
+  const [newCardAlias, setNewCardAlias] = useState("");
+  const [newCardLast4, setNewCardLast4] = useState("");
 
   // needs_ai
   const [interested, setInterested] = useState(false);
@@ -176,11 +182,19 @@ export default function ConciliarDetailPage() {
     setChoosing(true);
     try {
       const body: Record<string, unknown> = {};
-      if (selCard != null) { body.card_id = selCard; body.save_card_rule = saveCardRule; }
+      if (newCardOpen && newCardAlias.trim()) {
+        body.new_card = {
+          alias: newCardAlias.trim(),
+          bank: session?.bank ?? null,
+          last_4_digits: newCardLast4.trim() || null,
+        };
+        body.save_card_rule = saveCardRule;
+      } else if (selCard != null) { body.card_id = selCard; body.save_card_rule = saveCardRule; }
       if (selStmt != null) body.statement_id = selStmt;
       const res = await api.post<SessionDetail>(`/reconcile/${id}/choose`, body);
       setSession(res.data);
       setSelCard(null); setSelStmt(null); setSaveCardRule(false);
+      setNewCardOpen(false); setNewCardAlias(""); setNewCardLast4("");
       setError(null);
     } catch (e) {
       setError(getErrorMessage(e));
@@ -312,6 +326,24 @@ export default function ConciliarDetailPage() {
                   </button>
                 ))}
               </div>
+              <button type="button"
+                onClick={() => { setNewCardOpen(v => !v); setSelCard(null); }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border-2 border-dashed text-left text-sm transition-colors ${
+                  newCardOpen ? "border-ink bg-accent" : "border-border hover:bg-accent/50"
+                }`}>
+                <Plus className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="flex-1 font-medium text-foreground">
+                  {session.choices.cards.length ? "Es otra tarjeta — crearla" : "Crear la tarjeta de este resumen"}
+                </span>
+              </button>
+              {newCardOpen && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input value={newCardAlias} onChange={e => setNewCardAlias(e.target.value)}
+                    placeholder={`Alias (ej: ${session.bank ?? "Visa"} nueva)`} className={FIELD} />
+                  <input value={newCardLast4} onChange={e => setNewCardLast4(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    placeholder="Últimos 4 dígitos (opcional)" inputMode="numeric" pattern="[0-9]*" className={FIELD} />
+                </div>
+              )}
               <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
                 <input type="checkbox" checked={saveCardRule} onChange={e => setSaveCardRule(e.target.checked)}
                   className="w-4 h-4 accent-primary shrink-0" />
@@ -341,7 +373,8 @@ export default function ConciliarDetailPage() {
             </>
           )}
           <div className="flex justify-end pt-1">
-            <Button onClick={confirmChoice} disabled={choosing || (selCard == null && selStmt == null)}>
+            <Button onClick={confirmChoice}
+              disabled={choosing || (selCard == null && selStmt == null && !(newCardOpen && newCardAlias.trim()))}>
               {choosing && <Loader2 className="w-4 h-4 animate-spin" />} Confirmar
             </Button>
           </div>

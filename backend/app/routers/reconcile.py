@@ -186,10 +186,19 @@ async def get_session(
     return await _session_out(session, db)
 
 
+class NewCardBody(BaseModel):
+    alias: str
+    bank: str | None = None
+    last_4_digits: str | None = None
+
+
 class ChooseBody(BaseModel):
     card_id: int | None = None
     statement_id: int | None = None
     save_card_rule: bool = False
+    # El resumen puede ser de una tarjeta que todavía no está cargada: crearla
+    # acá evita el viaje a /tarjetas y volver a subir el PDF.
+    new_card: NewCardBody | None = None
 
 
 @router.post("/{session_id}/choose")
@@ -203,9 +212,28 @@ async def choose(
     session = await _owned_session(session_id, user, db)
     if session.status == SESSION_NEEDS_AI:
         raise HTTPException(status_code=409, detail="Esta sesión no pudo leerse; no hay nada que elegir")
+
+    card_id = body.card_id
+    if body.new_card is not None:
+        from app.models.credit_card import CreditCard
+
+        alias = body.new_card.alias.strip()
+        if not alias:
+            raise HTTPException(status_code=422, detail="La tarjeta nueva necesita un alias")
+        card = CreditCard(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            bank=(body.new_card.bank or (session.parsed or {}).get("bank") or "")[:100] or "—",
+            alias=alias[:100],
+            last_4_digits=(body.new_card.last_4_digits or "")[:4] or None,
+        )
+        db.add(card)
+        await db.flush()
+        card_id = card.id
+
     await reconcile_service.resolve_session(
         db, session, user,
-        explicit_card_id=body.card_id,
+        explicit_card_id=card_id,
         explicit_statement_id=body.statement_id,
         save_card_rule=body.save_card_rule,
     )
