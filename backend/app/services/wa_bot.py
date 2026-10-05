@@ -271,6 +271,13 @@ async def _handle_pdf(db: AsyncSession, user: User, inbound: InboundMessage) -> 
 
     if pdf_lines and not any(m.detect(pdf_lines) for m in REGISTRY):
         receipt = parse_transfer_receipt(pages)
+        if receipt is None:
+            # WARNING a propósito: llega a app_logs (que sólo guarda WARNING+)
+            # y dice por qué no matcheó — sin este rastro, "me ofreció el plan"
+            # no se puede distinguir de un deploy que no llegó.
+            from app.services.transfer_receipt import diagnose
+
+            logger.warning("WA receipt sin match: %s", diagnose(pages))
         if receipt is not None:
             await record_event(
                 db, tenant_id=user.tenant_id, user_id=user.id, channel="whatsapp",

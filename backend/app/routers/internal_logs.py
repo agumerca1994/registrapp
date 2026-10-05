@@ -613,3 +613,16 @@ async def whatsapp_webhook_config(
         if isinstance(wh.get("headers"), dict):
             wh["headers"] = {k: "***" for k in wh["headers"]}
     return results
+
+
+@router.get("/version")
+async def deployed_version(_: None = Depends(_require_internal_key)) -> dict[str, Any]:
+    """Qué código está sirviendo. Nació de una tarde de deploys y reintentos
+    cruzados: sin esto, "sigue fallando" no distingue entre un bug y una
+    imagen vieja que todavía atiende."""
+    from app.services import transfer_receipt as _tr
+
+    return {
+        "marker": "2026-10-05-receipts-v3",
+        "receipt_purchase_hints": list(_tr._A_PURCHASE),
+    }

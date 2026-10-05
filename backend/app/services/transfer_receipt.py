@@ -144,3 +144,19 @@ def parse_transfer_receipt(pages_text: list[str]) -> ReceiptDraft | None:
         counterparty=_find_counterparty(lines, text),
         kind="transferencia" if is_transfer else "pago",
     )
+
+
+def diagnose(pages_text: list[str]) -> dict:
+    """Por qué (no) matcheó un comprobante: pistas, montos, tamaño. Para el
+    log de diagnóstico del bot — datos sobre el match, no el contenido."""
+    text = "\n".join(pages_text)
+    low = fold_text(text)
+    amounts = len(_AMOUNT_RE.findall(text)) + len(_AMOUNT_SUPERSCRIPT_RE.findall(text))
+    return {
+        "a_transfer": [h for h in _A_TRANSFER if h in low],
+        "a_purchase": [h for h in _A_PURCHASE if h in low],
+        "b": [h for h in _B_HINTS if h in low],
+        "amounts_found": amounts,
+        "lines": len([ln for ln in text.split("\n") if ln.strip()]),
+        "chars": len(text),
+    }
