@@ -220,3 +220,12 @@ async def test_pending_category_answered_by_name(db):
     entry = await db.scalar(select(ExpenseEntry))
     cat = await db.scalar(select(ExpenseCategory).where(ExpenseCategory.name == "Farmacia"))
     assert entry.category_id == cat.id
+
+
+async def test_edit_description(db):
+    await _cat(db, "Kiosco")
+    await wa_bot.handle(db, USER, _in("5000 kiosco", wa_id="W1"))
+    replies = await wa_bot.handle(db, USER, _in("editar descripción golosinas para el finde", wa_id="W2"))
+    assert "golosinas para el finde" in replies[0]
+    entry = await db.scalar(select(ExpenseEntry))
+    assert entry.description == "golosinas para el finde"

@@ -62,7 +62,7 @@ MSG_NEEDS_AI_MEDIA = (
     "Mientras tanto podés cargar el gasto como texto: *12 lucas verdulería*."
 )
 
-_EDIT_RE = re.compile(r"^editar\s+(monto|categor[ií]a)\s+(.+)$", re.IGNORECASE)
+_EDIT_RE = re.compile(r"^editar\s+(monto|categor[ií]a|descripci[oó]n)\s+(.+)$", re.IGNORECASE)
 _UNDO_RE = re.compile(r"^(deshacer|deshace|anular)\b", re.IGNORECASE)
 _INTEREST_RE = re.compile(r"^me\s+interesa\b", re.IGNORECASE)
 _NUMBER_RE = re.compile(r"^\s*([1-9])\s*$")
@@ -528,7 +528,7 @@ async def _capture_draft(
     when = "" if entry.expense_date == datetime.now().date() else f" · {entry.expense_date.strftime('%d/%m')}"
     return [
         f"✅ {_fmt_amount(draft)} · {entry.description} — {pick.category_name}{suffix}{when}\n"
-        "Respondé *deshacer* o *editar monto …* / *editar categoría …*"
+        "Respondé *deshacer*, o *editar monto/categoría/descripción …*"
     ]
 
 
@@ -585,6 +585,13 @@ async def _do_edit(
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
         await db.commit()
         return ["No tengo un gasto reciente para editar."]
+
+    if field_name.startswith("descripci"):
+        entry.description = value[:255]
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        await db.commit()
+        formatted = f"{entry.amount:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
+        return [f"✏️ Listo: {_money(formatted, entry.currency)} · {entry.description}"]
 
     if field_name == "monto":
         amount = quick_capture._parse_number(value.replace("$", "").strip())
