@@ -214,7 +214,16 @@ test("stock: producción → una venta resta → conteo → una compra suma", as
     await page.getByRole("button", { name: "Guardar" }).click();
     await expect(page.getByRole("heading", { name: "Nuevo egreso" })).toHaveCount(0);
     expect(await level()).toBe(37);
+
+    // 5. El cierre con unidades (por la API, el camino que usa la pantalla):
+    // salieron 6 en el día, 4 ya los restó la venta, el cierre resta 2.
+    await request.put(`${API_URL}/sales/close/${day}`, {
+      headers: { Authorization: `Bearer ${await tokenOf(page)}` },
+      data: { counted: [{ method: "efectivo", amount: 20000 }], units: [{ product_id: product.id, qty: 6 }] },
+    });
+    expect(await level()).toBe(35);
   } finally {
+    await a.del(`/sales/close/${day}`);
     const entries: { id: number; description?: string }[] = await a.get(`/expenses/entries?q=E2E-compra-${stamp}`);
     for (const e of entries) await a.del(`/expenses/entries/${e.id}`);
     if (saleId) await a.del(`/sales/${saleId}`);

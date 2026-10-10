@@ -397,3 +397,17 @@ async def test_household_sale_like_text_keeps_the_old_behavior(db):
     # Sin tenant negocio, el bot no cambia: el texto sigue al gasto genérico.
     replies = await wa_bot.handle(db, USER, _in("vendí 20 porciones"))
     assert "todavía no los registro" not in replies[0]
+
+
+
+async def test_an_employee_cannot_load_expenses_or_statements(db):
+    from app.models.user import UserRole
+
+    await _business(db)
+    employee = SimpleNamespace(id=7, tenant_id=1, role=UserRole.employee)
+    await _cat(db, "Alquiler")
+    replies = await wa_bot.handle(db, employee, _in("45 lucas alquiler", wa_id="E1"))
+    assert "Como empleado" in replies[0]
+    replies = await wa_bot.handle(db, employee, _pdf_in("E2"))
+    assert "Como empleado" in replies[0]
+    assert (await db.scalar(select(ExpenseEntry))) is None

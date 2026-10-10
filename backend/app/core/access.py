@@ -25,6 +25,7 @@ su lista. Agregar un router sin guardia rompe un test, no la privacidad.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, timedelta
 
 from fastapi import Depends, HTTPException
 from sqlalchemy import select
@@ -35,6 +36,7 @@ from app.core.database import get_db
 from app.core.firebase import get_current_user
 from app.models.tenant import TENANT_KIND_BUSINESS
 from app.models.user import User
+from app.services.clock import business_today
 
 EMPLOYEE_ROLE = "employee"
 
@@ -87,6 +89,19 @@ async def get_staff_user(actor: Actor | None = Depends(get_actor)) -> Actor:
     if not actor.is_business:
         raise HTTPException(status_code=403, detail="Disponible sólo para negocios")
     return actor
+
+
+def assert_staff_day(actor: Actor, day: date) -> None:
+    """Un empleado carga y corrige ventas y stock de hoy y de ayer (por si el
+    cierre se hace pasada la medianoche). Lo de otros días es de los dueños:
+    tocar un día viejo cambia un mes que ya se miró."""
+    if not actor.is_employee:
+        return
+    today = business_today()
+    if not (today - timedelta(days=1) <= day <= today):
+        raise HTTPException(
+            status_code=403, detail="Como empleado podés cargar y corregir lo de hoy y de ayer.",
+        )
 
 
 async def get_owner_user(actor: Actor = Depends(get_staff_user)) -> Actor:

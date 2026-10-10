@@ -140,6 +140,20 @@ Un negocio es un tenant con `tenants.kind = 'business'` (`'household'` por defec
   - Borrar una compra o una venta borra su stock: CASCADE en Postgres, y borrado explícito en el servicio (`delete_for_expense` / `delete_for_sale`, que usa `services/expenses.delete_expense`) por el SQLite de los tests. Los movimientos que salen de una compra o una venta no se borran sueltos (409).
   - `stock_alerts` (negativo, o en el mínimo o debajo) va en `/business/summary` y en Inicio.
   - Los E2E de `business-flows` corren **en serie**: comparten la cuenta y el día, y una venta de un flujo aparecía en el cierre del otro.
+- **Empleados** (`UserRole.employee`; la migración del enum va sola, dentro de `autocommit_block()`, porque un valor nuevo no se puede usar en la transacción que lo agrega y `env.py` corre todo en una).
+  - Quien se suma a un **negocio** con el código entra como empleado. El dueño (admin) lo hace socio con `PATCH /auth/members/{id}/role`, nunca sobre sí mismo ni sobre otro admin.
+  - Un empleado:
+    - no ve `tenant_code`: el código es la credencial para sumarse;
+    - no lista miembros;
+    - no usa el MCP: `token_holder_valid` lo rechaza, así que pasarlo a empleado mata sus tokens en el acto;
+    - en el bot, sólo recibe "las ventas y el stock se cargan desde la app": ni gastos ni PDFs.
+  - **Ventana de hoy y ayer**: `access.assert_staff_day` en los routers de ventas y stock. Tocar un día viejo cambia un mes que ya se miró. El historial de stock que ve un empleado viene sin `unit_cost`.
+  - Si el dueño se va del negocio, hereda el **socio** más antiguo, nunca un empleado; si sólo quedan empleados, da 400.
+  - Frontend (`lib/account.ts`): `isEmployee`, `EMPLOYEE_ROUTES` (Ventas, Productos, Configuración) y `homeFor()`, que lo manda a `/ventas` porque un empleado no tiene Inicio.
+    - El layout no monta el provider de resúmenes: el puntito lee su valor por defecto en vez de pedir algo que daría 403 y quedaría en AppLog.
+    - En Productos el empleado mueve stock pero no crea ni edita.
+    - Configuración le esconde el código, los miembros y el conector.
+  - E2E: `auth.setup` suma un empleado al negocio de pruebas (el código del dueño sale de un login directo contra el emulador) y el proyecto `business-employee` verifica lo que ve y lo que el backend le niega.
 
 ### Backend structure
 ```

@@ -93,6 +93,19 @@ _BUSINESS_TEXT_RE = re.compile(
     rf"|^\d{{1,3}}\s+{_MONEY_WORD}[a-záéíóúñ]+.*?(?:\d{{3,}}|\d+\s*(?:lucas?|k|palos?)\b)",
     re.IGNORECASE,
 )
+# Un empleado de un negocio carga ventas y stock (desde la app, por ahora);
+# los gastos y los resúmenes son de los dueños: el bot no se los toma.
+MSG_EMPLOYEE_ONLY = (
+    "Como empleado, las ventas y el stock se cargan desde la app. "
+    "Los gastos y los resúmenes los carga el dueño o un socio."
+)
+
+
+def _is_employee(user) -> bool:
+    role = getattr(user, "role", None)
+    return getattr(role, "value", role) == "employee"
+
+
 MSG_BUSINESS_NOT_YET = (
     "📦 Eso parece una venta, una compra para el stock o la producción del día, "
     "y todavía no los registro por WhatsApp.\n\n"
@@ -251,6 +264,12 @@ async def purge_old_messages(db: AsyncSession) -> int:
 async def handle(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
     """Procesa un mensaje entrante. Commitea; devuelve las respuestas."""
     try:
+        if _is_employee(user) and inbound.kind != "text":
+            # Un PDF es un resumen o un comprobante de pago: cosa de los dueños.
+            _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id)
+            _remember(db, user.id, "out", "text", text=MSG_EMPLOYEE_ONLY)
+            await db.commit()
+            return [MSG_EMPLOYEE_ONLY]
         if inbound.kind == "pdf":
             return await _handle_pdf(db, user, inbound)
         if inbound.kind in ("image", "audio"):
@@ -474,6 +493,12 @@ async def _handle_text(db: AsyncSession, user: User, inbound: InboundMessage) ->
     handled = await _do_pending_category_by_name(db, user, inbound)
     if handled is not None:
         return handled
+
+    if _is_employee(user):
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        _remember(db, user.id, "out", "text", text=MSG_EMPLOYEE_ONLY)
+        await db.commit()
+        return [MSG_EMPLOYEE_ONLY]
 
     # Antes de la descripción pendiente: "vendí 3 empanadas" no es la
     # descripción del último gasto.

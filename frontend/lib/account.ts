@@ -19,6 +19,19 @@ export function isBusiness(user: MaybeUser): boolean {
   return tenantKind(user) === "business";
 }
 
+/** Un empleado de un negocio: carga ventas y stock, y no ve números del negocio. */
+export function isEmployee(user: MaybeUser): boolean {
+  return isBusiness(user) && user?.role === "employee";
+}
+
+/** Lo único que ve un empleado. El backend le niega todo lo demás (core/access.py). */
+export const EMPLOYEE_ROUTES = ["/ventas", "/productos", "/settings"];
+
+/** Adónde va al abrir la app: Inicio, salvo un empleado, que no tiene Inicio. */
+export function homeFor(user: MaybeUser): string {
+  return isEmployee(user) ? "/ventas" : "/dashboard";
+}
+
 /** Pantallas que sólo existen en un hogar: un negocio no las ve ni en la navegación. */
 export const HOUSEHOLD_ONLY_ROUTES = ["/income", "/divisas", "/shared", "/mortgage", "/macro"];
 /** Y al revés. */
@@ -28,11 +41,20 @@ function under(pathname: string, routes: string[]): boolean {
   return routes.some((r) => pathname === r || pathname.startsWith(r + "/"));
 }
 
-/** Si esta cuenta puede abrir esta ruta, o hay que mandarla a Inicio. */
+/** Si esta cuenta puede abrir esta ruta, o hay que mandarla a `homeFor`. */
 export function routeAllowed(pathname: string, user: MaybeUser): boolean {
+  if (isEmployee(user)) return under(pathname, EMPLOYEE_ROUTES);
   return isBusiness(user)
     ? !under(pathname, HOUSEHOLD_ONLY_ROUTES)
     : !under(pathname, BUSINESS_ONLY_ROUTES);
+}
+
+/** Cómo se llama cada rol en pantalla. */
+export function roleLabel(user: MaybeUser, role: string): string {
+  const labels: Record<string, string> = isBusiness(user)
+    ? { admin: "Dueño", member: "Socio", employee: "Empleado" }
+    : { admin: "Admin", member: "Miembro" };
+  return labels[role] ?? role;
 }
 
 /**

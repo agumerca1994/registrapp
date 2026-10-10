@@ -6,6 +6,8 @@ import { addDays, format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { ChevronRight, TriangleAlert } from "lucide-react";
 import api from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { isEmployee } from "@/lib/account";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { formatARS } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
@@ -32,7 +34,11 @@ import {
 export default function VentasPage() {
   useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const router = useRouter();
+  const { appUser } = useAuth();
   const today = businessToday();
+  // Un empleado trabaja sobre hoy y ayer (core/access.assert_staff_day).
+  const yesterday = format(addDays(parseISO(today), -1), "yyyy-MM-dd");
+  const employee = isEmployee(appUser);
   const [day, setDay] = useState(today);
   const [summary, setSummary] = useState<DaySummary | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -85,6 +91,7 @@ export default function VentasPage() {
         <DayPill label={pillLabel}
           onPrev={() => setDay(format(addDays(date, -1), "yyyy-MM-dd"))}
           onNext={() => setDay(format(addDays(date, 1), "yyyy-MM-dd"))}
+          prevDisabled={employee && day <= yesterday}
           nextDisabled={day >= today} />
       </div>
 

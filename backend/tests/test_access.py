@@ -53,3 +53,19 @@ async def test_get_actor_loads_the_tenant_kind(db):
     # El tenant queda cargado: un UserOut posterior no dispara lazy load.
     assert actor.user.tenant.name == "Rotisería"
     assert await get_actor({"uid": "nadie"}, db) is None
+
+
+def test_employees_work_on_today_and_yesterday_only(monkeypatch):
+    from datetime import date
+
+    from app.core import access
+
+    monkeypatch.setattr(access, "business_today", lambda: date(2026, 10, 10))
+    employee = _actor("employee")
+    access.assert_staff_day(employee, date(2026, 10, 10))
+    access.assert_staff_day(employee, date(2026, 10, 9))
+    with pytest.raises(HTTPException) as exc:
+        access.assert_staff_day(employee, date(2026, 10, 8))
+    assert exc.value.status_code == 403
+    # El dueño no tiene ventana.
+    access.assert_staff_day(_actor(UserRole.admin), date(2025, 1, 1))

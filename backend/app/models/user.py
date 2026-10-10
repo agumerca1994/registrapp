@@ -9,6 +9,10 @@ from app.core.database import Base
 class UserRole(str, enum.Enum):
     admin = "admin"
     member = "member"
+    # Sólo en un negocio: carga ventas y stock, no ve resultados, gastos ni
+    # sueldos (ver core/access.py). Quien se suma a un negocio con el código
+    # entra así; el dueño lo puede hacer socio (`member`).
+    employee = "employee"
 
 
 class User(Base):
@@ -65,6 +69,10 @@ class User(Base):
 
     @property
     def tenant_code(self) -> str | None:
+        # El código es la credencial para sumarse: un empleado no lo ve, así
+        # no puede sumar a otros (que entrarían con su mismo acceso o más).
+        if self.role == UserRole.employee:
+            return None
         return self.tenant.code if self.tenant else None
 
     @property

@@ -62,6 +62,13 @@ export default defineConfig({
       testMatch: /business-flows\.spec\.ts/,
       dependencies: ["setup"],
     },
+    // Un EMPLEADO del negocio: qué ve y qué le niega el backend.
+    {
+      name: "business-employee",
+      use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/employee.json" },
+      testMatch: /business-employee\.spec\.ts/,
+      dependencies: ["setup"],
+    },
     // Los visuales van últimos. Dependen de los otros dos a propósito: si un
     // flujo falla, sacar capturas encima de datos a medio borrar no dice nada.
     {

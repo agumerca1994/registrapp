@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.access import Actor, get_staff_user
+from app.core.access import Actor, assert_staff_day, get_staff_user
 from app.core.database import get_db
 from app.schemas.business import (
     StockCountsIn, StockLevelOut, StockMovementIn, StockMovementOut,
@@ -29,7 +29,11 @@ async def list_movements(
     actor: Actor = Depends(get_staff_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await stock_service.movements(db, actor.user.tenant_id, product_id, limit)
+    moves = await stock_service.movements(db, actor.user.tenant_id, product_id, limit)
+    if actor.is_employee:
+        # Un empleado ve las cantidades, no lo que costó la mercadería.
+        return [StockMovementOut.model_validate(m).model_copy(update={"unit_cost": None}) for m in moves]
+    return moves
 
 
 @router.post("/movements", response_model=StockMovementOut, status_code=status.HTTP_201_CREATED)
@@ -38,11 +42,13 @@ async def create_movement(
     actor: Actor = Depends(get_staff_user),
     db: AsyncSession = Depends(get_db),
 ):
+    assert_staff_day(actor, body.movement_date)
     tenant_id = actor.user.tenant_id
     await sales_service.lock_tenant(db, tenant_id)
     movement = await stock_service.record_movement(
         db, tenant_id=tenant_id, user_id=actor.user.id, product_id=body.product_id, kind=body.kind,
-        qty=body.qty, movement_date=body.movement_date, unit_cost=body.unit_cost, notes=body.notes,
+        qty=body.qty, movement_date=body.movement_date, notes=body.notes,
+        unit_cost=None if actor.is_employee else body.unit_cost,
     )
     await db.commit()
     return movement
@@ -56,6 +62,7 @@ async def record_counts(
 ):
     """Varios conteos de una vez ("quedan 5 coca, 2 tartas"): un ajuste por
     producto que no coincida con el libro. Los que coinciden no generan nada."""
+    assert_staff_day(actor, body.movement_date)
     tenant_id = actor.user.tenant_id
     await sales_service.lock_tenant(db, tenant_id)
     created = []
@@ -76,5 +83,11 @@ async def delete_movement(
     actor: Actor = Depends(get_staff_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if actor.is_employee:
+        from app.models.business import StockMovement
+
+        movement = await db.get(StockMovement, movement_id)
+        if movement is not None and movement.tenant_id == actor.user.tenant_id:
+            assert_staff_day(actor, movement.movement_date)
     await stock_service.delete_manual_movement(db, actor.user.tenant_id, movement_id)
     await db.commit()

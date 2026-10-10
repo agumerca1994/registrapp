@@ -1,4 +1,5 @@
 import logging
+from typing import Literal
 import secrets
 import string
 from datetime import datetime, timedelta
@@ -185,10 +186,14 @@ async def join_tenant(
     tenant = await db.scalar(select(Tenant).where(Tenant.code == body.tenant_code.strip().upper()))
     if not tenant:
         raise HTTPException(status_code=404, detail="Codigo de hogar incorrecto")
+    # A un negocio se entra como empleado: el código circula por el mostrador,
+    # y quien lo usa no tiene por qué ver los números. El dueño lo hace socio
+    # (PATCH /auth/members/{id}/role).
+    role = UserRole.employee if tenant.kind == TENANT_KIND_BUSINESS else UserRole.member
 
     if existing:
         existing.tenant_id = tenant.id
-        existing.role = UserRole.member
+        existing.role = role
         await db.commit()
         return await db.scalar(
             select(User).options(selectinload(User.tenant)).where(User.id == existing.id)
@@ -205,7 +210,7 @@ async def join_tenant(
             body.display_name or firebase_user.get("name"),
         ),
         phone_number=body.phone_number,
-        role=UserRole.member,
+        role=role,
         whatsapp_gate_pending=True,
     )
     if body.alias:
@@ -608,10 +613,54 @@ async def leave_household(
             .where(User.tenant_id == user.tenant_id, User.id != user.id)
             .order_by(User.created_at)
         )).all()
-        if other:
-            other[0].role = UserRole.admin
+        # El nuevo admin es el socio más antiguo, nunca un empleado: heredaría
+        # todo lo que su rol no le deja ver. Si sólo quedan empleados, primero
+        # hay que hacer socio a alguien.
+        heir = next((u for u in other if u.role != UserRole.employee), None)
+        if other and heir is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Sos el único dueño o socio: antes de irte, hacé socio a alguien.",
+            )
+        if heir is not None:
+            heir.role = UserRole.admin
     await _move_to_new_solo_tenant(user, db)
     await db.commit()
+
+
+class MemberRoleBody(BaseModel):
+    role: Literal["member", "employee"]
+
+
+@router.patch("/members/{member_id}/role", response_model=UserOut, dependencies=[Depends(deny_employee)])
+async def set_member_role(
+    member_id: int,
+    body: MemberRoleBody,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Socio o empleado, en un negocio. Lo cambia sólo el dueño (admin), nunca
+    sobre sí mismo ni sobre otro admin."""
+    user = await db.scalar(
+        select(User).options(selectinload(User.tenant)).where(User.firebase_uid == firebase_user["uid"])
+    )
+    if not user or user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Sólo el dueño puede cambiar roles")
+    if user.tenant.kind != TENANT_KIND_BUSINESS:
+        raise HTTPException(status_code=400, detail="Los empleados son sólo para negocios")
+    if member_id == user.id:
+        raise HTTPException(status_code=400, detail="No podés cambiar tu propio rol")
+    target = await db.scalar(
+        select(User).options(selectinload(User.tenant))
+        .where(User.id == member_id, User.tenant_id == user.tenant_id)
+    )
+    if not target:
+        raise HTTPException(status_code=404, detail="Miembro no encontrado")
+    if target.role == UserRole.admin:
+        raise HTTPException(status_code=400, detail="No se le cambia el rol al dueño")
+    target.role = UserRole(body.role)
+    await db.commit()
+    return await db.scalar(select(User).options(selectinload(User.tenant)).where(User.id == target.id))
 
 
 # ── Auto-login de los links del bot de WhatsApp ──────────────────────────────

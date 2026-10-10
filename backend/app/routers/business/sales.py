@@ -3,7 +3,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.access import Actor, get_owner_user, get_staff_user
+from app.core.access import Actor, assert_staff_day, get_owner_user, get_staff_user
 from app.core.database import get_db
 from app.schemas.business import CloseIn, DayBrief, DaySummary, SaleIn, SaleOut
 from app.services import analytics
@@ -20,6 +20,7 @@ async def create_sale(
     actor: Actor = Depends(get_staff_user),
     db: AsyncSession = Depends(get_db),
 ):
+    assert_staff_day(actor, body.sale_date)
     sale, _created = await sales_service.create_ticket(
         db, tenant_id=actor.user.tenant_id, user_id=actor.user.id, sale_date=body.sale_date,
         lines=body.lines, payments=body.payments, notes=body.notes, client_ref=body.client_ref,
@@ -36,6 +37,8 @@ async def update_sale(
     db: AsyncSession = Depends(get_db),
 ):
     sale = await sales_service.get_ticket(db, actor.user.tenant_id, sale_id)
+    assert_staff_day(actor, sale.sale_date)
+    assert_staff_day(actor, body.sale_date)
     await sales_service.update_ticket(
         db, sale, user_id=actor.user.id, sale_date=body.sale_date,
         lines=body.lines, payments=body.payments, notes=body.notes,
@@ -51,6 +54,7 @@ async def delete_sale(
     db: AsyncSession = Depends(get_db),
 ):
     sale = await sales_service.get_ticket(db, actor.user.tenant_id, sale_id)
+    assert_staff_day(actor, sale.sale_date)
     await sales_service.delete_ticket(db, sale, user_id=actor.user.id)
     await db.commit()
 
@@ -61,6 +65,7 @@ async def day_summary(
     actor: Actor = Depends(get_staff_user),
     db: AsyncSession = Depends(get_db),
 ):
+    assert_staff_day(actor, day)
     return await sales_service.day_summary(db, actor.user.tenant_id, day)
 
 
@@ -71,9 +76,11 @@ async def close_day(
     actor: Actor = Depends(get_staff_user),
     db: AsyncSession = Depends(get_db),
 ):
+    assert_staff_day(actor, day)
     tenant_id = actor.user.tenant_id
     await sales_service.upsert_close(
-        db, tenant_id=tenant_id, user_id=actor.user.id, day=day, counted=body.counted, notes=body.notes,
+        db, tenant_id=tenant_id, user_id=actor.user.id, day=day, counted=body.counted,
+        units=body.units, notes=body.notes,
     )
     await db.commit()
     return await sales_service.day_summary(db, tenant_id, day)
@@ -85,6 +92,7 @@ async def delete_close(
     actor: Actor = Depends(get_staff_user),
     db: AsyncSession = Depends(get_db),
 ):
+    assert_staff_day(actor, day)
     await sales_service.delete_close(db, tenant_id=actor.user.tenant_id, user_id=actor.user.id, day=day)
     await db.commit()
 

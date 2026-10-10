@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, MoreVertical } from "lucide-react";
 import api from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { isEmployee } from "@/lib/account";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { formatARS } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
@@ -27,6 +29,10 @@ const qty = (n: number | string) => Number(n).toLocaleString("es-AR", { maximumF
  */
 export default function ProductosPage() {
   useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
+  // Un empleado lleva el stock (producción, conteos, merma) pero no arma el
+  // catálogo: crear y editar productos es del dueño y los socios.
+  const { appUser } = useAuth();
+  const canEdit = !isEmployee(appUser);
   const [products, setProducts] = useState<Product[]>([]);
   const [levels, setLevels] = useState<Record<number, StockLevel>>({});
   const [loading, setLoading] = useState(true);
@@ -84,9 +90,11 @@ export default function ProductosPage() {
       ) : active.length === 0 ? (
         <Card className="p-4 md:p-5 space-y-3">
           <p className="text-sm text-muted-foreground">
-            Todavía no cargaste productos. Sin productos igual podés vender: en Ventas se pone el total.
+            {canEdit
+              ? "Todavía no cargaste productos. Sin productos igual podés vender: en Ventas se pone el total."
+              : "Todavía no hay productos cargados. Los carga el dueño o un socio."}
           </p>
-          <Button onClick={() => setCreating(true)}>Agregar producto</Button>
+          {canEdit && <Button onClick={() => setCreating(true)}>Agregar producto</Button>}
         </Card>
       ) : (
         <Card className="p-0 divide-y overflow-hidden">
@@ -124,10 +132,14 @@ export default function ProductosPage() {
                         Movimientos
                       </DropdownMenu.Item>
                     )}
-                    <DropdownMenu.Separator className="h-px bg-border my-1" />
-                    <DropdownMenu.Item className={MENU_ITEM} onSelect={() => setEditing(p)}>
-                      Editar
-                    </DropdownMenu.Item>
+                    {canEdit && (
+                      <>
+                        <DropdownMenu.Separator className="h-px bg-border my-1" />
+                        <DropdownMenu.Item className={MENU_ITEM} onSelect={() => setEditing(p)}>
+                          Editar
+                        </DropdownMenu.Item>
+                      </>
+                    )}
                   </DropdownMenu.Content>
                 </DropdownMenu.Portal>
               </DropdownMenu.Root>
@@ -136,7 +148,7 @@ export default function ProductosPage() {
         </Card>
       )}
 
-      {archived.length > 0 && (
+      {canEdit && archived.length > 0 && (
         <div className="space-y-2">
           <button onClick={() => setShowArchived(v => !v)}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -158,7 +170,7 @@ export default function ProductosPage() {
         </div>
       )}
 
-      <Fab label="Nuevo producto" onClick={() => setCreating(true)} />
+      {canEdit && <Fab label="Nuevo producto" onClick={() => setCreating(true)} />}
 
       {(creating || editing) && (
         <ProductFormModal product={editing ?? undefined} onSaved={onSaved} onClose={close} />

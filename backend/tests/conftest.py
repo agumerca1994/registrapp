@@ -48,6 +48,7 @@ from app.models.currency_operation import CurrencyOperation  # noqa: E402
 from app.models.mortgage import MortgageLoan  # noqa: E402
 from app.models.payment_reminder import PaymentReminder  # noqa: E402
 from app.models.business import Payee, Product, Sale, SaleLine, SalePayment, StockMovement  # noqa: E402
+from app.models.contact import SharedContact  # noqa: E402
 from app.models.reconciliation import (  # noqa: E402
     CaptureEvent,
     CaptureRule,
@@ -91,6 +92,8 @@ _TABLES = [
     SaleLine.__table__,
     SalePayment.__table__,
     StockMovement.__table__,
+    # La agenda: el alta (register/join) vincula contactos al usuario nuevo.
+    SharedContact.__table__,
 ]
 
 

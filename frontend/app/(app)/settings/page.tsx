@@ -14,7 +14,7 @@ import McpConnectorSection from "@/components/McpConnectorSection";
 import { IosShortcutSection } from "@/components/IosShortcutSection";
 import { features } from "@/lib/features";
 import { resetAllTours } from "@/components/ProductTour";
-import { isBusiness, terms } from "@/lib/account";
+import { isBusiness, isEmployee, roleLabel, terms } from "@/lib/account";
 import { WHATS_NEW_KEY } from "@/components/WhatsNewCarousel";
 import { Card } from "@/components/ui/card";
 import { FIELD, SelectField } from "@/components/ui/form";
@@ -29,9 +29,7 @@ interface Member {
   created_at: string;
 }
 
-const ROLE_LABELS: Record<string, string> = { admin: "Admin", member: "Miembro" };
-// En un negocio el admin es quien lo dio de alta y los demás son socios.
-const BUSINESS_ROLE_LABELS: Record<string, string> = { admin: "Dueño", member: "Socio" };
+
 const APP_TOUR_IDS = ["dashboard-intro", "income-intro", "expenses-intro"];
 
 function buildHouseholdInviteMessage(name: string, code: string, appUrl: string, business = false): string {
@@ -300,16 +298,27 @@ export default function SettingsPage() {
   // Un negocio no tiene divisas, gastos compartidos (los avisos de hoy son de
   // eso) ni la invitación a crear un hogar propio.
   const business = isBusiness(appUser);
+  const employee = isEmployee(appUser);
   const t = terms(appUser);
-  const roleLabels = business ? BUSINESS_ROLE_LABELS : ROLE_LABELS;
   const [members, setMembers] = useState<Member[]>([]);
   const [copied, setCopied] = useState(false);
   const [confirmKickId, setConfirmKickId] = useState<number | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const loadMembers = () => { api.get("/auth/members").then(r => setMembers(r.data)); };
-  useEffect(loadMembers, []);
+  // Un empleado no ve el organigrama (el backend se lo niega con 403).
+  const loadMembers = () => { if (!employee) api.get("/auth/members").then(r => setMembers(r.data)); };
+  useEffect(loadMembers, [employee]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const setRole = async (memberId: number, role: "member" | "employee") => {
+    setActionLoading(true);
+    try {
+      await api.patch(`/auth/members/${memberId}/role`, { role });
+      loadMembers();
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const copyId = () => {
     navigator.clipboard.writeText(appUser?.tenant_code ?? String(appUser?.tenant_id));
@@ -355,11 +364,12 @@ export default function SettingsPage() {
 
       {!business && <InviteFriendSection />}
 
+      {!employee && (
       <Card className="p-6 space-y-4">
         <h3 className="font-semibold text-foreground">{t.YourSpace}</h3>
         <p className="text-sm text-muted-foreground">
           {business
-            ? "Sumá a tus socios compartiendo este código."
+            ? "Quien se suma con este código entra como empleado: carga ventas y stock, sin ver los números del negocio. Desde acá lo podés hacer socio."
             : "Sumá miembros a tu hogar compartiendo este código."}
         </p>
         <div className="flex items-center gap-3 flex-wrap">
@@ -384,15 +394,25 @@ export default function SettingsPage() {
           {members.map(m => (
             <div key={m.id} className="flex items-center justify-between py-3 gap-3">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-foreground">
+                {/* `truncate`: un mail largo como nombre no corta en espacios y se
+                    metía debajo de las acciones de la derecha. */}
+                <p className="text-sm font-medium text-foreground truncate">
                   {m.display_name || m.email}
                   {m.id === appUser?.id && <span className="ml-2 text-xs text-muted-foreground">(vos)</span>}
                 </p>
                 <p className="text-xs text-muted-foreground truncate">{m.email}</p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                {business && appUser?.role === "admin" && m.role !== "admin" && (
+                  <button
+                    onClick={() => setRole(m.id, m.role === "employee" ? "member" : "employee")}
+                    disabled={actionLoading}
+                    className="text-xs text-primary font-medium hover:underline disabled:opacity-50">
+                    {m.role === "employee" ? "Hacer socio" : "Pasar a empleado"}
+                  </button>
+                )}
                 <Chip tone="neutral">
-                  {roleLabels[m.role] ?? m.role}
+                  {roleLabel(appUser, m.role)}
                 </Chip>
                 {appUser?.role === "admin" && m.id !== appUser?.id && (
                   confirmKickId === m.id ? (
@@ -438,6 +458,7 @@ export default function SettingsPage() {
         </div>
         </div>
       </Card>
+      )}
 
       {!business && <PushNotificationsSection />}
 
@@ -446,7 +467,8 @@ export default function SettingsPage() {
       {/* En pausa detrás de un flag: ver lib/features.ts. */}
       {features.iosShortcut && <IosShortcutSection />}
 
-      <McpConnectorSection />
+      {/* El conector lee todo el negocio: justo lo que un empleado no ve. */}
+      {!employee && <McpConnectorSection />}
 
       {!business && <CurrencySettingsSection />}
 
@@ -470,7 +492,7 @@ export default function SettingsPage() {
         <h3 className="font-semibold text-foreground">Tu cuenta</h3>
         <p className="text-sm text-foreground">{appUser?.display_name || "—"}</p>
         <p className="text-sm text-muted-foreground">{appUser?.email}</p>
-        <p className="text-xs text-muted-foreground">Rol: {roleLabels[appUser?.role ?? ""] ?? appUser?.role}</p>
+        <p className="text-xs text-muted-foreground">Rol: {roleLabel(appUser, appUser?.role ?? "")}</p>
       </Card>
     </div>
   );

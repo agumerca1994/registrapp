@@ -142,8 +142,14 @@ async def token_holder_valid(db: AsyncSession, row: McpToken) -> bool:
     con un PAT sin vencimiento. Configuración tampoco se los mostraba para
     revocarlos, porque lista por el hogar actual. Cuesta una consulta por PK.
     """
-    tenant_id = await db.scalar(select(User.tenant_id).where(User.id == row.user_id))
-    return tenant_id is not None and tenant_id == row.tenant_id
+    holder = (await db.execute(
+        select(User.tenant_id, User.role).where(User.id == row.user_id)
+    )).first()
+    if holder is None or holder.tenant_id != row.tenant_id:
+        return False
+    # Un empleado de un negocio no usa el conector: lee todo el negocio, que es
+    # justo lo que su rol no ve. Pasarlo a empleado mata sus tokens en el acto.
+    return getattr(holder.role, "value", holder.role) != "employee"
 
 
 async def revoke_grant(db: AsyncSession, grant_id: str, reason: str) -> int:

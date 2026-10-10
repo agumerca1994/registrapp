@@ -17,7 +17,7 @@ import { WhatsNewCarousel } from "@/components/WhatsNewCarousel";
 import { syncPushToken } from "@/lib/push";
 import { ensureServiceWorker } from "@/lib/sw";
 import { stashPendingRoute, takePendingRoute } from "@/lib/pending-route";
-import { isBusiness, routeAllowed } from "@/lib/account";
+import { homeFor, isBusiness, isEmployee, routeAllowed } from "@/lib/account";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { firebaseUser, appUser, loading } = useAuth();
@@ -78,7 +78,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // que no a todo. Las rutas de cada tipo están en lib/account.ts.
   useEffect(() => {
     if (!appUser || appUser.whatsapp_gate_pending || !pathname) return;
-    if (!routeAllowed(pathname, appUser)) router.replace("/dashboard");
+    if (!routeAllowed(pathname, appUser)) router.replace(homeFor(appUser));
   }, [appUser, pathname, router]);
 
   // Y al volver con sesión, retomarlo. Se consume una sola vez.
@@ -126,7 +126,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     // Wraps every protected screen: hiding amounts on one and not the others
     // would be worse than not hiding them at all.
     <PrivacyProvider>
-      {isBusiness(appUser) ? (
+      {isEmployee(appUser) ? (
+        // Un empleado no ve tarjetas ni resúmenes: sin el provider, el puntito
+        // lee su valor por defecto y no se le pide al backend algo que le
+        // contestaría 403 (y que quedaría en AppLog como error).
+        shell
+      ) : isBusiness(appUser) ? (
         // Un negocio no tiene gastos compartidos ni (todavía) un carrusel de
         // novedades propio. Sin el provider de compartidos, el puntito de la
         // navegación lee su valor por defecto: cero, sin pedirle nada al backend.

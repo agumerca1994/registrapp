@@ -14,7 +14,7 @@ import {
   Home, LogOut, Settings, MoreHorizontal, Users2, CreditCard, CalendarDays,
   CircleUserRound, ArrowLeftRight, Contact, ShoppingBag, Package,
 } from "lucide-react";
-import { isBusiness } from "@/lib/account";
+import { isBusiness, isEmployee } from "@/lib/account";
 import pkg from "../../package.json";
 
 interface NavItem {
@@ -60,14 +60,23 @@ const BUSINESS_NAV: NavItem[] = [
 ];
 const BUSINESS_TAB_HREFS = ["/dashboard", "/ventas", "/expenses", "/productos"];
 
+// Un empleado ve sólo lo que carga: ventas y productos (lib/account.ts).
+const EMPLOYEE_NAV: NavItem[] = [
+  { href: "/ventas", label: "Ventas", icon: ShoppingBag },
+  { href: "/productos", label: "Productos", icon: Package },
+  { href: "/settings", label: "Configuración", icon: Settings },
+];
+const EMPLOYEE_TAB_HREFS = ["/ventas", "/productos", "/settings"];
+
 // Un hook y no constantes de módulo: qué se muestra depende del usuario.
 // Las tres superficies (sidebar, tab bar, hoja "Más") lo llaman, así no
 // pueden discrepar.
 function useNav() {
   const { appUser } = useAuth();
   const business = isBusiness(appUser);
-  const items = business ? BUSINESS_NAV : nav;
-  const tabs = business ? BUSINESS_TAB_HREFS : MOBILE_TAB_HREFS;
+  const employee = isEmployee(appUser);
+  const items = employee ? EMPLOYEE_NAV : business ? BUSINESS_NAV : nav;
+  const tabs = employee ? EMPLOYEE_TAB_HREFS : business ? BUSINESS_TAB_HREFS : MOBILE_TAB_HREFS;
   return {
     items,
     mobileTabs: items.filter((item) => tabs.includes(item.href)),

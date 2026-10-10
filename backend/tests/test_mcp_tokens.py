@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from app.models.mcp_auth import McpToken
 from app.models.tenant import Tenant
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.services import mcp_tokens, oauth_provider
 from app.services.mcp_tokens import (
     RegistrappTokenVerifier, create_pat, create_token, token_holder_valid,
@@ -101,3 +101,16 @@ async def test_refresh_of_someone_who_left_kills_the_grant(shared_session):
     assert len(rows) == 1
     assert rows[0].revoked_at is not None
     assert rows[0].revoked_reason == "holder_moved"
+
+
+
+async def test_an_employee_cannot_use_the_connector(shared_session):
+    db = shared_session
+    old, _new, user = await _setup(db)
+    raw, _ = await create_pat(db, user_id=user.id, tenant_id=old.id, name="test", expires_in_days=None)
+    assert await RegistrappTokenVerifier().verify_token(raw) is not None
+
+    # Pasarlo a empleado mata sus tokens en el acto: el conector lee todo.
+    user.role = UserRole.employee
+    await db.flush()
+    assert await RegistrappTokenVerifier().verify_token(raw) is None
