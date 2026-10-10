@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.expense import EXPENSE_SOURCE_WHATSAPP, ExpenseCategory, ExpenseEntry
 from app.services import category_suggest
+from app.services.clock import ar_today
 from app.services.reconcile import rules as capture_rules
 from app.services.search import fold_text
 
@@ -82,7 +83,7 @@ def _parse_number(raw: str) -> Decimal | None:
 
 def parse_quick_text(text: str, today: date | None = None) -> QuickDraft | None:
     """Texto libre → borrador de gasto, o None si no hay un monto claro."""
-    today = today or date.today()
+    today = today or ar_today()
     original = text.strip()
     if not original:
         return None

@@ -297,3 +297,69 @@ async def test_category_answer_learns_merchant_rule(db):
     entries = (await db.scalars(select(ExpenseEntry).order_by(ExpenseEntry.id))).all()
     varios = await db.scalar(select(ExpenseCategory).where(ExpenseCategory.name == "Varios"))
     assert entries[-1].category_id == varios.id
+
+
+# ------------------------------------------------------ comprobantes PDF ---
+
+def _pdf_in(wa_id="P1"):
+    return InboundMessage(phone="549383", wa_id=wa_id, kind="pdf")
+
+
+def _serve_pdf_text(monkeypatch, text):
+    """Saltea Evolution y pdfplumber: el bot recibe directo el texto del PDF."""
+    from app.services import whatsapp
+    from app.services.statement_parsers import common
+
+    async def _download(*_args, **_kwargs):
+        return b"%PDF-fake"
+
+    monkeypatch.setattr(whatsapp, "download_media_base64", _download)
+    monkeypatch.setattr(common, "extract_pages_text", lambda _src: [text])
+
+
+async def test_incoming_transfer_receipt_is_not_an_expense(db, monkeypatch):
+    from tests.test_transfer_receipt import MP_INCOMING
+
+    _serve_pdf_text(monkeypatch, MP_INCOMING)
+    replies = await wa_bot.handle(db, USER, _pdf_in())
+
+    assert "recibiste" in replies[0]
+    assert "Juan Perez" in replies[0]
+    assert (await db.scalar(select(ExpenseEntry))) is None
+    event = await db.scalar(select(CaptureEvent))
+    assert event.bank_detected == "transferencia_recibida"
+
+
+async def test_outgoing_transfer_receipt_still_becomes_an_expense(db, monkeypatch):
+    from tests.test_transfer_receipt import BANK_RECEIPT
+
+    await _cat(db, "MARIA LOPEZ")
+    _serve_pdf_text(monkeypatch, BANK_RECEIPT)
+    replies = await wa_bot.handle(db, USER, _pdf_in())
+
+    assert "✅" in replies[0]
+    entry = await db.scalar(select(ExpenseEntry))
+    assert entry.amount == Decimal("250000.50")
+    assert entry.payment_method == "transferencia"
+
+
+async def test_undo_goes_through_the_expenses_service(db, monkeypatch):
+    # Lo que cuelga de un gasto (split, hipoteca, y con el negocio el stock de
+    # una compra) se suelta en `delete_expense`; un `db.delete` directo lo
+    # dejaba colgando.
+    from app.services import expenses as expenses_service
+
+    calls = []
+    real_delete = expenses_service.delete_expense
+
+    async def _spy(db_, entry, tenant_id):
+        calls.append(entry.id)
+        await real_delete(db_, entry, tenant_id)
+
+    monkeypatch.setattr(expenses_service, "delete_expense", _spy)
+    await _cat(db, "Kiosco")
+    await wa_bot.handle(db, USER, _in("5000 kiosco", wa_id="U1"))
+    entry_id = (await db.scalar(select(ExpenseEntry))).id
+
+    await wa_bot.handle(db, USER, _in("deshacer", wa_id="U2"))
+    assert calls == [entry_id]

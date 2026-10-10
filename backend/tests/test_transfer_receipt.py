@@ -110,3 +110,60 @@ def test_amount_line_without_dollar_sign():
     assert parse_transfer_receipt([
         "Compraste en Kiosco\nCBU 0110599520000012345678\nOperacion 123456"
     ]) is None
+
+
+# ------------------------------------------------- plata que entró ---
+# "Comprobante de transferencia" lo imprimen las dos direcciones: sin mirar la
+# dirección, lo que te pagaron se guardaba como un gasto.
+
+MP_INCOMING = """Comprobante de transferencia
+Recibiste
+$ 20.000
+5 de octubre de 2026 a las 10:15 hs
+De
+Juan Perez
+CVU: 0000003100000000000002
+Para
+Agustin Mercado
+CVU: 0000003100000000000001
+Número de operación
+987654321
+"""
+
+BANK_INCOMING = """BANCO EJEMPLO S.A.
+Comprobante de Transferencia
+Transferencia recibida
+Fecha: 06/10/2026
+Importe: $ 48.500,00
+Origen: PEDRO GOMEZ
+CBU: 0110599520000012345678
+"""
+
+
+def test_incoming_receipts_are_marked_in_with_the_sender():
+    r = parse_transfer_receipt([MP_INCOMING])
+    assert r is not None
+    assert r.direction == "in"
+    assert r.amount == Decimal("20000")
+    # La contraparte es quien mandó la plata, no el "Para" (que es el usuario).
+    assert r.counterparty == "Juan Perez"
+
+    r = parse_transfer_receipt([BANK_INCOMING])
+    assert r is not None
+    assert r.direction == "in"
+    assert r.amount == Decimal("48500")
+    assert r.counterparty == "PEDRO GOMEZ"
+
+
+def test_incoming_phrase_alone_is_recognized():
+    # Sin "comprobante de transferencia" ni verbos de pago: antes no era un
+    # comprobante y caía al "no sé leer este resumen".
+    r = parse_transfer_receipt(["Te transfirieron\n$ 3.000\nTransferencia\n07/10/2026"])
+    assert r is not None
+    assert r.direction == "in"
+    assert r.kind == "transferencia"
+
+
+def test_outgoing_receipts_stay_out():
+    assert parse_transfer_receipt([MP_RECEIPT]).direction == "out"
+    assert parse_transfer_receipt([BANK_RECEIPT]).direction == "out"

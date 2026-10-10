@@ -30,8 +30,9 @@ from app.models.expense import EXPENSE_SOURCE_WHATSAPP, ExpenseCategory, Expense
 from app.models.reconciliation import ACTION_PROPOSED, ReconciliationAction
 from app.models.user import User
 from app.models.wa_message import WaMessage
-from app.services import quick_capture, reconcile as reconcile_service
+from app.services import expenses as expenses_service, quick_capture, reconcile as reconcile_service
 from app.services.category_suggest import invalidate as invalidate_suggest
+from app.services.clock import ar_today
 from app.services.currency import get_or_create_usd_category
 from app.services.reconcile.engine import record_event
 from app.services.whatsapp import _money
@@ -293,6 +294,23 @@ async def _handle_pdf(db: AsyncSession, user: User, inbound: InboundMessage) -> 
             from app.services.transfer_receipt import diagnose
 
             logger.warning("WA receipt sin match: %s", diagnose(pages))
+        if receipt is not None and receipt.direction == "in":
+            # Plata que entró: guardarla como gasto descuadraba el mes dos
+            # veces (un ingreso que falta y un egreso que sobra).
+            await record_event(
+                db, tenant_id=user.tenant_id, user_id=user.id, channel="whatsapp",
+                input_kind="pdf", outcome="parsed_code", bank_detected="transferencia_recibida",
+            )
+            who = f" de {receipt.counterparty}" if receipt.counterparty else ""
+            reply = (
+                f"📥 Es el comprobante de una transferencia que *recibiste* "
+                f"({_fmt_amount(receipt)}{who}). No lo cargo como gasto: "
+                "acá sólo registro lo que pagaste."
+            )
+            _remember(db, user.id, "in", "pdf", wa_id=inbound.wa_id)
+            _remember(db, user.id, "out", "text", text=reply)
+            await db.commit()
+            return [reply]
         if receipt is not None:
             await record_event(
                 db, tenant_id=user.tenant_id, user_id=user.id, channel="whatsapp",
@@ -301,7 +319,7 @@ async def _handle_pdf(db: AsyncSession, user: User, inbound: InboundMessage) -> 
             draft = quick_capture.QuickDraft(
                 amount=receipt.amount,
                 currency=receipt.currency,
-                expense_date=receipt.receipt_date or datetime.now().date(),
+                expense_date=receipt.receipt_date or ar_today(),
                 term=receipt.counterparty or "Transferencia",
                 legacy=False,
             )
@@ -588,7 +606,7 @@ async def _capture_draft(
     await db.commit()
 
     suffix = " (sugerida)" if pick.source in ("suggest", "rule") else ""
-    when = "" if entry.expense_date == datetime.now().date() else f" · {entry.expense_date.strftime('%d/%m')}"
+    when = "" if entry.expense_date == ar_today() else f" · {entry.expense_date.strftime('%d/%m')}"
     base = f"✅ {_fmt_amount(draft)} · {entry.description} — {pick.category_name}{suffix}{when}"
     if pick.source in ("suggest", "rule"):
         reply = _offer_description(db, user, entry, base)
@@ -661,7 +679,10 @@ async def _do_undo(db: AsyncSession, user: User, inbound: InboundMessage) -> lis
         await db.commit()
         return ["Ese gasto ya no está (o no lo creé yo)."]
     desc, amount, currency = entry.description, entry.amount, entry.currency
-    await db.delete(entry)
+    # Por el servicio y no con `db.delete`: lo que cuelga del gasto (hoy un
+    # split o la hipoteca, mañana el stock de una compra) se suelta igual que
+    # cuando se borra desde la app.
+    await expenses_service.delete_expense(db, entry, user.tenant_id)
     ref.ref_type = None
     ref.ref_id = None
     _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)

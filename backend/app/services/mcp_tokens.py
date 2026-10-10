@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.models.mcp_auth import McpAuthCode, McpOAuthAuthorization, McpOAuthClient, McpToken
+from app.models.user import User
 
 READ_SCOPE = "registrapp:read"
 
@@ -131,6 +132,20 @@ async def load_token(db: AsyncSession, raw: str, kinds: tuple[str, ...]) -> McpT
     return row
 
 
+async def token_holder_valid(db: AsyncSession, row: McpToken) -> bool:
+    """El titular del token sigue siendo de ese hogar.
+
+    El token lleva grabado el `tenant_id` del momento en que se creó, y sacar a
+    alguien del hogar (`remove_member`) o irse (`leave_household`) lo mueve de
+    tenant sin tocar sus tokens. Sin este chequeo, su conector seguía leyendo y
+    escribiendo el hogar viejo: 30 días con un refresh que rota, y para siempre
+    con un PAT sin vencimiento. Configuración tampoco se los mostraba para
+    revocarlos, porque lista por el hogar actual. Cuesta una consulta por PK.
+    """
+    tenant_id = await db.scalar(select(User.tenant_id).where(User.id == row.user_id))
+    return tenant_id is not None and tenant_id == row.tenant_id
+
+
 async def revoke_grant(db: AsyncSession, grant_id: str, reason: str) -> int:
     """Kill an access token, its refresh token and every rotation of it."""
     result = await db.execute(
@@ -161,6 +176,9 @@ class RegistrappTokenVerifier(TokenVerifier):
             # must not work here — this is the confused-deputy defence, and it's
             # the third place it gets enforced.
             if row.resource and row.resource != settings.MCP_RESOURCE_URL:
+                return None
+
+            if not await token_holder_valid(db, row):
                 return None
 
             now = utcnow()

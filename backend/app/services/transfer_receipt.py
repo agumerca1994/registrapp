@@ -27,6 +27,15 @@ from app.services.statement_parsers.common import MONTHS
 # no es una transferencia y el medio de pago no debe decir que lo es.
 _A_TRANSFER = ("transferiste", "enviaste", "pago enviado", "le enviaste", "transferencia enviada", "comprobante de transferencia")
 _A_PURCHASE = ("compraste", "pagaste", "compra realizada", "pago realizado")
+# La plata que ENTRA. "Comprobante de transferencia" lo imprimen las dos
+# direcciones, así que sin esto un comprobante de algo que te pagaron se
+# guardaba como gasto. Gana siempre que aparezca: ante la duda, no es un gasto
+# (el usuario lo puede escribir), y un ingreso cargado como egreso descuadra
+# el mes dos veces.
+_A_INCOMING = (
+    "recibiste", "te transfirieron", "te enviaron", "transferencia recibida",
+    "dinero recibido", "ingreso de dinero", "cobraste",
+)
 _B_HINTS = ("transferencia", "cbu", "cvu", "alias", "operacion", "pago", "monto", "comprobante")
 
 _AMOUNT_RE = re.compile(r"\$\s*([\d.]{1,13}(?:,\d{1,2})?)")
@@ -50,6 +59,9 @@ _DATE_WORDS_RE = re.compile(
     r"(\d{1,2})\s+de\s+([a-záéíóú]+)(?:\s+de)?\s+(\d{4})", re.IGNORECASE
 )
 _LABELS = ("para", "destinatario", "beneficiario", "a nombre de", "titular", "nombre")
+# En un comprobante de plata que entró, la contraparte es quien la mandó: "Para"
+# ahí es el propio usuario.
+_LABELS_IN = ("de", "origen", "remitente", "ordenante", "enviado por")
 # Dígitos permitidos adentro: los nombres de comercio los traen ("Kiosco24").
 _NAME_RE = re.compile(r"^[A-Za-zÁÉÍÓÚÑáéíóúñ][A-Za-z0-9ÁÉÍÓÚÑáéíóúñ .'-]{2,59}$")
 # El otro formato de contraparte: en la misma frase de la acción
@@ -67,6 +79,7 @@ class ReceiptDraft:
     receipt_date: date | None
     counterparty: str | None
     kind: str = "transferencia"  # "transferencia" | "pago" (compra con billetera)
+    direction: str = "out"       # "out" (pagaste) | "in" (te pagaron: no es un gasto)
 
 
 def _parse_amount(raw: str) -> Decimal | None:
@@ -98,21 +111,23 @@ def _find_date(text: str) -> date | None:
     return None
 
 
-def _find_counterparty(lines: list[str], full_text: str) -> str | None:
-    m = _INLINE_PARTY_RE.search(full_text)
-    if m:
-        value = m.group(1).strip().rstrip(".")
-        if _NAME_RE.match(value):
-            return value
+def _find_counterparty(lines: list[str], full_text: str, incoming: bool = False) -> str | None:
+    if not incoming:
+        m = _INLINE_PARTY_RE.search(full_text)
+        if m:
+            value = m.group(1).strip().rstrip(".")
+            if _NAME_RE.match(value):
+                return value
+    labels = _LABELS_IN if incoming else _LABELS
     for i, line in enumerate(lines):
         folded = fold_text(line)
-        for label in _LABELS:
+        for label in labels:
             value = None
             if folded == label and i + 1 < len(lines):
                 value = lines[i + 1].strip()
             elif folded.startswith(label + ":"):
                 value = line.split(":", 1)[1].strip()
-            if value and _NAME_RE.match(value) and fold_text(value) not in _LABELS:
+            if value and _NAME_RE.match(value) and fold_text(value) not in _LABELS + _LABELS_IN:
                 return value
     return None
 
@@ -124,7 +139,8 @@ def parse_transfer_receipt(pages_text: list[str]) -> ReceiptDraft | None:
 
     is_transfer = any(h in low for h in _A_TRANSFER)
     is_purchase = any(h in low for h in _A_PURCHASE)
-    if not ((is_transfer or is_purchase) and any(h in low for h in _B_HINTS)):
+    is_incoming = any(h in low for h in _A_INCOMING)
+    if not ((is_transfer or is_purchase or is_incoming) and any(h in low for h in _B_HINTS)):
         return None
 
     # Primero los montos con centavos en superíndice, y se tapan sus spans
@@ -159,8 +175,9 @@ def parse_transfer_receipt(pages_text: list[str]) -> ReceiptDraft | None:
         amount=amount,
         currency=currency,
         receipt_date=_find_date(text),
-        counterparty=_find_counterparty(lines, text),
-        kind="transferencia" if is_transfer else "pago",
+        counterparty=_find_counterparty(lines, text, incoming=is_incoming),
+        kind="transferencia" if (is_transfer or not is_purchase) else "pago",
+        direction="in" if is_incoming else "out",
     )
 
 
@@ -173,6 +190,7 @@ def diagnose(pages_text: list[str]) -> dict:
     return {
         "a_transfer": [h for h in _A_TRANSFER if h in low],
         "a_purchase": [h for h in _A_PURCHASE if h in low],
+        "a_incoming": [h for h in _A_INCOMING if h in low],
         "b": [h for h in _B_HINTS if h in low],
         "amounts_found": amounts,
         "lines": len([ln for ln in text.split("\n") if ln.strip()]),

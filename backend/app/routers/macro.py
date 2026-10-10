@@ -3,7 +3,7 @@ import logging
 from datetime import date, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -12,7 +12,9 @@ import httpx
 from app.core.database import get_db, AsyncSessionLocal
 from app.core.firebase import get_current_user
 from app.models.macro_variable import MacroVariable
+from app.routers.internal_logs import _require_internal_key
 from app.schemas.macro_variable import MacroVariableOut
+from app.services import rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/macro", tags=["macro"])
@@ -230,11 +232,19 @@ async def list_macro(
 
 @router.post("/backfill")
 async def trigger_backfill(
+    request: Request,
     from_year: int = Query(default=2020, ge=2010, le=2030),
     from_month: int = Query(default=1, ge=1, le=12),
     firebase_user: dict = Depends(get_current_user),
 ):
-    """Bulk-upsert daily records from from_year/from_month to today."""
+    """Bulk-upsert daily records from from_year/from_month to today.
+
+    Sigue abierto a cualquier usuario porque lo usa la pantalla `/macro`, y no
+    destruye nada: trae datos oficiales. Pero la tabla es global y cada llamada
+    pega contra APIs externas hasta dos minutos, así que va con freno — por
+    usuario y por IP, los dos baldes de siempre."""
+    rate_limit.enforce_key(firebase_user.get("uid", "?"), "macro_backfill", 3, 3600)
+    rate_limit.enforce(request, "macro_backfill_ip", 6, 3600)
     count = await backfill_macro_history(from_year, from_month)
     return {"status": "ok", "records": count}
 
@@ -242,9 +252,13 @@ async def trigger_backfill(
 @router.delete("/{record_id}", status_code=204)
 async def delete_macro(
     record_id: int,
-    firebase_user: dict = Depends(get_current_user),
+    _: None = Depends(_require_internal_key),
     db: AsyncSession = Depends(get_db),
 ):
+    """Sólo con la clave interna: la tabla macro es GLOBAL (UVA, inflación,
+    dólar de todos los hogares) y antes alcanzaba con estar logueado para
+    borrarle una fila a todo el mundo. La app no lo usa; es una herramienta
+    de ops."""
     record = await db.get(MacroVariable, record_id)
     if not record:
         raise HTTPException(status_code=404, detail="Registro no encontrado")

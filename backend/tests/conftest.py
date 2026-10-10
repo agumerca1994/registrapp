@@ -39,6 +39,9 @@ from app.models.shared_expense import SharedExpense, SharedExpenseSplit  # noqa:
 from app.models.mortgage import MortgageRecord  # noqa: E402
 from app.models.wa_message import WaMessage  # noqa: E402
 from app.models.auth_link_token import AuthLinkToken  # noqa: E402
+from app.models.tenant import Tenant  # noqa: E402
+from app.models.user import User  # noqa: E402
+from app.models.mcp_auth import McpToken  # noqa: E402
 from app.models.reconciliation import (  # noqa: E402
     CaptureEvent,
     CaptureRule,
@@ -64,6 +67,9 @@ _TABLES = [
     CaptureEvent.__table__,
     WaMessage.__table__,
     AuthLinkToken.__table__,
+    Tenant.__table__,
+    User.__table__,
+    McpToken.__table__,
 ]
 
 
