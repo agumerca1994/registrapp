@@ -35,7 +35,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # no
 from app.core.database import Base  # noqa: E402
 from app.models.credit_card import CreditCard, CreditCardItem, CreditCardStatement  # noqa: E402
 from app.models.expense import ExpenseCategory, ExpenseEntry  # noqa: E402
-from app.models.shared_expense import SharedExpense  # noqa: E402
+from app.models.shared_expense import SharedExpense, SharedExpenseSplit  # noqa: E402
+from app.models.mortgage import MortgageRecord  # noqa: E402
 from app.models.wa_message import WaMessage  # noqa: E402
 from app.models.auth_link_token import AuthLinkToken  # noqa: E402
 from app.models.reconciliation import (  # noqa: E402
@@ -55,6 +56,8 @@ _TABLES = [
     CreditCardStatement.__table__,
     CreditCardItem.__table__,
     SharedExpense.__table__,  # la carga el selectinload de shared_expense en reconcile
+    SharedExpenseSplit.__table__,
+    MortgageRecord.__table__,
     ReconciliationSession.__table__,
     ReconciliationAction.__table__,
     CaptureRule.__table__,

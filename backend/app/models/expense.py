@@ -32,6 +32,7 @@ EXPENSE_SOURCE_CREDIT_CARD = "credit_card"  # ítem de resumen de tarjeta
 EXPENSE_SOURCE_SHARED_SPLIT = "shared_split"  # parte de un gasto compartido
 EXPENSE_SOURCE_IMPORT = "import"            # scripts/import_<banco>_*.py
 EXPENSE_SOURCE_MORTGAGE = "mortgage"        # cuota de hipoteca sincronizada
+EXPENSE_SOURCE_MCP = "mcp"                  # conector MCP (una IA, a pedido del usuario)
 
 EXPENSE_SOURCES = frozenset({
     EXPENSE_SOURCE_MANUAL,
@@ -43,6 +44,7 @@ EXPENSE_SOURCES = frozenset({
     EXPENSE_SOURCE_SHARED_SPLIT,
     EXPENSE_SOURCE_IMPORT,
     EXPENSE_SOURCE_MORTGAGE,
+    EXPENSE_SOURCE_MCP,
 })
 
 # Los canales por los que un humano carga un gasto de su bolsillo, en el momento.

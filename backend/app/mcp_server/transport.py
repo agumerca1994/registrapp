@@ -27,7 +27,8 @@ from app.mcp_server.instance import mcp
 # the decorators run at import time. Nothing else uses these names.
 from app.mcp_server import (  # noqa: E402,F401
     resources, tools_cards_write, tools_expenses, tools_forecast, tools_fx,
-    tools_income, tools_income_write, tools_meta, tools_reconcile, tools_shared,
+    tools_expenses_write, tools_income, tools_income_write, tools_meta, tools_reconcile,
+    tools_shared,
 )
 
 logger = logging.getLogger(__name__)

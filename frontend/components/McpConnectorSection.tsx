@@ -171,8 +171,9 @@ export default function McpConnectorSection() {
         Conectá RegistrApp a un asistente de IA para preguntarle sobre tus gastos, tus
         ingresos o el impacto de una compra. El asistente puede{" "}
         <strong className="text-foreground">leer</strong> los datos de tu hogar y{" "}
-        <strong className="text-foreground">cargar o corregir ingresos, tarjetas y gastos
-        compartidos</strong> (por ejemplo desde un recibo de sueldo o un resumen del banco),
+        <strong className="text-foreground">cargar o corregir gastos, ingresos, tarjetas y gastos
+        compartidos</strong> (por ejemplo «anotá 12 lucas de verdulería», un recibo de sueldo o
+        un resumen del banco),
         siempre con una vista previa que confirmás vos.
       </p>
 
@@ -212,7 +213,7 @@ export default function McpConnectorSection() {
                   <p className="text-xs text-muted-foreground">Último uso {relative(c.last_used_at)}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <Chip tone="emerald">Lectura + ingresos, tarjetas y compartidos</Chip>
+                  <Chip tone="emerald">Lectura + gastos, ingresos, tarjetas y compartidos</Chip>
                   {confirmRow(c.grant_id, () => disconnect(c.grant_id))}
                 </div>
               </div>

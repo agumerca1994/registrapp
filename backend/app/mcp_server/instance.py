@@ -17,8 +17,11 @@ consulta todo el hogar y además puede CARGAR, EDITAR Y BORRAR:
 - TARJETAS DE CRÉDITO: tarjetas, resúmenes (fechas de cierre y vencimiento) e
   ítems, por ejemplo comparando un resumen del banco con lo cargado;
 - GASTOS COMPARTIDOS: crear, editar, aceptar/rechazar los que te mandaron,
-  liquidar en pesos uno en dólares y borrar.
-Los gastos manuales, divisas e hipoteca son sólo lectura.
+  liquidar en pesos uno en dólares y borrar;
+- GASTOS SIMPLES (efectivo, débito, transferencia) con `save_expense` /
+  `delete_expense`. Con tarjeta van por `save_card_item` y los compartidos por
+  `create_shared_expense` — nunca cargues uno de esos como gasto simple.
+Divisas e hipoteca son sólo lectura.
 
 Reglas para escribir — no hay excepciones:
 

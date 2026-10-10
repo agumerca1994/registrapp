@@ -10,11 +10,9 @@ from app.core.database import get_db
 from app.core.firebase import get_current_user
 from app.models.user import User
 from app.models.expense import EXPENSE_SOURCE_MANUAL, ExpenseCategory, ExpenseEntry
-from app.models.mortgage import MortgageRecord
-from app.models.shared_expense import SharedExpenseSplit
-from app.services.currency import get_or_create_usd_category
 from app.services.search import fold, fold_term
 from app.services import category_suggest
+from app.services import expenses as expenses_service
 from app.schemas.expense import (
     ExpenseCategoryCreate, ExpenseCategoryOut,
     ExpenseEntryCreate, ExpenseEntryUpdate, ExpenseEntryOut,
@@ -243,30 +241,26 @@ async def create_entry(
     data = body.model_dump()
     # USD expenses can be categorised like any other now — a trip paid in
     # dollars belongs in "Viajes", not in a currency bucket. "Consumo en
-    # dólares" stays as the fallback when the user doesn't pick one.
-    if data.get("category_id") is None:
-        if data.get("currency") == "USD":
-            data["category_id"] = await get_or_create_usd_category(user.tenant_id, db)
-        else:
-            raise HTTPException(status_code=422, detail="category_id es requerido para gastos en ARS")
-    else:
-        await assert_owns_category(data["category_id"], user.tenant_id, db)
+    # dólares" stays as the fallback when the user doesn't pick one (that
+    # rule lives in services/expenses.resolve_category_id, shared with MCP).
+    #
     # `source` viene del body pero ya pasó por el validador de
     # `ExpenseEntryCreate`, que sólo deja pasar las superficies de alta por
     # usuario y manda cualquier otra cosa a "manual". Un cliente no puede
     # reclamar desde acá que un gasto lo generó el importador o una tarjeta.
-    data["source"] = data.get("source") or EXPENSE_SOURCE_MANUAL
-    entry = ExpenseEntry(
-        **data,
+    entry = await expenses_service.create_expense(
+        db,
         tenant_id=user.tenant_id,
         user_id=user.id,
+        amount=data["amount"],
+        expense_date=data["expense_date"],
+        category_id=data.get("category_id"),
+        currency=data.get("currency") or "ARS",
+        description=data.get("description"),
+        notes=data.get("notes"),
+        source=data.get("source") or EXPENSE_SOURCE_MANUAL,
     )
-    db.add(entry)
     await db.commit()
-    # El corpus de sugerencias acaba de cambiar. Es best-effort: si alguien
-    # agrega un escritor y se olvida de esto, el gasto nuevo tarda hasta
-    # CACHE_TTL en poder ser sugerido — nunca produce un dato incorrecto.
-    category_suggest.invalidate(user.tenant_id)
     result = await db.scalar(
         select(ExpenseEntry)
         .where(ExpenseEntry.id == entry.id)
@@ -287,12 +281,8 @@ async def update_entry(
     if not entry or entry.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
     updates = body.model_dump(exclude_none=True)
-    if "category_id" in updates:
-        await assert_owns_category(updates["category_id"], user.tenant_id, db)
-    for field, value in updates.items():
-        setattr(entry, field, value)
+    await expenses_service.update_expense(db, entry, user.tenant_id, updates)
     await db.commit()
-    category_suggest.invalidate(user.tenant_id)
     result = await db.scalar(
         select(ExpenseEntry).where(ExpenseEntry.id == entry_id).options(selectinload(ExpenseEntry.category))
     )
@@ -309,22 +299,6 @@ async def delete_entry(
     entry = await db.get(ExpenseEntry, entry_id)
     if not entry or entry.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
-    # If a mortgage_record references this expense, delete it first to avoid FK violation
-    mortgage_rec = await db.scalar(
-        select(MortgageRecord).where(MortgageRecord.expense_entry_id == entry_id)
-    )
-    if mortgage_rec:
-        await db.delete(mortgage_rec)
-        await db.flush()
-    # Soft link: if a shared expense split references this entry, reset it to pending
-    split = await db.scalar(
-        select(SharedExpenseSplit).where(SharedExpenseSplit.expense_entry_id == entry_id)
-    )
-    if split:
-        split.expense_entry_id = None
-        split.status = "pending"
-        await db.flush()
-
-    await db.delete(entry)
+    # Hipoteca y split compartido que lo referencian: ver services/expenses.
+    await expenses_service.delete_expense(db, entry, user.tenant_id)
     await db.commit()
-    category_suggest.invalidate(user.tenant_id)

@@ -519,6 +519,9 @@ async def expense_aggregate(
         )
         entries = [
             {
+                # El conector edita y borra gastos simples por id
+                # (save_expense / delete_expense); sin él no hay cómo señalar uno.
+                "id": e.id,
                 "date": e.expense_date.isoformat(),
                 # When the money actually left — differs from `date` for card
                 # purchases, which are paid with the following statement.
