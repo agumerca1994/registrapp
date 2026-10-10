@@ -32,6 +32,7 @@ from app.models.tenant import TENANT_KIND_BUSINESS, Tenant
 from app.models.user import User
 from app.models.wa_message import WaMessage
 from app.services import expenses as expenses_service, quick_capture, reconcile as reconcile_service
+from app.services.business import capture as business_capture
 from app.services.category_suggest import invalidate as invalidate_suggest
 from app.services.clock import ar_today
 from app.services.currency import get_or_create_usd_category
@@ -79,12 +80,14 @@ MSG_NEEDS_AI_AUDIO = (
     "respondé *me interesa* y te avisamos."
 )
 
-# Lo que escribe un NEGOCIO y el bot todavía no sabe registrar: ventas, cierres,
-# producción, conteos de stock y compras con cantidad. Sin esto, el gasto
-# genérico se lo traga — su monto es el primer número del texto, así que
-# "vendí 20 porciones" quedaba como un gasto de $20 y "compré 12 coca a 18 lucas"
-# como uno de $12. Sólo aplica a negocios: en un hogar el bot no cambia.
-_MONEY_WORD = r"(?!lucas?\b|k\b|palos?\b|mil\b|pesos\b)"
+# Lo que escribe un NEGOCIO: ventas, cierres, producción, conteos, compras con
+# cantidad. Lo lee `business/capture.py` y lo ejecuta `business/bot.py`, ANTES
+# que el gasto genérico — cuyo monto es el primer número del texto, así que
+# "vendí 20 porciones" quedaba como un gasto de $20 y "compré 12 coca a 18
+# lucas" como uno de $12. Esta expresión reconoce lo que *parece* de negocio
+# aunque no se haya podido leer: eso recibe la ayuda del negocio y nunca cae
+# al gasto. En un hogar el bot no cambia.
+_MONEY_WORD = r"(?!lucas?\b|k\b|palos?\b|mil\b|pesos\b|usd\b|u\$[sd]\b|d[oó]lar(?:es)?\b|verdes\b)"
 _BUSINESS_TEXT_RE = re.compile(
     r"^(vend[ií]|vendimos|ventas?|cierre|cerr[eé]|cerramos|hice|hicimos|produj[eé]|produjimos|quedan?|stock)\b"
     # "compré 12 coca …": una cantidad, no un monto ("compré 12 lucas de verdura" sigue siendo gasto)
@@ -93,11 +96,13 @@ _BUSINESS_TEXT_RE = re.compile(
     rf"|^\d{{1,3}}\s+{_MONEY_WORD}[a-záéíóúñ]+.*?(?:\d{{3,}}|\d+\s*(?:lucas?|k|palos?)\b)",
     re.IGNORECASE,
 )
-# Un empleado de un negocio carga ventas y stock (desde la app, por ahora);
-# los gastos y los resúmenes son de los dueños: el bot no se los toma.
+# Un empleado de un negocio carga ventas, el cierre y el stock; los gastos,
+# las compras y los resúmenes son de los dueños: el bot no se los toma.
 MSG_EMPLOYEE_ONLY = (
-    "Como empleado, las ventas y el stock se cargan desde la app. "
-    "Los gastos y los resúmenes los carga el dueño o un socio."
+    "Como empleado podés cargar por acá las ventas, el cierre del día y el stock: "
+    "*vendí 3 empanadas 4500 efectivo* · *cierre 200 lucas efectivo, 150 mp* · "
+    "*hice 30 empanadas* · *quedan 5 coca*.\n"
+    "Los gastos, las compras y los resúmenes los carga el dueño o un socio."
 )
 
 
@@ -106,10 +111,16 @@ def _is_employee(user) -> bool:
     return getattr(role, "value", role) == "employee"
 
 
-MSG_BUSINESS_NOT_YET = (
-    "📦 Eso parece una venta, una compra para el stock o la producción del día, "
-    "y todavía no los registro por WhatsApp.\n\n"
-    "Los gastos del negocio sí: *45 lucas alquiler* · *30 lucas sueldos*."
+MSG_BUSINESS_HELP = (
+    "No te entendí 🤔\n\n"
+    "Para el negocio podés mandarme:\n"
+    "• Una venta: *vendí 3 empanadas y 1 coca 6500 efectivo*\n"
+    "• El cierre del día: *cierre 200 lucas efectivo, 150 mp*\n"
+    "• Producción y conteos: *hice 30 empanadas* · *quedan 5 coca*\n"
+    "• Cuánto hay: *stock coca*\n"
+    "• Una compra o un pago: *compré 12 coca a 18 lucas* · *pagué 80 lucas a juan*\n"
+    "• Un gasto: *45 lucas alquiler*\n"
+    "• *deshacer* — borra lo último que cargué"
 )
 
 _EDIT_RE = re.compile(r"^editar\s+(monto|categor[ií]a|descripci[oó]n)\s+(.+)$", re.IGNORECASE)
@@ -217,13 +228,14 @@ def _cutoff() -> datetime:
 
 
 async def _last_ref(
-    db: AsyncSession, user_id: int, ref_type: str, quoted_wa_id: str | None = None
+    db: AsyncSession, user_id: int, ref_type: str | tuple[str, ...], quoted_wa_id: str | None = None
 ) -> WaMessage | None:
     """La entidad a la que apunta un comando: la del mensaje citado si lo hay,
-    si no la última creada dentro de la memoria."""
+    si no la última creada dentro de la memoria (de cualquiera de los tipos)."""
+    types = (ref_type,) if isinstance(ref_type, str) else tuple(ref_type)
     q = select(WaMessage).where(
         WaMessage.user_id == user_id,
-        WaMessage.ref_type == ref_type,
+        WaMessage.ref_type.in_(types),
         WaMessage.created_at >= _cutoff(),
     )
     if quoted_wa_id:
@@ -233,7 +245,7 @@ async def _last_ref(
                 WaMessage.wa_message_id == quoted_wa_id,
             )
         )
-        if quoted and quoted.ref_type == ref_type:
+        if quoted and quoted.ref_type in types:
             return quoted
     return await db.scalar(q.order_by(WaMessage.id.desc()).limit(1))
 
@@ -490,6 +502,12 @@ async def _handle_text(db: AsyncSession, user: User, inbound: InboundMessage) ->
         if handled is not None:
             return handled
 
+    # El negocio, antes que la categoría y la descripción pendientes y que el
+    # gasto genérico: "vendí 3 empanadas" no es la descripción del último gasto.
+    handled = await _do_business(db, user, inbound, text)
+    if handled is not None:
+        return handled
+
     handled = await _do_pending_category_by_name(db, user, inbound)
     if handled is not None:
         return handled
@@ -500,19 +518,37 @@ async def _handle_text(db: AsyncSession, user: User, inbound: InboundMessage) ->
         await db.commit()
         return [MSG_EMPLOYEE_ONLY]
 
-    # Antes de la descripción pendiente: "vendí 3 empanadas" no es la
-    # descripción del último gasto.
-    if _BUSINESS_TEXT_RE.search(text) and await _is_business(db, user):
-        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
-        _remember(db, user.id, "out", "text", text=MSG_BUSINESS_NOT_YET)
-        await db.commit()
-        return [MSG_BUSINESS_NOT_YET]
-
     handled = await _do_pending_description(db, user, inbound)
     if handled is not None:
         return handled
 
     return await _do_expense(db, user, inbound)
+
+
+async def _do_business(
+    db: AsyncSession, user: User, inbound: InboundMessage, text: str
+) -> list[str] | None:
+    """Ventas, cierres, compras, stock y pagos de un negocio (business/bot.py).
+    None = no es eso (o no es un negocio), y el mensaje sigue su camino."""
+    from app.services.business import bot as business_bot
+
+    intent = business_capture.parse_business_text(text)
+    if intent is None and not _BUSINESS_TEXT_RE.search(text):
+        # Un monto suelto puede ser la respuesta a "¿cuánto cobraste?".
+        return await business_bot.answer_text(db, user, inbound)
+    if not await _is_business(db, user):
+        return None
+    if intent is None:
+        # Parece del negocio pero no se pudo leer: la ayuda, nunca un gasto.
+        await record_event(
+            db, tenant_id=user.tenant_id, user_id=user.id, channel="whatsapp",
+            input_kind="text", outcome="needs_ai", reason="unparseable_text",
+        )
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        _remember(db, user.id, "out", "text", text=MSG_BUSINESS_HELP)
+        await db.commit()
+        return [MSG_BUSINESS_HELP]
+    return await business_bot.handle_intent(db, user, inbound, intent)
 
 
 _NO_WORDS = {"no", "n", "nop", "no gracias", "listo", "ok", "asi esta", "dejalo", "dejala"}
@@ -581,20 +617,55 @@ async def _do_pending_category_by_name(
     if cat is None:
         return None
 
-    draft = _draft_from_dict(pending["draft"])
+    return await _create_from_pending(db, user, inbound, row, cat)
+
+
+async def _create_from_pending(
+    db: AsyncSession, user: User, inbound: InboundMessage, row: WaMessage, cat: ExpenseCategory
+) -> list[str]:
+    """La respuesta a la pregunta de categoría: crea el gasto que la esperaba,
+    con lo que traía colgado (en un negocio, el stock de una compra y el
+    proveedor o empleado)."""
+    raw = (row.pending or {}).get("draft") or {}
+    draft = _draft_from_dict(raw)
+    extra = raw.get("x")
     entry = await quick_capture.create_quick_expense(
         db, tenant_id=user.tenant_id, user_id=user.id, draft=draft, category_id=cat.id,
-        payment_method=(pending["draft"] or {}).get("pm"),
+        payment_method=raw.get("pm"), payee_id=(extra or {}).get("payee_id"),
     )
+    suffix = await _finish_expense(db, user, entry, extra)
     await _learn_merchant_rule(db, user.tenant_id, draft.term, cat.id)
     row.pending = None
     _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text,
               ref_type="expense", ref_id=entry.id)
     reply = _offer_description(
-        db, user, entry, f"✅ {_fmt_amount(draft)} · {entry.description} — {cat.name}"
+        db, user, entry, f"✅ {_fmt_amount(draft)} · {entry.description} — {cat.name}{suffix}"
     )
     await db.commit()
     return [reply]
+
+
+async def _finish_expense(db: AsyncSession, user: User, entry: ExpenseEntry, extra: dict | None) -> str:
+    """Lo que cuelga de un gasto del negocio: lo que entró al stock con una
+    compra. Devuelve la línea que lo cuenta ("📦 Coca-Cola: hay 20")."""
+    lines = (extra or {}).get("stock") or []
+    if not lines:
+        return ""
+    from app.models.business import Product
+    from app.schemas.business import StockLineIn
+    from app.services.business import stock as stock_service
+
+    await stock_service.add_purchase_lines(
+        db, tenant_id=user.tenant_id, user_id=user.id, entry=entry,
+        lines=[StockLineIn(product_id=ln["pid"], qty=Decimal(ln["qty"])) for ln in lines],
+    )
+    ids = [ln["pid"] for ln in lines]
+    levels = await stock_service.on_hand(db, user.tenant_id, ids)
+    names = {p.id: p.name for p in (await db.scalars(select(Product).where(Product.id.in_(ids)))).all()}
+    return "\n📦 " + " · ".join(
+        f"{names.get(pid, 'Producto')}: hay {business_capture.fmt_qty(levels.get(pid, 0))}"
+        for pid in dict.fromkeys(ids)
+    )
 
 
 async def _do_expense(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
@@ -606,7 +677,7 @@ async def _do_expense(db: AsyncSession, user: User, inbound: InboundMessage) -> 
         )
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
         await db.commit()
-        return [MSG_HELP]
+        return [MSG_BUSINESS_HELP if await _is_business(db, user) else MSG_HELP]
 
     return await _capture_draft(db, user, inbound, draft)
 
@@ -617,11 +688,20 @@ async def _capture_draft(
     inbound: InboundMessage,
     draft: quick_capture.QuickDraft,
     payment_method: str | None = None,
+    *,
+    category: ExpenseCategory | None = None,
+    extra: dict | None = None,
 ) -> list[str]:
-    """La mitad común de capturar un gasto (texto libre o comprobante):
-    resolver categoría, preguntar si hace falta, guardar y responder."""
+    """La mitad común de capturar un gasto (texto libre, comprobante, o una
+    compra o un pago de un negocio): resolver categoría, preguntar si hace
+    falta, guardar y responder. `category` la fija quien llama (la de un
+    proveedor, "Mercadería" en una compra); `extra` es lo que cuelga del gasto
+    en un negocio (`payee_id`, y `stock`: lo que entró con la compra), y viaja
+    con la pregunta de categoría si hay que hacerla."""
+    if category is not None:
+        pick = quick_capture.CategoryPick(category.id, category.name, "exact", None, [])
     # En USD la categoría es siempre "Consumo en dólares" (regla del dominio).
-    if draft.currency == "USD":
+    elif draft.currency == "USD":
         category_id = await get_or_create_usd_category(user.tenant_id, db)
         pick = quick_capture.CategoryPick(category_id, "Consumo en dólares", "exact", None, [])
     else:
@@ -644,14 +724,14 @@ async def _capture_draft(
         options = pick.options
         if not options:
             reply = "No encontré una categoría para eso. Decime el nombre de la categoría."
-            pending = {"type": "category_name", "draft": _draft_dict(draft, payment_method)}
+            pending = {"type": "category_name", "draft": _draft_dict(draft, payment_method, extra)}
         else:
             listed = "\n".join(f"{i+1}️⃣ {name}" for i, name in enumerate(options))
             reply = (
                 f"¿En qué categoría va *{draft.term}* ({_fmt_amount(draft)})?\n{listed}\n"
                 "Respondé el número, o el nombre de otra categoría."
             )
-            pending = {"type": "category_pick", "draft": _draft_dict(draft, payment_method), "options": options}
+            pending = {"type": "category_pick", "draft": _draft_dict(draft, payment_method, extra), "options": options}
         _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id, text=inbound.text or None)
         _remember(db, user.id, "out", "text", text=reply, pending=pending)
         await db.commit()
@@ -660,15 +740,16 @@ async def _capture_draft(
     entry = await quick_capture.create_quick_expense(
         db, tenant_id=user.tenant_id, user_id=user.id, draft=draft,
         category_id=pick.category_id, description=pick.description,
-        payment_method=payment_method,
+        payment_method=payment_method, payee_id=(extra or {}).get("payee_id"),
     )
+    stock_line = await _finish_expense(db, user, entry, extra)
     _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id, text=inbound.text or None,
               ref_type="expense", ref_id=entry.id)
     await db.commit()
 
     suffix = " (sugerida)" if pick.source in ("suggest", "rule") else ""
     when = "" if entry.expense_date == ar_today() else f" · {entry.expense_date.strftime('%d/%m')}"
-    base = f"✅ {_fmt_amount(draft)} · {entry.description} — {pick.category_name}{suffix}{when}"
+    base = f"✅ {_fmt_amount(draft)} · {entry.description} — {pick.category_name}{suffix}{when}{stock_line}"
     if pick.source in ("suggest", "rule"):
         reply = _offer_description(db, user, entry, base)
         await db.commit()
@@ -706,12 +787,17 @@ def _offer_description(db: AsyncSession, user: User, entry, base_line: str) -> s
     return reply
 
 
-def _draft_dict(draft: quick_capture.QuickDraft, payment_method: str | None = None) -> dict:
-    return {
+def _draft_dict(
+    draft: quick_capture.QuickDraft, payment_method: str | None = None, extra: dict | None = None
+) -> dict:
+    d = {
         "amount": str(draft.amount), "currency": draft.currency,
         "date": draft.expense_date.isoformat(), "term": draft.term,
         "pm": payment_method,
     }
+    if extra:
+        d["x"] = extra
+    return d
 
 
 def _draft_from_dict(d: dict) -> quick_capture.QuickDraft:
@@ -729,11 +815,15 @@ def _fmt_amount(draft) -> str:
 
 
 async def _do_undo(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
-    ref = await _last_ref(db, user.id, "expense", inbound.quoted_wa_id)
+    from app.services.business import bot as business_bot
+
+    ref = await _last_ref(db, user.id, ("expense", *business_bot.BUSINESS_REFS), inbound.quoted_wa_id)
     if ref is None:
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
         await db.commit()
         return ["No tengo nada para deshacer en los últimos 7 días."]
+    if ref.ref_type != "expense":
+        return await business_bot.undo(db, user, inbound, ref)
     entry = await db.get(ExpenseEntry, ref.ref_id)
     if entry is None or entry.tenant_id != user.tenant_id or entry.source != EXPENSE_SOURCE_WHATSAPP:
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
@@ -756,7 +846,14 @@ async def _do_undo(db: AsyncSession, user: User, inbound: InboundMessage) -> lis
 async def _do_edit(
     db: AsyncSession, user: User, inbound: InboundMessage, field_name: str, value: str
 ) -> list[str]:
-    ref = await _last_ref(db, user.id, "expense", inbound.quoted_wa_id)
+    # El monto se corrige en lo último que se cargó, gasto o venta; la
+    # categoría y la descripción son sólo de los gastos.
+    types = ("expense", "sale") if field_name == "monto" else ("expense",)
+    ref = await _last_ref(db, user.id, types, inbound.quoted_wa_id)
+    if ref is not None and ref.ref_type == "sale":
+        from app.services.business import bot as business_bot
+
+        return await business_bot.edit_sale_amount(db, user, inbound, ref, value)
     entry = await db.get(ExpenseEntry, ref.ref_id) if ref else None
     if entry is None or entry.tenant_id != user.tenant_id or entry.source != EXPENSE_SOURCE_WHATSAPP:
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
@@ -828,6 +925,11 @@ async def _do_pending_answer(
     pending = row.pending or {}
     ptype = pending.get("type")
 
+    if ptype and ptype.startswith("biz_"):
+        from app.services.business import bot as business_bot
+
+        return await business_bot.answer_number(db, user, inbound, row, number)
+
     if ptype == "category_pick":
         options = pending.get("options") or []
         if not (1 <= number <= len(options)):
@@ -841,20 +943,7 @@ async def _do_pending_answer(
         cat = next((c for c in cats if fold_text(c.name) == fold_text(name)), None)
         if cat is None:
             return ["Esa categoría ya no existe — probá de nuevo."]
-        draft = _draft_from_dict(pending["draft"])
-        entry = await quick_capture.create_quick_expense(
-            db, tenant_id=user.tenant_id, user_id=user.id, draft=draft, category_id=cat.id,
-            payment_method=(pending["draft"] or {}).get("pm"),
-        )
-        await _learn_merchant_rule(db, user.tenant_id, draft.term, cat.id)
-        row.pending = None
-        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text,
-                  ref_type="expense", ref_id=entry.id)
-        reply = _offer_description(
-            db, user, entry, f"✅ {_fmt_amount(draft)} · {entry.description} — {cat.name}"
-        )
-        await db.commit()
-        return [reply]
+        return await _create_from_pending(db, user, inbound, row, cat)
 
     if ptype == "reconcile_apply":
         session_id = pending.get("session_id")

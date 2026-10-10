@@ -107,9 +107,23 @@ Un negocio es un tenant con `tenants.kind = 'business'` (`'household'` por defec
   - Un negocio no monta el provider de compartidos ni el carrusel de novedades.
   - `Sidebar.tsx` elige la navegación con `useNav()`, y **el array del hogar no se toca**: su orden y su `data-tour` son los que esperan la guía y los baselines visuales.
   - Configuración esconde en un negocio "Invitar amigo", "Cotización del dólar" y los avisos, que hoy sólo existen para gastos compartidos.
-- **Bot**: en un negocio, `_BUSINESS_TEXT_RE` intercepta ventas, cierres, producción, conteos y "compré 12 coca…" antes del gasto genérico, cuyo monto es el primer número del texto ("vendí 20 porciones" era un gasto de $20). Responde que todavía no se registran por WhatsApp; los gastos ("45 lucas alquiler") siguen igual.
-  - El tipo de cuenta se lee con `select(Tenant.kind)`, nunca con `user.tenant`.
-  - En un hogar no cambia nada.
+- **Bot** (`services/business/capture.py` + `bot.py`): en un negocio carga ventas, el cierre, compras, producción, conteos, consultas de stock y pagos. Va **antes** del gasto genérico, cuyo monto es el primer número del texto ("vendí 20 porciones" era un gasto de $20).
+  - `capture.py` es puro: texto → `Intent` (qué pasó, ítems, plata, medio, día). Lo difícil es separar cantidad de plata.
+    - Plata: `$N`, `N lucas/k/mil`, lo que sigue a "a", "por" o "total", y un número sin producto atrás.
+    - Cantidad: un número (o "una", "media docena") seguido de una palabra.
+    - Los envases no se sacan del nombre: "2 cajas de coca" no son 2 cocas, así que no matchea el producto y se carga como gasto.
+  - `bot.py` resuelve contra productos y proveedores con `match_by_name`, que tolera plurales, y ejecuta con los servicios de siempre.
+  - Cuando no alcanza, pregunta con opciones numeradas, y **el estado entero viaja en `wa_messages.pending`** (`biz_pick`, `biz_payee`, `biz_create`, `biz_amount`, `biz_kind`): la respuesta retoma donde quedó. Un mensaje nuevo del negocio anula las preguntas `biz_*` abiertas y la oferta de descripción, pero nunca la pregunta de categoría: sin respuesta, ese gasto no existe.
+  - **Lo que no es un producto no se inventa.** En una venta queda como texto libre; en una compra es un gasto sin stock (materia prima). Sólo "hice 30 X" ofrece crear el producto, y sólo a un dueño.
+  - Una compra con stock va por `_capture_draft` con `extra` (`stock`, `payee_id`). Ese `extra` viaja con la pregunta de categoría y lo aplica `_finish_expense` cuando el gasto se crea.
+    - Categoría: "Mercadería" si existe; un pago a un empleado sin categoría propia va a "Sueldos".
+    - Con tarjeta de crédito, a la app.
+  - Una venta sin monto usa el precio de lista si todos sus productos lo tienen; si no, pregunta. El medio por defecto es efectivo, y la respuesta lo dice.
+  - El cierre por chat conserva las unidades y las notas que se cargaron en la app: `upsert_close` las reemplaza todas. Si reemplazó un cierre, no se ofrece deshacer, porque borraría también el anterior; se manda de nuevo.
+  - *deshacer* cubre gasto, venta, cierre y stock. Los movimientos de un mismo mensaje comparten `created_at`, así se deshacen juntos. *editar monto* también corrige la última venta, si se cobró con un solo medio.
+  - `_ctx()` lee una vez lo que hace falta del usuario: después de un rollback el `User` del ORM queda expirado, y leerlo en async es `MissingGreenlet`.
+  - Lo que parece de negocio pero no se pudo leer (`_BUSINESS_TEXT_RE`) recibe la ayuda del negocio y nunca cae al gasto. Lo que está en dólares no es del negocio: sigue al gasto en USD.
+  - El tipo de cuenta se lee con `select(Tenant.kind)`, nunca con `user.tenant`. En un hogar no cambia nada: la intención se calcula, pero sin negocio sigue el flujo de siempre.
 - **MCP**: un solo servidor para los dos (mcp 1.29 no deja variar instrucciones ni herramientas por request).
   - `INSTRUCTIONS` abre con tres líneas que mandan a `get_taxonomy`.
   - En un negocio, `get_taxonomy` devuelve `account_kind`, `payees` y `rules` (`BUSINESS_RULES` en `tools_meta.py`), que reemplazan a las reglas del hogar.
@@ -146,7 +160,7 @@ Un negocio es un tenant con `tenants.kind = 'business'` (`'household'` por defec
     - no ve `tenant_code`: el código es la credencial para sumarse;
     - no lista miembros;
     - no usa el MCP: `token_holder_valid` lo rechaza, así que pasarlo a empleado mata sus tokens en el acto;
-    - en el bot, sólo recibe "las ventas y el stock se cargan desde la app": ni gastos ni PDFs.
+    - en el bot carga ventas, el cierre y el stock, con la misma ventana de hoy y ayer; gastos, compras, pagos y PDFs no.
   - **Ventana de hoy y ayer**: `access.assert_staff_day` en los routers de ventas y stock. Tocar un día viejo cambia un mes que ya se miró. El historial de stock que ve un empleado viene sin `unit_cost`.
   - Si el dueño se va del negocio, hereda el **socio** más antiguo, nunca un empleado; si sólo quedan empleados, da 400.
   - Frontend (`lib/account.ts`): `isEmployee`, `EMPLOYEE_ROUTES` (Ventas, Productos, Configuración) y `homeFor()`, que lo manda a `/ventas` porque un empleado no tiene Inicio.

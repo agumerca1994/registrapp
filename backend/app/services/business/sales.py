@@ -229,6 +229,7 @@ async def upsert_close(
     counted: list[SalePaymentIn],
     units: list[SaleLineIn] | None = None,
     notes: str | None = None,
+    source: str = "app",
 ) -> Sale:
     """Lo contado al cerrar el día. Un día tiene un solo cierre: volver a
     cerrar lo reemplaza (ej. se siguió vendiendo después del primero).
@@ -246,7 +247,7 @@ async def upsert_close(
     if close is None:
         close = Sale(
             tenant_id=tenant_id, user_id=user_id, sale_date=day, kind=SALE_KIND_CLOSE,
-            total=total, source="app", created_at=now, updated_at=now,
+            total=total, source=source, created_at=now, updated_at=now,
             payments=payment_rows, lines=unit_rows,
         )
         db.add(close)

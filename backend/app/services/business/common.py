@@ -30,9 +30,20 @@ class _Named(Protocol):
 T = TypeVar("T", bound=_Named)
 
 
+def _word_matches(word: str, token: str) -> bool:
+    """Una palabra del nombre "empieza con" lo escrito, tolerando el plural:
+    "empanadas" encuentra "Empanada de carne" y "panes" encuentra "Pan"."""
+    if word.startswith(token):
+        return True
+    if token.endswith("es") and len(token) > 3 and word.startswith(token[:-2]) and len(token[:-2]) >= len(word) - 1:
+        return True
+    return token.endswith("s") and len(token) > 2 and word.startswith(token[:-1])
+
+
 def match_by_name(items: Sequence[T], term: str) -> list[T]:
     """El nombre exacto plegado gana solo; si no, los que tienen una palabra
-    que empieza con cada palabra del término. Vacío o varios = preguntar."""
+    que empieza con cada palabra del término (con plurales). Vacío o varios =
+    preguntar."""
     key = fold_text(term or "").strip()
     if not key:
         return []
@@ -42,5 +53,5 @@ def match_by_name(items: Sequence[T], term: str) -> list[T]:
     tokens = key.split()
     return [
         it for it in items
-        if all(any(word.startswith(tok) for word in it.name_key.split()) for tok in tokens)
+        if all(any(_word_matches(word, tok) for word in it.name_key.split()) for tok in tokens)
     ]

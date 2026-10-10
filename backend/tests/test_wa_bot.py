@@ -377,12 +377,18 @@ async def _business(db, tenant_id=1):
 
 
 async def test_business_sale_text_is_not_an_expense(db):
+    # Lo del negocio va a business/bot.py (ver test_business_bot.py) y nunca
+    # al gasto genérico, que tomaba el primer número: "vendí 20 porciones"
+    # era un gasto de $20. Sin productos cargados, el bot pregunta.
     await _business(db)
-    for i, text in enumerate([
-        "vendí 20 porciones", "compré 12 coca a 18 lucas", "hice 30 empanadas", "12 coca 18000",
+    for i, (text, asks) in enumerate([
+        ("vendí 20 porciones", "¿Cuánto cobraste"),
+        ("hice 30 empanadas", "¿Lo creo?"),
+        ("12 coca 18000", "¿Qué fue?"),
+        ("vendí", "Para el negocio podés mandarme"),
     ]):
         replies = await wa_bot.handle(db, USER, _in(text, wa_id=f"B{i}"))
-        assert "todavía no los registro" in replies[0]
+        assert asks in replies[0], text
     assert (await db.scalar(select(ExpenseEntry))) is None
 
 
@@ -396,7 +402,8 @@ async def test_business_plain_expense_still_works(db):
 async def test_household_sale_like_text_keeps_the_old_behavior(db):
     # Sin tenant negocio, el bot no cambia: el texto sigue al gasto genérico.
     replies = await wa_bot.handle(db, USER, _in("vendí 20 porciones"))
-    assert "todavía no los registro" not in replies[0]
+    assert "Cuánto cobraste" not in replies[0]
+    assert "categoría" in replies[0]
 
 
 
