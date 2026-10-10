@@ -16,12 +16,14 @@ interface AuthContextType {
   clearUser: () => void;
 }
 
-interface AppUser {
+export interface AppUser {
   id: number;
   firebase_uid: string;
   tenant_id: number;
   tenant_code: string | null;
   tenant_name: string | null;
+  // "household" | "business". Ver lib/account.ts: ahí se decide qué ve cada uno.
+  tenant_kind?: "household" | "business" | null;
   email: string;
   first_name: string | null;
   last_name: string | null;
