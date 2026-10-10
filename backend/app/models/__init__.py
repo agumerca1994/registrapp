@@ -4,7 +4,7 @@ from app.models.income import IncomeSource, IncomeEntry, IncomeSourceField, Inco
 from app.models.expense import ExpenseCategory, ExpenseEntry
 # `expense_entries.payee_id` apunta a `payees`: la tabla tiene que estar en la
 # metadata para cualquier create_all (los tests importan modelos sueltos).
-from app.models.business import Payee, Product, Sale, SaleLine, SalePayment
+from app.models.business import Payee, Product, Sale, SaleLine, SalePayment, StockMovement
 from app.models.macro_variable import MacroVariable
 from app.models.mortgage import MortgageRecord
 from app.models.shared_expense import SharedExpense, SharedExpenseSplit
@@ -39,5 +39,5 @@ __all__ = [
     "McpOAuthClient", "McpOAuthAuthorization", "McpAuthCode", "McpToken",
     "ReconciliationSession", "ReconciliationAction", "CaptureRule", "CaptureEvent",
     "WaMessage", "AuthLinkToken",
-    "Payee", "Product", "Sale", "SaleLine", "SalePayment",
+    "Payee", "Product", "Sale", "SaleLine", "SalePayment", "StockMovement",
 ]

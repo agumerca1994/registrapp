@@ -182,7 +182,7 @@ export default function VentasPage() {
       )}
       {closing && summary && (
         <DailyCloseModal summary={summary} title={isToday ? "Cierre de hoy" : `Cierre del ${dayLabel}`}
-          onSaved={afterSave} onClose={() => setClosing(false)} />
+          products={products} onSaved={afterSave} onClose={() => setClosing(false)} />
       )}
     </div>
   );

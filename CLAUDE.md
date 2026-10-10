@@ -130,6 +130,16 @@ Un negocio es un tenant con `tenants.kind = 'business'` (`'household'` por defec
   - `GET /internal/sales-consistency?tenant_id=&repair=` compara cada día contra un recálculo y lo rehace con la misma función.
   - El día de negocio es `clock.business_today()` en el backend y `businessToday()` en `lib/sales.ts`: Argentina, con corte a las 05:00.
   - El `+` de Inicio de un negocio abre una venta (`/ventas?nueva=1`), y el hero es **"Resultado de {mes}" = ventas − egresos**, por fecha de pago.
+- **Stock** (`services/business/stock.py`, `/stock`; se ve y se mueve desde `/productos`). Stock = `SUM(stock_movements.qty)` por producto, con el signo en la cantidad: el patrón de `currency_operations.foreign_amount`. Un CHECK ata el signo al tipo: compra y producción suman, venta y merma restan, un ajuste no es cero.
+  - De dónde sale cada movimiento:
+    - **Compra**: `stock_lines` en `POST /expenses/entries`, sólo en negocios y **sólo en gastos simples**. Los espejos de tarjeta se borran por varios caminos (cuotas, conciliación) y el stock desaparecería en silencio, así que una compra con tarjeta carga su "Ingreso" a mano. Con una sola línea, el costo unitario es monto / cantidad; queda guardado para el día que se quiera ver el margen.
+    - **Venta**: cada línea de un ticket con producto que lleva stock (`sync_ticket_movements`, que se rehace en cada edición).
+    - **Cierre**: las unidades que se contaron en el día menos las que ya restaron los tickets (`sync_close_movements`). Lo llama `rebuild_day`, así que cualquier cambio de ese día lo rehace. Si los tickets restaron más que el cierre, no suma de vuelta: avisa.
+    - **A mano**: producción, merma, ingreso, y el conteo ("quedan 5"), que se guarda como un `ajuste` por la diferencia, o no se guarda si ya coincide. Cargar un movimiento a mano prende `track_stock`.
+  - **Una venta nunca se frena por falta de stock**: queda negativo y se marca en rojo ("cargá la producción"). Frenar el mostrador por un dato mal cargado es peor que el dato.
+  - Borrar una compra o una venta borra su stock: CASCADE en Postgres, y borrado explícito en el servicio (`delete_for_expense` / `delete_for_sale`, que usa `services/expenses.delete_expense`) por el SQLite de los tests. Los movimientos que salen de una compra o una venta no se borran sueltos (409).
+  - `stock_alerts` (negativo, o en el mínimo o debajo) va en `/business/summary` y en Inicio.
+  - Los E2E de `business-flows` corren **en serie**: comparten la cuenta y el día, y una venta de un flujo aparecía en el cierre del otro.
 
 ### Backend structure
 ```

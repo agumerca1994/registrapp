@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.business import SALE_KIND_CLOSE, SALE_KIND_TICKET, Payee, Product, Sale, SaleLine, SalePayment
 from app.models.expense import ExpenseEntry
 from app.services import analytics
+from app.services.business import stock as stock_service
 from app.services.analytics import CategorySummary
 from app.services.currency import cash_out_date, with_statement
 
@@ -62,6 +63,9 @@ class BusinessSummary(BaseModel):
     sales_by_method: list[MethodTotal] = []
     sales_by_day: list[DayTotal] = []
     top_products: list[ProductSold] = []
+    # Productos con stock negativo o en su mínimo: lo que hay que reponer o
+    # cargar (una venta sin la producción cargada deja el stock en negativo).
+    stock_alerts: list[dict] = []
 
 
 async def spend_by_payee(
@@ -179,4 +183,5 @@ async def business_summary(
         sales_by_method=await sales_by_method(db, tenant_id, start, end),
         sales_by_day=by_day,
         top_products=await top_products(db, tenant_id, start, end),
+        stock_alerts=[lv for lv in await stock_service.stock_levels(db, tenant_id) if lv["alert"]],
     )

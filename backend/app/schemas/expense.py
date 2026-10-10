@@ -3,6 +3,7 @@ from decimal import Decimal
 from pydantic import BaseModel, field_validator
 
 from app.models.expense import EXPENSE_SOURCE_MANUAL, EXPENSE_SOURCES_USER_ENTRY
+from app.schemas.business import StockLineIn
 
 
 class ExpenseCategoryCreate(BaseModel):
@@ -54,6 +55,9 @@ class ExpenseEntryCreate(BaseModel):
     # Proveedor o empleado de un negocio (models/business.py). Tiene que ser
     # del mismo tenant: 404 si no.
     payee_id: int | None = None
+    # Lo que entra al stock con esta compra (sólo negocios, sólo gastos
+    # simples). Ver services/business/stock.add_purchase_lines.
+    stock_lines: list[StockLineIn] | None = None
     # De qué pantalla vino. El cliente puede declarar **cuál de sus propias
     # superficies** es —el formulario de /expenses, /registrar, la hoja de
     # compartir, el Atajo— porque eso es lo único que sabe él y las cuatro

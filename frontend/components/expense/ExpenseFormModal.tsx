@@ -2,16 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { format } from "date-fns";
-import { X } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 import api from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { getErrorMessage, pickCategoryColor } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FieldLabel, SegmentedToggle, SelectField } from "@/components/ui/form";
+import { FIELD, FieldLabel, SegmentedToggle, SelectField } from "@/components/ui/form";
 import { isBusiness } from "@/lib/account";
 import type { Payee } from "@/components/business/types";
+import type { Product } from "@/lib/sales";
 import NewCategoryModal from "@/components/NewCategoryModal";
 import { ParticipantPicker, type PickedParticipant } from "@/components/ParticipantPicker";
 import BaseFields, { type CategoryOption } from "./BaseFields";
@@ -21,6 +22,8 @@ import {
   buildRequest, isCard, isInstallment, newDraft, periodLabel, validateDraft,
   type CreditCardLite, type ExpenseDraft, type SplitRow,
 } from "./submit";
+
+let stockSeq = 0;
 
 export type ExpenseSaved =
   | { kind: "simple" }
@@ -62,6 +65,7 @@ export default function ExpenseFormModal({
   // le pagó: el proveedor o empleado, que además propone su categoría.
   const business = isBusiness(appUser);
   const [payees, setPayees] = useState<Payee[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
 
   const selfRow = useCallback((): SplitRow | null => appUser
     ? { type: "self", user_id: appUser.id, member_name: appUser.display_name || appUser.email, contact: "", amount: "" }
@@ -89,6 +93,8 @@ export default function ExpenseFormModal({
       }
       // En dólares no hay cuotas: vuelve solo a un pago.
       if (next.currency === "USD" && next.plan === "installment") next.plan = "single";
+      // Con tarjeta no hay stock (ver submit.ts): no puede quedar colgado.
+      if (next.pay === "card" && next.stock_lines.length) next.stock_lines = [];
       return next;
     });
   }, []);
@@ -122,7 +128,14 @@ export default function ExpenseFormModal({
   useEffect(() => {
     if (!business) return;
     api.get<Payee[]>("/payees").then(({ data }) => setPayees(data)).catch(() => setPayees([]));
-  }, [business]);
+    if (mode === "create") {
+      api.get<Product[]>("/products").then(({ data }) => setProducts(data)).catch(() => setProducts([]));
+    }
+  }, [business, mode]);
+
+  const newStockLine = () => ({ key: `s${++stockSeq}`, product_id: "", qty: "" });
+  const setStockLine = (key: string, patch: Partial<ExpenseDraft["stock_lines"][number]>) =>
+    set({ stock_lines: draft.stock_lines.map(l => (l.key === key ? { ...l, ...patch } : l)) });
 
   const pickPayee = (payee_id: string) => {
     const payee = payees.find(p => String(p.id) === payee_id);
@@ -245,6 +258,52 @@ export default function ExpenseFormModal({
                     <CardPaymentSection draft={draft} set={set} cardsState={cardsState} onRetry={loadCards} />
                   )}
                 </div>
+
+                {/* Una compra de mercadería que entra al stock ("12 Coca-Cola"):
+                    sólo un negocio y sólo con pago simple (ver submit.ts). */}
+                {business && !isCard(draft) && (
+                  <div className="space-y-2">
+                    <FieldLabel>¿Entra al stock?</FieldLabel>
+                    <SegmentedToggle
+                      ariaLabel="¿Entra al stock?"
+                      value={draft.stock_lines.length ? "yes" : "no"}
+                      onChange={v => set({ stock_lines: v === "yes" ? [newStockLine()] : [] })}
+                      options={[
+                        { value: "no", label: "No" },
+                        { value: "yes", label: "Sí" },
+                      ]}
+                    />
+                    {draft.stock_lines.length > 0 && (
+                      <div className="space-y-2">
+                        {products.length === 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            Todavía no hay productos: cargalos en Productos.
+                          </p>
+                        )}
+                        {draft.stock_lines.map(l => (
+                          <div key={l.key} className="flex items-start gap-2" data-testid="stock-line">
+                            <SelectField className="flex-1"
+                              value={l.product_id} onChange={product_id => setStockLine(l.key, { product_id })}
+                              placeholder="Producto"
+                              options={products.map(p => ({ value: String(p.id), label: p.name }))} />
+                            <input type="text" inputMode="decimal" pattern="[0-9.,]*"
+                              className={`${FIELD} w-24`} placeholder="Cant." aria-label="Cantidad que entra"
+                              value={l.qty} onChange={e => setStockLine(l.key, { qty: e.target.value })} />
+                            <button type="button" title="Quitar" aria-label="Quitar producto"
+                              onClick={() => set({ stock_lines: draft.stock_lines.filter(x => x.key !== l.key) })}
+                              className="mt-1 p-2.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-accent">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                        <button type="button" onClick={() => set({ stock_lines: [...draft.stock_lines, newStockLine()] })}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                          <Plus className="w-3.5 h-3.5" /> Otro producto
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {!business && (
                 <div className="space-y-2">

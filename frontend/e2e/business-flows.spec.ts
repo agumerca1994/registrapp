@@ -9,6 +9,11 @@ import { test, expect, type Page, type APIRequestContext } from "@playwright/tes
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+// En serie: los flujos comparten la misma cuenta de negocio y el mismo día, y
+// el de ventas cierra la caja con lo que hay. En paralelo, una venta del flujo
+// de stock aparecía en el cierre del otro.
+test.describe.configure({ mode: "serial" });
+
 async function tokenOf(page: Page): Promise<string> {
   return page.evaluate(async () => {
     const w = window as unknown as { __e2e: { ready: Promise<void>; auth: { authStateReady: () => Promise<void>; currentUser: { getIdToken: () => Promise<string> } } } };
@@ -153,6 +158,69 @@ test("producto → venta → dos ventas a la vez → cierre → Inicio", async (
     await expect(page.getByText(/Ventas por medio de pago —/)).toBeVisible();
   } finally {
     await clearDay(a, day);
+    await a.patch(`/products/${product.id}`, { is_active: false });
+  }
+});
+
+test("stock: producción → una venta resta → conteo → una compra suma", async ({ page, request }) => {
+  const stamp = Date.now();
+  const day = businessToday();
+  await page.goto("/productos");
+  const a = api(request, await tokenOf(page));
+  const product = await a.post("/products", { name: `E2E Milanesa ${stamp}`, sale_price: 5000, track_stock: true });
+  const level = async () => {
+    const levels: { product_id: number; on_hand: string }[] = await a.get("/stock");
+    return Number(levels.find(l => l.product_id === product.id)?.on_hand ?? 0);
+  };
+  const row = () => page.getByTestId("product-row").filter({ hasText: `E2E Milanesa ${stamp}` });
+  let saleId: number | undefined;
+  try {
+    // 1. Producción desde el menú del producto.
+    await page.reload();
+    await page.getByRole("button", { name: `Acciones de E2E Milanesa ${stamp}` }).click();
+    await page.getByRole("menuitem", { name: "Producción" }).click();
+    await page.getByLabel("Cuántas hiciste").fill("30");
+    await page.getByRole("button", { name: "Guardar" }).click();
+    await expect(row()).toContainText("Hay 30");
+
+    // 2. Una venta resta (sin frenarse aunque no alcance).
+    const sale = await a.post("/sales", {
+      sale_date: day, lines: [{ product_id: product.id, qty: 4, unit_price: 5000 }],
+      payments: [{ method: "efectivo", amount: 20000 }],
+    });
+    saleId = sale.id;
+    expect(await level()).toBe(26);
+
+    // 3. Un conteo deja lo que hay de verdad.
+    await page.reload();
+    await page.getByRole("button", { name: `Acciones de E2E Milanesa ${stamp}` }).click();
+    await page.getByRole("menuitem", { name: "Contar lo que queda" }).click();
+    await page.getByLabel("Cuántas quedan").fill("25");
+    await page.getByRole("button", { name: "Guardar" }).click();
+    await expect(row()).toContainText("Hay 25");
+
+    // 4. Una compra con "entra al stock" suma.
+    await page.goto("/expenses");
+    await page.getByRole("button", { name: "Registrar egreso" }).click();
+    const form = page.locator("form").filter({ has: page.getByLabel("Descripción") });
+    await form.getByText("Categoría", { exact: true }).locator("..").getByRole("combobox").click();
+    await page.getByRole("option", { name: "Mercadería" }).first().click();
+    await page.getByLabel("Monto").fill("60.000");
+    await page.getByLabel("Descripción").fill(`E2E-compra-${stamp}`);
+    await page.getByRole("group", { name: "¿Entra al stock?" }).getByRole("button", { name: "Sí", exact: true }).click();
+    await page.getByTestId("stock-line").getByRole("combobox").click();
+    await page.getByRole("option", { name: `E2E Milanesa ${stamp}` }).click();
+    await page.getByLabel("Cantidad que entra").fill("12");
+    await page.getByRole("button", { name: "Guardar" }).click();
+    await expect(page.getByRole("heading", { name: "Nuevo egreso" })).toHaveCount(0);
+    expect(await level()).toBe(37);
+  } finally {
+    const entries: { id: number; description?: string }[] = await a.get(`/expenses/entries?q=E2E-compra-${stamp}`);
+    for (const e of entries) await a.del(`/expenses/entries/${e.id}`);
+    if (saleId) await a.del(`/sales/${saleId}`);
+    const moves: { id: number; sale_id: number | null; expense_entry_id: number | null }[] =
+      await a.get(`/stock/movements?product_id=${product.id}`);
+    for (const m of moves.filter(x => !x.sale_id && !x.expense_entry_id)) await a.del(`/stock/movements/${m.id}`);
     await a.patch(`/products/${product.id}`, { is_active: false });
   }
 });

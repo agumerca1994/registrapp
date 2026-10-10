@@ -57,6 +57,15 @@ export interface ExpenseDraft {
 
   /** Proveedor o empleado de un negocio; "" = ninguno. Un hogar no lo usa. */
   payee_id: string;
+
+  /** Lo que entra al stock con esta compra (negocio, pago simple, sólo al crear). */
+  stock_lines: StockLineDraft[];
+}
+
+export interface StockLineDraft {
+  key: string;
+  product_id: string;
+  qty: string;
 }
 
 export const MIN_INSTALLMENTS = 2;
@@ -80,6 +89,7 @@ export function newDraft(today: string, self: SplitRow | null): ExpenseDraft {
     splitType: "equal",
     rows: self ? [self] : [],
     payee_id: "",
+    stock_lines: [],
   };
 }
 
@@ -130,6 +140,10 @@ export interface ValidateCtx {
 export function validateDraft(d: ExpenseDraft, ctx: ValidateCtx): string | null {
   const amount = shareBase(d);
   if (!(amount > 0)) return "Poné un monto mayor a cero.";
+  for (const l of d.stock_lines) {
+    if (!l.product_id) return "Elegí qué producto entra al stock.";
+    if (!(parseAmount(l.qty || "0") > 0)) return "Poné cuántas unidades entran al stock.";
+  }
   if (!d.expense_date) return "Elegí una fecha.";
 
   const cardUsd = ctx.mode === "create" && isCard(d) && d.currency === "USD";
@@ -246,8 +260,13 @@ export function buildRequest(
     };
   }
 
+  // El stock sólo cuelga de un gasto simple: los espejos de tarjeta se borran
+  // por varios caminos y lo que entró desaparecería sin aviso.
+  const stock = d.stock_lines.length
+    ? { stock_lines: d.stock_lines.map(l => ({ product_id: parseInt(l.product_id, 10), qty: parseAmount(l.qty) })) }
+    : {};
   return {
     kind: "simple", method: "post", url: "/expenses/entries",
-    body: { amount, description: d.description, expense_date: d.expense_date, notes: d.notes, currency: d.currency, ...category, ...payee },
+    body: { amount, description: d.description, expense_date: d.expense_date, notes: d.notes, currency: d.currency, ...category, ...payee, ...stock },
   };
 }

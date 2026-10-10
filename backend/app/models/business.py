@@ -4,7 +4,7 @@ Viven aparte de las del hogar a propósito: si algún día el negocio se separa 
 otra instalación, es copiar estas tablas por `tenant_id`. Ver la sección
 "Negocio" de CLAUDE.md.
 """
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -170,3 +170,55 @@ class SalePayment(Base):
     sale_id: Mapped[int] = mapped_column(ForeignKey("sales.id", ondelete="CASCADE"), index=True)
     method: Mapped[str] = mapped_column(String(20))
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+
+
+STOCK_KIND_PURCHASE = "compra"
+STOCK_KIND_PRODUCTION = "produccion"
+STOCK_KIND_SALE = "venta"
+STOCK_KIND_ADJUSTMENT = "ajuste"
+STOCK_KIND_WASTE = "merma"
+STOCK_KINDS = (STOCK_KIND_PURCHASE, STOCK_KIND_PRODUCTION, STOCK_KIND_SALE, STOCK_KIND_ADJUSTMENT, STOCK_KIND_WASTE)
+
+
+class StockMovement(Base):
+    """Una entrada o salida de stock. Stock = SUM(qty) por producto, con el
+    signo en la cantidad (el patrón de `currency_operations.foreign_amount`).
+
+    Sale de una compra (`expense_entry_id`), de una venta o del cierre
+    (`sale_id`), o se carga a mano: producción, conteo (`ajuste`, con lo
+    `counted_qty` que se contó) o merma. Ver services/business/stock.py.
+    """
+    __tablename__ = "stock_movements"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('compra', 'produccion', 'venta', 'ajuste', 'merma')", name="ck_stock_movements_kind",
+        ),
+        CheckConstraint(
+            "(kind IN ('compra', 'produccion') AND qty > 0) OR (kind IN ('venta', 'merma') AND qty < 0) "
+            "OR (kind = 'ajuste' AND qty <> 0)",
+            name="ck_stock_movements_sign",
+        ),
+        CheckConstraint(
+            "NOT (expense_entry_id IS NOT NULL AND sale_id IS NOT NULL)", name="ck_stock_movements_one_origin",
+        ),
+        Index("ix_stock_movements_tenant_product", "tenant_id", "product_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="RESTRICT"))
+    kind: Mapped[str] = mapped_column(String(12))
+    qty: Mapped[Decimal] = mapped_column(Numeric(12, 3))
+    movement_date: Mapped[date] = mapped_column(Date)
+    unit_cost: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    counted_qty: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
+    expense_entry_id: Mapped[int | None] = mapped_column(
+        ForeignKey("expense_entries.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    sale_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sales.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    source: Mapped[str] = mapped_column(String(20), default="app")
+    notes: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))

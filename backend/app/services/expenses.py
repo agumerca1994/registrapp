@@ -146,6 +146,11 @@ async def delete_expense(db: AsyncSession, entry: ExpenseEntry, tenant_id: int) 
         split.expense_entry_id = None
         split.status = "pending"
         await db.flush()
+    # El stock que entró con esta compra se va con ella (en Postgres también lo
+    # haría el CASCADE; explícito por el SQLite de los tests).
+    from app.services.business.stock import delete_for_expense
+
+    await delete_for_expense(db, entry.id)
     await db.delete(entry)
     await db.flush()
     category_suggest.invalidate(tenant_id)

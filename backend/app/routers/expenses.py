@@ -244,7 +244,7 @@ async def create_entry(
     db: AsyncSession = Depends(get_db),
 ):
     user = await _get_db_user(firebase_user, db)
-    data = body.model_dump()
+    data = body.model_dump(exclude={"stock_lines"})
     # USD expenses can be categorised like any other now — a trip paid in
     # dollars belongs in "Viajes", not in a currency bucket. "Consumo en
     # dólares" stays as the fallback when the user doesn't pick one (that
@@ -267,6 +267,17 @@ async def create_entry(
         payee_id=data.get("payee_id"),
         source=data.get("source") or EXPENSE_SOURCE_MANUAL,
     )
+    if body.stock_lines:
+        # Sólo un negocio tiene productos: en un hogar esto no tiene a dónde ir.
+        from app.models.tenant import TENANT_KIND_BUSINESS, Tenant
+        from app.services.business import sales as sales_service, stock as stock_service
+
+        if await db.scalar(select(Tenant.kind).where(Tenant.id == user.tenant_id)) != TENANT_KIND_BUSINESS:
+            raise HTTPException(status_code=422, detail="El stock es sólo para negocios")
+        await sales_service.lock_tenant(db, user.tenant_id)
+        await stock_service.add_purchase_lines(
+            db, tenant_id=user.tenant_id, user_id=user.id, entry=entry, lines=body.stock_lines,
+        )
     await db.commit()
     result = await db.scalar(
         select(ExpenseEntry)

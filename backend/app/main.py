@@ -18,7 +18,7 @@ from app.routers import (
 from app.routers.internal_logs import router as internal_logs_router
 from app.routers.business import (
     payees as business_payees, products as business_products, sales as business_sales,
-    summary as business_summary,
+    stock as business_stock, summary as business_summary,
 )
 from app.core.access import deny_employee, employee_allowed
 from app.core.config import settings
@@ -243,6 +243,7 @@ if settings.RECONCILE_ENABLED:
 app.include_router(business_payees.router)
 app.include_router(business_products.router)
 app.include_router(business_sales.router)
+app.include_router(business_stock.router)
 app.include_router(business_summary.router)
 app.include_router(internal_logs_router)
 

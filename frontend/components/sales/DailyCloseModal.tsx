@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FIELD } from "@/components/ui/form";
 import { fromCents, toCents } from "@/lib/split";
-import { PAYMENT_METHOD_LABELS, PAYMENT_METHODS, type DaySummary, type PaymentMethod } from "@/lib/sales";
+import { PAYMENT_METHOD_LABELS, PAYMENT_METHODS, type DaySummary, type PaymentMethod, type Product } from "@/lib/sales";
 
 // Los que se muestran siempre, aunque el día no tenga ventas por ahí: la caja
 // y la billetera son lo que se cuenta en cualquier mostrador.
@@ -25,10 +25,12 @@ const fmtInput = (n: number) => (n ? n.toLocaleString("es-AR", { maximumFraction
  * muestra ("sin ticket" si hay de más, "falta" si hay de menos) pero no se
  * guarda: un ticket olvidado que se carga después no puede sumar dos veces.
  */
-export default function DailyCloseModal({ summary, title, onSaved, onClose }: {
+export default function DailyCloseModal({ summary, title, products = [], onSaved, onClose }: {
   summary: DaySummary;
   /** "Cierre de hoy" / "Cierre del viernes 9 de octubre". */
   title: string;
+  /** Para las unidades: sólo se preguntan las de los que llevan stock. */
+  products?: Product[];
   onSaved: () => void | Promise<void>;
   onClose: () => void;
 }) {
@@ -48,6 +50,21 @@ export default function DailyCloseModal({ summary, title, onSaved, onClose }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Las unidades que salieron en el día, para el stock. Arrancan en lo que ya
+  // dicen las ventas (o en lo del cierre anterior): el stock resta sólo lo que
+  // falta, nunca dos veces (services/business/stock.sync_close_movements).
+  const tracked = products.filter(p => p.is_active && p.track_stock);
+  const soldUnits: Record<number, number> = {};
+  for (const t of summary.tickets) {
+    for (const l of t.lines) if (l.product_id) soldUnits[l.product_id] = (soldUnits[l.product_id] ?? 0) + Number(l.qty);
+  }
+  const closeUnits = Object.fromEntries(
+    (summary.close?.lines ?? []).filter(l => l.product_id).map(l => [l.product_id as number, Number(l.qty)]),
+  ) as Record<number, number>;
+  const [units, setUnits] = useState<Record<number, string>>(() =>
+    Object.fromEntries(tracked.map(p => [p.id, fmtInput(summary.close ? closeUnits[p.id] ?? 0 : soldUnits[p.id] ?? 0)])),
+  );
+
   const totalCounted = fromCents(methods.reduce((s, m) => s + toCents(parseAmount(values[m] || "0")), 0));
   const hidden = PAYMENT_METHODS.filter(m => !methods.includes(m));
 
@@ -60,7 +77,10 @@ export default function DailyCloseModal({ summary, title, onSaved, onClose }: {
     setSaving(true);
     setError(null);
     try {
-      await api.put(`/sales/close/${summary.sale_date}`, { counted });
+      const unitRows = tracked
+        .map(p => ({ product_id: p.id, qty: parseAmount(units[p.id] || "0") }))
+        .filter(u => u.qty > 0);
+      await api.put(`/sales/close/${summary.sale_date}`, { counted, units: unitRows });
       await onSaved();
     } catch (err) {
       setError(getErrorMessage(err, "No se pudo guardar el cierre."));
@@ -124,6 +144,25 @@ export default function DailyCloseModal({ summary, title, onSaved, onClose }: {
                   onClick={() => { setMethods(ms => PAYMENT_METHODS.filter(x => ms.includes(x) || x === m)); setValues(v => ({ ...v, [m]: "" })); }}>
                   + {PAYMENT_METHOD_LABELS[m]}
                 </button>
+              ))}
+            </div>
+          )}
+
+          {tracked.length > 0 && (
+            <div className="border-t pt-3 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Unidades que salieron en el día (para el stock)</p>
+              {tracked.map(p => (
+                <div key={p.id} className="flex items-center gap-3" data-testid="close-unit">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-foreground truncate">{p.name}</p>
+                    {!!soldUnits[p.id] && (
+                      <p className="text-[11px] text-muted-foreground">en ventas: {soldUnits[p.id].toLocaleString("es-AR")}</p>
+                    )}
+                  </div>
+                  <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={`${FIELD} mt-0 w-24`}
+                    aria-label={`Unidades de ${p.name}`} placeholder="0"
+                    value={units[p.id] ?? ""} onChange={e => setUnits(u => ({ ...u, [p.id]: e.target.value }))} />
+                </div>
               ))}
             </div>
           )}

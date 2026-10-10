@@ -104,8 +104,10 @@ class SaleIn(BaseModel):
 
 class CloseIn(BaseModel):
     """Lo CONTADO al cerrar el día, por medio de pago. Un medio que no viene es
-    un medio en el que no se contó nada."""
+    un medio en el que no se contó nada. `units`: lo que salió de cada
+    producto con stock (sólo `product_id` y `qty`)."""
     counted: list[SalePaymentIn]
+    units: list[SaleLineIn] = []
     notes: str | None = None
 
 
@@ -166,3 +168,57 @@ class DayBrief(BaseModel):
     total: Decimal
     tickets: int
     closed: bool
+
+
+
+# ── Stock ────────────────────────────────────────────────────────────────────
+
+class StockLineIn(BaseModel):
+    """Lo que entra al stock con una compra."""
+    product_id: int
+    qty: Decimal
+    unit_cost: Decimal | None = None
+
+
+class StockMovementIn(BaseModel):
+    product_id: int
+    kind: Literal["produccion", "merma", "compra"]
+    # En positivo: el tipo decide si suma o resta.
+    qty: Decimal
+    movement_date: date
+    unit_cost: Decimal | None = None
+    notes: str | None = None
+
+
+class StockCountIn(BaseModel):
+    product_id: int
+    counted_qty: Decimal
+
+
+class StockCountsIn(BaseModel):
+    movement_date: date
+    counts: list[StockCountIn]
+
+
+class StockMovementOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: int
+    product_id: int
+    kind: str
+    qty: Decimal
+    movement_date: date
+    unit_cost: Decimal | None = None
+    counted_qty: Decimal | None = None
+    expense_entry_id: int | None = None
+    sale_id: int | None = None
+    notes: str | None = None
+
+
+class StockLevelOut(BaseModel):
+    product_id: int
+    name: str
+    unit: str
+    on_hand: Decimal
+    min_stock: Decimal | None = None
+    alert: str | None = None  # "negativo" | "bajo"

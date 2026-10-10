@@ -39,6 +39,7 @@ from app.models.business import (
 from app.models.income import IncomeEntry, IncomeSource, IncomeType
 from app.models.tenant import Tenant
 from app.schemas.business import DayBrief, DaySummary, MethodLine, SaleLineIn, SaleOut, SalePaymentIn
+from app.services.business import stock as stock_service
 from app.services.business.products import assert_owns_product
 from app.services.income import SALES_SYSTEM_KEY
 
@@ -162,6 +163,7 @@ async def create_ticket(
     )
     db.add(sale)
     await db.flush()
+    await stock_service.sync_ticket_movements(db, sale, user_id)
     await rebuild_day(db, tenant_id, sale_date, user_id)
     return sale, True
 
@@ -194,6 +196,7 @@ async def update_ticket(
     sale.notes = (notes or "").strip()[:500] or None
     sale.updated_at = _now()
     await db.flush()
+    await stock_service.sync_ticket_movements(db, sale, user_id)
     await rebuild_day(db, sale.tenant_id, sale_date, user_id)
     if old_date != sale_date:
         await rebuild_day(db, sale.tenant_id, old_date, user_id)
@@ -203,6 +206,7 @@ async def update_ticket(
 async def delete_ticket(db: AsyncSession, sale: Sale, *, user_id: int) -> None:
     await lock_tenant(db, sale.tenant_id)
     tenant_id, day = sale.tenant_id, sale.sale_date
+    await stock_service.delete_for_sale(db, sale.id)
     await db.delete(sale)
     await db.flush()
     await rebuild_day(db, tenant_id, day, user_id)
@@ -223,24 +227,35 @@ async def upsert_close(
     user_id: int,
     day: date,
     counted: list[SalePaymentIn],
+    units: list[SaleLineIn] | None = None,
     notes: str | None = None,
 ) -> Sale:
     """Lo contado al cerrar el día. Un día tiene un solo cierre: volver a
-    cerrar lo reemplaza (ej. se siguió vendiendo después del primero)."""
+    cerrar lo reemplaza (ej. se siguió vendiendo después del primero).
+
+    `units` son las unidades que salieron en el día por producto (para el
+    stock): sólo productos, sin precio. Lo que ya restaron los tickets no se
+    resta dos veces (`stock.sync_close_movements`)."""
     await lock_tenant(db, tenant_id)
     payment_rows, total = _payments(counted, what="lo contado")
+    unit_rows = await _lines(db, tenant_id, [u for u in units or [] if u.product_id is not None])
+    for row in unit_rows:
+        row.unit_price = None
     close = await get_close(db, tenant_id, day)
     now = _now()
     if close is None:
         close = Sale(
             tenant_id=tenant_id, user_id=user_id, sale_date=day, kind=SALE_KIND_CLOSE,
-            total=total, source="app", created_at=now, updated_at=now, payments=payment_rows,
+            total=total, source="app", created_at=now, updated_at=now,
+            payments=payment_rows, lines=unit_rows,
         )
         db.add(close)
     else:
         close.payments.clear()
+        close.lines.clear()
         await db.flush()
         close.payments.extend(payment_rows)
+        close.lines.extend(unit_rows)
         close.total = total
         close.user_id = user_id
         close.updated_at = now
@@ -255,6 +270,7 @@ async def delete_close(db: AsyncSession, *, tenant_id: int, user_id: int, day: d
     close = await get_close(db, tenant_id, day)
     if close is None:
         raise HTTPException(status_code=404, detail="Ese día no tiene cierre")
+    await stock_service.delete_for_sale(db, close.id)
     await db.delete(close)
     await db.flush()
     await rebuild_day(db, tenant_id, day, user_id)
@@ -309,6 +325,11 @@ async def rebuild_day(db: AsyncSession, tenant_id: int, day: date, user_id: int)
         else:
             keep.amount, keep.notes, keep.currency = total, note, "ARS"
     await db.flush()
+    # Lo que el cierre resta del stock depende de lo que ya restaron los
+    # tickets del día: cualquier cambio en el día lo rehace.
+    close = await get_close(db, tenant_id, day)
+    if close is not None:
+        await stock_service.sync_close_movements(db, close, user_id)
     return total
 
 
@@ -343,6 +364,18 @@ async def day_summary(db: AsyncSession, tenant_id: int, day: date) -> DaySummary
             warnings.append(
                 f"Diferencia de caja en {METHOD_LABELS[method]}: se contó {_ars(-diff)} menos "
                 "de lo que suman las ventas."
+            )
+    if close is not None and close.lines:
+        sold_units: dict[int, Decimal] = defaultdict(Decimal)
+        for t in tickets:
+            for ln in t.lines:
+                if ln.product_id:
+                    sold_units[ln.product_id] += Decimal(ln.qty)
+        short = [ln for ln in close.lines if ln.product_id and Decimal(ln.qty) < sold_units.get(ln.product_id, 0)]
+        if short:
+            warnings.append(
+                "Las ventas cargadas suman más unidades que las del cierre en "
+                f"{len(short)} producto{'s' if len(short) != 1 else ''}: revisá las unidades del cierre."
             )
     if close is not None and any(t.created_at > close.updated_at for t in tickets):
         warnings.append(

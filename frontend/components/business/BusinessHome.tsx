@@ -41,6 +41,7 @@ interface BusinessSummary {
   sales_total: number;
   sales_by_method: { method: PaymentMethod; total: number }[];
   top_products: { product_id: number | null; name: string; qty: number; revenue: number }[];
+  stock_alerts: { product_id: number; name: string; on_hand: number | string; alert: "negativo" | "bajo" }[];
 }
 
 // El color dice qué es cada uno, no quién: proveedores y empleados se leen de
@@ -137,6 +138,27 @@ export default function BusinessHome() {
             <p className="text-xs text-muted-foreground -mt-2 md:-mt-4">
               Además se pagaron {formatUSD(expensesUsd)}, que no entran en el resultado en pesos.
             </p>
+          )}
+
+          {data.stock_alerts.length > 0 && (
+            <Card className="p-4 md:p-5 space-y-2">
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-foreground text-sm md:text-base truncate">Stock para revisar</h3>
+                <Link href="/productos" className="ml-auto shrink-0 text-xs font-medium text-primary hover:underline">
+                  Ver productos
+                </Link>
+              </div>
+              {data.stock_alerts.map((a) => (
+                <p key={a.product_id} className="text-sm flex items-baseline justify-between gap-3">
+                  <span className="truncate text-foreground">{a.name}</span>
+                  <span className={`shrink-0 tabular-nums ${a.alert === "negativo" ? "text-rose-700" : "text-amber-700"}`}>
+                    {a.alert === "negativo"
+                      ? `${Number(a.on_hand).toLocaleString("es-AR")}: cargá la producción`
+                      : `quedan ${Number(a.on_hand).toLocaleString("es-AR")}`}
+                  </span>
+                </p>
+              ))}
+            </Card>
           )}
 
           {empty ? (

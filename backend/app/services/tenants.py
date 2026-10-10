@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.business import Payee, Product, Sale
+from app.models.business import Payee, Product, Sale, StockMovement
 from app.models.credit_card import CreditCard
 from app.models.currency_operation import CurrencyOperation
 from app.models.expense import ExpenseCategory, ExpenseEntry
@@ -47,6 +47,7 @@ BUSINESS_ONLY_DATA = (
     ("proveedores y empleados", Payee),
     ("productos", Product),
     ("ventas", Sale),
+    ("stock", StockMovement),
 )
 
 # (nombre, color, fijo). Sustantivos cortos, como el resto de las etiquetas:
