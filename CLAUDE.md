@@ -76,6 +76,23 @@ Current flags: `NEXT_PUBLIC_FEATURE_IOS_SHORTCUT` — the iOS Shortcut section i
 ### Multi-tenancy
 Every data table has `tenant_id` (FK to `tenants`). The auth flow: Firebase JWT → `get_current_user` dependency verifies the token and returns decoded claims → routers call `_get_db_user()` to look up `User` by `firebase_uid` and get `tenant_id` → all queries filter by `tenant_id`.
 
+### Negocio: la misma app para comercios chicos
+Un negocio es un tenant con `tenants.kind = 'business'` (`'household'` por defecto; VARCHAR + CHECK, no un enum de Postgres). **Misma imagen, misma base, mismo código**: separar duplicaría el bot (un solo número y un solo webhook de Evolution), el VPS y los deploys sin aislar a un negocio de otro, que igual depende de `tenant_id`. Y separar más adelante es un script que copia filas por `tenant_id`, mientras que juntar dos bases obliga a renumerar cada FK. Para que separar siga siendo barato, el negocio vive en sus propios módulos y tablas.
+
+- **Alta.** El piloto se convierte a mano con `PATCH /internal/tenants/{id}/kind` (`services/tenants.set_kind`). Da 409 si el tenant tiene datos que el otro tipo no muestra (`HOUSEHOLD_ONLY_DATA`: ingresos, divisas, hipoteca, compartidos), porque quedarían escondidos sin que nada lo diga. Gastos, tarjetas y recordatorios no bloquean. Al pasar a negocio siembra `BUSINESS_CATEGORIES` (idempotente por nombre plegado). **Cada módulo nuevo del negocio suma sus tablas a `BUSINESS_ONLY_DATA`**. El alta pública (`POST /auth/register {kind:"business"}`) exige `BUSINESS_SIGNUP_ENABLED`, que por defecto está apagado.
+- `UserOut.tenant_kind` es un `@property`, con la misma trampa que `tenant_code`: hace falta `selectinload(User.tenant)`.
+- **Empleados: denegado por defecto, en un solo lugar (`core/access.py`).** Hasta acá cualquier miembro veía todo, y `_get_db_user` está copiado en 12 routers: un `if` por endpoint falla en cuanto falta en uno.
+  - `deny_employee` va a nivel de router en `main.py`, en todo router que pide usuario en todas sus rutas.
+  - En los mixtos va por endpoint, porque a nivel de router le pediría token a la ruta pública:
+    - `macro`: el borrado usa la clave interna;
+    - `oauth`: discovery y token son públicos;
+    - `auth`: `employee_allowed` a nivel de router (es el propio perfil) más `deny_employee` en `/auth/members`.
+  - `shared_expenses` separó su ruta pública (`GET /invite/{token}`) en `public_router` justamente para poder llevar la guardia a nivel de router.
+  - `employee_allowed` es una marca que no valida nada: deja escrita la decisión al lado de la ruta.
+  - Los routers del negocio usan `get_staff_user` / `get_owner_user`, que además devuelven el usuario; no se agrega otra copia de `_get_db_user`.
+  - `get_actor` carga el tenant con `joinedload`, así un `UserOut` posterior no dispara un lazy load.
+  - **`tests/test_route_policies.py` es lo que lo hace real.** Falla si una ruta que pide usuario no tiene política, y también si aparece una ruta pública que no está en `PUBLIC_ROUTES`. Agregar un router sin guardia rompe un test, no la privacidad de un negocio.
+
 ### Backend structure
 ```
 backend/app/

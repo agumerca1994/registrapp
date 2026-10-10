@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # y es el que gobierna si la pantalla existe; éste es el apagador de
     # emergencia del backend.
     RECONCILE_ENABLED: bool = True
+    # Alta pública de negocios (`POST /auth/register` con kind="business").
+    # Apagada: el piloto se convierte a mano con PATCH /internal/tenants/{id}/kind.
+    BUSINESS_SIGNUP_ENABLED: bool = False
     FRONTEND_URL: str = "http://localhost:3000"
     INTERNAL_LOG_KEY: str = ""
 

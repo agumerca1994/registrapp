@@ -13,16 +13,12 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.firebase import get_current_user
+from app.core.access import deny_employee
 from app.services import contacts as contacts_service
+from app.services import tenants as tenants_service
 from app.services import user_directory
-from app.models.credit_card import CreditCard
-from app.models.currency_operation import CurrencyOperation
-from app.models.expense import ExpenseEntry
-from app.models.income import IncomeEntry
-from app.models.mortgage import MortgageRecord
-from app.models.payment_reminder import PaymentReminder
-from app.models.shared_expense import SharedExpense, SharedExpenseSplit
-from app.models.tenant import Tenant
+from app.models.shared_expense import SharedExpenseSplit
+from app.models.tenant import TENANT_KIND_BUSINESS, Tenant
 from app.models.user import User, UserRole
 from app.routers.shared_expenses import _normalize_phone
 from app.schemas.user import UserJoinTenant, UserOut, UserRegister
@@ -43,24 +39,9 @@ def _generate_tenant_code() -> str:
     return "".join(secrets.choice(chars) for _ in range(8))
 
 
-# Tables that hold what a household would actually lose by being abandoned.
-# Not exhaustive on purpose — categories and sources get auto-created and would
-# make an untouched household look occupied.
-_TENANT_DATA_MODELS = (
-    IncomeEntry, ExpenseEntry, CurrencyOperation, CreditCard, MortgageRecord,
-    SharedExpense, PaymentReminder,
-)
-
-
-async def _tenant_has_data(db: AsyncSession, tenant_id: int) -> bool:
-    """Whether abandoning this tenant would strand anything the user loaded."""
-    for model in _TENANT_DATA_MODELS:
-        found = await db.scalar(
-            select(model.id).where(model.tenant_id == tenant_id).limit(1)
-        )
-        if found is not None:
-            return True
-    return False
+# Movidos a services/tenants.py; los nombres viejos quedan por compatibilidad.
+_TENANT_DATA_MODELS = tenants_service.TENANT_DATA_MODELS
+_tenant_has_data = tenants_service.tenant_has_data
 
 
 async def _assert_can_leave_current_tenant(user: User, db: AsyncSession) -> None:
@@ -128,14 +109,19 @@ async def register(
     firebase_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if body.kind == TENANT_KIND_BUSINESS and not settings.BUSINESS_SIGNUP_ENABLED:
+        raise HTTPException(status_code=403, detail="El alta de negocios todavía no está abierta")
+
     existing = await db.scalar(
         select(User).where(User.firebase_uid == firebase_user["uid"])
     )
     if existing:
         await _assert_can_leave_current_tenant(existing, db)
-        new_t = Tenant(name=body.tenant_name, code=_generate_tenant_code())
+        new_t = Tenant(name=body.tenant_name, code=_generate_tenant_code(), kind=body.kind)
         db.add(new_t)
         await db.flush()
+        if body.kind == TENANT_KIND_BUSINESS:
+            await tenants_service.seed_business_categories(db, new_t.id)
         existing.tenant_id = new_t.id
         existing.role = UserRole.admin
         await db.commit()
@@ -143,9 +129,11 @@ async def register(
             select(User).options(selectinload(User.tenant)).where(User.id == existing.id)
         )
 
-    tenant = Tenant(name=body.tenant_name, code=_generate_tenant_code())
+    tenant = Tenant(name=body.tenant_name, code=_generate_tenant_code(), kind=body.kind)
     db.add(tenant)
     await db.flush()
+    if body.kind == TENANT_KIND_BUSINESS:
+        await tenants_service.seed_business_categories(db, tenant.id)
 
     user = User(
         firebase_uid=firebase_user["uid"],
@@ -558,7 +546,9 @@ async def skip_whatsapp_gate(
     )
 
 
-@router.get("/members", response_model=list[UserOut])
+# El resto de /auth es del propio usuario y un empleado lo usa (ver main.py);
+# la lista de miembros no: es el organigrama del negocio.
+@router.get("/members", response_model=list[UserOut], dependencies=[Depends(deny_employee)])
 async def list_members(
     firebase_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

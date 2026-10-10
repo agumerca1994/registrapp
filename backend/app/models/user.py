@@ -73,5 +73,10 @@ class User(Base):
         # que devuelva UserOut necesita `selectinload(User.tenant)` o revienta
         # con MissingGreenlet al serializar.
         return self.tenant.name if self.tenant else None
+
+    @property
+    def tenant_kind(self) -> str | None:
+        # Misma trampa que `tenant_code`: necesita `selectinload(User.tenant)`.
+        return self.tenant.kind if self.tenant else None
     income_entries: Mapped[list["IncomeEntry"]] = relationship(back_populates="user")
     expense_entries: Mapped[list["ExpenseEntry"]] = relationship(back_populates="user")

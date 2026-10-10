@@ -4,7 +4,7 @@ import traceback
 from contextlib import asynccontextmanager
 from datetime import date
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -16,6 +16,7 @@ from app.routers import (
     notifications, directory, reconcile,
 )
 from app.routers.internal_logs import router as internal_logs_router
+from app.core.access import deny_employee, employee_allowed
 from app.core.config import settings
 from app.core.logging_config import setup_logging, log_queue_consumer, log_http_error
 
@@ -208,22 +209,31 @@ def _is_expected_auth_noise(request: Request, response) -> bool:
     return False
 
 
-app.include_router(auth.router)
-app.include_router(income.router)
-app.include_router(expenses.router)
+# Empleados de un negocio: denegados por defecto (core/access.py). Los routers
+# que piden usuario en TODAS sus rutas llevan la guardia acá; los mixtos (auth,
+# macro, oauth) la llevan por endpoint, porque a nivel router le pediría token a
+# su ruta pública. tests/test_route_policies.py falla si una ruta queda sin
+# decidir.
+_deny_employees = [Depends(deny_employee)]
+_employees_ok = [Depends(employee_allowed)]
+
+app.include_router(auth.router, dependencies=_employees_ok)  # su propio perfil; /members tiene guardia
+app.include_router(income.router, dependencies=_deny_employees)
+app.include_router(expenses.router, dependencies=_deny_employees)
 app.include_router(macro.router)
-app.include_router(dashboard.router)
-app.include_router(mortgage.router)
-app.include_router(shared_expenses.router)
-app.include_router(credit_cards.router)
+app.include_router(dashboard.router, dependencies=_deny_employees)
+app.include_router(mortgage.router, dependencies=_deny_employees)
+app.include_router(shared_expenses.public_router)
+app.include_router(shared_expenses.router, dependencies=_deny_employees)
+app.include_router(credit_cards.router, dependencies=_deny_employees)
 app.include_router(whatsapp.router)
-app.include_router(contacts.router)
-app.include_router(reminders.router)
-app.include_router(currency.router)
-app.include_router(notifications.router)
-app.include_router(directory.router)
+app.include_router(contacts.router, dependencies=_deny_employees)
+app.include_router(reminders.router, dependencies=_deny_employees)
+app.include_router(currency.router, dependencies=_deny_employees)
+app.include_router(notifications.router, dependencies=_employees_ok)  # registrar el push
+app.include_router(directory.router, dependencies=_deny_employees)
 if settings.RECONCILE_ENABLED:
-    app.include_router(reconcile.router)
+    app.include_router(reconcile.router, dependencies=_deny_employees)
 app.include_router(internal_logs_router)
 
 if settings.MCP_ENABLED:

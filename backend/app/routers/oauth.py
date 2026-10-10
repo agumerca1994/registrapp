@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.access import deny_employee
 from app.core.firebase import get_current_user
 from app.models.mcp_auth import McpOAuthAuthorization, McpOAuthClient, McpToken
 from app.models.user import User
@@ -184,7 +185,7 @@ async def authorize_txn(txn_id: str, db: AsyncSession = Depends(get_db)):
     }
 
 
-@router.post("/oauth/authorize/consent")
+@router.post("/oauth/authorize/consent", dependencies=[Depends(deny_employee)])
 async def authorize_consent(
     body: ConsentBody,
     request: Request,
@@ -243,7 +244,7 @@ def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
 
-@router.get("/oauth/connections")
+@router.get("/oauth/connections", dependencies=[Depends(deny_employee)])
 async def list_connections(
     firebase_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -282,7 +283,7 @@ async def list_connections(
     return {"connections": list(grants.values()), "connector_url": settings.MCP_RESOURCE_URL}
 
 
-@router.delete("/oauth/connections/{grant_id}", status_code=204)
+@router.delete("/oauth/connections/{grant_id}", status_code=204, dependencies=[Depends(deny_employee)])
 async def disconnect(
     grant_id: str,
     firebase_user: dict = Depends(get_current_user),
@@ -302,7 +303,7 @@ async def disconnect(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/oauth/tokens")
+@router.get("/oauth/tokens", dependencies=[Depends(deny_employee)])
 async def list_tokens(
     firebase_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -337,7 +338,7 @@ async def list_tokens(
     }
 
 
-@router.post("/oauth/tokens", status_code=201)
+@router.post("/oauth/tokens", status_code=201, dependencies=[Depends(deny_employee)])
 async def create_token_endpoint(
     body: PatCreate,
     firebase_user: dict = Depends(get_current_user),
@@ -374,7 +375,7 @@ async def create_token_endpoint(
     }
 
 
-@router.delete("/oauth/tokens/{token_id}", status_code=204)
+@router.delete("/oauth/tokens/{token_id}", status_code=204, dependencies=[Depends(deny_employee)])
 async def delete_token(
     token_id: int,
     firebase_user: dict = Depends(get_current_user),

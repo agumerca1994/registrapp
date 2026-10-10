@@ -42,6 +42,10 @@ from app.models.auth_link_token import AuthLinkToken  # noqa: E402
 from app.models.tenant import Tenant  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.models.mcp_auth import McpToken  # noqa: E402
+from app.models.income import IncomeEntry, IncomeEntryItem, IncomeSource, IncomeSourceField  # noqa: E402
+from app.models.currency_operation import CurrencyOperation  # noqa: E402
+from app.models.mortgage import MortgageLoan  # noqa: E402
+from app.models.payment_reminder import PaymentReminder  # noqa: E402
 from app.models.reconciliation import (  # noqa: E402
     CaptureEvent,
     CaptureRule,
@@ -70,6 +74,14 @@ _TABLES = [
     Tenant.__table__,
     User.__table__,
     McpToken.__table__,
+    # Las que consultan los chequeos de "¿este tenant tiene datos?" (services/tenants.py).
+    IncomeSource.__table__,
+    IncomeSourceField.__table__,
+    IncomeEntry.__table__,
+    IncomeEntryItem.__table__,
+    CurrencyOperation.__table__,
+    MortgageLoan.__table__,
+    PaymentReminder.__table__,
 ]
 
 

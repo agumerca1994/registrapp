@@ -3,6 +3,10 @@ from sqlalchemy import String, DateTime, func, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
+TENANT_KIND_HOUSEHOLD = "household"
+TENANT_KIND_BUSINESS = "business"
+TENANT_KINDS = (TENANT_KIND_HOUSEHOLD, TENANT_KIND_BUSINESS)
+
 
 class Tenant(Base):
     __tablename__ = "tenants"
@@ -17,6 +21,12 @@ class Tenant(Base):
     # mide el interés en el análisis con IA (ver capture_events). Gatea sólo
     # los caminos que gastarían plata en IA, nunca una feature ya existente.
     plan: Mapped[str] = mapped_column(String(10), default="free", server_default="free")
+    # "household" | "business" (TENANT_KINDS). Un negocio es un tenant más en la
+    # misma base: ve otra navegación y sus propios módulos, pero comparte login,
+    # bot, MCP y todo lo que no es del hogar. Ver la sección "Negocio" de CLAUDE.md.
+    kind: Mapped[str] = mapped_column(
+        String(20), default=TENANT_KIND_HOUSEHOLD, server_default=TENANT_KIND_HOUSEHOLD
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     users: Mapped[list["User"]] = relationship(back_populates="tenant")

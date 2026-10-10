@@ -21,6 +21,10 @@ from app.schemas.shared_expense import (
 )
 
 router = APIRouter(prefix="/shared-expenses", tags=["shared-expenses"])
+# La única ruta sin login: la página de una invitación, que la abre alguien que
+# todavía no tiene cuenta. Va en su propio router porque el principal lleva la
+# guardia de empleados (core/access.py) a nivel router, y esa pide token.
+public_router = APIRouter(prefix="/shared-expenses", tags=["shared-expenses"])
 logger = logging.getLogger(__name__)
 
 
@@ -202,7 +206,7 @@ async def reject_split(
     return _out(result, user)
 
 
-@router.get("/invite/{token}", response_model=InviteInfoOut)
+@public_router.get("/invite/{token}", response_model=InviteInfoOut)
 async def get_invite_info(
     token: str,
     db: AsyncSession = Depends(get_db),

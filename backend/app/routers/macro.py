@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 import httpx
 
+from app.core.access import deny_employee
 from app.core.database import get_db, AsyncSessionLocal
 from app.core.firebase import get_current_user
 from app.models.macro_variable import MacroVariable
@@ -217,7 +218,7 @@ async def backfill_macro_history(from_year: int = 2020, from_month: int = 1) -> 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
-@router.get("", response_model=list[MacroVariableOut])
+@router.get("", response_model=list[MacroVariableOut], dependencies=[Depends(deny_employee)])
 async def list_macro(
     from_date: str | None = Query(default=None, description="YYYY-MM-DD"),
     firebase_user: dict = Depends(get_current_user),
@@ -230,7 +231,7 @@ async def list_macro(
     return result.all()
 
 
-@router.post("/backfill")
+@router.post("/backfill", dependencies=[Depends(deny_employee)])
 async def trigger_backfill(
     request: Request,
     from_year: int = Query(default=2020, ge=2010, le=2030),

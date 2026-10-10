@@ -562,6 +562,30 @@ async def set_tenant_plan(
     return {"tenant_id": tenant.id, "plan": tenant.plan}
 
 
+@router.patch("/tenants/{tenant_id}/kind")
+async def set_tenant_kind(
+    tenant_id: int,
+    payload: dict[str, Any],
+    _: None = Depends(_require_internal_key),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Convierte un tenant en hogar o negocio (el alta del piloto de negocios).
+
+    Rechaza con 409 si el tenant tiene datos que el otro tipo no muestra
+    (ingresos, divisas, hipoteca o compartidos para pasar a negocio): quedarían
+    escondidos sin que nada en pantalla diga que siguen ahí. Al pasar a negocio
+    siembra sus categorías de gasto, sin duplicar las que ya existan."""
+    from app.models.tenant import Tenant
+    from app.services import tenants as tenants_service
+
+    tenant = await db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant no encontrado")
+    seeded = await tenants_service.set_kind(db, tenant, payload.get("kind"))
+    await db.commit()
+    return {"tenant_id": tenant.id, "kind": tenant.kind, "categories_seeded": seeded}
+
+
 @router.get("/whatsapp-webhook-config")
 async def whatsapp_webhook_config(
     _: None = Depends(_require_internal_key),

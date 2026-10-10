@@ -47,6 +47,9 @@
       # check (421/403 on /mcp). Comma-separated, normally empty.
       MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-}
       MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
+      # Alta pública de negocios (POST /auth/register con kind="business").
+      # Apagada: el piloto se convierte con PATCH /internal/tenants/{id}/kind.
+      BUSINESS_SIGNUP_ENABLED: ${BUSINESS_SIGNUP_ENABLED:-false}
     restart: unless-stopped
     depends_on:
       registrapp-db:
