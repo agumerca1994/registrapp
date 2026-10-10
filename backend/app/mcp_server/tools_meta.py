@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.mcp_server.context import current_caller, tool_session
 from app.mcp_server.instance import READ_ONLY, mcp
 from app.mcp_server.serialize import f, f0, guard
-from app.models.business import Payee
+from app.models.business import Payee, Product
 from app.models.credit_card import CreditCard
 from app.models.expense import ExpenseCategory
 from app.models.income import IncomeSource
@@ -22,22 +22,35 @@ from app.services.currency import get_tenant_rate_type
 BUSINESS_RULES = [
     "Es la cuenta de un NEGOCIO, no de un hogar: no apliques las reglas de "
     "divisas, hipoteca, gastos compartidos ni recibos de sueldo.",
-    "Los gastos cuentan el mes en que sale la plata: una compra con tarjeta, "
-    "cuando vence el resumen. Los montos nunca se mezclan entre ARS y USD.",
-    "`payees` son los proveedores y empleados del negocio; cada gasto puede "
-    "tener uno (`payee_id`). Por ahora se cargan y se asignan desde la app.",
-    "Las ventas entran como UN ingreso por día en la fuente «Ventas» (lo contado "
-    "si ese día se cerró la caja; si no, la suma de las ventas). Ese ingreso lo "
-    "arma la app: no lo crees ni lo edites con save_income_entry (lo rechaza).",
-    "Cargar ventas, stock y producción todavía no se puede desde este conector: "
-    "si te lo piden, decilo en vez de cargarlos como gastos o ingresos.",
+    "El resultado del mes es ventas − egresos. Los gastos cuentan el mes en que "
+    "sale la plata: una compra con tarjeta, cuando vence el resumen. Los montos "
+    "nunca se mezclan entre ARS y USD.",
+    "Las ventas entran como UN ingreso por día en la fuente «Ventas»: lo CONTADO "
+    "si ese día se cerró la caja (record_daily_close) y, si no, la suma de las "
+    "ventas (record_sale). Ese ingreso lo arma la app: no lo crees ni lo edites "
+    "con save_income_entry (lo rechaza). Para leer ventas usá get_sales.",
+    "Una venta cargada en un día que ya tiene cierre no cambia el total del día: "
+    "si esa plata no estaba en la caja al cerrar, hay que volver a cerrar. Si lo "
+    "contado supera lo vendido es venta sin ticket; si no llega, diferencia de caja.",
+    "Stock: lo que hay es la suma de los movimientos (get_stock). Una compra para "
+    "revender va con save_expense + stock_lines (gasto y stock juntos); "
+    "producción, merma, un conteo o un ingreso sin gasto, con "
+    "record_stock_movement. La materia prima (verdura, carne, harina) es un "
+    "gasto, no stock: va sin stock_lines.",
+    "Una venta nunca se frena por falta de stock: un stock negativo quiere decir "
+    "que falta cargar producción o un ingreso, no que la venta esté mal.",
+    "`payees` son los proveedores y empleados: save_expense acepta `payee` y, si "
+    "no le pasás categoría, usa la suya. Se crean desde la app.",
+    "Los productos no se borran: se archivan (save_product con is_active=false), "
+    "porque las ventas viejas los nombran.",
 ]
 
 
 @mcp.tool(annotations=READ_ONLY)
 async def get_taxonomy() -> dict[str, Any]:
     """Catálogo de la cuenta: tipo (hogar o negocio), categorías de gasto,
-    fuentes de ingreso, tarjetas y, en un negocio, proveedores y empleados.
+    fuentes de ingreso, tarjetas y, en un negocio, proveedores, empleados y
+    productos.
 
     Llamala primero: `account_kind` dice si es un hogar o un negocio, y en un
     negocio `rules` reemplaza a las reglas de hogar. También da los nombres
@@ -73,6 +86,11 @@ async def get_taxonomy() -> dict[str, Any]:
             .where(Payee.tenant_id == tid, Payee.is_active.is_(True))
             .order_by(Payee.name_key)
         )).scalars().all() if kind == TENANT_KIND_BUSINESS else []
+        products = (await db.execute(
+            select(Product)
+            .where(Product.tenant_id == tid, Product.is_active.is_(True))
+            .order_by(Product.name_key)
+        )).scalars().all() if kind == TENANT_KIND_BUSINESS else []
 
     business = kind == TENANT_KIND_BUSINESS
     extra = {
@@ -80,6 +98,11 @@ async def get_taxonomy() -> dict[str, Any]:
             {"id": p.id, "name": p.name, "kind": p.kind,
              "default_category_id": p.default_category_id}
             for p in payees
+        ],
+        "products": [
+            {"id": p.id, "name": p.name, "kind": p.kind, "unit": p.unit,
+             "sale_price": f(p.sale_price), "track_stock": p.track_stock}
+            for p in products
         ],
         "rules": BUSINESS_RULES,
     } if business else {}

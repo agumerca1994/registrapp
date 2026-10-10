@@ -143,3 +143,26 @@ def cargar_recibo() -> str:
         "5. Mostrame la vista previa y las advertencias, y guardá sólo cuando te "
         "confirme."
     )
+
+
+@mcp.prompt()
+def analisis_negocio(year: int, month: int) -> str:
+    """Analiza el mes de un negocio: resultado, ventas, gastos fijos y stock."""
+    return (
+        f"Analizá cómo le fue al negocio en {year}-{month:02d}.\n\n"
+        "1. Con get_taxonomy confirmá que es un negocio y leé sus `rules`.\n"
+        "2. Traé el resumen con get_month_summary: el resultado del mes es ventas "
+        "(ingresos) − egresos, contados por fecha de pago.\n"
+        "3. Mirá cómo se vendió con get_sales: group_by=\"day\" (días fuertes y "
+        "flojos, días sin cierre), \"method\" (medios de pago) y \"product\" "
+        "(lo que más factura).\n"
+        "4. Compará ventas y egresos contra el mes anterior y contra un año atrás "
+        "con compare_periods, en términos REALES (descontada la inflación), no "
+        "nominales.\n"
+        "5. Separá los gastos fijos (categorías con is_fixed) de los variables con "
+        "list_expenses, y decí cuánto hay que vender por mes para cubrir los fijos.\n"
+        "6. Revisá get_stock(only_alerts=true): productos en negativo (falta cargar "
+        "producción o ingresos) o en el mínimo.\n"
+        "7. Cerrá con 3 o 4 conclusiones concretas y accionables. Si algo llama la "
+        "atención, decilo directo; no adornes."
+    )

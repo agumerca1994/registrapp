@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
+import { connectorScopeLabel, isBusiness } from "@/lib/account";
 
 // Deliberately outside the (app) route group: that layout bounces anyone
 // without a session to /login, which would drop the ?txn= and break the OAuth
@@ -140,16 +141,27 @@ function AuthorizeInner() {
         <div className="flex items-start gap-2">
           <Eye className="w-4 h-4 mt-0.5 text-emerald-700 shrink-0" />
           <p className="text-sm text-foreground">
-            <strong>Va a poder leer</strong> los ingresos, gastos, tarjetas, cuotas,
-            hipoteca y tenencia en dólares de tu hogar.
+            {isBusiness(appUser) ? (
+              <><strong>Va a poder leer</strong> las ventas, los gastos, el stock, los
+              proveedores y las tarjetas de tu negocio.</>
+            ) : (
+              <><strong>Va a poder leer</strong> los ingresos, gastos, tarjetas, cuotas,
+              hipoteca y tenencia en dólares de tu hogar.</>
+            )}
           </p>
         </div>
         <div className="flex items-start gap-2">
           <Pencil className="w-4 h-4 mt-0.5 text-primary shrink-0" />
           <p className="text-sm text-foreground">
-            <strong>Va a poder cargar, editar y borrar gastos, ingresos, tarjetas y gastos
-            compartidos</strong> (incluido avisarle a quien compartas), siempre con una vista
-            previa que tenés que confirmar. Lo demás es sólo lectura.
+            {isBusiness(appUser) ? (
+              <><strong>Va a poder cargar, editar y borrar ventas, el cierre del día, stock,
+              productos, gastos y tarjetas</strong>, siempre con una vista previa que tenés que
+              confirmar. Lo demás es sólo lectura.</>
+            ) : (
+              <><strong>Va a poder cargar, editar y borrar gastos, ingresos, tarjetas y gastos
+              compartidos</strong> (incluido avisarle a quien compartas), siempre con una vista
+              previa que tenés que confirmar. Lo demás es sólo lectura.</>
+            )}
           </p>
         </div>
       </div>
@@ -164,7 +176,7 @@ function AuthorizeInner() {
         <div className="flex flex-wrap gap-1 pt-1">
           {info.scopes.map(s => (
             <Chip key={s} tone="emerald">
-              {s === "registrapp:read" ? "Lectura + gastos, ingresos, tarjetas y compartidos" : s}
+              {s === "registrapp:read" ? connectorScopeLabel(appUser) : s}
             </Chip>
           ))}
         </div>

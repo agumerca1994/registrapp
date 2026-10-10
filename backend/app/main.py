@@ -2,7 +2,7 @@ import asyncio
 import logging
 import traceback
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -261,8 +261,15 @@ if settings.MCP_ENABLED:
     )
 
 
+# Cuándo arrancó este proceso. El webhook de deploy no devuelve estado, y un
+# build que falla deja al contenedor viejo respondiendo 200 igual: comparar
+# esta hora con la del deploy es lo que dice si la imagen nueva está arriba.
+STARTED_AT = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
 @app.get("/health")
 async def health():
-    # Sin auth y público: devuelve liveness y nada más. Devolvía FRONTEND_URL,
-    # que es configuración interna que no le sirve a un health check.
-    return {"status": "ok"}
+    # Sin auth y público: liveness y la hora de arranque, nada más. Devolvía
+    # FRONTEND_URL, que es configuración interna que no le sirve a un health
+    # check; la hora de arranque no es configuración.
+    return {"status": "ok", "started_at": STARTED_AT}

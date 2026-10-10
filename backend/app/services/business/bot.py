@@ -49,9 +49,10 @@ from app.services.search import fold_text
 # Lo que `deshacer` sabe revertir, además de un gasto.
 BUSINESS_REFS = ("sale", "close", "stock")
 OWNER_OPS = {"purchase", "pay", "expense"}
-# El medio de un gasto simple (`expense_entries.payment_method` es texto libre).
+# El medio de un gasto simple: los de `services/expenses.PAYMENT_METHODS`. En
+# una compra o un pago, Mercado Pago es una transferencia.
 EXPENSE_METHODS = {
-    "efectivo": "efectivo", "debito": "debito", "mercadopago": "mercadopago", "transferencia": "transferencia",
+    "efectivo": "efectivo", "debito": "debito", "transferencia": "transferencia", "mercadopago": "transferencia",
 }
 MSG_CARD = (
     "Con tarjeta de crédito cargalo desde la app (Egresos → Tarjeta): así va al resumen "

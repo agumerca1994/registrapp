@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
-import { isBusiness } from "@/lib/account";
+import { connectorScopeLabel, isBusiness } from "@/lib/account";
 import { FIELD, SelectField } from "@/components/ui/form";
 import { Chip } from "@/components/ui/chip";
 
@@ -177,9 +177,10 @@ export default function McpConnectorSection() {
             Conectá RegistrApp a un asistente de IA para preguntarle cómo viene el negocio:
             en qué se va la plata, a quién se le paga, cómo se compara con otros meses.
             El asistente puede <strong className="text-foreground">leer</strong> los datos de
-            tu negocio y <strong className="text-foreground">cargar o corregir gastos y
-            tarjetas</strong> (por ejemplo «anotá 45 lucas de alquiler» o un resumen del banco),
-            siempre con una vista previa que confirmás vos.
+            tu negocio y <strong className="text-foreground">cargar o corregir ventas, el cierre
+            del día, stock, productos, gastos y tarjetas</strong> (por ejemplo «cargá las ventas
+            de hoy», «anotá 45 lucas de alquiler» o un resumen del banco), siempre con una vista
+            previa que confirmás vos.
           </>
         ) : (
           <>
@@ -230,7 +231,7 @@ export default function McpConnectorSection() {
                   <p className="text-xs text-muted-foreground">Último uso {relative(c.last_used_at)}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <Chip tone="emerald">Lectura + gastos, ingresos, tarjetas y compartidos</Chip>
+                  <Chip tone="emerald">{connectorScopeLabel(appUser)}</Chip>
                   {confirmRow(c.grant_id, () => disconnect(c.grant_id))}
                 </div>
               </div>
