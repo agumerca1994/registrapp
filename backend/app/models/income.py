@@ -23,6 +23,10 @@ class IncomeSource(Base):
     income_type: Mapped[IncomeType] = mapped_column(Enum(IncomeType))
     description: Mapped[str | None] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(default=True)
+    # Una fuente que arma el sistema y no la persona: "sales" es la de Ventas
+    # de un negocio, a la que entra un ingreso por día calculado desde las
+    # ventas. No acepta altas ni ediciones a mano (services/income.py).
+    system_key: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     tenant: Mapped["Tenant"] = relationship(back_populates="income_sources")

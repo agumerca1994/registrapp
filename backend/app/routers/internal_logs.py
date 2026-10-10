@@ -586,6 +586,71 @@ async def set_tenant_kind(
     return {"tenant_id": tenant.id, "kind": tenant.kind, "categories_seeded": seeded}
 
 
+@router.get("/sales-consistency")
+async def sales_consistency(
+    tenant_id: int | None = Query(None),
+    repair: bool = Query(False),
+    _: None = Depends(_require_internal_key),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """El ingreso diario de "Ventas" contra un recálculo desde las ventas.
+
+    Las ventas de un día entran al libro como UN ingreso que
+    `services/business/sales.rebuild_day` recalcula en cada escritura. Si
+    alguna vez eso se desincroniza (un bug, un dato tocado a mano en la base),
+    esto lo encuentra: un día cuyo ingreso no es lo que dicen las ventas, o
+    que tiene más de un ingreso. Con `repair=true` lo rehace con la misma
+    función que usa la app."""
+    from decimal import Decimal
+
+    from sqlalchemy import distinct
+
+    from app.models.business import Sale
+    from app.models.income import IncomeEntry, IncomeSource
+    from app.models.user import User
+    from app.services.business import sales as sales_service
+    from app.services.income import SALES_SYSTEM_KEY
+
+    tenant_ids = [tenant_id] if tenant_id else list(
+        (await db.scalars(select(distinct(Sale.tenant_id)))).all()
+    )
+    mismatches: list[dict[str, Any]] = []
+    for tid in tenant_ids:
+        source_id = await db.scalar(select(IncomeSource.id).where(
+            IncomeSource.tenant_id == tid, IncomeSource.system_key == SALES_SYSTEM_KEY,
+        ))
+        sale_days = set((await db.scalars(
+            select(distinct(Sale.sale_date)).where(Sale.tenant_id == tid)
+        )).all())
+        entries: dict = {}
+        if source_id is not None:
+            for day, amount, count in (await db.execute(
+                select(IncomeEntry.period_date, func.sum(IncomeEntry.amount), func.count(IncomeEntry.id))
+                .where(IncomeEntry.tenant_id == tid, IncomeEntry.source_id == source_id)
+                .group_by(IncomeEntry.period_date)
+            )).all():
+                entries[day] = (Decimal(amount), count)
+        repair_user = None
+        for day in sorted(sale_days | set(entries)):
+            expected, _tickets, _closed = await sales_service.day_total(db, tid, day)
+            got, count = entries.get(day, (Decimal(0), 0))
+            if got == expected and count <= 1:
+                continue
+            mismatches.append({
+                "tenant_id": tid, "day": day.isoformat(),
+                "expected": str(expected), "in_ledger": str(got), "entries": count,
+            })
+            if repair:
+                if repair_user is None:
+                    repair_user = await db.scalar(
+                        select(User.id).where(User.tenant_id == tid).order_by(User.id).limit(1)
+                    )
+                await sales_service.rebuild_day(db, tid, day, repair_user)
+    if repair and mismatches:
+        await db.commit()
+    return {"tenants": len(tenant_ids), "mismatches": mismatches, "repaired": repair and bool(mismatches)}
+
+
 @router.get("/whatsapp-webhook-config")
 async def whatsapp_webhook_config(
     _: None = Depends(_require_internal_key),

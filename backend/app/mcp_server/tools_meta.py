@@ -26,8 +26,11 @@ BUSINESS_RULES = [
     "cuando vence el resumen. Los montos nunca se mezclan entre ARS y USD.",
     "`payees` son los proveedores y empleados del negocio; cada gasto puede "
     "tener uno (`payee_id`). Por ahora se cargan y se asignan desde la app.",
-    "Las ventas, el stock y la producción todavía no se registran desde este "
-    "conector: si te los piden, decilo en vez de cargarlos como gastos o ingresos.",
+    "Las ventas entran como UN ingreso por día en la fuente «Ventas» (lo contado "
+    "si ese día se cerró la caja; si no, la suma de las ventas). Ese ingreso lo "
+    "arma la app: no lo crees ni lo edites con save_income_entry (lo rechaza).",
+    "Cargar ventas, stock y producción todavía no se puede desde este conector: "
+    "si te lo piden, decilo en vez de cargarlos como gastos o ingresos.",
 ]
 
 

@@ -23,7 +23,8 @@ from app.mcp_server.write_common import (
 from app.models.income import IncomeEntry, IncomeSource, IncomeSourceField, IncomeType
 from app.schemas.income import IncomeEntryItemIn, IncomeSourceFieldIn
 from app.services.income import (
-    apply_items, assert_owns_source, ensure_field, entry_out, load_source, sync_fields,
+    apply_items, assert_entry_writable, assert_owns_source, assert_writable_source,
+    ensure_field, entry_out, load_source, sync_fields,
 )
 
 logger = logging.getLogger(__name__)
@@ -169,6 +170,11 @@ async def save_income_entry(
 
             target_source = source_id if source_id is not None else entry.source_id
             await assert_owns_source(target_source, caller.tenant_id, db)
+            # La fuente "Ventas" de un negocio la arma el sistema: ni altas ni
+            # ediciones a mano, tampoco mover un ingreso adentro o afuera.
+            if entry is not None:
+                await assert_entry_writable(entry, db)
+            await assert_writable_source(target_source, db)
             source = await load_source(target_source, caller.tenant_id, db)
 
             created_fields: list[str] = []
@@ -301,6 +307,10 @@ async def delete_income_entry(entry_id: int, dry_run: bool = True) -> dict[str, 
         entry = await db.get(IncomeEntry, entry_id)
         if entry is None or entry.tenant_id != caller.tenant_id:
             raise ToolError(f"No existe el ingreso {entry_id} en este hogar")
+        try:
+            await assert_entry_writable(entry, db)
+        except HTTPException as exc:
+            raise http_to_tool(exc)
         snapshot = _entry_dict(await entry_out(entry_id, db))
         await db.delete(entry)
         await db.flush()
@@ -397,6 +407,7 @@ async def update_income_source_fields(
         limit_writes(caller)
         try:
             source = await load_source(source_id, caller.tenant_id, db)
+            await assert_writable_source(source.id, db)
             before = _fields_dict(source)
             renames = {r.field_id: r.name.strip() for r in rename or []}
             removes = set(remove or [])

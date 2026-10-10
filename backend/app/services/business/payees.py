@@ -11,18 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.business import PAYEE_KINDS, Payee
-from app.services.search import fold_text
-
-MAX_NAME = 120
-
-
-def name_and_key(raw: str | None) -> tuple[str, str]:
-    name = " ".join((raw or "").split())
-    if not name:
-        raise HTTPException(status_code=422, detail="El nombre es obligatorio")
-    if len(name) > MAX_NAME:
-        raise HTTPException(status_code=422, detail=f"El nombre no puede pasar de {MAX_NAME} caracteres")
-    return name, fold_text(name)
+from app.services.business.common import match_by_name, name_and_key
 
 
 def _check_kind(kind: str) -> str:
@@ -104,19 +93,6 @@ async def update_payee(db: AsyncSession, payee: Payee, tenant_id: int, updates: 
 
 
 async def resolve_payee(db: AsyncSession, tenant_id: int, term: str) -> list[Payee]:
-    """Del texto de una persona ("juan", "la verdu") a los payees activos que
-    pueden ser: el nombre exacto plegado gana solo; si no, los que tienen una
-    palabra que empieza con cada palabra del término. Lista vacía o de varios
-    = hay que preguntar."""
-    key = fold_text(term or "").strip()
-    if not key:
-        return []
-    payees = await list_payees(db, tenant_id)
-    exact = [p for p in payees if p.name_key == key]
-    if exact:
-        return exact
-    tokens = key.split()
-    return [
-        p for p in payees
-        if all(any(word.startswith(tok) for word in p.name_key.split()) for tok in tokens)
-    ]
+    """De lo que escribe una persona ("juan", "la verdu") a los payees activos
+    que pueden ser (ver `common.match_by_name`). Vacío o varios = preguntar."""
+    return match_by_name(await list_payees(db, tenant_id), term)

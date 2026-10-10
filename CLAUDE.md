@@ -114,6 +114,22 @@ Un negocio es un tenant con `tenants.kind = 'business'` (`'household'` por defec
   - `INSTRUCTIONS` abre con tres líneas que mandan a `get_taxonomy`.
   - En un negocio, `get_taxonomy` devuelve `account_kind`, `payees` y `rules` (`BUSINESS_RULES` en `tools_meta.py`), que reemplazan a las reglas del hogar.
 - El alta pública lleva dos flags: `BUSINESS_SIGNUP_ENABLED` (backend) y `NEXT_PUBLIC_FEATURE_BUSINESS_SIGNUP` (frontend, con sus tres piezas). Apagado, `/onboarding` es exactamente el de siempre. El `docker-compose.yml` de desarrollo prende el del backend, porque la cuenta de negocio de los E2E se crea por ahí.
+- **Ventas, en las dos modalidades** (`services/business/sales.py`, `/sales`, `/products`; pantallas `/ventas` y `/productos`). Una `Sale` es un **ticket** (qué se vendió y cómo se cobró) o el **cierre** del día (lo contado por medio de pago, uno por día).
+  - `sales.total` es la suma de `sale_payments`, nunca de las líneas: con un descuento, lo cobrado no es lo que suman los productos. Por eso el formulario sigue a las líneas hasta que la persona toca el total.
+  - **Un día = un ingreso.** Las ventas entran al libro como UN `IncomeEntry` por día, sin ítems, en la fuente "Ventas" (`income_sources.system_key = 'sales'`, creada la primera vez).
+    - `rebuild_day` lo recalcula **desde cero** en cada escritura: nunca suma ni resta.
+    - Así el resultado del mes, la historia, el dashboard y el MCP siguen funcionando sin saber de ventas, y la lista de ingresos queda en ~30 filas por mes.
+    - **Ese ingreso no se toca a mano**: `services/income.assert_writable_source` / `assert_entry_writable` lo rechazan con 409 en el router de ingresos (alta, edición, borrado, fuente, importación) y en las tools del MCP.
+  - **El cierre guarda lo CONTADO, no la diferencia.** El día suma lo contado si hay cierre, y si no la suma de los tickets.
+    - "Sin ticket" y "diferencia de caja" se calculan en `day_summary` para mostrarse, no se guardan. Guardar la diferencia hacía que un ticket olvidado, cargado después del cierre con la plata ya contada, sumara dos veces.
+    - Un ticket posterior al cierre no cambia el día: la pantalla avisa que hay que actualizar el cierre.
+  - Las escrituras de un negocio van en fila (`lock_tenant`, `FOR NO KEY UPDATE` sobre su fila de `tenants`): dos celulares a la vez no se pisan el total. El E2E `business-flows` lo prueba contra Postgres, porque SQLite ignora el lock.
+  - `client_ref` (único por negocio) hace que un doble toque o un reintento con mala señal devuelva la misma venta.
+  - Las relaciones `Sale.lines` / `payments` son `selectin` + `delete-orphan`. Para reemplazarlas hay que vaciar y hacer **flush antes** de agregar las nuevas: el flush inserta antes de borrar y chocaría con `UNIQUE(sale_id, method)`.
+  - El analytics del negocio (`sales_by_method`, `sales_by_day`) aplica la misma regla del cierre. `top_products` sale sólo de tickets y se ordena por lo facturado.
+  - `GET /internal/sales-consistency?tenant_id=&repair=` compara cada día contra un recálculo y lo rehace con la misma función.
+  - El día de negocio es `clock.business_today()` en el backend y `businessToday()` en `lib/sales.ts`: Argentina, con corte a las 05:00.
+  - El `+` de Inicio de un negocio abre una venta (`/ventas?nueva=1`), y el hero es **"Resultado de {mes}" = ventas − egresos**, por fecha de pago.
 
 ### Backend structure
 ```

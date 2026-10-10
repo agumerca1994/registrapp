@@ -38,6 +38,27 @@ async def assert_owns_source(source_id: int, tenant_id: int, db: AsyncSession) -
         raise HTTPException(status_code=404, detail="Fuente no encontrada")
 
 
+SALES_SYSTEM_KEY = "sales"
+_SYSTEM_SOURCE_DETAIL = (
+    "Los ingresos de «Ventas» se arman solos con las ventas de cada día: "
+    "se corrigen desde Ventas, no a mano."
+)
+
+
+async def assert_writable_source(source_id: int, db: AsyncSession) -> None:
+    """Una fuente que arma el sistema (`system_key`) no acepta ingresos ni
+    cambios a mano. Hoy es la de Ventas de un negocio: su ingreso de cada día
+    se recalcula desde las ventas (services/business/sales.py), y uno editado
+    a mano se pisaría en la próxima venta o descuadraría contra ellas."""
+    key = await db.scalar(select(IncomeSource.system_key).where(IncomeSource.id == source_id))
+    if key:
+        raise HTTPException(status_code=409, detail=_SYSTEM_SOURCE_DETAIL)
+
+
+async def assert_entry_writable(entry: IncomeEntry, db: AsyncSession) -> None:
+    await assert_writable_source(entry.source_id, db)
+
+
 # ── Campos de detalle ──────────────────────────────────────────────────────────
 
 async def load_source(source_id: int, tenant_id: int, db: AsyncSession) -> IncomeSource:

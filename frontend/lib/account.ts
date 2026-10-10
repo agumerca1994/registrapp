@@ -22,7 +22,7 @@ export function isBusiness(user: MaybeUser): boolean {
 /** Pantallas que sólo existen en un hogar: un negocio no las ve ni en la navegación. */
 export const HOUSEHOLD_ONLY_ROUTES = ["/income", "/divisas", "/shared", "/mortgage", "/macro"];
 /** Y al revés. */
-export const BUSINESS_ONLY_ROUTES = ["/proveedores"];
+export const BUSINESS_ONLY_ROUTES = ["/ventas", "/productos", "/proveedores"];
 
 function under(pathname: string, routes: string[]): boolean {
   return routes.some((r) => pathname === r || pathname.startsWith(r + "/"));

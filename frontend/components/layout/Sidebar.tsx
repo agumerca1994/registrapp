@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, TrendingUp, TrendingDown, BarChart3,
   Home, LogOut, Settings, MoreHorizontal, Users2, CreditCard, CalendarDays,
-  CircleUserRound, ArrowLeftRight, Contact,
+  CircleUserRound, ArrowLeftRight, Contact, ShoppingBag, Package,
 } from "lucide-react";
 import { isBusiness } from "@/lib/account";
 import pkg from "../../package.json";
@@ -46,17 +46,19 @@ const nav: NavItem[] = [
 const MOBILE_TAB_HREFS = ["/dashboard", "/income", "/expenses", "/tarjetas"];
 
 // Un negocio ve sólo lo que tiene sentido en un comercio: sin divisas,
-// hipoteca, compartidos ni macro (las rutas, en lib/account.ts). Ventas y
-// stock se suman acá cuando existan sus pantallas.
+// hipoteca, compartidos ni macro (las rutas, en lib/account.ts). En la tab bar
+// va lo de todos los días: vender, gastar y los productos.
 const BUSINESS_NAV: NavItem[] = [
   { href: "/dashboard", label: "Inicio", icon: LayoutDashboard },
+  { href: "/ventas", label: "Ventas", icon: ShoppingBag },
   { href: "/expenses", label: "Egresos", icon: TrendingDown },
+  { href: "/productos", label: "Productos", icon: Package },
   { href: "/proveedores", label: "Proveedores y empleados", short: "Proveedores", icon: Contact },
   { href: "/tarjetas", label: "Tarjetas", icon: CreditCard },
   { href: "/calendario", label: "Calendario de pagos", icon: CalendarDays },
   { href: "/settings", label: "Configuración", icon: Settings },
 ];
-const BUSINESS_TAB_HREFS = ["/dashboard", "/expenses", "/proveedores", "/tarjetas"];
+const BUSINESS_TAB_HREFS = ["/dashboard", "/ventas", "/expenses", "/productos"];
 
 // Un hook y no constantes de módulo: qué se muestra depende del usuario.
 // Las tres superficies (sidebar, tab bar, hoja "Más") lo llaman, así no

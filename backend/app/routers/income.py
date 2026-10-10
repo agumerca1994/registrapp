@@ -20,6 +20,7 @@ from app.models.income import (
 from app.services.search import fold, fold_term
 from app.services.income import (
     assert_owns_source, load_source, source_out, sync_fields, apply_items,
+    assert_writable_source, assert_entry_writable,
     ensure_field, entry_out,
 )
 from app.schemas.income import (
@@ -149,6 +150,7 @@ async def update_source(
 ):
     user = await _get_db_user(firebase_user, db)
     source = await load_source(source_id, user.tenant_id, db)
+    await assert_writable_source(source.id, db)
     if body.name is not None:
         name = body.name.strip()
         if not name:
@@ -240,6 +242,7 @@ async def create_entry(
 ):
     user = await _get_db_user(firebase_user, db)
     await assert_owns_source(body.source_id, user.tenant_id, db)
+    await assert_writable_source(body.source_id, db)
     entry = IncomeEntry(
         **body.model_dump(exclude={"items"}), tenant_id=user.tenant_id, user_id=user.id,
     )
@@ -261,10 +264,12 @@ async def update_entry(
     entry = await db.get(IncomeEntry, entry_id)
     if not entry or entry.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
+    await assert_entry_writable(entry, db)
     updates = body.model_dump(exclude_none=True, exclude={"items"})
     source_changed = "source_id" in updates and updates["source_id"] != entry.source_id
     if "source_id" in updates:
         await assert_owns_source(updates["source_id"], user.tenant_id, db)
+        await assert_writable_source(updates["source_id"], db)
     for field, value in updates.items():
         setattr(entry, field, value)
     if body.items is not None:
@@ -286,6 +291,7 @@ async def delete_entry(
     entry = await db.get(IncomeEntry, entry_id)
     if not entry or entry.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
+    await assert_entry_writable(entry, db)
     await db.delete(entry)
     await db.commit()
 
@@ -350,6 +356,7 @@ async def import_run(
         source = await db.get(IncomeSource, source_id)
         if not source or source.tenant_id != user.tenant_id:
             raise HTTPException(status_code=404, detail="Fuente no encontrada")
+        await assert_writable_source(source.id, db)
     elif new_source_name:
         source = IncomeSource(
             tenant_id=user.tenant_id,

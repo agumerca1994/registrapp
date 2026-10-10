@@ -22,9 +22,26 @@ function api(req: APIRequestContext, token: string) {
   const headers = { Authorization: `Bearer ${token}` };
   return {
     get: async (path: string) => (await req.get(`${API_URL}${path}`, { headers })).json(),
+    post: async (path: string, data: unknown) => (await req.post(`${API_URL}${path}`, { headers, data })).json(),
     patch: (path: string, data: unknown) => req.patch(`${API_URL}${path}`, { headers, data }),
     del: (path: string) => req.delete(`${API_URL}${path}`, { headers }),
   };
+}
+
+/** El día de negocio, igual que lib/sales.ts: Argentina, con corte a las 5. */
+function businessToday(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(Date.now() - 5 * 3600 * 1000));
+}
+
+type Api = ReturnType<typeof api>;
+
+/** Deja el día sin ventas ni cierre: la cuenta de negocio es sólo de los E2E. */
+async function clearDay(a: Api, day: string) {
+  const summary: { tickets: { id: number }[]; close: unknown } = await a.get(`/sales/day/${day}`);
+  for (const t of summary.tickets) await a.del(`/sales/${t.id}`);
+  if (summary.close) await a.del(`/sales/close/${day}`);
 }
 
 const form = (page: Page) => page.locator("form").filter({ has: page.getByLabel("Descripción") });
@@ -85,5 +102,57 @@ test("proveedor → gasto asignado → Inicio lo muestra", async ({ page, reques
     const entries: { id: number; description?: string }[] = await a.get(`/expenses/entries?q=${desc}`);
     for (const e of entries.filter(x => x.description === desc)) await a.del(`/expenses/entries/${e.id}`);
     if (payeeId) await a.patch(`/payees/${payeeId}`, { is_active: false });
+  }
+});
+
+
+test("producto → venta → dos ventas a la vez → cierre → Inicio", async ({ page, request }) => {
+  const stamp = Date.now();
+  const day = businessToday();
+  await page.goto("/ventas");
+  const a = api(request, await tokenOf(page));
+  await clearDay(a, day);
+  const product = await a.post("/products", { name: `E2E Empanada ${stamp}`, sale_price: 1500 });
+  try {
+    // 1. Una venta desde la pantalla: tocar el producto dos veces y cobrar.
+    await page.reload();
+    await page.getByRole("button", { name: "Nueva venta" }).click();
+    const chip = page.getByRole("button", { name: new RegExp(`E2E Empanada ${stamp}`) });
+    await chip.click();
+    await chip.click();
+    await expect(page.getByLabel("Cantidad")).toHaveText("2");
+    await page.getByRole("button", { name: /^Cobrar/ }).click();
+    await expect(page.getByRole("heading", { name: "Nueva venta" })).toHaveCount(0);
+    await expect(page.getByTestId("sale-row").filter({ hasText: `2 × E2E Empanada ${stamp}` })).toBeVisible();
+
+    // 2. Dos ventas a la vez contra Postgres: el ingreso del día no se pisa.
+    await Promise.all([
+      a.post("/sales", { sale_date: day, payments: [{ method: "efectivo", amount: 1000 }], client_ref: `e2e-a-${stamp}` }),
+      a.post("/sales", { sale_date: day, payments: [{ method: "mercadopago", amount: 2500 }], client_ref: `e2e-b-${stamp}` }),
+    ]);
+    const income: { amount: string; source: { name: string } }[] =
+      await a.get(`/income/entries?date_from=${day}&date_to=${day}`);
+    const ventas = income.filter(e => e.source.name === "Ventas");
+    expect(ventas).toHaveLength(1);
+    expect(Number(ventas[0].amount)).toBe(3000 + 1000 + 2500);
+
+    // 3. El cierre: se precarga con lo vendido y el día pasa a sumar lo contado.
+    await page.reload();
+    await page.getByRole("button", { name: "Cerrar el día" }).click();
+    await expect(page.getByLabel("Contado en Efectivo")).toHaveValue("4.000");
+    await page.getByLabel("Contado en Efectivo").fill("4.500");
+    await expect(page.getByText(/sin ticket/)).toBeVisible();
+    await page.getByRole("button", { name: "Cerrar el día" }).last().click();
+    await expect(page.getByText("Cerrado", { exact: true })).toBeVisible();
+    const summary: { total: string } = await a.get(`/sales/day/${day}`);
+    expect(Number(summary.total)).toBe(4500 + 2500);
+
+    // 4. Inicio: el resultado del mes y las ventas por medio de pago.
+    await page.goto("/dashboard");
+    await expect(page.getByText(/^Resultado de /)).toBeVisible();
+    await expect(page.getByText(/Ventas por medio de pago —/)).toBeVisible();
+  } finally {
+    await clearDay(a, day);
+    await a.patch(`/products/${product.id}`, { is_active: false });
   }
 });
