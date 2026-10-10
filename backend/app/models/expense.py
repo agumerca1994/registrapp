@@ -86,6 +86,13 @@ class ExpenseEntry(Base):
     entity: Mapped[str | None] = mapped_column(String(100), nullable=True)
     currency: Mapped[str] = mapped_column(String(3), default="ARS", server_default="ARS")
     source: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
+    # A quién se le pagó (proveedor o empleado de un negocio; ver models/business.py).
+    # Sólo el id, sin relationship: `ExpenseEntryOut` lo expone tal cual y la
+    # pantalla lo cruza con /payees — una relación cargada de forma perezosa en
+    # la serialización es el MissingGreenlet de siempre.
+    payee_id: Mapped[int | None] = mapped_column(
+        ForeignKey("payees.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     category: Mapped["ExpenseCategory"] = relationship(back_populates="entries")

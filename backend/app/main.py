@@ -16,6 +16,7 @@ from app.routers import (
     notifications, directory, reconcile,
 )
 from app.routers.internal_logs import router as internal_logs_router
+from app.routers.business import payees as business_payees, summary as business_summary
 from app.core.access import deny_employee, employee_allowed
 from app.core.config import settings
 from app.core.logging_config import setup_logging, log_queue_consumer, log_http_error
@@ -234,6 +235,10 @@ app.include_router(notifications.router, dependencies=_employees_ok)  # registra
 app.include_router(directory.router, dependencies=_deny_employees)
 if settings.RECONCILE_ENABLED:
     app.include_router(reconcile.router, dependencies=_deny_employees)
+# Negocio: cada ruta trae su política en la dependencia que le da el usuario
+# (get_owner_user / get_staff_user), así que no llevan guardia acá.
+app.include_router(business_payees.router)
+app.include_router(business_summary.router)
 app.include_router(internal_logs_router)
 
 if settings.MCP_ENABLED:

@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.expense import EXPENSE_SOURCE_WHATSAPP, ExpenseCategory, ExpenseEntry
 from app.models.reconciliation import ACTION_PROPOSED, ReconciliationAction
+from app.models.tenant import TENANT_KIND_BUSINESS, Tenant
 from app.models.user import User
 from app.models.wa_message import WaMessage
 from app.services import expenses as expenses_service, quick_capture, reconcile as reconcile_service
@@ -76,6 +77,26 @@ MSG_NEEDS_AI_AUDIO = (
     "*12 lucas verdulería*.\n\n"
     "Entender audios con IA va a ser parte del plan Pro (próximamente) — "
     "respondé *me interesa* y te avisamos."
+)
+
+# Lo que escribe un NEGOCIO y el bot todavía no sabe registrar: ventas, cierres,
+# producción, conteos de stock y compras con cantidad. Sin esto, el gasto
+# genérico se lo traga — su monto es el primer número del texto, así que
+# "vendí 20 porciones" quedaba como un gasto de $20 y "compré 12 coca a 18 lucas"
+# como uno de $12. Sólo aplica a negocios: en un hogar el bot no cambia.
+_MONEY_WORD = r"(?!lucas?\b|k\b|palos?\b|mil\b|pesos\b)"
+_BUSINESS_TEXT_RE = re.compile(
+    r"^(vend[ií]|vendimos|ventas?|cierre|cerr[eé]|cerramos|hice|hicimos|produj[eé]|produjimos|quedan?|stock)\b"
+    # "compré 12 coca …": una cantidad, no un monto ("compré 12 lucas de verdura" sigue siendo gasto)
+    rf"|^compr[eé]\s+\d+\s+{_MONEY_WORD}[a-záéíóúñ]"
+    # "12 coca 18000" / "3 empanadas 4 lucas": cantidad chica + producto + precio
+    rf"|^\d{{1,3}}\s+{_MONEY_WORD}[a-záéíóúñ]+.*?(?:\d{{3,}}|\d+\s*(?:lucas?|k|palos?)\b)",
+    re.IGNORECASE,
+)
+MSG_BUSINESS_NOT_YET = (
+    "📦 Eso parece una venta, una compra para el stock o la producción del día, "
+    "y todavía no los registro por WhatsApp.\n\n"
+    "Los gastos del negocio sí: *45 lucas alquiler* · *30 lucas sueldos*."
 )
 
 _EDIT_RE = re.compile(r"^editar\s+(monto|categor[ií]a|descripci[oó]n)\s+(.+)$", re.IGNORECASE)
@@ -427,6 +448,13 @@ async def _handle_unsupported_media(
     return [reply]
 
 
+async def _is_business(db: AsyncSession, user) -> bool:
+    # Por consulta y no `user.tenant`: la relación no está cargada (lazy load
+    # en async = MissingGreenlet) y en los tests el usuario es un SimpleNamespace.
+    kind = await db.scalar(select(Tenant.kind).where(Tenant.id == user.tenant_id))
+    return kind == TENANT_KIND_BUSINESS
+
+
 async def _handle_text(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
     text = inbound.text.strip()
 
@@ -446,6 +474,14 @@ async def _handle_text(db: AsyncSession, user: User, inbound: InboundMessage) ->
     handled = await _do_pending_category_by_name(db, user, inbound)
     if handled is not None:
         return handled
+
+    # Antes de la descripción pendiente: "vendí 3 empanadas" no es la
+    # descripción del último gasto.
+    if _BUSINESS_TEXT_RE.search(text) and await _is_business(db, user):
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        _remember(db, user.id, "out", "text", text=MSG_BUSINESS_NOT_YET)
+        await db.commit()
+        return [MSG_BUSINESS_NOT_YET]
 
     handled = await _do_pending_description(db, user, inbound)
     if handled is not None:

@@ -1,6 +1,7 @@
 import { test as setup } from "@playwright/test";
 
 const AUTH_FILE = "e2e/.auth/user.json";
+const BUSINESS_AUTH_FILE = "e2e/.auth/business.json";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const TEST_EMAIL = "e2e@registrapp.local";
 const TEST_PASSWORD = "e2e-test-password-123";
@@ -14,7 +15,10 @@ type E2EWindow = Window & {
   };
 };
 
-setup("authenticate", async ({ page }) => {
+async function authenticate(page: import("@playwright/test").Page, opts: {
+  email: string; tenantName: string; kind?: "business"; file: string;
+}) {
+  const { email, tenantName, kind, file } = opts;
   await page.goto("/login");
 
   // Sign in (or register, on first run) against the Auth Emulator, entirely
@@ -39,7 +43,7 @@ setup("authenticate", async ({ page }) => {
       }
       return cred.user.getIdToken();
     },
-    { email: TEST_EMAIL, password: TEST_PASSWORD }
+    { email, password: TEST_PASSWORD }
   );
 
   const authHeader = { Authorization: `Bearer ${idToken}` };
@@ -49,8 +53,14 @@ setup("authenticate", async ({ page }) => {
   // (and tenant) already exist — both are fine, only a real failure isn't.
   const registerRes = await page.request.post(`${API_URL}/auth/register`, {
     headers: authHeader,
-    data: { tenant_name: "E2E Test Household" },
+    data: { tenant_name: tenantName, ...(kind ? { kind } : {}) },
   });
+  if (registerRes.status() === 403 && kind === "business") {
+    throw new Error(
+      "/auth/register 403: el backend de desarrollo tiene que tener BUSINESS_SIGNUP_ENABLED=true " +
+      "(docker-compose.yml) para crear la cuenta de negocio de los E2E."
+    );
+  }
   if (!registerRes.ok() && registerRes.status() !== 400) {
     throw new Error(`/auth/register failed: ${registerRes.status()} ${await registerRes.text()}`);
   }
@@ -79,5 +89,23 @@ setup("authenticate", async ({ page }) => {
     }
   });
 
-  await page.context().storageState({ path: AUTH_FILE });
+  await page.context().storageState({ path: file });
+}
+
+// En serie: con las dos cuentas en paralelo, la del negocio quedaba sin sesión
+// en su storageState (sola, o como segunda, anda). Son dos logins: el costo de
+// hacerlos uno detrás del otro es un segundo.
+setup.describe.configure({ mode: "serial" });
+
+setup("authenticate", async ({ page }) => {
+  await authenticate(page, { email: TEST_EMAIL, tenantName: "E2E Test Household", file: AUTH_FILE });
+});
+
+// La cuenta de un NEGOCIO (tenants.kind="business"): sus pantallas, su
+// navegación y sus flujos corren en los proyectos `business*`.
+setup("authenticate business", async ({ page }) => {
+  await authenticate(page, {
+    email: "e2e-negocio@registrapp.local", tenantName: "E2E Rotisería", kind: "business",
+    file: BUSINESS_AUTH_FILE,
+  });
 });

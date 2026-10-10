@@ -58,6 +58,9 @@ class CreditCardItemCreate(BaseModel):
     installment_count: int | None = None
     installment_number: int = 1
     purchase_total: Decimal | None = None
+    # Proveedor o empleado de un negocio: va al egreso espejo (y al de cada
+    # cuota). Tiene que ser del mismo tenant.
+    payee_id: int | None = None
 
     @model_validator(mode="after")
     def compute_installment_amounts(self) -> "CreditCardItemCreate":

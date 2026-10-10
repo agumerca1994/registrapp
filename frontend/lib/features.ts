@@ -37,4 +37,13 @@ export const features = {
    * backend queda accesible igual.
    */
   reconcile: on(process.env.NEXT_PUBLIC_FEATURE_RECONCILE),
+
+  /**
+   * El alta pública de negocios: en /onboarding, "Crear nueva" ofrece Hogar o
+   * Negocio. Apagado, el alta es la de siempre (sólo hogar) y el piloto se
+   * convierte a mano con `PATCH /internal/tenants/{id}/kind`. Va junto con
+   * `BUSINESS_SIGNUP_ENABLED` del backend: con uno solo prendido, o no aparece
+   * la opción o el backend la rechaza con 403.
+   */
+  businessSignup: on(process.env.NEXT_PUBLIC_FEATURE_BUSINESS_SIGNUP),
 } as const;

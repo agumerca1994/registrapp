@@ -7,7 +7,8 @@ import { getErrorMessage } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import WhatsAppVerifyForm from "@/components/WhatsAppVerifyForm";
 import { AtSign, MessageCircle } from "lucide-react";
-import { FIELD, FormGrid } from "@/components/ui/form";
+import { FIELD, FormGrid, SegmentedToggle } from "@/components/ui/form";
+import { features } from "@/lib/features";
 import { suggestAlias } from "@/lib/alias";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,10 @@ export default function OnboardingPage() {
   }, [firebaseUser, appUser, authLoading, router]);
 
   const [mode, setMode] = useState<"create" | "join">("create");
+  // Hogar o negocio. Sólo se pregunta con el alta de negocios abierta
+  // (lib/features.ts); apagada, esta pantalla es exactamente la de siempre.
+  const [kind, setKind] = useState<"household" | "business">("household");
+  const business = features.businessSignup && kind === "business";
   const [tenantName, setTenantName] = useState("");
   const [tenantCode, setTenantCode] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -52,6 +57,7 @@ export default function OnboardingPage() {
         ? await api.post("/auth/register", {
             tenant_name: tenantName, first_name: firstName, last_name: lastName,
             alias: alias.trim() || null,
+            ...(business ? { kind: "business" } : {}),
           })
         : await api.post("/auth/join", {
             tenant_code: tenantCode.trim().toUpperCase(), first_name: firstName,
@@ -102,17 +108,28 @@ export default function OnboardingPage() {
             onClick={() => setMode("create")}
             className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors border-2 ${mode === "create" ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent"}`}
           >
-            Crear hogar nuevo
+            {features.businessSignup ? "Crear nueva" : "Crear hogar nuevo"}
           </button>
           <button
             onClick={() => setMode("join")}
             className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors border-2 ${mode === "join" ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent"}`}
           >
-            Unirme a un hogar
+            {features.businessSignup ? "Unirme con un código" : "Unirme a un hogar"}
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {mode === "create" && features.businessSignup && (
+            <SegmentedToggle
+              ariaLabel="Para qué es la cuenta"
+              value={kind}
+              onChange={setKind}
+              options={[
+                { value: "household", label: "Mi hogar" },
+                { value: "business", label: "Mi negocio" },
+              ]}
+            />
+          )}
           <FormGrid>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Nombre</label>
@@ -149,13 +166,18 @@ export default function OnboardingPage() {
 
           {mode === "create" ? (
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Nombre del hogar</label>
+              <label className="text-xs font-medium text-muted-foreground">
+                {business ? "Nombre del negocio" : "Nombre del hogar"}
+              </label>
               <input className={FIELD} value={tenantName} required
-                onChange={(e) => setTenantName(e.target.value)} placeholder="Ej: Casa García" />
+                onChange={(e) => setTenantName(e.target.value)}
+                placeholder={business ? "Ej: Rotisería Don Pepe" : "Ej: Casa García"} />
             </div>
           ) : (
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Código del hogar</label>
+              <label className="text-xs font-medium text-muted-foreground">
+                {features.businessSignup ? "Código del hogar o negocio" : "Código del hogar"}
+              </label>
               <input
                 className={`${FIELD} uppercase tracking-widest`}
                 value={tenantCode}
@@ -164,14 +186,16 @@ export default function OnboardingPage() {
                 maxLength={8}
                 required
               />
-              <p className="text-xs text-muted-foreground mt-1">El admin del hogar te comparte este código</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {features.businessSignup ? "Te lo comparte quien lo administra" : "El admin del hogar te comparte este código"}
+              </p>
             </div>
           )}
 
           {error && <p className="text-destructive text-sm">{error}</p>}
 
           <Button type="submit" disabled={loading}>
-            {loading ? "Configurando..." : mode === "create" ? "Crear hogar" : "Unirme"}
+            {loading ? "Configurando..." : mode === "create" ? (business ? "Crear negocio" : "Crear hogar") : "Unirme"}
           </Button>
         </form>
       </Card>

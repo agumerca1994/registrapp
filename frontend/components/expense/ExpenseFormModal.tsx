@@ -9,7 +9,9 @@ import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { getErrorMessage, pickCategoryColor } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FieldLabel, SegmentedToggle } from "@/components/ui/form";
+import { FieldLabel, SegmentedToggle, SelectField } from "@/components/ui/form";
+import { isBusiness } from "@/lib/account";
+import type { Payee } from "@/components/business/types";
 import NewCategoryModal from "@/components/NewCategoryModal";
 import { ParticipantPicker, type PickedParticipant } from "@/components/ParticipantPicker";
 import BaseFields, { type CategoryOption } from "./BaseFields";
@@ -56,6 +58,10 @@ export default function ExpenseFormModal({
 }) {
   useAmountsHidden();
   const { appUser } = useAuth();
+  // Un negocio no comparte gastos (eso es del hogar) y en cambio dice a quién
+  // le pagó: el proveedor o empleado, que además propone su categoría.
+  const business = isBusiness(appUser);
+  const [payees, setPayees] = useState<Payee[]>([]);
 
   const selfRow = useCallback((): SplitRow | null => appUser
     ? { type: "self", user_id: appUser.id, member_name: appUser.display_name || appUser.email, contact: "", amount: "" }
@@ -113,6 +119,20 @@ export default function ExpenseFormModal({
 
   const cards = cardsState?.status === "ready" ? cardsState.cards : null;
 
+  useEffect(() => {
+    if (!business) return;
+    api.get<Payee[]>("/payees").then(({ data }) => setPayees(data)).catch(() => setPayees([]));
+  }, [business]);
+
+  const pickPayee = (payee_id: string) => {
+    const payee = payees.find(p => String(p.id) === payee_id);
+    // La categoría habitual sólo llena un campo vacío: nunca pisa lo que la
+    // persona ya eligió.
+    const category = payee?.default_category_id && !draft.category_id
+      ? { category_id: String(payee.default_category_id) } : {};
+    set({ payee_id, ...category });
+  };
+
   const applyPick = (idx: number | null, picked: PickedParticipant) => {
     const row: SplitRow =
       picked.kind === "member" || picked.kind === "user"
@@ -141,7 +161,7 @@ export default function ExpenseFormModal({
     const problem = validateDraft(draft, { mode, cards });
     if (problem) { setError(problem); return; }
 
-    const req = buildRequest(draft, mode, editId);
+    const req = buildRequest(draft, mode, editId, { withPayee: business });
     setSaving(true);
     setError(null);
     try {
@@ -194,6 +214,18 @@ export default function ExpenseFormModal({
               hideCategory={create && isCard(draft) && draft.currency === "USD"}
               amountLabel={create && isInstallment(draft) ? "Monto por cuota" : "Monto"}
               descriptionRequired={create && (isCard(draft) || draft.shared)}
+              leading={business ? (
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Proveedor o empleado <span className="font-normal">(opcional)</span>
+                  </label>
+                  <SelectField
+                    value={draft.payee_id}
+                    onChange={pickPayee}
+                    placeholder={payees.length ? "Ninguno" : "Todavía no cargaste ninguno"}
+                    options={payees.map(p => ({ value: String(p.id), label: p.name }))} />
+                </div>
+              ) : undefined}
             />
 
             {create && (
@@ -214,6 +246,7 @@ export default function ExpenseFormModal({
                   )}
                 </div>
 
+                {!business && (
                 <div className="space-y-2">
                   <FieldLabel>¿Lo compartís?</FieldLabel>
                   <SegmentedToggle
@@ -229,6 +262,7 @@ export default function ExpenseFormModal({
                     <SplitSection draft={draft} set={set} onPick={idx => setPicker({ open: true, idx })} />
                   )}
                 </div>
+                )}
               </>
             )}
 

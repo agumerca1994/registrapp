@@ -51,6 +51,9 @@ class ExpenseEntryCreate(BaseModel):
     expense_date: date
     notes: str | None = None
     currency: str = "ARS"
+    # Proveedor o empleado de un negocio (models/business.py). Tiene que ser
+    # del mismo tenant: 404 si no.
+    payee_id: int | None = None
     # De qué pantalla vino. El cliente puede declarar **cuál de sus propias
     # superficies** es —el formulario de /expenses, /registrar, la hoja de
     # compartir, el Atajo— porque eso es lo único que sabe él y las cuatro
@@ -79,6 +82,9 @@ class ExpenseEntryUpdate(BaseModel):
     expense_date: date | None = None
     notes: str | None = None
     currency: str | None = None
+    # A diferencia del resto, un `null` explícito se aplica: sacarle el
+    # proveedor a un gasto es una edición legítima (ver el router).
+    payee_id: int | None = None
 
 
 class ExpenseEntryOut(BaseModel):
@@ -96,5 +102,6 @@ class ExpenseEntryOut(BaseModel):
     # De dónde vino. NULL en todo lo anterior a la columna; lo setea siempre
     # el servidor. Ver EXPENSE_SOURCES en models/expense.py.
     source: str | None = None
+    payee_id: int | None = None
     created_at: datetime
     category: ExpenseCategoryOut

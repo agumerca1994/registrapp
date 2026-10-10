@@ -35,7 +35,7 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/user.json" },
-      testIgnore: [/visual\.spec\.ts/, /new-expense\.spec\.ts/, /income-fields\.spec\.ts/],
+      testIgnore: [/visual\.spec\.ts/, /new-expense\.spec\.ts/, /income-fields\.spec\.ts/, /business-.*\.spec\.ts/],
       dependencies: ["setup"],
     },
     // Los flujos que crean datos corren aparte y antes que los visuales. Con
@@ -45,6 +45,21 @@ export default defineConfig({
       name: "flows",
       use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/user.json" },
       testMatch: /(new-expense|income-fields)\.spec\.ts/,
+      dependencies: ["setup"],
+    },
+    // Un NEGOCIO (tenants.kind="business"), con su propia cuenta: sus rutas
+    // son otras y su navegación también. Los `ROUTES` de smoke/visual son del
+    // hogar; los del negocio están en business-smoke.spec.ts.
+    {
+      name: "business",
+      use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/business.json" },
+      testMatch: /business-smoke\.spec\.ts/,
+      dependencies: ["setup"],
+    },
+    {
+      name: "business-flows",
+      use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/business.json" },
+      testMatch: /business-flows\.spec\.ts/,
       dependencies: ["setup"],
     },
     // Los visuales van últimos. Dependen de los otros dos a propósito: si un

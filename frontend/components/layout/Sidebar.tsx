@@ -12,11 +12,23 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, TrendingUp, TrendingDown, BarChart3,
   Home, LogOut, Settings, MoreHorizontal, Users2, CreditCard, CalendarDays,
-  CircleUserRound, ArrowLeftRight,
+  CircleUserRound, ArrowLeftRight, Contact,
 } from "lucide-react";
+import { isBusiness } from "@/lib/account";
 import pkg from "../../package.json";
 
-const nav = [
+interface NavItem {
+  href: string;
+  label: string;
+  // Para la tab bar del celular, donde no entra un label largo.
+  short?: string;
+  icon: React.ElementType;
+  tour?: string;
+}
+
+// El del hogar no se toca: orden, labels y `data-tour` son los que esperan la
+// guía del dashboard y los baselines visuales.
+const nav: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, tour: "nav-dashboard" },
   { href: "/income", label: "Ingresos", icon: TrendingUp, tour: "nav-income" },
   { href: "/expenses", label: "Egresos", icon: TrendingDown, tour: "nav-expenses" },
@@ -32,8 +44,34 @@ const nav = [
 // Bottom tab bar (mobile only) surfaces these 4 directly; everything else in
 // `nav` lives behind "Más". Order/membership confirmed with the user.
 const MOBILE_TAB_HREFS = ["/dashboard", "/income", "/expenses", "/tarjetas"];
-const mobileTabs = nav.filter((item) => MOBILE_TAB_HREFS.includes(item.href));
-const moreItems = nav.filter((item) => !MOBILE_TAB_HREFS.includes(item.href));
+
+// Un negocio ve sólo lo que tiene sentido en un comercio: sin divisas,
+// hipoteca, compartidos ni macro (las rutas, en lib/account.ts). Ventas y
+// stock se suman acá cuando existan sus pantallas.
+const BUSINESS_NAV: NavItem[] = [
+  { href: "/dashboard", label: "Inicio", icon: LayoutDashboard },
+  { href: "/expenses", label: "Egresos", icon: TrendingDown },
+  { href: "/proveedores", label: "Proveedores y empleados", short: "Proveedores", icon: Contact },
+  { href: "/tarjetas", label: "Tarjetas", icon: CreditCard },
+  { href: "/calendario", label: "Calendario de pagos", icon: CalendarDays },
+  { href: "/settings", label: "Configuración", icon: Settings },
+];
+const BUSINESS_TAB_HREFS = ["/dashboard", "/expenses", "/proveedores", "/tarjetas"];
+
+// Un hook y no constantes de módulo: qué se muestra depende del usuario.
+// Las tres superficies (sidebar, tab bar, hoja "Más") lo llaman, así no
+// pueden discrepar.
+function useNav() {
+  const { appUser } = useAuth();
+  const business = isBusiness(appUser);
+  const items = business ? BUSINESS_NAV : nav;
+  const tabs = business ? BUSINESS_TAB_HREFS : MOBILE_TAB_HREFS;
+  return {
+    items,
+    mobileTabs: items.filter((item) => tabs.includes(item.href)),
+    moreItems: items.filter((item) => !tabs.includes(item.href)),
+  };
+}
 
 // Activo también en las subrutas (/tarjetas/resumenes, /tarjetas/3/12): una
 // pantalla que cuelga de una sección no puede dejar la navegación sin nada
@@ -117,6 +155,7 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
   // pantallas llegan como children del provider y React no las re-renderiza
   // cuando cambia su estado. Esto es lo que suscribe al puntito.
   const pendingHrefs = usePendingHrefs();
+  const { items } = useNav();
 
   return (
     <>
@@ -128,7 +167,7 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {nav.map(({ href, label, icon: Icon, tour }) => (
+        {items.map(({ href, label, icon: Icon, tour }) => (
           <Link
             key={href}
             href={href}
@@ -188,6 +227,7 @@ function MoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bo
   const pathname = usePathname();
   const { appUser, firebaseUser, logout } = useAuth();
   const pendingHrefs = usePendingHrefs();
+  const { moreItems } = useNav();
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -248,6 +288,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { appUser } = useAuth();
   const pendingHrefs = usePendingHrefs();
+  const { mobileTabs, moreItems } = useNav();
   const isMoreActive = moreItems.some((item) => isNavActive(pathname, item.href));
 
   return (
@@ -271,7 +312,7 @@ export default function Sidebar() {
         className="md:hidden fixed left-3 right-3 z-40 bg-card border-[2.5px] border-ink rounded-2xl shadow-hero flex items-stretch h-[68px] px-1"
         style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
       >
-        {mobileTabs.map(({ href, label, icon: Icon, tour }) => {
+        {mobileTabs.map(({ href, label, short, icon: Icon, tour }) => {
           const active = isNavActive(pathname, href);
           return (
             <Link
@@ -288,7 +329,7 @@ export default function Sidebar() {
                 <Icon className="w-5 h-5" />
                 {pendingHrefs.has(href) && <NavDot className="absolute -top-0.5 -right-1" />}
               </span>
-              {label}
+              {short ?? label}
             </Link>
           );
         })}

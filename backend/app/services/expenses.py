@@ -31,6 +31,13 @@ from app.services.currency import get_or_create_usd_category
 PAYMENT_METHODS = ("efectivo", "debito", "transferencia")
 
 
+async def _assert_owns_payee(db: AsyncSession, tenant_id: int, payee_id: int) -> None:
+    # Import tardío: el paquete del negocio no se carga para un gasto del hogar.
+    from app.services.business.payees import assert_owns_payee
+
+    await assert_owns_payee(db, tenant_id, payee_id)
+
+
 async def linked_to(db: AsyncSession, entry: ExpenseEntry) -> str | None:
     """De qué es espejo este egreso, si de algo: "tarjeta", "compartido",
     "hipoteca" o None (un gasto simple, cargado a mano)."""
@@ -76,9 +83,12 @@ async def create_expense(
     description: str | None = None,
     notes: str | None = None,
     payment_method: str | None = None,
+    payee_id: int | None = None,
     source: str,
 ) -> ExpenseEntry:
     """Crea un gasto simple. **Sólo flush.**"""
+    if payee_id is not None:
+        await _assert_owns_payee(db, tenant_id, payee_id)
     entry = ExpenseEntry(
         tenant_id=tenant_id,
         user_id=user_id,
@@ -89,6 +99,7 @@ async def create_expense(
         notes=notes,
         currency=currency,
         payment_method=payment_method,
+        payee_id=payee_id,
         source=source,
     )
     db.add(entry)
@@ -107,6 +118,8 @@ async def update_expense(
         from app.routers.expenses import assert_owns_category
 
         await assert_owns_category(updates["category_id"], tenant_id, db)
+    if updates.get("payee_id") is not None:
+        await _assert_owns_payee(db, tenant_id, updates["payee_id"])
     for field, value in updates.items():
         setattr(entry, field, value)
     await db.flush()

@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { signInWithCustomToken } from "firebase/auth";
 import api from "@/lib/api";
 import { auth } from "@/lib/firebase";
@@ -17,10 +17,12 @@ import { WhatsNewCarousel } from "@/components/WhatsNewCarousel";
 import { syncPushToken } from "@/lib/push";
 import { ensureServiceWorker } from "@/lib/sw";
 import { stashPendingRoute, takePendingRoute } from "@/lib/pending-route";
+import { isBusiness, routeAllowed } from "@/lib/account";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { firebaseUser, appUser, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   // `?wat=` es el token de auto-login de los links del bot de WhatsApp: un
   // solo uso, 15 minutos, canjeable por un custom token de Firebase. Existe
   // porque esos links se abren en el navegador interno de WhatsApp, donde el
@@ -70,6 +72,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [firebaseUser, appUser, loading, router]);
 
+  // Un negocio no tiene las pantallas del hogar (divisas, hipoteca…) ni al
+  // revés: una ruta que no es de esta cuenta —un link viejo, un tipeo— va a
+  // Inicio en vez de mostrar una pantalla a la que el backend le va a decir
+  // que no a todo. Las rutas de cada tipo están en lib/account.ts.
+  useEffect(() => {
+    if (!appUser || appUser.whatsapp_gate_pending || !pathname) return;
+    if (!routeAllowed(pathname, appUser)) router.replace("/dashboard");
+  }, [appUser, pathname, router]);
+
   // Y al volver con sesión, retomarlo. Se consume una sola vez.
   useEffect(() => {
     if (!appUser || appUser.whatsapp_gate_pending) return;
@@ -97,30 +108,43 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [appUser]);
 
   if (loading || !appUser || appUser.whatsapp_gate_pending) return null;
+  // Redirigiendo a Inicio (ver arriba): no pintar la pantalla que no va.
+  if (pathname && !routeAllowed(pathname, appUser)) return null;
+
+  const shell = (
+    <div className="flex min-h-screen bg-background">
+      <Sidebar />
+      <ScrollToTop />
+      <ErrorReporter />
+      <main id="main-content" className="flex-1 p-4 md:p-8 overflow-auto pt-20 pb-28 md:pt-8 md:pb-8">
+        {children}
+      </main>
+    </div>
+  );
 
   return (
     // Wraps every protected screen: hiding amounts on one and not the others
     // would be worse than not hiding them at all.
     <PrivacyProvider>
-      {/* Envuelve todo por la misma razón que PrivacyProvider: el puntito de la
-          navegación y el aviso del primer ingreso tienen que leer los mismos
-          pendientes, y la navegación está en todas las pantallas. */}
-      <PendingSharedProvider>
-      <PendingStatementsProvider>
-        <div className="flex min-h-screen bg-background">
-          <Sidebar />
-          <ScrollToTop />
-          <ErrorReporter />
-          <main id="main-content" className="flex-1 p-4 md:p-8 overflow-auto pt-20 pb-28 md:pt-8 md:pb-8">
-            {children}
-          </main>
-        </div>
-        <PendingSharedDialog />
-        {/* Cede ante el aviso de pendientes y ante una guía corriendo: nunca
-            dos overlays a la vez (ver el componente). */}
-        <WhatsNewCarousel />
-      </PendingStatementsProvider>
-      </PendingSharedProvider>
+      {isBusiness(appUser) ? (
+        // Un negocio no tiene gastos compartidos ni (todavía) un carrusel de
+        // novedades propio. Sin el provider de compartidos, el puntito de la
+        // navegación lee su valor por defecto: cero, sin pedirle nada al backend.
+        <PendingStatementsProvider>{shell}</PendingStatementsProvider>
+      ) : (
+        /* Envuelve todo por la misma razón que PrivacyProvider: el puntito de la
+           navegación y el aviso del primer ingreso tienen que leer los mismos
+           pendientes, y la navegación está en todas las pantallas. */
+        <PendingSharedProvider>
+        <PendingStatementsProvider>
+          {shell}
+          <PendingSharedDialog />
+          {/* Cede ante el aviso de pendientes y ante una guía corriendo: nunca
+              dos overlays a la vez (ver el componente). */}
+          <WhatsNewCarousel />
+        </PendingStatementsProvider>
+        </PendingSharedProvider>
+      )}
     </PrivacyProvider>
   );
 }

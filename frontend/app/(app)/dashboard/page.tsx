@@ -12,7 +12,7 @@ import {
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { formatARS, formatUSD, formatPct, areAmountsHidden } from "@/lib/utils";
-import { TrendingUp, TrendingDown, Gauge, Home, CalendarDays, ChevronLeft, ChevronRight, MoreVertical } from "lucide-react";
+import { TrendingUp, TrendingDown, Gauge, Home, MoreVertical } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { PrivacyMenuItem } from "@/components/ui/privacy-toggle";
 import ProductTour from "@/components/ProductTour";
@@ -26,6 +26,12 @@ import {
 import { Chip } from "@/components/ui/chip";
 import { Fab } from "@/components/ui/fab";
 import { Button } from "@/components/ui/button";
+import { MonthPill } from "@/components/dashboard/MonthPill";
+import { StatCard } from "@/components/dashboard/StatCard";
+import { BreakdownBarsCard } from "@/components/dashboard/BreakdownBarsCard";
+import BusinessHome from "@/components/business/BusinessHome";
+import { useAuth } from "@/contexts/AuthContext";
+import { isBusiness } from "@/lib/account";
 
 const DASHBOARD_TOUR_STEPS: Step[] = [
   {
@@ -124,36 +130,6 @@ function fmtPeriod(p: string): string {
   catch { return p; }
 }
 
-const STAT_TONES = {
-  positive: "bg-emerald-50 text-emerald-600",
-  negative: "bg-rose-50 text-rose-600",
-  usd: "bg-amber-50 text-amber-600",
-  neutral: "bg-accent text-primary",
-} as const;
-
-// Balance now lives in its own hero panel above this row, so every stat
-// here is a secondary/flat tile — borderless, just icon + text, per the v3
-// mockup (no card around secondary stats).
-function StatCard({ label, value, sub, icon: Icon, tone = "neutral" }: {
-  label: string; value: string; sub?: string; icon: React.ElementType; tone?: keyof typeof STAT_TONES;
-}) {
-  return (
-    // `flex-1` so a handful of tiles spreads across the row, `min-w` so they
-    // stop shrinking and start scrolling instead of squashing once there are
-    // too many — or on a phone, where three already don't fit.
-    <div className="p-3 md:p-5 flex items-center gap-3 flex-1 shrink-0 min-w-[170px]">
-      <div className={`p-2 md:p-3 rounded-xl shrink-0 ${STAT_TONES[tone]}`}>
-        <Icon className="w-4 h-4 md:w-5 md:h-5" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-sm md:text-base font-bold text-foreground break-words">{value}</p>
-        {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
-      </div>
-    </div>
-  );
-}
-
 function compactAmount(n: number): string {
   // Goes through the privacy flag like every other amount — the donut's centre
   // total is as sensitive as the rows it summarises.
@@ -244,7 +220,15 @@ function PieCustomTooltip({ active, payload, formatValue = formatARS }: any) {
   );
 }
 
+// Inicio sigue en /dashboard para los dos tipos de cuenta: lo usan el
+// `start_url` de la PWA, el login, el onboarding y "Reiniciar guía". La página
+// elige qué Inicio mostrar; el del hogar es el de siempre, con su tour.
 export default function DashboardPage() {
+  const { appUser } = useAuth();
+  return isBusiness(appUser) ? <BusinessHome /> : <HouseholdDashboard />;
+}
+
+function HouseholdDashboard() {
   const router = useRouter();
   useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const now = new Date();
@@ -366,11 +350,6 @@ export default function DashboardPage() {
     return { start, end, initial, bought, sold, earned, paid, adjustments, other, net: end - start };
   })();
 
-  // Denominator for the category bars: peso-equivalent, since categories can
-  // now hold both currencies. `total_expenses` is ARS-only and would push the
-  // percentages over 100% as soon as a category has any USD in it.
-  const categoryTotal = (data?.expenses_by_category ?? [])
-    .reduce((s, c) => s + Number(c.ars_equivalent), 0);
 
   const pieData = (() => {
     const arsEntries = expEntries.filter(e => e.currency !== "USD");
@@ -423,16 +402,7 @@ export default function DashboardPage() {
       <ProductTour tourId="dashboard-intro" steps={DASHBOARD_TOUR_STEPS} requireDesktop />
 
       <div className="flex justify-end">
-        <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
-          <CalendarDays className="w-4 h-4 text-primary shrink-0" />
-          <button onClick={prev} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
-          <button onClick={next} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
+        <MonthPill label={periodLabel} onPrev={prev} onNext={next} />
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button title="Más acciones"
@@ -616,54 +586,16 @@ export default function DashboardPage() {
               )}
 
               {(data.expenses_by_category.length > 0 || data.total_expenses_usd > 0) && (
-                <Card className="p-4 md:p-5">
-                  <h3 className="font-semibold text-foreground mb-3 text-sm md:text-base">
-                    {"Egresos por categoría"} — {periodLabel}
-                  </h3>
-                  <div className="space-y-2.5">
-                    {/* Bars are sized by the peso equivalent so a category paid
-                        in dollars is comparable to one paid in pesos — but the
-                        amounts stay unmixed, so it's clear what was paid in what. */}
-                    {data.expenses_by_category.map((cat, i) => {
-                      const share = categoryTotal > 0 ? (cat.ars_equivalent / categoryTotal) * 100 : 0;
-                      return (
-                        <div key={cat.category_name}>
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color || "#6366f1" }} />
-                              <span className="text-sm text-foreground truncate">{cat.category_name}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                              <span className="text-sm font-medium">
-                                {cat.total > 0 && formatARS(cat.total)}
-                                {cat.total > 0 && cat.total_usd > 0 && " + "}
-                                {cat.total_usd > 0 && (
-                                  <span className="text-emerald-600">{formatUSD(cat.total_usd)}</span>
-                                )}
-                              </span>
-                              <span className="text-xs text-muted-foreground">({formatPct(share)})</span>
-                            </div>
-                          </div>
-                          <div className="h-1 bg-muted rounded-full overflow-hidden">
-                            {/* Staggered by row so the list fills top to bottom
-                                instead of every bar snapping at once. */}
-                            <div className="h-full rounded-full animate-grow-bar"
-                              style={{
-                                width: `${share}%`,
-                                backgroundColor: cat.color || "#6366f1",
-                                animationDelay: `${i * 80}ms`,
-                              }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {data.total_expenses_usd > 0 && data.usd_rate && (
-                    <p className="text-[11px] text-muted-foreground mt-3 pt-2.5 border-t">
-                      Los porcentajes valúan los dólares a {formatARS(data.usd_rate)} ({data.usd_rate_type}).
-                    </p>
-                  )}
-                </Card>
+                <BreakdownBarsCard
+                  title={`Egresos por categoría — ${periodLabel}`}
+                  rows={data.expenses_by_category.map(cat => ({
+                    key: cat.category_name, label: cat.category_name, color: cat.color,
+                    total: cat.total, total_usd: cat.total_usd, ars_equivalent: cat.ars_equivalent,
+                  }))}
+                  footnote={data.total_expenses_usd > 0 && data.usd_rate
+                    ? `Los porcentajes valúan los dólares a ${formatARS(data.usd_rate)} (${data.usd_rate_type}).`
+                    : null}
+                />
               )}
             </div>
           )}

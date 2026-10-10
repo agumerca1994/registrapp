@@ -21,6 +21,9 @@ import { Fab } from "@/components/ui/fab";
 import ExpenseFormModal, { type ExpenseSaved } from "@/components/expense/ExpenseFormModal";
 import { newDraft } from "@/components/expense/submit";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
+import { isBusiness } from "@/lib/account";
+import type { Payee } from "@/components/business/types";
 
 const EXPENSES_TOUR_STEPS: Step[] = [
   {
@@ -36,6 +39,7 @@ interface ExpenseEntry {
   id: number; category_id: number; amount: number;
   description?: string; expense_date: string; notes?: string;
   payment_method?: string; entity?: string; currency?: string;
+  payee_id?: number | null;
   category: Category;
 }
 
@@ -49,9 +53,10 @@ const SORT_LABELS: Record<SortKey, string> = {
 // creating what you're missing shouldn't cost you the form you already began.
 
 function EntryDetailModal({
-  entry, onEdit, onDelete, onViewStatement, onClose,
+  entry, payeeName, onEdit, onDelete, onViewStatement, onClose,
 }: {
   entry: ExpenseEntry;
+  payeeName?: string;
   onEdit: () => void;
   onDelete: () => void;
   onViewStatement: () => void;
@@ -77,6 +82,12 @@ function EntryDetailModal({
             <span className="text-muted-foreground">Categoría</span>
             <span className="font-medium">{entry.category.name}</span>
           </div>
+          {payeeName && (
+            <div className="flex justify-between py-2 gap-4">
+              <span className="text-muted-foreground shrink-0">Pagado a</span>
+              <span className="font-medium text-right">{payeeName}</span>
+            </div>
+          )}
           {entry.description && entry.description !== entry.category.name && (
             <div className="flex justify-between py-2 gap-4">
               <span className="text-muted-foreground shrink-0">Descripción</span>
@@ -127,6 +138,9 @@ function EntryDetailModal({
 export default function ExpensesPage() {
   useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const router = useRouter();
+  const { appUser } = useAuth();
+  const business = isBusiness(appUser);
+  const [payees, setPayees] = useState<Payee[]>([]);
   const [entries, setEntries] = useState<ExpenseEntry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   // El formulario unificado (components/expense). `key` cambia en cada
@@ -152,6 +166,7 @@ export default function ExpensesPage() {
   const [showCustomFilter, setShowCustomFilter] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [currencyFilter, setCurrencyFilter] = useState("");
+  const [payeeFilter, setPayeeFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [sort, setSort] = useState<SortKey | null>(null);
@@ -163,7 +178,7 @@ export default function ExpensesPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const panelFilterActive = !!(categoryFilter || currencyFilter || dateFrom || dateTo);
+  const panelFilterActive = !!(categoryFilter || currencyFilter || payeeFilter || dateFrom || dateTo);
   // Any active filter takes the list out of the month view and into the whole
   // history: a search that only looks inside the month currently on screen
   // would miss what the user is looking for and give no hint that it did.
@@ -177,6 +192,7 @@ export default function ExpensesPage() {
           q: debouncedSearch || undefined,
           category_id: categoryFilter || undefined,
           currency: currencyFilter || undefined,
+          payee_id: payeeFilter || undefined,
           date_from: dateFrom || undefined,
           date_to: dateTo || undefined,
           ...ordering,
@@ -192,7 +208,15 @@ export default function ExpensesPage() {
   };
 
   useEffect(() => { load(); },
-    [year, month, debouncedSearch, categoryFilter, currencyFilter, dateFrom, dateTo, sort, order]);
+    [year, month, debouncedSearch, categoryFilter, currencyFilter, payeeFilter, dateFrom, dateTo, sort, order]);
+
+  // Los nombres de proveedores y empleados: para el filtro, las filas y el
+  // detalle (el egreso trae sólo el id).
+  useEffect(() => {
+    if (!business) return;
+    api.get<Payee[]>("/payees?include_inactive=true").then(({ data }) => setPayees(data)).catch(() => {});
+  }, [business]);
+  const payeeName = (id?: number | null) => (id ? payees.find(p => p.id === id)?.name : undefined);
 
   // `?nuevo=1` abre "Nuevo egreso" al llegar. Es la puerta del `+` del
   // dashboard: cargar un gasto desde el inicio usa este mismo formulario, no una
@@ -204,6 +228,14 @@ export default function ExpensesPage() {
   // que el build pueda prerenderizarla, y acá sólo hace falta mirar una vez.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    // `?payee_id=` viene de Proveedores y empleados ("ver sus gastos"): entra
+    // con el filtro puesto y el panel abierto, así se ve por qué la lista es esa.
+    const payee = params.get("payee_id");
+    if (payee) {
+      setPayeeFilter(payee);
+      setShowCustomFilter(true);
+      router.replace("/expenses");
+    }
     if (params.get("nuevo") !== "1") return;
     openCreate();
     router.replace("/expenses");
@@ -330,6 +362,7 @@ export default function ExpensesPage() {
             description: formState.entry.description || "",
             notes: formState.entry.notes || "",
             currency: (formState.entry.currency as "ARS" | "USD") || "ARS",
+            payee_id: formState.entry.payee_id ? String(formState.entry.payee_id) : "",
           } : undefined}
           categories={categories}
           onCategoriesChanged={load}
@@ -401,13 +434,17 @@ export default function ExpensesPage() {
               options={categories.map(c => ({ value: String(c.id), label: c.name }))} />
             <PillSelect value={currencyFilter} onChange={setCurrencyFilter} placeholder="Moneda"
               options={[{ value: "ARS", label: "Pesos" }, { value: "USD", label: "Dólares" }]} />
+            {business && payees.length > 0 && (
+              <PillSelect value={payeeFilter} onChange={setPayeeFilter} placeholder="Proveedor"
+                options={payees.map(p => ({ value: String(p.id), label: p.name }))} />
+            )}
             <PillDateRange
               from={dateFrom} to={dateTo}
               onChange={(f, t) => { setDateFrom(f); setDateTo(t); }}
             />
             {panelFilterActive && (
               <ClearFilters onClick={() => {
-                setCategoryFilter(""); setCurrencyFilter(""); setDateFrom(""); setDateTo("");
+                setCategoryFilter(""); setCurrencyFilter(""); setPayeeFilter(""); setDateFrom(""); setDateTo("");
               }} />
             )}
           </FilterPanel>
@@ -475,6 +512,9 @@ export default function ExpensesPage() {
                 {filtering && entry.description && (
                   <span className="block text-xs text-muted-foreground truncate">{entry.category.name}</span>
                 )}
+                {payeeName(entry.payee_id) && (
+                  <span className="block text-xs text-muted-foreground truncate">{payeeName(entry.payee_id)}</span>
+                )}
                 {entry.payment_method === "tarjeta_credito" && (
                   <span className="inline-flex items-center gap-1 text-xs text-primary font-medium">
                     <CreditCard className="w-3 h-3" />{entry.entity}
@@ -508,6 +548,7 @@ export default function ExpensesPage() {
       {detailEntry && (
         <EntryDetailModal
           entry={detailEntry}
+          payeeName={payeeName(detailEntry.payee_id)}
           onEdit={() => { setDetailEntry(null); openEdit(detailEntry); }}
           onDelete={() => handleDelete(detailEntry.id)}
           onViewStatement={() => handleViewStatement(detailEntry.id)}

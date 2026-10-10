@@ -7,6 +7,8 @@ import { KeyRound, Plug, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Card } from "@/components/ui/card";
+import { useAuth } from "@/contexts/AuthContext";
+import { isBusiness } from "@/lib/account";
 import { FIELD, SelectField } from "@/components/ui/form";
 import { Chip } from "@/components/ui/chip";
 
@@ -60,6 +62,8 @@ function shortDate(iso: string | null): string {
 }
 
 export default function McpConnectorSection() {
+  const { appUser } = useAuth();
+  const business = isBusiness(appUser);
   const [connectorUrl, setConnectorUrl] = useState("");
   const [connections, setConnections] = useState<Connection[]>([]);
   const [tokens, setTokens] = useState<PersonalToken[]>([]);
@@ -168,13 +172,26 @@ export default function McpConnectorSection() {
         <h3 className="font-semibold text-foreground">Conectar con una IA</h3>
       </div>
       <p className="text-sm text-muted-foreground">
-        Conectá RegistrApp a un asistente de IA para preguntarle sobre tus gastos, tus
-        ingresos o el impacto de una compra. El asistente puede{" "}
-        <strong className="text-foreground">leer</strong> los datos de tu hogar y{" "}
-        <strong className="text-foreground">cargar o corregir gastos, ingresos, tarjetas y gastos
-        compartidos</strong> (por ejemplo «anotá 12 lucas de verdulería», un recibo de sueldo o
-        un resumen del banco),
-        siempre con una vista previa que confirmás vos.
+        {business ? (
+          <>
+            Conectá RegistrApp a un asistente de IA para preguntarle cómo viene el negocio:
+            en qué se va la plata, a quién se le paga, cómo se compara con otros meses.
+            El asistente puede <strong className="text-foreground">leer</strong> los datos de
+            tu negocio y <strong className="text-foreground">cargar o corregir gastos y
+            tarjetas</strong> (por ejemplo «anotá 45 lucas de alquiler» o un resumen del banco),
+            siempre con una vista previa que confirmás vos.
+          </>
+        ) : (
+          <>
+            Conectá RegistrApp a un asistente de IA para preguntarle sobre tus gastos, tus
+            ingresos o el impacto de una compra. El asistente puede{" "}
+            <strong className="text-foreground">leer</strong> los datos de tu hogar y{" "}
+            <strong className="text-foreground">cargar o corregir gastos, ingresos, tarjetas y gastos
+            compartidos</strong> (por ejemplo «anotá 12 lucas de verdulería», un recibo de sueldo o
+            un resumen del banco),
+            siempre con una vista previa que confirmás vos.
+          </>
+        )}
       </p>
 
       <div className="space-y-2">

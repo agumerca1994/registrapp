@@ -363,3 +363,37 @@ async def test_undo_goes_through_the_expenses_service(db, monkeypatch):
 
     await wa_bot.handle(db, USER, _in("deshacer", wa_id="U2"))
     assert calls == [entry_id]
+
+
+# ------------------------------------------------------------ negocio ---
+# En un negocio, "vendí 20 porciones" se guardaba como un gasto de $20: el
+# monto del gasto genérico es el primer número del texto.
+
+async def _business(db, tenant_id=1):
+    from app.models.tenant import Tenant
+
+    db.add(Tenant(id=tenant_id, name="Rotisería", kind="business"))
+    await db.flush()
+
+
+async def test_business_sale_text_is_not_an_expense(db):
+    await _business(db)
+    for i, text in enumerate([
+        "vendí 20 porciones", "compré 12 coca a 18 lucas", "hice 30 empanadas", "12 coca 18000",
+    ]):
+        replies = await wa_bot.handle(db, USER, _in(text, wa_id=f"B{i}"))
+        assert "todavía no los registro" in replies[0]
+    assert (await db.scalar(select(ExpenseEntry))) is None
+
+
+async def test_business_plain_expense_still_works(db):
+    await _business(db)
+    await _cat(db, "Alquiler")
+    replies = await wa_bot.handle(db, USER, _in("45 lucas alquiler"))
+    assert "✅ $45.000,00" in replies[0]
+
+
+async def test_household_sale_like_text_keeps_the_old_behavior(db):
+    # Sin tenant negocio, el bot no cambia: el texto sigue al gasto genérico.
+    replies = await wa_bot.handle(db, USER, _in("vendí 20 porciones"))
+    assert "todavía no los registro" not in replies[0]

@@ -16,7 +16,7 @@ export interface CategoryOption { id: number; name: string; color?: string | nul
  */
 export default function BaseFields({
   draft, set, categories, onNewCategory,
-  hideCategory, amountLabel, descriptionRequired,
+  hideCategory, amountLabel, descriptionRequired, leading,
 }: {
   draft: ExpenseDraft;
   set: (patch: Partial<ExpenseDraft>) => void;
@@ -25,10 +25,14 @@ export default function BaseFields({
   hideCategory: boolean;
   amountLabel: string;
   descriptionRequired: boolean;
+  /** Un campo que va antes de la categoría: en un negocio, a quién se le pagó,
+   *  que además la propone. Un hogar no lo pasa. */
+  leading?: React.ReactNode;
 }) {
   return (
     <>
       <CurrencyToggle className="mb-1" value={draft.currency} onChange={currency => set({ currency })} />
+      {leading}
       <FormGrid>
         {hideCategory ? (
           <div>

@@ -30,6 +30,7 @@ if "app.core.firebase" not in sys.modules:
     sys.modules["app.core.firebase"] = _fake_firebase
 
 import pytest_asyncio  # noqa: E402
+from sqlalchemy import event  # noqa: E402
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # noqa: E402
 
 from app.core.database import Base  # noqa: E402
@@ -46,6 +47,7 @@ from app.models.income import IncomeEntry, IncomeEntryItem, IncomeSource, Income
 from app.models.currency_operation import CurrencyOperation  # noqa: E402
 from app.models.mortgage import MortgageLoan  # noqa: E402
 from app.models.payment_reminder import PaymentReminder  # noqa: E402
+from app.models.business import Payee  # noqa: E402
 from app.models.reconciliation import (  # noqa: E402
     CaptureEvent,
     CaptureRule,
@@ -82,13 +84,28 @@ _TABLES = [
     CurrencyOperation.__table__,
     MortgageLoan.__table__,
     PaymentReminder.__table__,
+    # Negocio.
+    Payee.__table__,
 ]
+
+
+def _postgres_date_functions(dbapi_connection, _record):
+    """`cash_out_date()` (services/currency.py) estima el vencimiento de un
+    resumen sin fecha con `make_date(...) + make_interval(...)`, que SQLite no
+    tiene: sin estas dos, nada que cuente por fecha de pago se puede testear.
+    Devuelven NULL, así que el COALESCE cae igual que en Postgres para un gasto
+    sin tarjeta (su fecha) y para un resumen con vencimiento real (esa fecha).
+    Lo único que no se reproduce es la ESTIMACIÓN: un test que dependa de un
+    resumen sin `due_date` tiene que cargarle la fecha."""
+    dbapi_connection.create_function("make_date", 3, lambda *_: None)
+    dbapi_connection.create_function("make_interval", 4, lambda *_: None)
 
 
 @pytest_asyncio.fixture
 async def db():
     """AsyncSession sobre un SQLite en memoria recién creado por test."""
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    event.listen(engine.sync_engine, "connect", _postgres_date_functions)
     async with engine.begin() as conn:
         await conn.run_sync(lambda sync_conn: Base.metadata.create_all(sync_conn, tables=_TABLES))
     maker = async_sessionmaker(engine, expire_on_commit=False)

@@ -11,6 +11,7 @@ import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/utils";
 import { suggestAlias } from "@/lib/alias";
 import { useAuth } from "@/contexts/AuthContext";
+import { isBusiness, terms } from "@/lib/account";
 
 /**
  * Tus datos: nombre, apellido, alias y el nombre del hogar.
@@ -108,17 +109,19 @@ function EditProfileModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div>
-          <label className="text-xs font-medium text-muted-foreground">Nombre del hogar</label>
+          <label className="text-xs font-medium text-muted-foreground">Nombre del {terms(appUser).space}</label>
           <input
             className={FIELD}
             value={tenantName}
             onChange={e => setTenantName(e.target.value)}
-            placeholder={isAdmin ? "Ej: Casa García" : "Sólo un administrador puede cambiarlo"}
+            placeholder={isAdmin
+              ? (isBusiness(appUser) ? "Ej: Rotisería Don Pepe" : "Ej: Casa García")
+              : "Sólo un administrador puede cambiarlo"}
             disabled={!isAdmin}
           />
           {!isAdmin && (
             <p className="text-xs text-muted-foreground mt-1">
-              Sólo un administrador del hogar puede cambiarlo.
+              Sólo un administrador del {terms(appUser).space} puede cambiarlo.
             </p>
           )}
         </div>

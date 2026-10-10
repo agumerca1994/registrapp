@@ -29,6 +29,9 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-registrapp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-registrapp}
+      # Sólo en desarrollo: la cuenta de negocio de los E2E (e2e/auth.setup.ts)
+      # se crea por el alta pública. En producción está apagado.
+      BUSINESS_SIGNUP_ENABLED: "true"
     ports:
       - "8000:8000"
     depends_on:

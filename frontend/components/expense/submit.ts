@@ -54,6 +54,9 @@ export interface ExpenseDraft {
   shared: boolean;
   splitType: SplitType;
   rows: SplitRow[];
+
+  /** Proveedor o empleado de un negocio; "" = ninguno. Un hogar no lo usa. */
+  payee_id: string;
 }
 
 export const MIN_INSTALLMENTS = 2;
@@ -76,6 +79,7 @@ export function newDraft(today: string, self: SplitRow | null): ExpenseDraft {
     shared: false,
     splitType: "equal",
     rows: self ? [self] : [],
+    payee_id: "",
   };
 }
 
@@ -182,15 +186,26 @@ function splitsPayload(d: ExpenseDraft) {
   }));
 }
 
-/** Arma el request. Asume que `validateDraft` ya devolvió null. */
-export function buildRequest(d: ExpenseDraft, mode: "create" | "edit", editId?: number): BuiltRequest {
+/**
+ * Arma el request. Asume que `validateDraft` ya devolvió null.
+ *
+ * `withPayee` es para un negocio: suma `payee_id`, y al editar manda `null`
+ * explícito para sacarlo. Un hogar no lo pasa y sus requests quedan iguales.
+ */
+export function buildRequest(
+  d: ExpenseDraft, mode: "create" | "edit", editId?: number,
+  opts: { withPayee?: boolean } = {},
+): BuiltRequest {
   const amount = shareBase(d);
   const category = d.category_id ? { category_id: parseInt(d.category_id, 10) } : {};
+  const payee = !opts.withPayee ? {}
+    : d.payee_id ? { payee_id: parseInt(d.payee_id, 10) }
+    : mode === "edit" ? { payee_id: null } : {};
 
   if (mode === "edit") {
     return {
       kind: "simple", method: "patch", url: `/expenses/entries/${editId}`,
-      body: { amount, description: d.description, expense_date: d.expense_date, notes: d.notes, currency: d.currency, ...category },
+      body: { amount, description: d.description, expense_date: d.expense_date, notes: d.notes, currency: d.currency, ...category, ...payee },
     };
   }
 
@@ -211,6 +226,7 @@ export function buildRequest(d: ExpenseDraft, mode: "create" | "edit", editId?: 
         installment_number: 1,
         ...(installment ? { installment_count: installmentCount(d), purchase_total: purchaseTotal(d) } : {}),
         ...(d.shared ? { share: { split_type: d.splitType, splits: splitsPayload(d) } } : {}),
+        ...payee,
       },
     };
   }
@@ -232,6 +248,6 @@ export function buildRequest(d: ExpenseDraft, mode: "create" | "edit", editId?: 
 
   return {
     kind: "simple", method: "post", url: "/expenses/entries",
-    body: { amount, description: d.description, expense_date: d.expense_date, notes: d.notes, currency: d.currency, ...category },
+    body: { amount, description: d.description, expense_date: d.expense_date, notes: d.notes, currency: d.currency, ...category, ...payee },
   };
 }

@@ -61,6 +61,7 @@ async def create_expense_entry(
     user_id: int,
     db: AsyncSession,
     currency: str = "ARS",
+    payee_id: int | None = None,
 ) -> ExpenseEntry:
     entry = ExpenseEntry(
         tenant_id=tenant_id,
@@ -72,6 +73,7 @@ async def create_expense_entry(
         payment_method="tarjeta_credito",
         entity=card.bank,
         currency=currency,
+        payee_id=payee_id,
         source=EXPENSE_SOURCE_CREDIT_CARD,
     )
     db.add(entry)
@@ -107,11 +109,17 @@ async def create_item_in_statement(
     else:
         await assert_owns_category(category_id, user.tenant_id, db)
 
+    payee_id = getattr(body, "payee_id", None)
+    if payee_id is not None:
+        from app.services.business.payees import assert_owns_payee  # sólo negocios
+
+        await assert_owns_payee(db, user.tenant_id, payee_id)
+
     entry = await create_expense_entry(
         card, body.item_date, body.amount,
         f"{body.description}{cuota_label}",
         category_id, user.tenant_id, user.id, db,
-        currency=body.currency,
+        currency=body.currency, payee_id=payee_id,
     )
 
     item = CreditCardItem(
@@ -153,7 +161,7 @@ async def create_item_in_statement(
                 card, future_item_date, body.amount,
                 f"{body.description} ({cuota_n}/{body.installment_count})",
                 category_id, user.tenant_id, user.id, db,
-                currency=body.currency,
+                currency=body.currency, payee_id=payee_id,
             )
             future_item = CreditCardItem(
                 statement_id=future_stmt.id,

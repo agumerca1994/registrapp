@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.business import Payee
 from app.models.credit_card import CreditCard
 from app.models.currency_operation import CurrencyOperation
 from app.models.expense import ExpenseCategory, ExpenseEntry
@@ -42,7 +43,9 @@ HOUSEHOLD_ONLY_DATA = (
 )
 
 # Lo mismo al revés. Cada módulo del negocio suma acá sus tablas.
-BUSINESS_ONLY_DATA: tuple = ()
+BUSINESS_ONLY_DATA = (
+    ("proveedores y empleados", Payee),
+)
 
 # (nombre, color, fijo). Sustantivos cortos, como el resto de las etiquetas:
 # la pantalla ya dice que son gastos del negocio.

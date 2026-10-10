@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.firebase import get_current_user
 from app.models.user import User
+from app.models.business import Payee
 from app.models.expense import EXPENSE_SOURCE_MANUAL, ExpenseCategory, ExpenseEntry
 from app.services.search import fold, fold_term
 from app.services import category_suggest
@@ -171,6 +172,7 @@ async def list_entries(
     q: str | None = Query(None, description="Coincidencia parcial en descripción, categoría, comercio o notas"),
     category_id: int | None = None,
     currency: str | None = None,
+    payee_id: int | None = None,
     date_from: _date | None = None,
     date_to: _date | None = None,
     sort: Literal["date", "category", "amount"] = "date",
@@ -204,6 +206,8 @@ async def list_entries(
         stmt = stmt.where(ExpenseEntry.category_id == category_id)
     if currency:
         stmt = stmt.where(ExpenseEntry.currency == currency.upper())
+    if payee_id:
+        stmt = stmt.where(ExpenseEntry.payee_id == payee_id)
     if date_from:
         stmt = stmt.where(ExpenseEntry.expense_date >= date_from)
     if date_to:
@@ -214,11 +218,13 @@ async def list_entries(
         # so all three have to be searchable — plus `notes`, which is where the
         # detail they half-remember usually ended up.
         term = fold_term(q)
-        stmt = stmt.where(or_(
+        # En un negocio la fila también muestra a quién se le pagó.
+        stmt = stmt.outerjoin(Payee, Payee.id == ExpenseEntry.payee_id).where(or_(
             fold(func.coalesce(ExpenseEntry.description, "")).like(term),
             fold(func.coalesce(ExpenseEntry.notes, "")).like(term),
             fold(func.coalesce(ExpenseEntry.entity, "")).like(term),
             fold(ExpenseCategory.name).like(term),
+            fold(func.coalesce(Payee.name, "")).like(term),
         ))
 
     cols = SORT_COLUMNS[sort]
@@ -258,6 +264,7 @@ async def create_entry(
         currency=data.get("currency") or "ARS",
         description=data.get("description"),
         notes=data.get("notes"),
+        payee_id=data.get("payee_id"),
         source=data.get("source") or EXPENSE_SOURCE_MANUAL,
     )
     await db.commit()
@@ -281,6 +288,8 @@ async def update_entry(
     if not entry or entry.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
     updates = body.model_dump(exclude_none=True)
+    if "payee_id" in body.model_fields_set:
+        updates["payee_id"] = body.payee_id  # null explícito = sin proveedor
     await expenses_service.update_expense(db, entry, user.tenant_id, updates)
     await db.commit()
     result = await db.scalar(

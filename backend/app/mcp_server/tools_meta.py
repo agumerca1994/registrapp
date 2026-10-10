@@ -7,19 +7,38 @@ from sqlalchemy.orm import selectinload
 from app.mcp_server.context import current_caller, tool_session
 from app.mcp_server.instance import READ_ONLY, mcp
 from app.mcp_server.serialize import f, f0, guard
+from app.models.business import Payee
 from app.models.credit_card import CreditCard
 from app.models.expense import ExpenseCategory
 from app.models.income import IncomeSource
+from app.models.tenant import TENANT_KIND_BUSINESS, Tenant
 from app.services import analytics
 from app.services.currency import get_tenant_rate_type
 
 
+# Las reglas de un negocio. Viajan en la respuesta y no en INSTRUCTIONS porque
+# el servidor es uno solo para todos (mcp 1.29 no deja variar las instrucciones
+# por request) y un hogar no tiene por qué leerlas.
+BUSINESS_RULES = [
+    "Es la cuenta de un NEGOCIO, no de un hogar: no apliques las reglas de "
+    "divisas, hipoteca, gastos compartidos ni recibos de sueldo.",
+    "Los gastos cuentan el mes en que sale la plata: una compra con tarjeta, "
+    "cuando vence el resumen. Los montos nunca se mezclan entre ARS y USD.",
+    "`payees` son los proveedores y empleados del negocio; cada gasto puede "
+    "tener uno (`payee_id`). Por ahora se cargan y se asignan desde la app.",
+    "Las ventas, el stock y la producción todavía no se registran desde este "
+    "conector: si te los piden, decilo en vez de cargarlos como gastos o ingresos.",
+]
+
+
 @mcp.tool(annotations=READ_ONLY)
 async def get_taxonomy() -> dict[str, Any]:
-    """Catálogo del hogar: categorías de gasto, fuentes de ingreso y tarjetas.
+    """Catálogo de la cuenta: tipo (hogar o negocio), categorías de gasto,
+    fuentes de ingreso, tarjetas y, en un negocio, proveedores y empleados.
 
-    Llamala primero cuando necesites filtrar por nombre en otras herramientas,
-    para usar los nombres exactos que cargó el usuario.
+    Llamala primero: `account_kind` dice si es un hogar o un negocio, y en un
+    negocio `rules` reemplaza a las reglas de hogar. También da los nombres
+    exactos que cargó el usuario, para filtrar en otras herramientas.
     """
     async with tool_session() as db:
         caller = await current_caller(db)
@@ -45,8 +64,26 @@ async def get_taxonomy() -> dict[str, Any]:
         )).scalars().all()
 
         rate_type = await get_tenant_rate_type(db, tid)
+        kind = await db.scalar(select(Tenant.kind).where(Tenant.id == tid))
+        payees = (await db.execute(
+            select(Payee)
+            .where(Payee.tenant_id == tid, Payee.is_active.is_(True))
+            .order_by(Payee.name_key)
+        )).scalars().all() if kind == TENANT_KIND_BUSINESS else []
+
+    business = kind == TENANT_KIND_BUSINESS
+    extra = {
+        "payees": [
+            {"id": p.id, "name": p.name, "kind": p.kind,
+             "default_category_id": p.default_category_id}
+            for p in payees
+        ],
+        "rules": BUSINESS_RULES,
+    } if business else {}
 
     return guard({
+        "account_kind": kind or "household",
+        **extra,
         "categories": [
             {"id": c.id, "name": c.name, "is_fixed": c.is_fixed, "color": c.color}
             for c in categories

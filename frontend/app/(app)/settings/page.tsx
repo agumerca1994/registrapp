@@ -14,6 +14,7 @@ import McpConnectorSection from "@/components/McpConnectorSection";
 import { IosShortcutSection } from "@/components/IosShortcutSection";
 import { features } from "@/lib/features";
 import { resetAllTours } from "@/components/ProductTour";
+import { isBusiness, terms } from "@/lib/account";
 import { WHATS_NEW_KEY } from "@/components/WhatsNewCarousel";
 import { Card } from "@/components/ui/card";
 import { FIELD, SelectField } from "@/components/ui/form";
@@ -29,16 +30,21 @@ interface Member {
 }
 
 const ROLE_LABELS: Record<string, string> = { admin: "Admin", member: "Miembro" };
+// En un negocio el admin es quien lo dio de alta y los demás son socios.
+const BUSINESS_ROLE_LABELS: Record<string, string> = { admin: "Dueño", member: "Socio" };
 const APP_TOUR_IDS = ["dashboard-intro", "income-intro", "expenses-intro"];
 
-function buildHouseholdInviteMessage(name: string, code: string, appUrl: string): string {
+function buildHouseholdInviteMessage(name: string, code: string, appUrl: string, business = false): string {
+  // El paso 3 nombra el botón tal como se ve en /onboarding, que cambia con
+  // el alta de negocios abierta.
+  const joinLabel = features.businessSignup ? "Unirme con un código" : "Unirme a un hogar";
   return [
-    "Hola! " + name + " te invita a sumarte a su hogar en RegistrApp.",
+    "Hola! " + name + " te invita a sumarte a su " + (business ? "negocio" : "hogar") + " en RegistrApp.",
     "",
     "Para unirte:",
     "1. Ingresa a " + appUrl,
     "2. Inicia sesión con Google",
-    "3. Elige la opción Unirme a un hogar",
+    "3. Elige la opción " + joinLabel,
     "4. Ingresa el código: " + code,
   ].join(String.fromCharCode(10));
 }
@@ -291,6 +297,11 @@ function WhatsAppSection() {
 export default function SettingsPage() {
   const { appUser, clearUser } = useAuth();
   const router = useRouter();
+  // Un negocio no tiene divisas, gastos compartidos (los avisos de hoy son de
+  // eso) ni la invitación a crear un hogar propio.
+  const business = isBusiness(appUser);
+  const t = terms(appUser);
+  const roleLabels = business ? BUSINESS_ROLE_LABELS : ROLE_LABELS;
   const [members, setMembers] = useState<Member[]>([]);
   const [copied, setCopied] = useState(false);
   const [confirmKickId, setConfirmKickId] = useState<number | null>(null);
@@ -310,7 +321,7 @@ export default function SettingsPage() {
     const code = appUser?.tenant_code ?? String(appUser?.tenant_id ?? "");
     const name = appUser?.display_name || appUser?.email || "Alguien";
     const appUrl = typeof window !== "undefined" ? window.location.origin : "";
-    const message = buildHouseholdInviteMessage(name, code, appUrl);
+    const message = buildHouseholdInviteMessage(name, code, appUrl, business);
     window.open("https://wa.me/?text=" + encodeURIComponent(message), "_blank");
   };
 
@@ -342,16 +353,18 @@ export default function SettingsPage() {
 
       <ProfileSection />
 
-      <InviteFriendSection />
+      {!business && <InviteFriendSection />}
 
       <Card className="p-6 space-y-4">
-        <h3 className="font-semibold text-foreground">{"Tu hogar"}</h3>
+        <h3 className="font-semibold text-foreground">{t.YourSpace}</h3>
         <p className="text-sm text-muted-foreground">
-          {"Sumá miembros a tu hogar compartiendo este código."}
+          {business
+            ? "Sumá a tus socios compartiendo este código."
+            : "Sumá miembros a tu hogar compartiendo este código."}
         </p>
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex-1 min-w-[140px] bg-muted border rounded-lg px-4 py-3">
-            <p className="text-xs text-muted-foreground mb-1">{"Código del hogar"}</p>
+            <p className="text-xs text-muted-foreground mb-1">{t.spaceCode}</p>
             <p className="text-2xl font-bold text-primary tracking-widest">{appUser?.tenant_code ?? appUser?.tenant_id}</p>
           </div>
           <div className="flex gap-2 shrink-0">
@@ -379,7 +392,7 @@ export default function SettingsPage() {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <Chip tone="neutral">
-                  {ROLE_LABELS[m.role] ?? m.role}
+                  {roleLabels[m.role] ?? m.role}
                 </Chip>
                 {appUser?.role === "admin" && m.id !== appUser?.id && (
                   confirmKickId === m.id ? (
@@ -395,7 +408,7 @@ export default function SettingsPage() {
                     </div>
                   ) : (
                     <button onClick={() => setConfirmKickId(m.id)}
-                      className="text-destructive/60 hover:text-destructive transition-colors" title="Eliminar del hogar">
+                      className="text-destructive/60 hover:text-destructive transition-colors" title={`Eliminar del ${t.space}`}>
                       <Trash2 className="w-4 h-4" />
                     </button>
                   )
@@ -426,7 +439,7 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      <PushNotificationsSection />
+      {!business && <PushNotificationsSection />}
 
       <WhatsAppSection />
 
@@ -435,7 +448,7 @@ export default function SettingsPage() {
 
       <McpConnectorSection />
 
-      <CurrencySettingsSection />
+      {!business && <CurrencySettingsSection />}
 
       <Card className="p-6 space-y-2">
         <h3 className="font-semibold text-foreground">Guía de la app</h3>
@@ -457,7 +470,7 @@ export default function SettingsPage() {
         <h3 className="font-semibold text-foreground">Tu cuenta</h3>
         <p className="text-sm text-foreground">{appUser?.display_name || "—"}</p>
         <p className="text-sm text-muted-foreground">{appUser?.email}</p>
-        <p className="text-xs text-muted-foreground">Rol: {ROLE_LABELS[appUser?.role ?? ""] ?? appUser?.role}</p>
+        <p className="text-xs text-muted-foreground">Rol: {roleLabels[appUser?.role ?? ""] ?? appUser?.role}</p>
       </Card>
     </div>
   );
