@@ -66,7 +66,21 @@ const nextConfig: NextConfig = {
   // effect on production builds.
   devIndicators: false,
   async headers() {
-    return [{ source: "/(.*)", headers: securityHeaders }];
+    return [
+      { source: "/(.*)", headers: securityHeaders },
+      // La presentación estática de RegistrApp Negocio se muestra en un iframe
+      // de /negocio y /negocio/instructivo. Es un archivo autocontenido sin
+      // código de la app ni sesión, así que se deja enmarcar sólo desde este
+      // mismo sitio; el resto de la app sigue con DENY. (Next aplica las reglas
+      // en orden: la última gana para la misma key.)
+      {
+        source: "/negocio/instructivo.html",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy-Report-Only", value: CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'") },
+        ],
+      },
+    ];
   },
 };
 
