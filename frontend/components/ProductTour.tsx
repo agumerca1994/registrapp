@@ -106,7 +106,7 @@ export default function ProductTour({ tourId, steps, requireDesktop }: {
       }}
       styles={{
         tooltip: { borderRadius: 16, fontSize: 14 },
-        tooltipContent: { padding: "8px 0" },
+        tooltipContent: { padding: "8px 0", textAlign: "left" },
         buttonPrimary: {
           borderRadius: 9999,
           border: "2px solid #1E1A2E",

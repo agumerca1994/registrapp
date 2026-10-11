@@ -274,7 +274,7 @@ export default function CalendarioPage() {
                 key={day.toISOString()}
                 onClick={() => setSelectedDay(day)}
                 className={cn(
-                  "aspect-square rounded-lg p-1 flex flex-col items-center justify-start text-xs border-2 transition-colors",
+                  "h-10 sm:h-11 rounded-lg p-1 flex flex-col items-center justify-start text-xs border-2 transition-colors",
                   inMonth ? "bg-card hover:bg-accent" : "bg-muted text-muted-foreground/40",
                   // Selected wins over today: today is where you start, the
                   // selection is where you're looking.
