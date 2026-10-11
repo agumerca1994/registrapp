@@ -174,13 +174,9 @@ export default function McpConnectorSection() {
       <p className="text-sm text-muted-foreground">
         {business ? (
           <>
-            Conectá RegistrApp a un asistente de IA para preguntarle cómo viene el negocio:
-            en qué se va la plata, a quién se le paga, cómo se compara con otros meses.
-            El asistente puede <strong className="text-foreground">leer</strong> los datos de
-            tu negocio y <strong className="text-foreground">cargar o corregir ventas, el cierre
-            del día, stock, productos, gastos y tarjetas</strong> (por ejemplo «cargá las ventas
-            de hoy», «anotá 45 lucas de alquiler» o un resumen del banco), siempre con una vista
-            previa que confirmás vos.
+            Conectá RegistrApp a un asistente de IA para consultar cómo viene tu negocio y
+            cargar movimientos conversando. Antes de guardar cualquier cambio, el asistente te
+            muestra qué va a hacer para que lo confirmes.
           </>
         ) : (
           <>
