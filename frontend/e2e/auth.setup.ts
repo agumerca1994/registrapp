@@ -93,6 +93,7 @@ async function authenticate(page: import("@playwright/test").Page, opts: {
     for (const tourId of [
       "dashboard-intro", "income-intro", "expenses-intro",
       "sales-intro", "sale-form", "close-form", "products-intro", "product-form", "payees-intro", "expense-business",
+      "home-intro", "cards-intro", "calendar-intro", "expenses-business-intro",
     ]) {
       localStorage.setItem(`tour_seen_${tourId}`, "1");
     }

@@ -24,6 +24,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { isBusiness } from "@/lib/account";
 import type { Payee } from "@/components/business/types";
+import BusinessTour from "@/components/business/BusinessTour";
+import { EXPENSES_BUSINESS_INTRO_STEPS } from "@/components/business/tours";
 
 const EXPENSES_TOUR_STEPS: Step[] = [
   {
@@ -306,7 +308,8 @@ export default function ExpensesPage() {
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <ProductTour tourId="expenses-intro" steps={EXPENSES_TOUR_STEPS} />
+      {!business && <ProductTour tourId="expenses-intro" steps={EXPENSES_TOUR_STEPS} />}
+      <BusinessTour tourId="expenses-business-intro" steps={EXPENSES_BUSINESS_INTRO_STEPS} />
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Egresos</h2>
         <div className="flex items-center gap-1 shrink-0">
@@ -404,7 +407,7 @@ export default function ExpensesPage() {
           One box searches description, category, card alias and notes: a row
           shows `description || category`, so any of them is what the user
           remembers about the expense they're looking for. */}
-      <FilterBar>
+      <div data-tour="expenses-filter"><FilterBar>
         <FilterRow>
           <CollapsibleSearch
             open={searchOpen}
@@ -449,7 +452,7 @@ export default function ExpensesPage() {
             )}
           </FilterPanel>
         )}
-      </FilterBar>
+      </FilterBar></div>
 
       <Card className="p-0 md:p-0 divide-y">
         {entries.length > 0 && (

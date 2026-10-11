@@ -19,6 +19,8 @@ import { features } from "@/lib/features";
 import { UploadStatementButton } from "@/components/UploadStatementButton";
 import { usePendingStatements } from "@/contexts/PendingStatementsContext";
 import { periodLabel } from "@/app/(app)/conciliar/shared";
+import BusinessTour from "@/components/business/BusinessTour";
+import { CARDS_INTRO_STEPS } from "@/components/business/tours";
 
 const OTRO = "__otro__";
 
@@ -358,11 +360,12 @@ export default function TarjetasPage() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      <BusinessTour tourId="cards-intro" steps={CARDS_INTRO_STEPS} />
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Tarjetas de crédito</h2>
         <div className="flex items-center gap-2 shrink-0">
-          {features.reconcile && <UploadStatementButton href="/tarjetas/resumenes" pulse={pendingStatements > 0} />}
-          <Button onClick={() => { setEditCard(null); setShowModal(true); }}>
+          {features.reconcile && <div data-tour="cards-upload"><UploadStatementButton href="/tarjetas/resumenes" pulse={pendingStatements > 0} /></div>}
+          <Button data-tour="cards-new" onClick={() => { setEditCard(null); setShowModal(true); }}>
             <Plus className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Nueva tarjeta</span>
           </Button>

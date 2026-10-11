@@ -15,6 +15,8 @@ import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { FIELD, DateField } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
+import BusinessTour from "@/components/business/BusinessTour";
+import { CALENDAR_INTRO_STEPS } from "@/components/business/tours";
 
 const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
@@ -120,7 +122,7 @@ function DayDetail({
   onDeleteReminder: (id: number) => Promise<void>;
 }) {
   return (
-    <Card className="p-4 md:p-5 space-y-3">
+    <Card className="p-4 md:p-5 space-y-3" data-tour="cal-day">
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="font-semibold text-foreground first-letter:uppercase">
           {format(date, "EEEE d 'de' MMMM", { locale: es })}
@@ -156,7 +158,7 @@ function DayDetail({
         </div>
       )}
 
-      <button onClick={onAddReminder}
+      <button data-tour="cal-add" onClick={onAddReminder}
         className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-border rounded-lg py-2.5 text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors">
         <Plus className="w-4 h-4" /> Agregar recordatorio
       </button>
@@ -241,11 +243,12 @@ export default function CalendarioPage() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      <BusinessTour tourId="calendar-intro" steps={CALENDAR_INTRO_STEPS} />
       <div className="flex items-center justify-between">
         <h1 className="text-lg md:text-2xl font-display font-bold text-foreground">Calendario de pagos</h1>
       </div>
 
-      <Card variant="hero" className="p-3 md:p-4">
+      <Card variant="hero" className="p-3 md:p-4" data-tour="cal-grid">
         <div className="flex items-center justify-between mb-3">
           <button onClick={() => setMonth(subMonths(month, 1))} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">
             <ChevronLeft className="w-5 h-5" />

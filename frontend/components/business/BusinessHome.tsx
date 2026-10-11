@@ -19,6 +19,8 @@ import {
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/sales";
 import { MonthPill } from "@/components/dashboard/MonthPill";
 import { BreakdownBarsCard } from "@/components/dashboard/BreakdownBarsCard";
+import ProductTour from "@/components/ProductTour";
+import { HOME_INTRO_STEPS } from "@/components/business/tours";
 
 interface CategoryRow {
   category_name: string; color: string | null;
@@ -93,7 +95,8 @@ export default function BusinessHome() {
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <div className="flex justify-end">
+      <ProductTour tourId="home-intro" steps={HOME_INTRO_STEPS} />
+      <div className="flex justify-end" data-tour="home-month">
         <MonthPill label={periodLabel} onPrev={prev} onNext={next} />
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
@@ -117,6 +120,7 @@ export default function BusinessHome() {
         <Card variant="hero" className="h-40 animate-pulse" />
       ) : data ? (
         <>
+          <div data-tour="home-result">
           <SummaryCard>
             <SummaryHeader title={`Resultado de ${periodLabel}`}
               open={showDetail} onToggle={() => setShowDetail(v => !v)} />
@@ -134,6 +138,7 @@ export default function BusinessHome() {
             </SummaryGrid>
             {showDetail && <SummaryTotal label="Resultado" items={[signedARS(result)]} />}
           </SummaryCard>
+          </div>
           {expensesUsd > 0 && (
             <p className="text-xs text-muted-foreground -mt-2 md:-mt-4">
               Además se pagaron {formatUSD(expensesUsd)}, que no entran en el resultado en pesos.
@@ -141,7 +146,7 @@ export default function BusinessHome() {
           )}
 
           {data.stock_alerts.length > 0 && (
-            <Card className="p-4 md:p-5 space-y-2">
+            <Card className="p-4 md:p-5 space-y-2" data-tour="home-stock">
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-foreground text-sm md:text-base truncate">Stock para revisar</h3>
                 <Link href="/productos" className="ml-auto shrink-0 text-xs font-medium text-primary hover:underline">
@@ -172,7 +177,7 @@ export default function BusinessHome() {
               </p>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" data-tour="home-breakdowns">
               {data.sales_by_method.length > 0 && (
                 <BreakdownBarsCard
                   title={`Ventas por medio de pago — ${periodLabel}`}
@@ -231,7 +236,7 @@ export default function BusinessHome() {
 
       {/* Lo de todos los días en un comercio es vender: el `+` de Inicio abre una
           venta. Los gastos tienen su `+` en Egresos. */}
-      <Fab label="Nueva venta" onClick={() => router.push("/ventas?nueva=1")} />
+      <Fab label="Nueva venta" data-tour="home-add" onClick={() => router.push("/ventas?nueva=1")} />
     </div>
   );
 }
