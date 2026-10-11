@@ -92,7 +92,7 @@ export default function BusinessHome() {
   const empty = !!data && income === 0 && expensesArs === 0 && expensesUsd === 0;
 
   return (
-    <div className="max-w-4xl space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div className="flex justify-end">
         <MonthPill label={periodLabel} onPrev={prev} onNext={next} />
         <DropdownMenu.Root>

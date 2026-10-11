@@ -398,7 +398,7 @@ function HouseholdDashboard() {
   })();
 
   return (
-    <div className="max-w-4xl space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <ProductTour tourId="dashboard-intro" steps={DASHBOARD_TOUR_STEPS} requireDesktop />
 
       <div className="flex justify-end">

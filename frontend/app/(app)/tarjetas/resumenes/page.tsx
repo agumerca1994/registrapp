@@ -134,7 +134,7 @@ export default function ResumenesPage() {
   }
 
   return (
-    <div className="max-w-4xl space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {header}
 
       <Card>

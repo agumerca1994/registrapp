@@ -70,7 +70,7 @@ export default function ProveedoresPage() {
   const onSaved = async () => { close(); await load(); };
 
   return (
-    <div className="max-w-4xl space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div className="space-y-1">
         <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Proveedores y empleados</h2>
         <p className="text-sm text-muted-foreground">

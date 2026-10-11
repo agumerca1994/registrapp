@@ -72,7 +72,7 @@ export default function ProductosPage() {
   };
 
   return (
-    <div className="max-w-4xl space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1 min-w-0">
           <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Productos</h2>

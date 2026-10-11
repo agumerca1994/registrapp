@@ -714,7 +714,7 @@ export default function StatementDetailPage() {
   }, {});
 
   return (
-    <div className="max-w-4xl space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div className="sticky top-0 z-10 bg-background pt-2 pb-3 -mx-4 px-4 md:-mx-8 md:px-8">
         <div className="flex items-center gap-3">
         <button onClick={() => router.push(`/tarjetas/${cardId}`)} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">

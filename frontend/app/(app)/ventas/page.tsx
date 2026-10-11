@@ -85,7 +85,7 @@ export default function VentasPage() {
   const close = summary?.close ?? null;
 
   return (
-    <div className="max-w-4xl space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Ventas</h2>
         <DayPill label={pillLabel}

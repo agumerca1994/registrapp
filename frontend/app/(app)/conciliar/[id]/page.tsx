@@ -262,7 +262,7 @@ export default function ConciliarDetailPage() {
   const inReview = ["ready", "unexplained", "applied", "closed"].includes(session.status);
 
   return (
-    <div className="max-w-4xl space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div className="flex items-center gap-3">
         <button onClick={() => router.push("/tarjetas/resumenes")} aria-label="Volver"
           className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">

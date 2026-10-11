@@ -308,7 +308,7 @@ export default function DivisasPage() {
   const valuation = summary?.valuation_ars != null ? Number(summary.valuation_ars) : null;
 
   return (
-    <div className="max-w-4xl space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Divisas</h2>
         <div className="flex items-center gap-1 shrink-0">

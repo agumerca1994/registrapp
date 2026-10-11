@@ -240,7 +240,7 @@ export default function CalendarioPage() {
   const selectedEvents = eventsForDay(selectedDay);
 
   return (
-    <div className="max-w-4xl space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-lg md:text-2xl font-display font-bold text-foreground">Calendario de pagos</h1>
       </div>
