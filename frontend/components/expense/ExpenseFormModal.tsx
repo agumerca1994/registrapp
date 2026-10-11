@@ -284,13 +284,13 @@ export default function ExpenseFormModal({
                           </p>
                         )}
                         {draft.stock_lines.map(l => (
-                          <div key={l.key} className="flex items-start gap-2" data-testid="stock-line">
-                            <SelectField className="flex-1"
+                          <div key={l.key} className="grid grid-cols-[minmax(0,1fr)_5.5rem_auto] items-start gap-2" data-testid="stock-line">
+                            <SelectField
                               value={l.product_id} onChange={product_id => setStockLine(l.key, { product_id })}
                               placeholder="Producto"
                               options={products.map(p => ({ value: String(p.id), label: p.name }))} />
                             <input type="text" inputMode="decimal" pattern="[0-9.,]*"
-                              className={`${FIELD} w-24`} placeholder="Cant." aria-label="Cantidad que entra"
+                              className={FIELD} placeholder="Cant." aria-label="Cantidad que entra"
                               value={l.qty} onChange={e => setStockLine(l.key, { qty: e.target.value })} />
                             <button type="button" title="Quitar" aria-label="Quitar producto"
                               onClick={() => set({ stock_lines: draft.stock_lines.filter(x => x.key !== l.key) })}
