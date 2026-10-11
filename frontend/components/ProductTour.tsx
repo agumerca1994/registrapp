@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import type { EventData, Step } from "react-joyride";
 
@@ -47,6 +47,37 @@ export function useTourRunning(): boolean {
   );
 }
 
+// ── La forma del recorte ─────────────────────────────────────────────────────
+// El recorte que ilumina un paso copia la forma del elemento: una píldora queda
+// píldora, el botón + queda círculo, una tarjeta conserva sus esquinas. Joyride
+// usa un solo radio para todos los pasos si no se le dice otra cosa, así que se
+// lee el border-radius real de cada destino al arrancar el recorrido.
+const SPOTLIGHT_PADDING = 6;
+
+function radiusOf(el: Element): number {
+  const rect = el.getBoundingClientRect();
+  const raw = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
+  // `rounded-full` declara 9999px: el radio real es la mitad del lado corto.
+  return Math.min(raw, Math.min(rect.width, rect.height) / 2);
+}
+
+function shapeFor(step: Step): Step {
+  if (typeof step.target !== "string") return step;
+  const el = document.querySelector(step.target);
+  if (!el) return step;
+  let radius = radiusOf(el);
+  // Un envoltorio sin bordes propios (un div alrededor de una tarjeta) toma la
+  // forma de su único hijo, que es lo que se ve.
+  if (radius === 0 && el.children.length === 1) radius = radiusOf(el.children[0]);
+  // El recorte va SPOTLIGHT_PADDING por fuera del borde: para que sea
+  // concéntrico, su radio crece lo mismo (salvo en un rectángulo recto).
+  return {
+    ...step,
+    spotlightPadding: SPOTLIGHT_PADDING,
+    spotlightRadius: radius > 0 ? radius + SPOTLIGHT_PADDING : 0,
+  };
+}
+
 export default function ProductTour({ tourId, steps, requireDesktop }: {
   tourId: string;
   steps: Step[];
@@ -65,6 +96,9 @@ export default function ProductTour({ tourId, steps, requireDesktop }: {
     if (runningTours > 0) return;
     setRun(true);
   }, [tourId, requireDesktop]);
+
+  // Se mide cuando arranca: recién ahí los destinos están en pantalla.
+  const shapedSteps = useMemo(() => (run ? steps.map(shapeFor) : steps), [run, steps]);
 
   // Publicar el estado real, no la intención: `run` ya incorpora la clave de
   // localStorage y el chequeo de viewport.
@@ -85,7 +119,7 @@ export default function ProductTour({ tourId, steps, requireDesktop }: {
 
   return (
     <Joyride
-      steps={steps}
+      steps={shapedSteps}
       run={run}
       continuous
       scrollToFirstStep
