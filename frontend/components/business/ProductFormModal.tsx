@@ -6,6 +6,8 @@ import api from "@/lib/api";
 import { getErrorMessage, parseAmount } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import ProductTour from "@/components/ProductTour";
+import { PRODUCT_FORM_STEPS } from "@/components/business/tours";
 import { FIELD, FormGrid, SegmentedToggle } from "@/components/ui/form";
 import type { Product } from "@/lib/sales";
 
@@ -67,6 +69,7 @@ export function ProductFormModal({ product, onSaved, onClose }: {
           <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={e => { e.preventDefault(); save(); }} className="space-y-4">
+          <ProductTour tourId="product-form" steps={PRODUCT_FORM_STEPS} />
           <SegmentedToggle<Kind>
             ariaLabel="Tipo de producto"
             value={kind}
@@ -83,14 +86,14 @@ export function ProductFormModal({ product, onSaved, onClose }: {
           </p>
           <FormGrid>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Nombre</label>
+              <label className="text-xs font-medium text-muted-foreground" data-tour="product-name">Nombre</label>
               <input className={FIELD} autoFocus={!editing} required maxLength={120}
                 placeholder={kind === "elaborado" ? "Empanada de carne" : "Coca-Cola 1,5 L"}
                 value={name} onChange={e => setName(e.target.value)} />
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Precio (opcional)</label>
-              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD} aria-label="Precio"
+              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD} aria-label="Precio" data-tour="product-price"
                 placeholder="1.500" value={price} onChange={e => setPrice(e.target.value)} />
             </div>
           </FormGrid>
@@ -115,7 +118,7 @@ export function ProductFormModal({ product, onSaved, onClose }: {
             )}
             <div className="flex gap-2 ml-auto">
               <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-              <Button type="submit" disabled={saving || !name.trim()}>
+              <Button type="submit" disabled={saving || !name.trim()} data-tour="product-save">
                 {saving ? "Guardando..." : editing ? "Guardar" : "Crear"}
               </Button>
             </div>

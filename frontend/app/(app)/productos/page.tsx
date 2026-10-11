@@ -11,6 +11,8 @@ import { formatARS } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Fab } from "@/components/ui/fab";
+import ProductTour from "@/components/ProductTour";
+import { PRODUCTS_INTRO_STEPS } from "@/components/business/tours";
 import { ProductFormModal, PRODUCT_KIND_LABELS, UNIT_LABELS } from "@/components/business/ProductFormModal";
 import { StockMovementModal, type StockAction } from "@/components/business/StockMovementModal";
 import { StockHistoryModal } from "@/components/business/StockHistoryModal";
@@ -73,13 +75,14 @@ export default function ProductosPage() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      <ProductTour tourId="products-intro" steps={PRODUCTS_INTRO_STEPS} />
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1 min-w-0">
           <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Productos</h2>
           <p className="text-sm text-muted-foreground">Lo que vende el negocio y cuánto hay.</p>
         </div>
         {active.length > 0 && (
-          <Button variant="outline" className="shrink-0" onClick={() => setMoving({ action: "produccion" })}>
+          <Button variant="outline" className="shrink-0" data-tour="products-produce" onClick={() => setMoving({ action: "produccion" })}>
             Cargar producción
           </Button>
         )}
@@ -170,7 +173,7 @@ export default function ProductosPage() {
         </div>
       )}
 
-      {canEdit && <Fab label="Nuevo producto" onClick={() => setCreating(true)} />}
+      {canEdit && <Fab label="Nuevo producto" data-tour="products-add" onClick={() => setCreating(true)} />}
 
       {(creating || editing) && (
         <ProductFormModal product={editing ?? undefined} onSaved={onSaved} onClose={close} />

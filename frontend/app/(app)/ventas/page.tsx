@@ -14,6 +14,8 @@ import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
 import { Fab } from "@/components/ui/fab";
+import ProductTour from "@/components/ProductTour";
+import { SALES_INTRO_STEPS } from "@/components/business/tours";
 import {
   SummaryCard, SummaryHeader, SummarySection, SummaryGrid, SummaryCell, SummaryFigure, ChainRow, SummaryTotal,
 } from "@/components/ui/summary-card";
@@ -86,6 +88,7 @@ export default function VentasPage() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      <ProductTour tourId="sales-intro" steps={SALES_INTRO_STEPS} />
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Ventas</h2>
         <DayPill label={pillLabel}
@@ -141,7 +144,7 @@ export default function VentasPage() {
                   ? "Al terminar, contá la caja: se precarga con las ventas de cada medio."
                   : "Si no cargás venta por venta, cerrá el día con lo que hay en la caja."}
             </p>
-            <Button variant={close ? "outline" : "primary"} onClick={() => setClosing(true)}>
+            <Button variant={close ? "outline" : "primary"} data-tour="sales-close" onClick={() => setClosing(true)}>
               {close ? "Editar cierre" : "Cerrar el día"}
             </Button>
           </Card>
@@ -173,7 +176,7 @@ export default function VentasPage() {
         <p className="text-sm text-muted-foreground">No se pudieron cargar las ventas.</p>
       )}
 
-      <Fab label="Nueva venta" onClick={openNew} />
+      <Fab label="Nueva venta" data-tour="sales-add" onClick={openNew} />
 
       {form && (
         <SaleFormModal

@@ -14,6 +14,7 @@ import McpConnectorSection from "@/components/McpConnectorSection";
 import { IosShortcutSection } from "@/components/IosShortcutSection";
 import { features } from "@/lib/features";
 import { resetAllTours } from "@/components/ProductTour";
+import { BUSINESS_TOUR_IDS } from "@/components/business/tours";
 import { isBusiness, isEmployee, roleLabel, terms } from "@/lib/account";
 import { WHATS_NEW_KEY } from "@/components/WhatsNewCarousel";
 import { Card } from "@/components/ui/card";
@@ -30,7 +31,7 @@ interface Member {
 }
 
 
-const APP_TOUR_IDS = ["dashboard-intro", "income-intro", "expenses-intro"];
+const APP_TOUR_IDS = ["dashboard-intro", "income-intro", "expenses-intro", ...BUSINESS_TOUR_IDS];
 
 function buildHouseholdInviteMessage(name: string, code: string, appUrl: string, business = false): string {
   // El paso 3 nombra el botón tal como se ve en /onboarding, que cambia con

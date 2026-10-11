@@ -90,7 +90,10 @@ async function authenticate(page: import("@playwright/test").Page, opts: {
   // that reuses this storageState sees the steady-state UI, not a first-visit
   // Joyride overlay — this file is the one place new tourIds need adding.
   await page.evaluate(() => {
-    for (const tourId of ["dashboard-intro", "income-intro", "expenses-intro"]) {
+    for (const tourId of [
+      "dashboard-intro", "income-intro", "expenses-intro",
+      "sales-intro", "sale-form", "close-form", "products-intro", "product-form", "payees-intro", "expense-business",
+    ]) {
       localStorage.setItem(`tour_seen_${tourId}`, "1");
     }
   });

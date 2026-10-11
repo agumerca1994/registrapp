@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { FIELD, FieldLabel, SegmentedToggle, SelectField } from "@/components/ui/form";
 import { isBusiness } from "@/lib/account";
 import type { Payee } from "@/components/business/types";
+import ProductTour from "@/components/ProductTour";
+import { EXPENSE_BUSINESS_STEPS } from "@/components/business/tours";
 import type { Product } from "@/lib/sales";
 import NewCategoryModal from "@/components/NewCategoryModal";
 import { ParticipantPicker, type PickedParticipant } from "@/components/ParticipantPicker";
@@ -219,6 +221,7 @@ export default function ExpenseFormModal({
           </div>
 
           <form noValidate onSubmit={handleSubmit} className="space-y-3">
+            {business && create && <ProductTour tourId="expense-business" steps={EXPENSE_BUSINESS_STEPS} />}
             <BaseFields
               draft={draft}
               set={set}
@@ -228,7 +231,7 @@ export default function ExpenseFormModal({
               amountLabel={create && isInstallment(draft) ? "Monto por cuota" : "Monto"}
               descriptionRequired={create && (isCard(draft) || draft.shared)}
               leading={business ? (
-                <div>
+                <div data-tour="expense-payee">
                   <label className="text-xs font-medium text-muted-foreground">
                     Proveedor o empleado <span className="font-normal">(opcional)</span>
                   </label>
@@ -262,7 +265,7 @@ export default function ExpenseFormModal({
                 {/* Una compra de mercadería que entra al stock ("12 Coca-Cola"):
                     sólo un negocio y sólo con pago simple (ver submit.ts). */}
                 {business && !isCard(draft) && (
-                  <div className="space-y-2">
+                  <div className="space-y-2" data-tour="expense-stock">
                     <FieldLabel>¿Entra al stock?</FieldLabel>
                     <SegmentedToggle
                       ariaLabel="¿Entra al stock?"
@@ -331,7 +334,7 @@ export default function ExpenseFormModal({
 
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-              <Button type="submit" disabled={saving || blockedByCards}>
+              <Button type="submit" disabled={saving || blockedByCards} data-tour="expense-save">
                 {saving ? "Guardando..." : "Guardar"}
               </Button>
             </div>

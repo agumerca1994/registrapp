@@ -10,6 +10,8 @@ import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { formatARS, formatUSD } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Fab } from "@/components/ui/fab";
+import ProductTour from "@/components/ProductTour";
+import { PAYEES_INTRO_STEPS } from "@/components/business/tours";
 import { Button } from "@/components/ui/button";
 import { SegmentedToggle } from "@/components/ui/form";
 import { PayeeFormModal } from "@/components/business/PayeeFormModal";
@@ -71,6 +73,7 @@ export default function ProveedoresPage() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      <ProductTour tourId="payees-intro" steps={PAYEES_INTRO_STEPS} />
       <div className="space-y-1">
         <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Proveedores y empleados</h2>
         <p className="text-sm text-muted-foreground">
@@ -163,7 +166,7 @@ export default function ProveedoresPage() {
         </div>
       )}
 
-      <Fab label="Nuevo proveedor o empleado" onClick={() => setCreating(true)} />
+      <Fab label="Nuevo proveedor o empleado" data-tour="payees-add" onClick={() => setCreating(true)} />
 
       {(creating || editing) && (
         <PayeeFormModal

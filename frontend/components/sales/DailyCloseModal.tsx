@@ -7,6 +7,8 @@ import { formatARS, getErrorMessage, parseAmount } from "@/lib/utils";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import ProductTour from "@/components/ProductTour";
+import { CLOSE_FORM_STEPS } from "@/components/business/tours";
 import { FIELD } from "@/components/ui/form";
 import { fromCents, toCents } from "@/lib/split";
 import { PAYMENT_METHOD_LABELS, PAYMENT_METHODS, type DaySummary, type PaymentMethod, type Product } from "@/lib/sales";
@@ -115,12 +117,13 @@ export default function DailyCloseModal({ summary, title, products = [], onSaved
         </p>
 
         <form noValidate onSubmit={save} className="space-y-3">
+          <ProductTour tourId="close-form" steps={CLOSE_FORM_STEPS} />
           {methods.map(m => {
             const sold = ticketed[m] ?? 0;
             const got = parseAmount(values[m] || "0");
             const diff = fromCents(toCents(got) - toCents(sold));
             return (
-              <div key={m} data-testid="close-row">
+              <div key={m} data-testid="close-row" data-tour="close-counted">
                 <div className="flex items-baseline justify-between gap-2">
                   <label className="text-xs font-medium text-muted-foreground">{PAYMENT_METHOD_LABELS[m]}</label>
                   <span className="text-[11px] text-muted-foreground tabular-nums">vendido {formatARS(sold)}</span>
@@ -182,7 +185,7 @@ export default function DailyCloseModal({ summary, title, products = [], onSaved
             )}
             <div className="flex gap-2 ml-auto">
               <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-              <Button type="submit" disabled={saving}>{saving ? "Guardando..." : "Cerrar el día"}</Button>
+              <Button type="submit" disabled={saving} data-tour="close-save">{saving ? "Guardando..." : "Cerrar el día"}</Button>
             </div>
           </div>
         </form>

@@ -8,6 +8,8 @@ import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChoiceChips } from "@/components/ui/choice-chips";
+import ProductTour from "@/components/ProductTour";
+import { SALE_FORM_STEPS } from "@/components/business/tours";
 import { FIELD, FieldLabel } from "@/components/ui/form";
 import {
   PAYMENT_METHOD_LABELS, PAYMENT_METHODS, buildSaleBody, chargedTotal, linesTotal, newLineKey,
@@ -113,10 +115,11 @@ export default function SaleFormModal({ sale, initial, saleDate, products, onSav
         </div>
 
         <form noValidate onSubmit={submit} className="space-y-4">
+          <ProductTour tourId="sale-form" steps={SALE_FORM_STEPS} />
           {active.length > 0 ? (
             <div className="space-y-2">
               <FieldLabel>Productos</FieldLabel>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2" data-tour="sale-products">
                 {active.map(p => (
                   <button key={p.id} type="button" onClick={() => addProduct(p)}
                     className="inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-card px-3 py-1.5 text-sm font-medium shadow-chip hover:bg-accent active:translate-y-px">
@@ -179,7 +182,7 @@ export default function SaleFormModal({ sale, initial, saleDate, products, onSav
 
           <div>
             <label className="text-xs font-medium text-muted-foreground">Total cobrado</label>
-            <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD} aria-label="Total cobrado"
+            <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD} aria-label="Total cobrado" data-tour="sale-total"
               placeholder="0"
               value={draft.totalTouched ? draft.total : (fromLines ? fromLines.toLocaleString("es-AR", { maximumFractionDigits: 2 }) : "")}
               onChange={e => set({ total: e.target.value, totalTouched: e.target.value.trim() !== "" })} />
@@ -188,7 +191,7 @@ export default function SaleFormModal({ sale, initial, saleDate, products, onSav
             )}
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2" data-tour="sale-method">
             <FieldLabel>{draft.split ? "Primer medio de pago" : "Cómo se cobró"}</FieldLabel>
             <ChoiceChips ariaLabel="Medio de pago" value={draft.method} wrap
               onChange={m => set({ method: m as PaymentMethod })} options={METHOD_OPTIONS} />
@@ -226,7 +229,7 @@ export default function SaleFormModal({ sale, initial, saleDate, products, onSav
             )}
             <div className="flex gap-2 ml-auto">
               <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-              <Button type="submit" disabled={saving}>
+              <Button type="submit" disabled={saving} data-tour="sale-save">
                 {saving ? "Guardando..." : total > 0 ? `Cobrar ${formatARS(total)}` : "Guardar"}
               </Button>
             </div>
