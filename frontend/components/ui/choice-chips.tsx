@@ -32,7 +32,7 @@ export interface ChoiceOption {
 }
 
 export function ChoiceChips({
-  value, onChange, options, trailing, ariaLabel, className = "",
+  value, onChange, options, trailing, ariaLabel, className = "", wrap = false,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -40,6 +40,12 @@ export function ChoiceChips({
   trailing?: React.ReactNode;
   ariaLabel: string;
   className?: string;
+  /**
+   * Varias filas en vez de scroll horizontal. Para conjuntos que entran en dos
+   * o tres filas (medios de pago): con scroll, la última opción queda cortada
+   * en el borde del modal y nadie la ve.
+   */
+  wrap?: boolean;
 }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -63,9 +69,8 @@ export function ChoiceChips({
   // el foco entra por el primero. Con algo elegido, entra por lo elegido.
   const focusIndex = Math.max(0, options.findIndex(o => o.value === value));
 
-  return (
-    <ScrollRow gap="gap-2" className={className}>
-      <div role="radiogroup" aria-label={ariaLabel} className="flex gap-2">
+  const group = (
+      <div role="radiogroup" aria-label={ariaLabel} className={wrap ? "flex flex-wrap gap-2 p-1" : "flex gap-2"}>
         {options.map((o, i) => {
           const selected = o.value === value;
           return (
@@ -102,6 +107,7 @@ export function ChoiceChips({
         })}
         {trailing}
       </div>
-    </ScrollRow>
   );
+
+  return wrap ? <div className={className}>{group}</div> : <ScrollRow gap="gap-2" className={className}>{group}</ScrollRow>;
 }

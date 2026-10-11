@@ -190,7 +190,7 @@ export default function SaleFormModal({ sale, initial, saleDate, products, onSav
 
           <div className="space-y-2">
             <FieldLabel>{draft.split ? "Primer medio de pago" : "Cómo se cobró"}</FieldLabel>
-            <ChoiceChips ariaLabel="Medio de pago" value={draft.method}
+            <ChoiceChips ariaLabel="Medio de pago" value={draft.method} wrap
               onChange={m => set({ method: m as PaymentMethod })} options={METHOD_OPTIONS} />
             {draft.split ? (
               <div className="rounded-xl border p-3 space-y-2">
@@ -200,7 +200,7 @@ export default function SaleFormModal({ sale, initial, saleDate, products, onSav
                     Quitar
                   </button>
                 </div>
-                <ChoiceChips ariaLabel="Segundo medio de pago" value={draft.split.method}
+                <ChoiceChips ariaLabel="Segundo medio de pago" value={draft.split.method} wrap
                   onChange={m => set({ split: { ...draft.split!, method: m as PaymentMethod } })}
                   options={METHOD_OPTIONS.filter(o => o.value !== draft.method)} />
                 <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
