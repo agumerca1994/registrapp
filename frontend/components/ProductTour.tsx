@@ -59,6 +59,10 @@ export default function ProductTour({ tourId, steps, requireDesktop }: {
   useEffect(() => {
     if (localStorage.getItem(tourSeenKey(tourId))) return;
     if (requireDesktop && !window.matchMedia("(min-width: 768px)").matches) return;
+    // Una guía a la vez: si otra ya está en pantalla (la de la página mientras
+    // se abre su formulario), ésta no arranca encima. Queda sin ver, así que
+    // aparece la próxima vez que se abra.
+    if (runningTours > 0) return;
     setRun(true);
   }, [tourId, requireDesktop]);
 
