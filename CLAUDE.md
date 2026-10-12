@@ -426,6 +426,8 @@ The root `mcp/server.py` (a FastMCP stdio server registered in `.mcp.json` as `r
 Los anuncios de features nuevas son carruseles a pantalla completa construidos **en la app**, no en Stitch (se intentó: lienzo de escritorio, copy inventado, generaciones que dejaron de completarse). El subagente `.claude/agents/banner-creator.md` tiene el procedimiento completo — reglas de gating (nunca dos overlays: cede ante `useTourRunning()` y el diálogo de compartidos), clave de "visto" versionada en localStorage + reset en "Reiniciar guía", copy sin jerga interna ni promesas que el código no cumple, y **revisión visual obligatoria** en 390×844 con una ruta de preview temporal que no se commitea. Cuando aparezca el segundo banner, el shell se extrae a `components/announcements/` en vez de copiarse.
 
 ### Landings públicas e instructivos (`/negocio`, `/hogar`)
+**La raíz `/` es la home pública** (`app/page.tsx`): presenta las dos versiones, que es multiplataforma y el asistente de IA, explicado por lo que hace y sin nombrar el protocolo. A quien ya inició sesión, `HomeRedirect` lo manda a `/dashboard` (o a `/onboarding`), igual que hacía la raíz antes. La app instalada arranca en `/dashboard` (`manifest.json`), así que no pasa por la home. Las capturas con marco de navegador y de celular son `components/marketing/Frames.tsx` (`Screen`, `Phone`), compartidas por las tres páginas.
+
 Dos landings públicas, una por tipo de cuenta, cada una con su instructivo:
 - `frontend/app/negocio/` y `frontend/app/hogar/`: la landing, más `instructivo/` con la presentación a pantalla completa y un botón de descarga.
 - **Van fuera de `(app)`**: ese layout manda a `/login` a quien no inició sesión, y estas páginas son para quien todavía no tiene cuenta.
