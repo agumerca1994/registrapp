@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Image from "next/image";
+import { Screen } from "@/components/marketing/Frames";
 import Link from "next/link";
 import {
   BarChart3, Boxes, Download, MessageCircle, Play, ReceiptText, ShoppingBag, Users,
@@ -40,18 +40,6 @@ const STEPS = [
   { title: "Vendé y cerrá el día", text: "El resultado del mes se arma solo." },
 ];
 
-function Screen({ src, alt, hero = false }: { src: string; alt: string; hero?: boolean }) {
-  return (
-    <div className={`rounded-2xl border-2 border-ink bg-card overflow-hidden ${hero ? "shadow-hero" : "shadow-chip"}`}>
-      <div className="flex gap-1.5 px-3 py-2 border-b-2 border-ink bg-accent" aria-hidden="true">
-        <span className="w-2.5 h-2.5 rounded-full bg-white border border-ink/30" />
-        <span className="w-2.5 h-2.5 rounded-full bg-white border border-ink/30" />
-        <span className="w-2.5 h-2.5 rounded-full bg-white border border-ink/30" />
-      </div>
-      <Image src={src} alt={alt} width={1280} height={800} className="w-full h-auto" priority={hero} />
-    </div>
-  );
-}
 
 export default function NegocioPage() {
   return (
@@ -59,7 +47,7 @@ export default function NegocioPage() {
       <header className="sticky top-0 z-20 bg-background/90 backdrop-blur border-b border-border"
         style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="max-w-6xl mx-auto px-4 md:px-8 h-16 flex items-center gap-3">
-          <span className="font-display font-bold text-xl text-primary">RegistrApp</span>
+          <Link href="/" className="font-display font-bold text-xl text-primary">RegistrApp</Link>
           <span className="rounded-full border-2 border-ink px-2.5 py-0.5 text-xs font-semibold">Negocio</span>
           <nav className="ml-auto flex items-center gap-2">
             <a href="#instructivo" className="hidden sm:inline px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
