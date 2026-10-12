@@ -425,6 +425,22 @@ The root `mcp/server.py` (a FastMCP stdio server registered in `.mcp.json` as `r
 ### Banners de novedades (`components/WhatsNewCarousel.tsx` + agente `banner-creator`)
 Los anuncios de features nuevas son carruseles a pantalla completa construidos **en la app**, no en Stitch (se intentó: lienzo de escritorio, copy inventado, generaciones que dejaron de completarse). El subagente `.claude/agents/banner-creator.md` tiene el procedimiento completo — reglas de gating (nunca dos overlays: cede ante `useTourRunning()` y el diálogo de compartidos), clave de "visto" versionada en localStorage + reset en "Reiniciar guía", copy sin jerga interna ni promesas que el código no cumple, y **revisión visual obligatoria** en 390×844 con una ruta de preview temporal que no se commitea. Cuando aparezca el segundo banner, el shell se extrae a `components/announcements/` en vez de copiarse.
 
+### Landings públicas e instructivos (`/negocio`, `/hogar`)
+Dos landings públicas, una por tipo de cuenta, cada una con su instructivo:
+- `frontend/app/negocio/` y `frontend/app/hogar/`: la landing, más `instructivo/` con la presentación a pantalla completa y un botón de descarga.
+- **Van fuera de `(app)`**: ese layout manda a `/login` a quien no inició sesión, y estas páginas son para quien todavía no tiene cuenta.
+- El login no tiene un link a ellas, a propósito: su nota de diseño pide sólo el botón de Google.
+
+**El instructivo es un archivo autocontenido.** Cada uno es un `public/<sección>/instructivo.html`, con todas las capturas embebidas en base64; se descarga y se abre sin conexión. Las capturas para la landing van al lado, como `.jpg`.
+- Son de cuentas de demo con datos inventados ("Rotisería La Esquina", "Casa Gómez"), armadas en la app local. El repo es público: **nunca capturas de una cuenta real**.
+- `next.config.ts` manda `X-Frame-Options: DENY` a toda la app, y con eso el iframe sale en blanco. Cada instructivo tiene su propia regla `SAMEORIGIN` / `frame-ancestors 'self'`, sólo para ese archivo. Uno nuevo necesita la suya.
+
+**Se regeneran, no se editan a mano.** `tools/instructivo/<sección>/capture.mjs` crea la cuenta de demo, carga los datos por la API y captura pantallas y flujos. `deck.json` es el guion.
+- Para armar el HTML: `python3 ~/.claude/agents/instructivo-kit/build_deck.py tools/instructivo/<sección>/deck.json`.
+- Todo lo hace el agente de usuario `instructivo-builder` (`~/.claude/agents/`), que sirve para cualquier app.
+- Lo específico de RegistrApp está en `.claude/instructivo/registrapp.md`: el login con el emulador, los endpoints, las guías a marcar, el reloj fijo y las trampas.
+- Las salidas de los scripts van **fuera del repo** (`/private/tmp/registrapp-instructivo/`): una captura suelta en el árbol ya frenó un deploy.
+
 ### Conciliación de resúmenes (`services/reconcile/` + `/reconcile` + `/conciliar`)
 El usuario sube el PDF del resumen del banco y el motor lo compara contra lo cargado, propone correcciones por grupos y las aplica sólo al confirmar. **Todo determinista, sin IA** — el algoritmo del doc de conciliación, en código y testeado contra el resumen BBVA real de agosto 2026 (fixture privado) y un escenario sintético con sus casos (Aerolíneas duplicado, taxi doble-contado, PlayStation cargado como Google One, redondeos de cuota 2..N). El router `/reconcile` es una cáscara; la lógica vive en el servicio para que la pantalla, el conector MCP (`tools_reconcile.py`: el texto del resumen entra por `detect_and_parse_text`, mismos parsers) y el futuro bot de WhatsApp no puedan divergir.
 
@@ -670,6 +686,15 @@ Two placements neither rule covers: a chip acting as a list row's right-hand met
 `AuthContext` exposes `firebaseUser`, `appUser`, `loading`, and `refreshUser()`. `refreshUser()` re-fetches `GET /auth/me` **and then auto-claims any `pendingInviteToken` stored in localStorage** — call it after register/join to complete the invite flow. The `(app)` layout redirects to `/login` if not authenticated, or `/onboarding` if authenticated but no `appUser` (tenant not created yet) **or `appUser.whatsapp_gate_pending` is still `true`** (see the onboarding gate above).
 
 **Product tour**: `ProductTour` is mounted per-page (`dashboard`, `income`, `expenses`), each with its own `tourId` and step list targeting `data-tour="..."` attributes (e.g. on `Sidebar` nav links, or the "+ Agregar"/"Importar" buttons). A tour that targets Sidebar links must pass `requireDesktop` — those links live in the `hidden md:flex` desktop `<aside>`, so on mobile Joyride can't find the target and would otherwise mark the tour "seen" without ever showing it. "Reiniciar guía" in Settings clears every known `tourId`'s localStorage key via `resetAllTours`.
+
+**Las guías del negocio** (`components/business/tours.ts`) siguen las mismas reglas, con cuatro agregados:
+- **Viven donde explican.** Hay una por pantalla (Inicio, Ventas, Productos, Proveedores, Tarjetas, Calendario, Egresos) y una por formulario (venta, cierre del día, producto, egreso con proveedor y stock). La del formulario se monta dentro del modal y arranca la primera vez que se abre.
+  - Las pantallas que comparten hogar y negocio montan `BusinessTour`, que no hace nada en un hogar. La guía de Egresos del hogar sigue siendo `expenses-intro`.
+- **Una guía a la vez.** `ProductTour` no arranca si otra ya está en pantalla (`runningTours > 0`): la de Ventas seguía abierta mientras se montaba la del formulario y quedaban dos globos encimados. La que no arrancó queda sin ver y aparece la próxima vez.
+- **El resaltado copia la forma del elemento.** Al arrancar se lee el `border-radius` real de cada destino (`shapeFor`), así el botón + se ilumina en círculo y una tarjeta con sus esquinas. Un envoltorio sin bordes toma la forma de su único hijo. El texto de los pasos va alineado a la izquierda.
+- **Cada `tourId` nuevo va en dos listas:** `BUSINESS_TOUR_IDS` (que suma `APP_TOUR_IDS` en Configuración) y la de `e2e/auth.setup.ts`. Si falta en la segunda, el globo tapa los clics de los E2E.
+
+**Las pantallas ocupan todo el ancho.** El contenedor raíz de cada página es `space-y-4 md:space-y-6`, sin `max-w-*`; fue un pedido explícito del usuario. Antes el dashboard tenía `max-w-6xl` y el resto entre `3xl` y `4xl`, y se notaba la diferencia. El calendario de pagos usa celdas de alto fijo (`h-10 sm:h-11`), no `aspect-square`: con celdas cuadradas, en una pantalla ancha la grilla pasaba el alto de la ventana. `ChoiceChips` tiene `wrap` para conjuntos que entran en dos filas, como los medios de pago de una venta: con scroll, la última opción quedaba cortada en el borde del modal. La fila producto/cantidad del stock en un egreso es una grilla de tres columnas, porque con `flex` el combo empujaba la cantidad en algunos navegadores.
 
 **Scroll reset**: the `<main id="main-content">` in `(app)/layout.tsx` has `overflow-auto`, so the browser doesn't reset scroll on navigation. The `ScrollToTop` component (`frontend/components/ScrollToTop.tsx`) uses `usePathname()` to scroll `#main-content` to top on every route change — it must stay inside the layout.
 
