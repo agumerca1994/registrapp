@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Screen } from "@/components/marketing/Frames";
+import { Phone, Screen } from "@/components/marketing/Frames";
 import Link from "next/link";
 import {
   BarChart3, Boxes, Download, MessageCircle, Play, ReceiptText, ShoppingBag, Users,
@@ -85,7 +85,8 @@ export default function NegocioPage() {
             <p className="mt-4 text-sm text-muted-foreground">Entrás con tu cuenta de Google y elegís «Mi negocio».</p>
           </div>
           <div className="min-w-0">
-            <Screen src="/negocio/inicio.jpg" alt="Inicio de RegistrApp Negocio: el resultado del mes y las ventas por medio de pago" hero />
+            <div className="hidden sm:block"><Screen src="/negocio/inicio.jpg" alt="Inicio de RegistrApp Negocio: el resultado del mes y las ventas por medio de pago" hero /></div>
+            <Phone src="/home/celular-negocio.jpg" alt="RegistrApp Negocio en el celular" className="sm:hidden mx-auto w-[68%] max-w-[260px]" />
           </div>
         </section>
 

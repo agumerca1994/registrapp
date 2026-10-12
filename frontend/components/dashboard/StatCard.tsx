@@ -21,7 +21,7 @@ export function StatCard({ label, value, sub, icon: Icon, tone = "neutral" }: {
       </div>
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-sm md:text-base font-bold text-foreground break-words">{value}</p>
+        <p className="text-sm md:text-base font-bold text-foreground whitespace-nowrap tabular-nums">{value}</p>
         {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
       </div>
     </div>

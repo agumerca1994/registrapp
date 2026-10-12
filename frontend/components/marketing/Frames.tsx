@@ -21,11 +21,15 @@ export function Screen({ src, alt, hero = false, height = 800 }: {
   );
 }
 
-/** Una captura de 390×844 (a 2×) dentro de un celular. */
+/**
+ * Una captura de 390×844 (a 2×) dentro de un celular. El marco es fino y la
+ * pantalla tiene poco redondeo: con un marco grueso y esquinas grandes, la
+ * curva se comía el contenido de las esquinas (el logo, los montos).
+ */
 export function Phone({ src, alt, className = "" }: { src: string; alt: string; className?: string }) {
   return (
-    <div className={`rounded-[2.2rem] border-2 border-ink bg-ink p-2 shadow-chip ${className}`}>
-      <div className="rounded-[1.7rem] overflow-hidden bg-card">
+    <div className={`rounded-[1.4rem] border-2 border-ink bg-ink p-[3px] shadow-chip ${className}`}>
+      <div className="rounded-[1.15rem] overflow-hidden bg-card">
         <Image src={src} alt={alt} width={780} height={1688} className="w-full h-auto" />
       </div>
     </div>

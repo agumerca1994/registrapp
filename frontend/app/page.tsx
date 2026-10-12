@@ -25,12 +25,12 @@ const PILL = "inline-flex items-center gap-2 rounded-full border-2 border-ink px
 
 const VARIANTS = [
   {
-    href: "/hogar", icon: HomeIcon, name: "RegistrApp Hogar", image: "/hogar/inicio.jpg",
+    href: "/hogar", icon: HomeIcon, name: "RegistrApp Hogar", image: "/hogar/inicio.jpg", phone: "/home/celular-hogar.jpg",
     lead: "Para las cuentas de tu casa: cuánta plata te queda a fin de mes, en pesos y en dólares.",
     items: ["Sueldos con su detalle", "Tarjetas y cuotas", "Dólares y tenencia", "Hipoteca UVA", "Gastos compartidos"],
   },
   {
-    href: "/negocio", icon: Store, name: "RegistrApp Negocio", image: "/negocio/inicio.jpg",
+    href: "/negocio", icon: Store, name: "RegistrApp Negocio", image: "/negocio/inicio.jpg", phone: "/home/celular-negocio.jpg",
     lead: "Para comercios chicos: ventas, cierre de caja, stock y el resultado del mes.",
     items: ["Ventas y cierre de caja", "Stock que se mueve solo", "Proveedores y empleados", "Equipo con permisos", "Resultado del mes"],
   },
@@ -92,10 +92,13 @@ export default function Home() {
             </div>
             <p className="mt-4 text-sm text-muted-foreground">Entrás con tu cuenta de Google y elegís si es para tu hogar o tu negocio.</p>
           </div>
-          <div className="relative min-w-0 pb-6 lg:pb-0">
+          {/* En un celular, la captura de escritorio queda en letra ilegible: ahí va la del celular. */}
+          <Phone src="/home/celular-hogar.jpg" alt="RegistrApp en el celular: el cierre del mes en pesos y en dólares"
+            className="sm:hidden mx-auto w-[68%] max-w-[260px]" />
+          <div className="relative min-w-0 pb-6 lg:pb-0 hidden sm:block">
             <Screen src="/hogar/inicio.jpg" alt="RegistrApp en la compu: el cierre del mes en pesos y en dólares" hero />
             <Phone src="/home/celular-hogar.jpg" alt="RegistrApp en el celular"
-              className="absolute -bottom-2 right-2 w-[28%] max-w-[170px] hidden sm:block" />
+              className="absolute -bottom-4 -right-2 w-[24%] max-w-[150px]" />
           </div>
         </section>
 
@@ -106,8 +109,8 @@ export default function Home() {
             Elegís una cuando creás tu cuenta. Cada una muestra sólo lo que necesitás.
           </p>
           <div className="mt-8 grid lg:grid-cols-2 gap-6">
-            {VARIANTS.map(({ href, icon: Icon, name, image, lead, items }) => (
-              <article key={href} className="rounded-2xl border-2 border-ink bg-card p-5 md:p-6 flex flex-col gap-5 shadow-chip">
+            {VARIANTS.map(({ href, icon: Icon, name, image, phone, lead, items }) => (
+              <article key={href} className="rounded-2xl border-2 border-ink bg-card p-4 md:p-6 flex flex-col gap-5 shadow-chip">
                 <div className="flex items-center gap-2">
                   <Icon className="w-6 h-6 text-primary" aria-hidden="true" />
                   <h3 className="font-display font-bold text-2xl">{name}</h3>
@@ -120,7 +123,8 @@ export default function Home() {
                     </li>
                   ))}
                 </ul>
-                <Screen src={image} alt={`Inicio de ${name}`} />
+                <div className="hidden sm:block"><Screen src={image} alt={`Inicio de ${name}`} /></div>
+                <Phone src={phone} alt={`${name} en el celular`} className="sm:hidden mx-auto w-[62%] max-w-[230px]" />
                 <Link href={href} className="mt-auto inline-flex items-center gap-1.5 font-semibold text-primary hover:underline">
                   Conocé {name} <ArrowRight className="w-4 h-4" />
                 </Link>
@@ -146,7 +150,8 @@ export default function Home() {
               ))}
             </div>
           </div>
-          <div className="min-w-0 flex justify-center gap-4">
+          {/* En un celular esos dos ya se vieron en las versiones, justo arriba. */}
+          <div className="min-w-0 hidden sm:flex justify-center items-start gap-4">
             <Phone src="/home/celular-hogar.jpg" alt="RegistrApp Hogar en el celular" className="w-1/2 max-w-[230px]" />
             <Phone src="/home/celular-negocio.jpg" alt="RegistrApp Negocio en el celular" className="w-1/2 max-w-[230px] mt-10" />
           </div>
@@ -154,7 +159,7 @@ export default function Home() {
 
         {/* IA */}
         <section id="ia" className="scroll-mt-20 max-w-6xl mx-auto px-4 md:px-8 py-14">
-          <div className="rounded-3xl border-2 border-ink bg-card p-6 md:p-10 shadow-hero grid lg:grid-cols-2 gap-10 items-center">
+          <div className="rounded-3xl border-2 border-ink bg-card p-5 md:p-10 shadow-hero grid lg:grid-cols-2 gap-8 md:gap-10 items-center">
             <div className="min-w-0">
               <p className="text-sm font-semibold uppercase tracking-wider text-primary">Con inteligencia artificial</p>
               <h2 className="mt-2 font-display font-bold text-3xl md:text-4xl tracking-tight text-balance">
@@ -175,20 +180,20 @@ export default function Home() {
                 Funciona con Claude en la web, en la app de escritorio y en Claude Code.
               </p>
             </div>
-            <div className="min-w-0 rounded-2xl bg-background border border-border p-4 md:p-5 space-y-3" aria-label="Ejemplo de conversación">
+            <div className="min-w-0 rounded-2xl bg-background border border-border p-3 md:p-5 space-y-3 text-[15px] md:text-base" aria-label="Ejemplo de conversación">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ejemplo de conversación</p>
               <p className="ml-auto max-w-[85%] w-fit rounded-2xl rounded-br-md bg-primary text-primary-foreground px-4 py-2.5">
                 ¿En qué gasté más este mes comparado con septiembre?
               </p>
               <p className="max-w-[90%] w-fit rounded-2xl rounded-bl-md bg-card border border-border px-4 py-2.5">
-                Supermercado subió de $ 92.000 a $ 105.200, pero descontando la inflación es casi lo mismo.
-                Lo que más creció fue Restaurantes: de $ 41.000 a $ 82.000.
+                Supermercado subió de $&nbsp;92.000 a $&nbsp;105.200, pero descontando la inflación es casi lo mismo.
+                Lo que más creció fue Restaurantes: de $&nbsp;41.000 a $&nbsp;82.000.
               </p>
               <p className="ml-auto max-w-[85%] w-fit rounded-2xl rounded-br-md bg-primary text-primary-foreground px-4 py-2.5">
                 Cargame este recibo de sueldo.
               </p>
               <p className="max-w-[90%] w-fit rounded-2xl rounded-bl-md bg-card border border-border px-4 py-2.5">
-                Encontré octubre: neto $ 1.890.000, con bruto, jubilación, obra social y Ganancias. ¿Lo guardo?
+                Encontré octubre: neto $&nbsp;1.890.000, con bruto, jubilación, obra social y Ganancias. ¿Lo guardo?
               </p>
             </div>
           </div>
@@ -196,7 +201,7 @@ export default function Home() {
 
         {/* Cierre */}
         <section className="max-w-6xl mx-auto px-4 md:px-8 pt-4 pb-16">
-          <div className="rounded-2xl border-2 border-ink bg-primary text-primary-foreground p-8 md:p-10 flex flex-wrap items-center gap-6 justify-between shadow-chip">
+          <div className="rounded-2xl border-2 border-ink bg-primary text-primary-foreground p-6 md:p-10 flex flex-wrap items-center gap-6 justify-between shadow-chip">
             <div className="min-w-0">
               <h2 className="font-display font-bold text-3xl tracking-tight">Empezá hoy</h2>
               <p className="mt-2 text-primary-foreground/85 text-lg">Entrás con Google y elegís hogar o negocio. Lo configurás en un minuto.</p>

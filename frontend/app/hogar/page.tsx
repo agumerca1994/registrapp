@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Screen } from "@/components/marketing/Frames";
+import { Phone, Screen } from "@/components/marketing/Frames";
 import Link from "next/link";
 import {
   CreditCard, DollarSign, Download, Home, Play, ReceiptText, TrendingUp, Users,
@@ -85,7 +85,8 @@ export default function HogarPage() {
             <p className="mt-4 text-sm text-muted-foreground">Entrás con tu cuenta de Google y creás tu hogar.</p>
           </div>
           <div className="min-w-0">
-            <Screen src="/hogar/inicio.jpg" alt="Inicio de RegistrApp Hogar: los pesos y los dólares que quedan en el mes" hero />
+            <div className="hidden sm:block"><Screen src="/hogar/inicio.jpg" alt="Inicio de RegistrApp Hogar: los pesos y los dólares que quedan en el mes" hero /></div>
+            <Phone src="/home/celular-hogar.jpg" alt="RegistrApp Hogar en el celular" className="sm:hidden mx-auto w-[68%] max-w-[260px]" />
           </div>
         </section>
 
