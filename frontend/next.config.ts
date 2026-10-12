@@ -80,6 +80,14 @@ const nextConfig: NextConfig = {
           { key: "Content-Security-Policy-Report-Only", value: CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'") },
         ],
       },
+      // Lo mismo para la de RegistrApp Hogar (/hogar y /hogar/instructivo).
+      {
+        source: "/hogar/instructivo.html",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy-Report-Only", value: CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'") },
+        ],
+      },
     ];
   },
 };

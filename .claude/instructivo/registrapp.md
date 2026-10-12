@@ -1,6 +1,16 @@
 # Receta: instructivos de RegistrApp
 
-Lo específico de este proyecto para el agente `instructivo-builder` (`~/.claude/agents/`). Ejemplo completo y funcionando: `tools/instructivo/negocio/` (`capture.mjs` + `deck.json`).
+Lo específico de este proyecto para el agente `instructivo-builder` (`~/.claude/agents/`). Ejemplos completos y funcionando: `tools/instructivo/negocio/` y `tools/instructivo/hogar/` (`capture.mjs` + `deck.json`). El de hogar usa `recorder()` del kit y lee las guías y la clave del carrusel del código (ver abajo); preferilo como base.
+
+## Hogar (lo aprendido en /hogar)
+- Tres cuentas por corrida: el dueño (sesión de la página), un miembro que se suma con `POST /auth/join {tenant_code}` y una amiga con su propio hogar para compartidos. Las otras dos se crean en un segundo contexto, así la sesión del principal no cambia.
+- Compartidos sin diálogo pendiente: el dueño crea uno con la amiga y ella lo acepta; ella crea otro con el dueño y **él lo acepta por la API** antes de capturar. Crear un compartido con alguien sin dispositivo ni WhatsApp vinculado no manda nada en local (no hay error).
+- Hipoteca: `POST /mortgage/loans` con `first_payment_date` pasado registra sola las cuotas vencidas como egresos, pero sólo los meses con UVA en `macro_variables` (en local desde 2025-01): arrancar el préstamo en 2025.
+- Con tarjeta, lo del resumen del mes cuenta en Inicio el mes siguiente: para que haya gastos de tarjeta en el mes actual, cargá compras en el resumen del mes anterior. La cuota n se fecha compra + n−1 meses: una compra del día 20 deja la cuota 2 en el futuro.
+- Capturá el flujo que carga un ingreso **antes** de las pantallas si Inicio depende de él (si no, Inicio sale en negativo).
+- Reloj: `ctx.clock.setFixedTime(<hoy 15:00 -03:00>)` después de cargar los datos. Divisas y /shared proponen la fecha con `toISOString()` (UTC): después de las 21 h dicen "mañana".
+- Trampa visual conocida (bug de la app): los modales viven dentro de un `space-y-*` y el `margin-top` corre el fondo oscuro 24 px; las capturas con modal tienen una franja clara arriba. Para la landing se recortó con un clip de Playwright (`sips -c` no recorta).
+- El flag `NEXT_PUBLIC_FEATURE_RECONCILE` está apagado: no prometer "Subir resumen". `businessSignup` apagado en local: el alta dice "Crear hogar nuevo", no «Mi hogar».
 
 ## Levantar la app
 - `docker compose up` (Postgres, backend en :8000, frontend en :3000) y, en otra terminal, `npm run emulator` desde `frontend/` (Firebase Auth en :9099). Si el emulador no responde (`curl 127.0.0.1:9099`), no se puede iniciar sesión.
@@ -14,7 +24,7 @@ Lo específico de este proyecto para el agente `instructivo-builder` (`~/.claude
 - Correo corto: se ve en la barra lateral (`laura123@demo.local`).
 
 ## Guías que hay que marcar como vistas
-`localStorage.tour_seen_<id> = "1"` para cada id de `APP_TOUR_IDS` en `frontend/app/(app)/settings/page.tsx` (incluye `BUSINESS_TOUR_IDS` de `components/business/tours.ts`). Un hogar además tiene el carrusel de novedades (`WhatsNewCarousel`, clave versionada `whats_new_seen_*`) y el diálogo de compartidos pendientes: marcarlos o no generar invitaciones pendientes para la cuenta de demo.
+El script de hogar los saca del código (todos los `tourId="…"` de `app/` y `components/`, más `BUSINESS_TOUR_IDS` y `WHATS_NEW_KEY`). A mano: `localStorage.tour_seen_<id> = "1"` para cada id de `APP_TOUR_IDS` en `frontend/app/(app)/settings/page.tsx` (incluye `BUSINESS_TOUR_IDS` de `components/business/tours.ts`). Un hogar además tiene el carrusel de novedades (`WhatsNewCarousel`, clave versionada `whats_new_seen_*`) y el diálogo de compartidos pendientes: marcarlos o no generar invitaciones pendientes para la cuenta de demo.
 
 ## Datos por la API
 - Categorías: `GET/POST /expenses/categories`. Un negocio nace con las suyas sembradas.
