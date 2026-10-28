@@ -29,6 +29,12 @@
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-}
       WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET:-}
+      # Lectura de comprobantes con IA en el bot. Vacía = el bot sigue como
+      # antes (imágenes sin leer, PDFs desconocidos a la conciliación).
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      WA_AI_ENABLED: ${WA_AI_ENABLED:-true}
+      WA_AI_MODEL: ${WA_AI_MODEL:-claude-opus-5-5}
+      WA_AI_DAILY_LIMIT: ${WA_AI_DAILY_LIMIT:-40}
       APP_DOMAIN: ${APP_DOMAIN:-}
       # Already used by the Traefik labels below; the backend needs it too, to
       # derive the OAuth issuer and the canonical /mcp resource URL.

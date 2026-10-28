@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     # Alta pública de negocios (`POST /auth/register` con kind="business").
     # Apagada: el piloto se convierte a mano con PATCH /internal/tenants/{id}/kind.
     BUSINESS_SIGNUP_ENABLED: bool = False
+    # Lectura de comprobantes con IA en el bot de WhatsApp (fotos, capturas y
+    # PDFs que el código no reconoce): `services/ai_capture.py`. Sin la clave
+    # el bot hace lo de antes; WA_AI_ENABLED es el apagador sin tocar la clave.
+    ANTHROPIC_API_KEY: str = ""
+    WA_AI_ENABLED: bool = True
+    WA_AI_MODEL: str = "claude-opus-5-5"
+    # Lecturas por hogar por día: el freno de costo si alguien manda 200 fotos.
+    WA_AI_DAILY_LIMIT: int = 40
     FRONTEND_URL: str = "http://localhost:3000"
     INTERNAL_LOG_KEY: str = ""
 

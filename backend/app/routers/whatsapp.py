@@ -13,8 +13,9 @@ Qué entiende el bot hoy:
 - el PDF del resumen de la tarjeta → conciliación completa con veredicto;
 - *deshacer*, *editar monto …*, *editar categoría …*, respuestas "1"/"2" y
   responder citando un mensaje anterior;
-- imagen/audio → se registra en el embudo (`capture_events`) y se ofrece el
-  plan Pro — es la medición de la IA de respaldo, no una promesa.
+- una foto, una captura o un PDF que el código no reconoce → lectura con IA
+  (`services/ai_capture.py`) y el gasto por el mismo camino que el texto;
+- audio → se registra en el embudo (`capture_events`) y se ofrece el plan Pro.
 """
 import logging
 import secrets

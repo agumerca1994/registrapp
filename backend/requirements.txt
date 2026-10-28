@@ -35,6 +35,10 @@ mcp==1.29.0
 # needed to satisfy mcp's import graph.
 sse-starlette==2.1.3
 
+# Lectura de comprobantes con IA en el bot (services/ai_capture.py). Trae
+# httpx2 como dependencia propia: no choca con el httpx de arriba.
+anthropic==2.3.0
+
 python-json-logger==2.0.7
 # zoneinfo necesita la base de zonas horarias; la imagen slim puede no
 # traerla, y sin ella `services/clock.py` no arranca. Ver ese módulo.

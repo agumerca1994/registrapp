@@ -19,6 +19,10 @@ import types
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("FIREBASE_PROJECT_ID", "test")
+# La lectura con IA del bot (services/ai_capture.py) llama a una API paga: con
+# la clave del `.env` de desarrollo, cualquier test que mande un PDF raro la
+# dispararía de verdad. Los tests que la usan la stubbean explícitamente.
+os.environ["ANTHROPIC_API_KEY"] = ""
 
 if "app.core.firebase" not in sys.modules:
     _fake_firebase = types.ModuleType("app.core.firebase")

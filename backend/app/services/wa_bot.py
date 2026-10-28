@@ -31,7 +31,7 @@ from app.models.reconciliation import ACTION_PROPOSED, ReconciliationAction
 from app.models.tenant import TENANT_KIND_BUSINESS, Tenant
 from app.models.user import User
 from app.models.wa_message import WaMessage
-from app.services import expenses as expenses_service, quick_capture, reconcile as reconcile_service
+from app.services import ai_capture, expenses as expenses_service, quick_capture, reconcile as reconcile_service
 from app.services.business import capture as business_capture
 from app.services.category_suggest import invalidate as invalidate_suggest
 from app.services.clock import ar_today
@@ -60,6 +60,18 @@ MSG_HELP = (
     "• *deshacer* — borra lo último que cargué\n"
     "• *editar monto / categoría / descripción …*"
 )
+
+
+def _help_text() -> str:
+    """Con la IA prendida, el bot también lee fotos y capturas: la ayuda lo dice."""
+    if not ai_capture.enabled():
+        return MSG_HELP
+    return MSG_HELP.replace(
+        "• El *PDF de un comprobante* de pago o transferencia",
+        "• Un *comprobante* de pago o transferencia: foto, captura o PDF",
+    )
+
+
 # Una imagen casi siempre es un comprobante compartido como captura: muchas
 # apps (Mercado Pago, los bancos) comparten la imagen por default. El PDF sí
 # se lee en código, así que lo primero que dice el mensaje es cómo mandarlo —
@@ -164,8 +176,13 @@ def parse_evolution_payload(payload: dict) -> InboundMessage | None:
     text = ""
     if doc is not None:
         kind = "pdf" if "pdf" in (doc.get("mimetype") or "").lower() else "other"
+        if kind == "pdf":
+            text = (doc.get("caption") or "").strip()
     elif "imageMessage" in message:
         kind = "image"
+        # El texto que acompaña la foto ("almuerzo con clientes") le sirve a
+        # la lectura con IA para elegir la categoría.
+        text = (message["imageMessage"].get("caption") or "").strip()
     elif "audioMessage" in message or "pttMessage" in message:
         kind = "audio"
     else:
@@ -284,6 +301,8 @@ async def handle(db: AsyncSession, user: User, inbound: InboundMessage) -> list[
             return [MSG_EMPLOYEE_ONLY]
         if inbound.kind == "pdf":
             return await _handle_pdf(db, user, inbound)
+        if inbound.kind == "image" and ai_capture.enabled():
+            return await _handle_image(db, user, inbound)
         if inbound.kind in ("image", "audio"):
             return await _handle_unsupported_media(db, user, inbound)
         return await _handle_text(db, user, inbound)
@@ -337,7 +356,8 @@ async def _handle_pdf(db: AsyncSession, user: User, inbound: InboundMessage) -> 
     except Exception:
         pages, pdf_lines = [], []
 
-    if pdf_lines and not any(m.detect(pdf_lines) for m in REGISTRY):
+    is_statement = bool(pdf_lines) and any(m.detect(pdf_lines) for m in REGISTRY)
+    if pdf_lines and not is_statement:
         receipt = parse_transfer_receipt(pages)
         if receipt is None:
             # WARNING a propósito: llega a app_logs (que sólo guarda WARNING+)
@@ -379,6 +399,15 @@ async def _handle_pdf(db: AsyncSession, user: User, inbound: InboundMessage) -> 
                 db, user, inbound, draft,
                 payment_method="transferencia" if receipt.kind == "transferencia" else None,
             )
+
+    # Ni resumen conocido ni comprobante que el código lea (o un PDF escaneado,
+    # sin texto): lo lee la IA. Si resulta ser un resumen, o la IA no pudo,
+    # sigue a la conciliación, que explica el motivo como siempre.
+    if not is_statement and ai_capture.enabled():
+        inbound = await _claim_inbound(db, user, inbound)
+        handled = await _read_with_ai(db, user, inbound, pdf)
+        if handled is not None:
+            return handled
 
     _remember(db, user.id, "in", "pdf", wa_id=inbound.wa_id)
     session = await reconcile_service.start_session(
@@ -463,6 +492,125 @@ async def _pending_group_counts(db: AsyncSession, session_id: int) -> dict[str, 
     for a in rows:
         counts[a.klass] = counts.get(a.klass, 0) + 1
     return {k: counts[k] for k in reconcile_service.GROUP_ORDER if k in counts}
+
+
+MSG_AI_UNREADABLE = (
+    "🤔 No encontré un pago en lo que me mandaste.\n"
+    "Si es un comprobante, probá con una foto más nítida o el *PDF*, "
+    "o escribilo: *15000 transferencia juan*."
+)
+MSG_AI_STATEMENT_IMAGE = (
+    "📄 Parece el resumen de una tarjeta. Mandámelo en *PDF* (el que descargás "
+    "del home banking) y dejo tus datos al día."
+)
+MSG_AI_CREDIT_CARD = (
+    "💳 {what} se pagó con *tarjeta de crédito*, así que no lo cargo ahora: "
+    "entra cuando me mandes el resumen de la tarjeta (si lo cargara acá, "
+    "contaría dos veces). Si lo querés ya, cargalo en la app como gasto con tarjeta."
+)
+MSG_AI_LIMIT = (
+    "Llegaste al máximo de comprobantes leídos por hoy 🙏 "
+    "Mañana sigo; mientras tanto podés escribirlo: *15000 farmacia*."
+)
+
+
+async def _claim_inbound(db: AsyncSession, user: User, inbound: InboundMessage) -> InboundMessage:
+    """Guarda el mensaje entrante y commitea ANTES de la llamada a la IA, que
+    tarda segundos: si Evolution reintenta el webhook mientras tanto,
+    `already_seen` lo frena y el gasto no se carga dos veces. Devuelve el
+    mensaje sin `wa_id`, para que lo que sigue no vuelva a registrarlo."""
+    from dataclasses import replace
+
+    _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id, text=inbound.text or None)
+    await db.commit()
+    return replace(inbound, wa_id=None)
+
+
+async def _handle_image(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
+    from app.services.whatsapp import download_media_base64
+
+    data = await download_media_base64(inbound.media_key, inbound.raw_message)
+    if data is None:
+        _remember(db, user.id, "in", "image", wa_id=inbound.wa_id)
+        await db.commit()
+        return ["No pude descargar la imagen 😕 Probá mandarla de nuevo."]
+    inbound = await _claim_inbound(db, user, inbound)
+    return await _read_with_ai(db, user, inbound, data) or [MSG_AI_UNREADABLE]
+
+
+async def _read_with_ai(
+    db: AsyncSession, user: User, inbound: InboundMessage, data: bytes
+) -> list[str] | None:
+    """Una foto o un PDF → la lectura de `ai_capture` → el gasto, por el mismo
+    `_capture_draft` que el texto libre. None = un PDF que no es para cargar
+    acá (un resumen, o no se pudo leer): el que llama sigue a la conciliación."""
+    from app.services import rate_limit
+    from app.services.search import fold_text
+
+    is_pdf = inbound.kind == "pdf"
+
+    async def reply_with(text: str) -> list[str]:
+        _remember(db, user.id, "out", "text", text=text)
+        await db.commit()
+        return [text]
+
+    if not rate_limit.check(f"wa_ai:{user.tenant_id}", settings.WA_AI_DAILY_LIMIT, 86400):
+        logger.warning("IA: hogar %s llegó al límite diario de lecturas", user.tenant_id)
+        return None if is_pdf else await reply_with(MSG_AI_LIMIT)
+
+    cats = (await db.scalars(
+        select(ExpenseCategory).where(ExpenseCategory.tenant_id == user.tenant_id)
+    )).all()
+    reading = await ai_capture.read_receipt(
+        data, categories=sorted(c.name for c in cats), today=ar_today(), caption=inbound.text,
+    )
+    if reading is None:
+        await record_event(
+            db, tenant_id=user.tenant_id, user_id=user.id, channel="whatsapp",
+            input_kind=inbound.kind, outcome="ai_failed", reason=inbound.kind,
+        )
+        return None if is_pdf else await reply_with(MSG_AI_UNREADABLE)
+
+    await record_event(
+        db, tenant_id=user.tenant_id, user_id=user.id, channel="whatsapp",
+        input_kind=inbound.kind, outcome="ai_ok", bank_detected=reading.kind[:30],
+        est_input_tokens=reading.input_tokens,
+    )
+
+    if reading.kind == ai_capture.KIND_STATEMENT:
+        return None if is_pdf else await reply_with(MSG_AI_STATEMENT_IMAGE)
+    if reading.kind == ai_capture.KIND_INCOMING:
+        amount = f" ({_fmt_amount(reading)})" if reading.amount else ""
+        who = f" de {reading.merchant}" if reading.merchant else ""
+        return await reply_with(
+            f"📥 Es una transferencia que *recibiste*{amount}{who}. No la cargo como "
+            "gasto: acá sólo registro lo que pagaste."
+        )
+    if (
+        reading.kind != ai_capture.KIND_EXPENSE
+        or reading.amount is None
+        or reading.amount > quick_capture.MAX_AMOUNT
+    ):
+        return None if is_pdf else await reply_with(MSG_AI_UNREADABLE)
+    if reading.payment_method == "tarjeta_credito":
+        # Un consumo con tarjeta entra con el resumen (conciliación). Cargarlo
+        # como gasto simple lo duplica el día que llega el resumen.
+        what = f"{_fmt_amount(reading)} en {reading.merchant}" if reading.merchant else _fmt_amount(reading)
+        return await reply_with(MSG_AI_CREDIT_CARD.format(what=what[0].upper() + what[1:]))
+
+    draft = quick_capture.QuickDraft(
+        amount=reading.amount,
+        currency=reading.currency,
+        expense_date=reading.receipt_date or ar_today(),
+        term=reading.merchant or reading.category or "Comprobante",
+        legacy=False,
+    )
+    suggested = next(
+        (c for c in cats if reading.category and fold_text(c.name) == fold_text(reading.category)),
+        None,
+    )
+    method = reading.payment_method if reading.payment_method in ("efectivo", "debito", "transferencia") else None
+    return await _capture_draft(db, user, inbound, draft, payment_method=method, suggested=suggested)
 
 
 async def _handle_unsupported_media(
@@ -677,7 +825,7 @@ async def _do_expense(db: AsyncSession, user: User, inbound: InboundMessage) -> 
         )
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
         await db.commit()
-        return [MSG_BUSINESS_HELP if await _is_business(db, user) else MSG_HELP]
+        return [MSG_BUSINESS_HELP if await _is_business(db, user) else _help_text()]
 
     return await _capture_draft(db, user, inbound, draft)
 
@@ -691,13 +839,16 @@ async def _capture_draft(
     *,
     category: ExpenseCategory | None = None,
     extra: dict | None = None,
+    suggested: ExpenseCategory | None = None,
 ) -> list[str]:
     """La mitad común de capturar un gasto (texto libre, comprobante, o una
     compra o un pago de un negocio): resolver categoría, preguntar si hace
     falta, guardar y responder. `category` la fija quien llama (la de un
     proveedor, "Mercadería" en una compra); `extra` es lo que cuelga del gasto
     en un negocio (`payee_id`, y `stock`: lo que entró con la compra), y viaja
-    con la pregunta de categoría si hay que hacerla."""
+    con la pregunta de categoría si hay que hacerla. `suggested` es la que
+    propuso la lectura con IA: entra sólo si el hogar no tiene regla ni
+    historial para ese comercio, y se muestra como sugerida."""
     if category is not None:
         pick = quick_capture.CategoryPick(category.id, category.name, "exact", None, [])
     # En USD la categoría es siempre "Consumo en dólares" (regla del dominio).
@@ -719,6 +870,8 @@ async def _capture_draft(
             db.add(cat)
             await db.flush()
             pick = quick_capture.CategoryPick(cat.id, cat.name, "created", None, [])
+        elif pick.category_id is None and suggested is not None:
+            pick = quick_capture.CategoryPick(suggested.id, suggested.name, "suggest", None, [])
 
     if pick.category_id is None:
         options = pick.options
