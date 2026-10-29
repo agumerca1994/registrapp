@@ -475,6 +475,10 @@ El webhook (`POST /webhook/whatsapp`, shared secret, falla cerrado) quedó como 
   - **El mensaje entrante se commitea antes de llamar a la IA** (`_claim_inbound`): la llamada tarda segundos, Evolution reintenta el webhook, y sin eso el reintento cargaba el gasto otra vez.
   - Embudo: `ai_ok` (con `bank_detected` = lo que la IA dijo que era y `est_input_tokens` reales) o `ai_failed`. Los tests nunca llaman a la API: `conftest.py` vacía la clave y `tests/test_ai_capture.py` stubbea `read_receipt`.
   - Sin la clave, todo es como antes: la imagen recibe el aviso de mandarla en PDF.
+- **Un PDF con contraseña la pide por chat** (`services/pdf_unlock.py`, con pypdfium2, que ya viene con pdfplumber). Los bancos protegen el resumen con el DNI, y así no lo lee ni pdfminer ni la API de Claude (400 "password protected"). `pending = pdf_password` guarda cómo volver a bajarlo de Evolution (key + mensaje crudo sin miniatura), nunca el PDF. La respuesta lo baja de nuevo, lo abre en memoria y sigue por `_handle_pdf` como si hubiera llegado sin contraseña. Reglas:
+  - Va **primero** en `_handle_text`: un DNI es un número y se leería como respuesta a otra pregunta o como un gasto. Un texto con espacios no es una contraseña: descarta la pregunta y sigue su camino. Tres intentos, 30 minutos, *cancelar*.
+  - **La contraseña nunca se guarda**: el mensaje entrante se registra sin texto, y el PDF sigue con `text=""` para que no viaje como comentario a la IA.
+  - La pregunta abierta es la del **último** mensaje (`_open_pending`: un `pending=None` se guarda como JSON `null`, que no es NULL), así que un reintento la vuelve a hacer en un mensaje nuevo en vez de editar la vieja.
 - **Audio no se procesa** — registra `needs_ai` (reason `audio`) y ofrece el plan Pro con "me interesa": es la medición, no una promesa.
 
 ### Conector MCP (`/mcp`) — la app como fuente de datos para una IA

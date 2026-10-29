@@ -7,3 +7,5 @@
 pytest==8.3.4
 pytest-asyncio==0.25.0
 aiosqlite==0.20.0
+# Sólo para fabricar PDFs con contraseña en los tests (pdf_unlock usa pypdfium2).
+pypdf==6.1.1

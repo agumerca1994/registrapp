@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from decimal import Decimal
 
@@ -333,14 +333,47 @@ def _fmt_total(totals: dict | None, cur: str, key: str) -> str:
     return _money(f"{Decimal(raw):,.2f}".replace(",", "@").replace(".", ",").replace("@", "."), cur) if raw else "-"
 
 
-async def _handle_pdf(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
+MSG_PDF_PASSWORD = (
+    "🔒 El PDF tiene contraseña. Mandame la contraseña en un mensaje y lo abro "
+    "(en los resúmenes del banco suele ser tu DNI, sin puntos). No la guardo."
+)
+PDF_PASSWORD_TRIES = 3
+PDF_PASSWORD_MINUTES = 30
+
+
+def _strip_thumbnails(node):
+    """El mensaje crudo viaja en `pending` para volver a bajar el PDF cuando
+    llegue la contraseña; la miniatura (base64) no hace falta y pesa."""
+    if isinstance(node, dict):
+        return {k: _strip_thumbnails(v) for k, v in node.items() if k != "jpegThumbnail"}
+    return node
+
+
+async def _handle_pdf(
+    db: AsyncSession, user: User, inbound: InboundMessage, pdf: bytes | None = None
+) -> list[str]:
+    from app.services import pdf_unlock
     from app.services.whatsapp import download_media_base64
 
-    pdf = await download_media_base64(inbound.media_key, inbound.raw_message)
+    if pdf is None:
+        pdf = await download_media_base64(inbound.media_key, inbound.raw_message)
     if pdf is None:
         _remember(db, user.id, "in", "pdf", wa_id=inbound.wa_id)
         await db.commit()
         return ["No pude descargar el PDF 😕 Probá mandarlo de nuevo."]
+
+    if pdf_unlock.needs_password(pdf):
+        # Ni los parsers ni la IA leen un PDF protegido (la API lo rechaza con
+        # un 400). Se pide la contraseña y la respuesta lo vuelve a bajar: el
+        # PDF no se guarda, sólo cómo pedírselo de nuevo a Evolution.
+        _remember(db, user.id, "in", "pdf", wa_id=inbound.wa_id)
+        _remember(db, user.id, "out", "text", text=MSG_PDF_PASSWORD, pending={
+            "type": "pdf_password", "tries": 0,
+            "media_key": inbound.media_key,
+            "raw_message": _strip_thumbnails(inbound.raw_message),
+        })
+        await db.commit()
+        return [MSG_PDF_PASSWORD]
 
     # Un PDF puede ser el resumen de la tarjeta (→ conciliación) o el
     # comprobante de UNA transferencia/pago (→ gasto directo, preguntando la
@@ -421,10 +454,12 @@ async def _handle_pdf(db: AsyncSession, user: User, inbound: InboundMessage) -> 
             "encrypted": "El PDF tiene contraseña. Descargalo sin contraseña y volvé a mandarlo.",
             "no_text": "No pude extraer texto del archivo.",
         }.get(session.reason or "", "No pude leer el resumen.")
-        reply += (
-            "\n\nAnalizarlo con IA va a ser parte del plan Pro (próximamente) — "
-            "respondé *me interesa* y te avisamos."
-        )
+        if session.reason != "encrypted":
+            # A un PDF protegido no lo arregla ningún plan: le falta la contraseña.
+            reply += (
+                "\n\nAnalizarlo con IA va a ser parte del plan Pro (próximamente) — "
+                "respondé *me interesa* y te avisamos."
+            )
         _remember(db, user.id, "out", "text", text=reply, ref_type="reconcile",
                   ref_id=session.id, pending={"type": "interest", "session_id": session.id})
         await db.commit()
@@ -519,8 +554,6 @@ async def _claim_inbound(db: AsyncSession, user: User, inbound: InboundMessage) 
     tarda segundos: si Evolution reintenta el webhook mientras tanto,
     `already_seen` lo frena y el gasto no se carga dos veces. Devuelve el
     mensaje sin `wa_id`, para que lo que sigue no vuelva a registrarlo."""
-    from dataclasses import replace
-
     _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id, text=inbound.text or None)
     await db.commit()
     return replace(inbound, wa_id=None)
@@ -634,8 +667,70 @@ async def _is_business(db: AsyncSession, user) -> bool:
     return kind == TENANT_KIND_BUSINESS
 
 
+async def _do_pdf_password(
+    db: AsyncSession, user: User, inbound: InboundMessage, text: str
+) -> list[str] | None:
+    """La respuesta a "el PDF tiene contraseña". Va antes que todo lo demás
+    porque un DNI es un número y se leería como respuesta a otra pregunta o
+    como un gasto. None = no había esa pregunta, o el mensaje es otra cosa (un
+    texto con espacios no es una contraseña: la pregunta se descarta y el
+    mensaje sigue su camino). La contraseña nunca se guarda en la memoria."""
+    from app.services import pdf_unlock
+    from app.services.whatsapp import download_media_base64
+
+    row = await _open_pending(db, user.id)
+    pending = (row.pending if row else None) or {}
+    if pending.get("type") != "pdf_password":
+        return None
+    if row.created_at < datetime.now() - timedelta(minutes=PDF_PASSWORD_MINUTES) or not text:
+        row.pending = None
+        return None
+    if text.lower() in ("cancelar", "no", "dejalo"):
+        row.pending = None
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id)
+        await db.commit()
+        return ["Listo, dejé ese PDF."]
+    if any(c.isspace() for c in text):
+        row.pending = None
+        return None
+
+    pdf = await download_media_base64(pending.get("media_key") or {}, pending.get("raw_message"))
+    if pdf is None:
+        row.pending = None
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id)
+        await db.commit()
+        return ["No pude volver a bajar el PDF 😕 Mandalo de nuevo."]
+    unlocked = pdf_unlock.unlock(pdf, text)
+    if unlocked is None:
+        tries = int(pending.get("tries") or 0) + 1
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id)
+        if tries >= PDF_PASSWORD_TRIES:
+            row.pending = None
+            await db.commit()
+            return ["Esa contraseña tampoco lo abre. Mandá el PDF de nuevo cuando la tengas."]
+        # La pregunta abierta es la del último mensaje: se vuelve a hacer.
+        row.pending = None
+        reply = "Esa contraseña no abre el PDF. Probá de nuevo, o mandá *cancelar*."
+        _remember(db, user.id, "out", "text", text=reply, pending={**pending, "tries": tries})
+        await db.commit()
+        return [reply]
+
+    row.pending = None
+    # El PDF sigue como si hubiera llegado sin contraseña. Sin el texto: la
+    # contraseña no puede terminar en la memoria ni como comentario para la IA.
+    as_pdf = replace(
+        inbound, kind="pdf", text="",
+        media_key=pending.get("media_key") or {}, raw_message=pending.get("raw_message") or {},
+    )
+    return await _handle_pdf(db, user, as_pdf, pdf=unlocked)
+
+
 async def _handle_text(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
     text = inbound.text.strip()
+
+    handled = await _do_pdf_password(db, user, inbound, text)
+    if handled is not None:
+        return handled
 
     if _UNDO_RE.match(text):
         return await _do_undo(db, user, inbound)
