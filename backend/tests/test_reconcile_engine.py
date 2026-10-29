@@ -275,3 +275,30 @@ async def test_no_cards_asks_then_new_card_resolves(db):
         select(ReconciliationAction).where(ReconciliationAction.klass == "missing")
     )).all()
     assert len(missing) == 2  # todo faltante: la tarjeta acaba de nacer
+
+
+async def test_surplus_child_cuota_goes_to_the_app_with_its_reason(db):
+    """Una cuota 2..N que el banco no muestra no se borra desde acá (se borra
+    desde la cuota 1): queda `needs_app`, y el payload dice por qué, que es lo
+    que la pantalla usa para explicarlo y llevar al ítem."""
+    cat, card, stmt, session = await _setup(db)
+    august = await find_or_create_statement(card, 2026, 8, 1, db)
+    await create_item_in_statement(
+        august, card,
+        CreditCardItemCreate(
+            description="Heladera", category_id=cat.id, item_date=date(2026, 8, 5),
+            item_type="installment", amount=Decimal("5000.00"),
+            installment_number=1, installment_count=3,
+        ),
+        USER, db,
+    )
+    await resolve_session(db, session, USER)
+
+    surplus = (await db.scalars(
+        select(ReconciliationAction).where(ReconciliationAction.klass == "surplus")
+    )).all()
+    by_desc = {a.payload["description"]: a for a in surplus}
+    assert by_desc["Heladera"].status == "needs_app"
+    assert by_desc["Heladera"].payload["why_app"] == "child"
+    assert by_desc["Gasto viejo"].status == "proposed"
+    assert by_desc["Gasto viejo"].payload["why_app"] is None

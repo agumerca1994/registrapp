@@ -40,6 +40,8 @@ export interface ActionPayload {
   updates?: { amount?: string; description?: string };
   app_description?: string;
   app_amount?: string;
+  // needs_app: por qué no se corrige desde acá
+  why_app?: "shared" | "child" | null;
   // dates
   closing_date?: string | null;
   due_date?: string | null;

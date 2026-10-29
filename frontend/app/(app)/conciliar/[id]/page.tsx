@@ -446,6 +446,8 @@ export default function ConciliarDetailPage() {
                 <div className="divide-y mt-2">
                   {actions.map(a => (
                     <ActionRow key={a.id} klass={klass} action={a} categories={categories}
+                      fixHref={session.card_id && session.statement_id && a.item_id != null
+                        ? `/tarjetas/${session.card_id}/${session.statement_id}?item=${a.item_id}` : null}
                       descDraft={descDraft} setDescDraft={setDescDraft}
                       ruleChecked={ruleChecked} setRuleChecked={setRuleChecked}
                       userPicked={userPicked} setUserPicked={setUserPicked}
@@ -485,10 +487,11 @@ export default function ConciliarDetailPage() {
 }
 
 /** Una fila de un grupo. La forma depende del `klass`, el estado la apaga. */
-function ActionRow({ klass, action, categories, descDraft, setDescDraft, ruleChecked, setRuleChecked, userPicked, setUserPicked, patchAction }: {
+function ActionRow({ klass, action, categories, fixHref, descDraft, setDescDraft, ruleChecked, setRuleChecked, userPicked, setUserPicked, patchAction }: {
   klass: string;
   action: Action;
   categories: Category[];
+  fixHref: string | null;
   descDraft: Record<number, string>;
   setDescDraft: React.Dispatch<React.SetStateAction<Record<number, string>>>;
   ruleChecked: Record<number, boolean>;
@@ -499,14 +502,40 @@ function ActionRow({ klass, action, categories, descDraft, setDescDraft, ruleChe
 }) {
   const p = action.payload;
   const proposed = action.status === "proposed";
-  const muted = !proposed;
+  // Apagado = ya resuelto. Lo que se corrige en la app sigue esperando algo.
+  const muted = !proposed && action.status !== "needs_app";
 
+  // Lo que la API no toca (compartidos, cuotas 2..N) lleva al ítem en su
+  // resumen, y se puede dejar así: si no, queda en pantalla sin salida.
   const stateBadge = action.status === "needs_app" ? (
-    <Chip locked className="shrink-0">Corregir en la app</Chip>
+    <span className="flex items-center gap-1 shrink-0">
+      {fixHref ? (
+        <Link href={fixHref} title="Abrir este ítem en el resumen">
+          <Chip locked className="hover:bg-accent transition-colors">Corregir en la app →</Chip>
+        </Link>
+      ) : (
+        <Chip locked>Corregir en la app</Chip>
+      )}
+      <button onClick={() => patchAction(action.id, { discard: true })}
+        aria-label="Dejarlo así" title="Dejarlo así"
+        className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-rose-600 transition-colors">
+        <X className="w-4 h-4" />
+      </button>
+    </span>
   ) : action.status === "applied" ? (
     <span className="inline-flex items-center gap-1 text-xs text-emerald-700 font-medium shrink-0">
       <Check className="w-3.5 h-3.5" /> Aplicado
     </span>
+  ) : null;
+
+  const needsAppNote = action.status === "needs_app" ? (
+    <p className="text-xs text-muted-foreground mt-0.5">
+      {p.why_app === "shared"
+        ? "Es un gasto compartido: se corrige desde el resumen."
+        : p.why_app === "child"
+          ? "Es una cuota de un plan: se corrige desde la cuota 1."
+          : "Es compartido o una cuota de un plan: se corrige desde el resumen."}
+    </p>
   ) : null;
 
   // ── Fechas del resumen ──
@@ -611,7 +640,10 @@ function ActionRow({ klass, action, categories, descDraft, setDescDraft, ruleChe
   if (klass === "surplus") {
     return (
       <div className={`px-4 md:px-5 py-3 flex items-center gap-3 ${muted ? "opacity-60" : ""}`}>
-        <p className="flex-1 min-w-0 text-sm text-foreground truncate">{p.description}</p>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-foreground truncate">{p.description}</p>
+          {needsAppNote}
+        </div>
         <p className="text-sm font-bold tabular-nums shrink-0">{fmtAmount(p.currency, p.amount ?? 0)}</p>
         {stateBadge}
       </div>
@@ -632,6 +664,7 @@ function ActionRow({ klass, action, categories, descDraft, setDescDraft, ruleChe
           {p.bank_description}
           {p.bank_coupon && ` · cupón ${p.bank_coupon}`}
         </p>
+        {needsAppNote}
       </div>
       <div className="text-right shrink-0">
         <p className="text-sm font-bold tabular-nums">

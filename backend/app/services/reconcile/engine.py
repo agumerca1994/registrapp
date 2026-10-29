@@ -438,6 +438,7 @@ async def _build_actions(
                     "app_description": p.app.description,
                     "app_amount": str(p.app.amount),
                     "extra_bank_idx": p.extra_bank_idx,
+                    "why_app": "shared" if p.app.shared else None,
                 },
             ))
 
@@ -455,6 +456,8 @@ async def _build_actions(
                 "description": a.description,
                 "amount": str(a.amount),
                 "currency": a.currency,
+                # Por qué va a la app (la pantalla lo dice y lleva al ítem).
+                "why_app": "shared" if a.shared else ("child" if not a.is_root else None),
             },
         ))
     await db.flush()

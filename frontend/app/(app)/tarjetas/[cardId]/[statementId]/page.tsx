@@ -663,6 +663,26 @@ export default function StatementDetailPage() {
   // Only offer values this statement actually contains — a pill option that
   // matches nothing here reads as "no hay nada" when it means "no existe".
   const items = useMemo(() => statement?.items ?? [], [statement]);
+
+  // `?item=<id>` llega desde "Subir resumen" para los ítems que hay que
+  // corregir acá (compartidos y cuotas 2..N): abre ese ítem, o la cuota 1 de
+  // su plan, que es donde se edita. Una vez por resumen (ir a la cuota 1 de
+  // otro resumen reusa esta misma pantalla), y se saca de la URL.
+  const [itemParamFor, setItemParamFor] = useState<number | null>(null);
+  useEffect(() => {
+    if (itemParamFor === statementId || !statement || statement.id !== statementId) return;
+    setItemParamFor(statementId);
+    const wanted = Number(new URLSearchParams(window.location.search).get("item"));
+    if (!wanted) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    const target = statement.items.find(i => i.id === wanted);
+    if (!target) return;
+    if (target.installment_group_id && target.installment_root_statement_id) {
+      router.push(`/tarjetas/${cardId}/${target.installment_root_statement_id}?item=${target.installment_group_id}`);
+    } else {
+      setEditItem(target);
+    }
+  }, [statement, statementId, itemParamFor, router, cardId]);
   const presentCategories = useMemo(() => {
     const seen = new Map<number, string>();
     items.forEach(i => seen.set(i.category.id, i.category.name));

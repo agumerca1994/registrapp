@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.firebase import get_current_user
 from app.models.reconciliation import (
+    ACTION_NEEDS_APP,
     ACTION_PROPOSED,
     ReconciliationAction,
     ReconciliationSession,
@@ -316,7 +317,9 @@ async def patch_action(
     )
     if not action:
         raise HTTPException(status_code=404, detail="Acción no encontrada")
-    if action.status != ACTION_PROPOSED:
+    # Un ítem que se corrige en la app también se puede descartar ("lo dejo
+    # así"): si no, queda pendiente para siempre y la sesión no se cierra.
+    if action.status != ACTION_PROPOSED and not (body.discard and action.status == ACTION_NEEDS_APP):
         raise HTTPException(status_code=409, detail="La acción ya no está propuesta")
 
     if body.discard:
