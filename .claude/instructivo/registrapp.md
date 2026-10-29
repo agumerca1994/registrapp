@@ -39,6 +39,13 @@ El script de hogar los saca del código (todos los `tourId="…"` de `app/` y `c
 - `reducedMotion: "reduce"`: el hero de Inicio cuenta desde cero y sin esto se captura a mitad de camino.
 - Los modales tienen detrás listas con los mismos textos: acotá los Locators (`[data-tour='sale-products']`, `[data-testid='stock-line']`, `[data-tour='expense-payee']`…). Los combos son `role="combobox"` y sus opciones `role="option"`.
 
+## Conector MCP (lo aprendido en /conectar)
+- Script de referencia: `/private/tmp/registrapp-conectar/seed.mjs` (fuera del repo; arma hogar + negocio de demo, llama a las tools y captura). Si no está, se rehace con esto.
+- **Tools reales contra la demo**: `POST /oauth/tokens {name, expires_in_days}` con el token de Firebase da un `rap_pat_…`; con él, `POST http://localhost:8000/mcp` con `Accept: application/json, text/event-stream` y un JSON-RPC `tools/call` directo (el servidor es stateless: no hace falta `initialize`). El resultado viene en `result.structuredContent.result` (o `content[0].text`). Borrá los tokens al terminar: si no, aparecen en la captura de Configuración.
+- **Página de autorizar con una transacción real**: `POST /oauth/register {client_name:"Claude", redirect_uris:["https://claude.ai/api/mcp/auth_callback"], grant_types:["authorization_code","refresh_token"], response_types:["code"], token_endpoint_auth_method:"none"}` (límite 5/h por IP: guardá el `client_id` en un archivo y reusalo); después `GET /oauth/authorize?response_type=code&client_id=…&redirect_uri=…&code_challenge=<S256>&code_challenge_method=S256&state=…&scope=registrapp:read&resource=http://localhost:8000/mcp` con `redirect: "manual"`: el `Location` es `http://localhost:3000/oauth/authorize?txn=…`. Abrilo en el contexto con la sesión de demo; la tarjeta es `div.max-w-md` (recortá con 16 px de margen o se corta la sombra). No hace falta autorizar.
+- En local, Configuración muestra `http://localhost:8000/mcp` como dirección: recortá la captura a la parte del token (`div.space-y-3` con el título "Token") y escribí la de producción en la página.
+- Firebase del emulador: `window.__e2e.signInWithEmailAndPassword` sirve para volver a entrar a una cuenta de demo ya creada.
+
 ## Dónde va lo publicado
 - Assets públicos: `frontend/public/<sección>/` (el instructivo como `instructivo.html` + capturas `.jpg` para la landing).
 - Landing: `frontend/app/<sección>/page.tsx` y la vista a pantalla completa en `frontend/app/<sección>/instructivo/page.tsx`, **fuera de `(app)`** (ese layout manda a `/login`). Ejemplo: `/negocio`.

@@ -179,6 +179,9 @@ export default function Home() {
               <p className="mt-6 text-sm text-muted-foreground">
                 Funciona con Claude en la web, en la app de escritorio y en Claude Code.
               </p>
+              <Link href="/conectar" className="mt-4 inline-flex items-center gap-1.5 font-semibold text-primary hover:underline">
+                Cómo conectarlo <ArrowRight className="w-4 h-4" aria-hidden="true" />
+              </Link>
             </div>
             <div className="min-w-0 rounded-2xl bg-background border border-border p-3 md:p-5 space-y-3 text-[15px] md:text-base" aria-label="Ejemplo de conversación">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ejemplo de conversación</p>
@@ -216,6 +219,7 @@ export default function Home() {
           <span className="font-semibold text-foreground">RegistrApp</span>
           <Link href="/hogar" className="hover:text-foreground">Hogar</Link>
           <Link href="/negocio" className="hover:text-foreground">Negocio</Link>
+          <Link href="/conectar" className="hover:text-foreground">Conectar con Claude</Link>
           <Link href="/login" className="sm:ml-auto hover:text-foreground">Entrar a la app</Link>
         </div>
       </footer>
