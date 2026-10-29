@@ -640,3 +640,40 @@ def test_reconcile_groups_read_as_sentences():
         "2 consumos que faltan · 1 diferencia de centavos"
     )
     assert wa_bot._groups_text({"surplus": 1}, wa_bot._GROUP_DONE) == "1 consumo de más borrado"
+
+
+async def test_category_name_answering_the_description_offer_changes_the_category(db):
+    from app.services import category_suggest
+
+    await _cat(db, "Servicios")
+    await _cat(db, "Internet")
+    await wa_bot.handle(db, USER, _in("12 lucas cosas del chino", wa_id="W1"))
+    await wa_bot.handle(db, USER, _in("2", wa_id="W2"))  # "¿Le agregás una descripción?" queda abierta
+    category_suggest.invalidate(1)
+
+    replies = await wa_bot.handle(db, USER, _in("Servicios", wa_id="W3"))
+    assert "(antes:" in replies[0]
+    servicios = await db.scalar(select(ExpenseCategory).where(ExpenseCategory.name == "Servicios"))
+    entry = await db.scalar(select(ExpenseEntry))
+    assert entry.category_id == servicios.id
+    assert entry.description != "Servicios"
+
+
+async def test_quoting_own_message_that_waited_for_a_category(db):
+    from app.services import category_suggest
+
+    category_suggest.invalidate(1)
+    await _cat(db, "Supermercado")
+    await _cat(db, "Farmacia")
+    await wa_bot.handle(db, USER, _in("12 lucas cosas del chino", wa_id="ORIG"))
+    await wa_bot.handle(db, USER, _in("2", wa_id="W2"))
+    await wa_bot.handle(db, USER, _in("no", wa_id="W3"))
+    replies = await wa_bot.handle(db, USER, _in("supermercado", wa_id="W4", quoted="ORIG"))
+    assert "Supermercado (antes: Farmacia)" in replies[0]
+
+
+async def test_same_amount_and_date_warns_twin(db):
+    await _cat(db, "Kiosco")
+    await wa_bot.handle(db, USER, _in("5000 kiosco", wa_id="W1"))
+    replies = await wa_bot.handle(db, USER, _in("5000 kiosco", wa_id="W2"))
+    assert "Ya había uno igual" in replies[0]

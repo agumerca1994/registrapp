@@ -298,6 +298,18 @@ async def _quoted_ref(db: AsyncSession, user_id: int, quoted_wa_id: str | None) 
             WaMessage.wa_message_id == quoted_wa_id,
         )
     )
+    if quoted is not None and not quoted.ref_type and quoted.direction == "in":
+        # Un mensaje que no creó nada por sí mismo: una captura registrada
+        # antes de la IA (`_claim_inbound`) o un gasto que esperó la pregunta
+        # de categoría. Lo creado quedó en el mensaje entrante siguiente.
+        nxt = await db.scalar(
+            select(WaMessage).where(
+                WaMessage.user_id == user_id,
+                WaMessage.direction == "in",
+                WaMessage.id > quoted.id,
+            ).order_by(WaMessage.id).limit(1)
+        )
+        return nxt if nxt is not None and nxt.ref_type else quoted
     if quoted is None or not quoted.ref_type or not quoted.ref_type.startswith(_REPLY_PREFIX):
         return quoted
     original = await db.scalar(
@@ -1145,6 +1157,25 @@ async def _do_pending_description(
         return None
 
     entry = await db.get(ExpenseEntry, (row.pending or {}).get("entry_id"))
+    # El nombre exacto de otra categoría no es una descripción: es quien vio
+    # "(sugerida)" y la quiere cambiar. Guardarlo como descripción dejaba la
+    # categoría equivocada y la persona sin entender por qué.
+    if entry is not None and entry.tenant_id == user.tenant_id:
+        cats = (await db.scalars(
+            select(ExpenseCategory).where(ExpenseCategory.tenant_id == user.tenant_id)
+        )).all()
+        cat = next((c for c in cats if fold_text(c.name) == fold_text(inbound.text)), None)
+        if cat is not None and cat.id != entry.category_id:
+            ref = await db.scalar(
+                select(WaMessage).where(
+                    WaMessage.user_id == user.id, WaMessage.ref_type == "expense",
+                    WaMessage.ref_id == entry.id,
+                ).order_by(WaMessage.id.desc()).limit(1)
+            )
+            if ref is not None:
+                row.pending = None
+                return await _recategorize(db, user, inbound, ref, entry, cat.name)
+
     row.pending = None
     if entry is None or entry.tenant_id != user.tenant_id:
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
@@ -1317,6 +1348,11 @@ async def _capture_draft(
     suffix = " (sugerida)" if pick.source in ("suggest", "rule") else ""
     when = "" if entry.expense_date == ar_today() else f" · {entry.expense_date.strftime('%d/%m')}"
     base = _saved_line(draft, entry.description, pick.category_name) + f"{suffix}{when}{stock_line}"
+    if await _has_twin(db, entry):
+        # El mismo comprobante mandado otra vez (caso real: una captura de
+        # $36.000 llegó cuatro veces y eran cuatro gastos). Se avisa, no se
+        # frena: dos cargas iguales el mismo día también existen.
+        base += "\n⚠️ Ya había uno igual (mismo monto y fecha). Si es el mismo, respondé *deshacer*."
     if pick.source in ("suggest", "rule"):
         reply = _offer_description(db, user, entry, base)
         await db.commit()
@@ -1352,6 +1388,19 @@ async def _show_hints(db: AsyncSession, user_id: int) -> bool:
         )
     )
     return (n or 0) <= HINT_CAPTURES
+
+
+async def _has_twin(db: AsyncSession, entry: ExpenseEntry) -> bool:
+    twin = await db.scalar(
+        select(ExpenseEntry.id).where(
+            ExpenseEntry.tenant_id == entry.tenant_id,
+            ExpenseEntry.amount == entry.amount,
+            ExpenseEntry.currency == entry.currency,
+            ExpenseEntry.expense_date == entry.expense_date,
+            ExpenseEntry.id != entry.id,
+        ).limit(1)
+    )
+    return twin is not None
 
 
 async def _learn_merchant_rule(
