@@ -76,3 +76,28 @@ def test_bbva_agosto_2026_real():
     assert by_desc["APPLE.COM BILL MQVS5H1YJUSD 9,49"]["currency"] == "USD"
     assert by_desc["APPLE.COM BILL MQVS5H1YJUSD 9,49"]["cupon"] == "131655"
     assert by_desc["PLAYSTATION 787094463USD 7,99"]["amount"] == "7.99"
+
+
+BN_VISA_OCT = PRIVATE / "bn_visa_2026-10_lines.txt"
+
+
+@pytest.mark.skipif(not BN_VISA_OCT.exists(), reason="fixture privado ausente")
+def test_banco_nacion_visa_octubre_2026_real():
+    """Formato nuevo de BN Visa (fechas con puntos, columnas PESOS/DOLAR): el
+    lector reconocía el banco y devolvía cero consumos, y la conciliación
+    mandaba las 10 cuotas cargadas a "sobra"."""
+    from app.services.statement_parsers import banco_nacion
+
+    lines = _load(BN_VISA_OCT)
+    assert banco_nacion.detect(lines)
+    data = banco_nacion.parse_lines(lines)
+    assert (data["closing_date"], data["due_date"]) == ("2026-10-15", "2026-10-28")
+    assert (data["year"], data["month"]) == (2026, 10)
+
+    (stmt,) = data["statements"]
+    assert stmt["card"]["hint_last_4"] == "3430"
+    assert len(stmt["items"]) == 11
+    assert sum(Decimal(i["amount"]) for i in stmt["items"]) == Decimal(stmt["block_total"]["ars"])
+    assert sum(1 for i in stmt["items"] if i["item_type"] == "installment") == 10
+    assert len(data["excluded"]["payments"]) == 1
+    assert len(data["excluded"]["fees"]) == 3

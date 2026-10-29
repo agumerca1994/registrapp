@@ -1,8 +1,14 @@
 """Parser de resúmenes Banco Nación Visa.
 
 Movido tal cual desde `scripts/import_banconacion_statements.py`; el script
-ahora importa de acá. Cambio único: la línea "TARJETA NNNN Total Consumos de …"
-captura sus dos montos en `block_total` para el control de totales.
+ahora importa de acá. La línea "TARJETA NNNN Total Consumos de …" captura sus
+dos montos en `block_total` para el control de totales.
+
+Hay dos formatos. El viejo: fechas "21-09-26", un solo importe por renglón y
+"VENCIMIENTO ACTUAL:". El de 2026-10 en adelante: fechas "04.11.24", dos
+columnas de importe (PESOS y DOLAR, la que no aplica en 0,00), y el
+vencimiento en la línea que sigue a "VENCIMIENTO SALDO $ …". Con el formato
+nuevo el lector reconocía el banco y no leía un solo consumo.
 """
 from __future__ import annotations
 
@@ -16,7 +22,11 @@ BANK_ID = "banco_nacion"
 
 AMOUNT_RE = re.compile(r"(\d{1,3}(?:\.\d{3})*,\d{2}-?)\s*$")
 AMOUNT_TOKEN_RE = re.compile(r"\d{1,3}(?:\.\d{3})*,\d{2}")
-DATE_PREFIX_RE = re.compile(r"^(\d{2})-(\d{2})-(\d{2})\s+(.+)$")
+DATE_PREFIX_RE = re.compile(r"^(\d{2})[-.](\d{2})[-.](\d{2})\s+(.+)$")
+# Formato nuevo: dos columnas al final, pesos y dólares ("54.541,62 0,00"). El
+# pago trae el signo adelante ("-337.635,99 0,00").
+_AMT = r"-?\d{1,3}(?:\.\d{3})*,\d{2}-?"
+TWO_AMOUNTS_RE = re.compile(rf"\s({_AMT})\s+({_AMT})\s*$")
 DATE_HEADER_RE = re.compile(r"(\d{2})\s+([A-Za-zÁ-Úá-ú]{3})\.?\s+(\d{2})")
 CUPON_RE = re.compile(r"^(\d{4,8})\s+(.*)$")
 CUOTA_RE = re.compile(r"C\.(\d{2})/(\d{2})")
@@ -29,9 +39,8 @@ PAGOS_PREFIX = "SU PAGO"
 
 def parse_amount(raw: str) -> Decimal:
     raw = raw.strip()
-    negative = raw.endswith("-")
-    if negative:
-        raw = raw[:-1]
+    negative = raw.endswith("-") or raw.startswith("-")
+    raw = raw.strip("-")
     val = Decimal(raw.replace(".", "").replace(",", "."))
     return -val if negative else val
 
@@ -43,6 +52,22 @@ def parse_short_date(dd: str, mm: str, yy: str) -> date:
 def parse_header_date(dd: str, mon: str, yy: str) -> date:
     month = MONTHS[mon.strip().lower().rstrip(".")[:3]]
     return date(2000 + int(yy), month, int(dd))
+
+
+def split_amount(rest: str) -> tuple[Decimal, str, str] | None:
+    """(importe, moneda, lo que queda adelante) del final de un renglón: las
+    dos columnas del formato nuevo (gana la que no es cero), o el importe
+    único del viejo."""
+    two = TWO_AMOUNTS_RE.search(rest)
+    if two:
+        ars, usd = parse_amount(two.group(1)), parse_amount(two.group(2))
+        if ars == 0 and usd != 0:
+            return usd, "USD", rest[: two.start()].strip()
+        return ars, "ARS", rest[: two.start()].strip()
+    one = AMOUNT_RE.search(rest)
+    if not one:
+        return None
+    return parse_amount(one.group(1)), "ARS", rest[: one.start()].strip()
 
 
 def detect(lines: list[str]) -> bool:
@@ -64,11 +89,10 @@ def parse_consumo_row(line: str) -> dict | None:
     except ValueError:
         return None
 
-    amt_m = AMOUNT_RE.search(rest)
-    if not amt_m:
+    split = split_amount(rest)
+    if split is None:
         return None
-    amount = parse_amount(amt_m.group(1))
-    remainder = rest[: amt_m.start()].strip()
+    amount, currency, remainder = split
     if not remainder:
         return None
 
@@ -77,7 +101,7 @@ def parse_consumo_row(line: str) -> dict | None:
             "date": item_date.isoformat(),
             "description": remainder,
             "amount": str(amount),
-            "currency": "ARS",
+            "currency": currency,
             "_excluded": "payment",
         }
 
@@ -106,7 +130,7 @@ def parse_consumo_row(line: str) -> dict | None:
         "description": remainder,
         "cupon": cupon,
         "amount": str(amount),
-        "currency": "ARS",
+        "currency": currency,
         "item_type": item_type,
         "installment_number": installment_number,
         "installment_count": installment_count,
@@ -122,14 +146,14 @@ def parse_fee_row(line: str) -> dict | None:
         item_date = parse_short_date(dd, mm, yy)
     except ValueError:
         return None
-    amt_m = AMOUNT_RE.search(rest)
-    if not amt_m:
+    split = split_amount(rest)
+    if split is None:
         return None
-    amount = parse_amount(amt_m.group(1))
-    description = rest[: amt_m.start()].strip().lstrip("$").strip()
+    amount, currency, description = split
+    description = description.strip("$ ").strip()
     if not description:
         return None
-    return {"date": item_date.isoformat(), "description": description, "amount": str(amount), "currency": "ARS"}
+    return {"date": item_date.isoformat(), "description": description, "amount": str(amount), "currency": currency}
 
 
 def parse_header(lines: list[str]) -> dict:
@@ -145,18 +169,26 @@ def parse_header(lines: list[str]) -> dict:
         m = re.search(label_pattern + r"\s*\$?\s*([\d.,]+)", full_text)
         return str(parse_amount(m.group(1))) if m else None
 
-    account_m = re.search(r"N DE CUENTA:\s*(\d+)", full_text)
+    account_m = re.search(r"N(?:RO)? DE CUENTA:?\s*(\d+)", full_text)
+
+    # Formato nuevo: "VENCIMIENTO SALDO $ …" es un encabezado de columnas y la
+    # fecha va al principio de la línea siguiente ("28 Oct 26 344.714,44 …").
+    due = find_date(r"VENCIMIENTO ACTUAL:")
+    if due is None:
+        m = re.search(r"VENCIMIENTO SALDO[^\n]*\n(\d{2})\s+([A-Za-zÁ-Úá-ú]{3})\.?\s+(\d{2})", full_text)
+        if m:
+            due = parse_header_date(m.group(1), m.group(2), m.group(3)).isoformat()
 
     meta = {
         "bank": "Banco Nación",
         "account_number": account_m.group(1) if account_m else None,
         "closing_date": find_date(r"CIERRE ACTUAL:"),
-        "due_date": find_date(r"VENCIMIENTO ACTUAL:"),
+        "due_date": due,
         "prev_closing_date": find_date(r"CIERRE ANTERIOR"),
         "prev_due_date": find_date(r"VTO\. ANTERIOR"),
         "next_closing_date": find_date(r"PROXIMO CIERRE"),
         "next_due_date": find_date(r"PROXIMO VTO"),
-        "saldo_actual_ars": find_amount(r"SALDO ACTUAL:"),
+        "saldo_actual_ars": find_amount(r"SALDO ACTUAL:?"),
         "year": None,
         "month": None,
     }

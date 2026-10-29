@@ -227,6 +227,43 @@ def test_banco_nacion_parse():
     assert data["excluded"]["fees"][0]["description"] == "IMPUESTO DE SELLOS"
 
 
+# Formato nuevo (2026-10): fechas con puntos, columnas PESOS y DOLAR, y el
+# vencimiento debajo de "VENCIMIENTO SALDO". Datos inventados.
+BN_NEW_LINES = [
+    "PEREZ JUAN VISA PLATINUM Hoja 1/3",
+    "NRO DE CUENTA 123456",
+    "CIERRE ACTUAL: 15 Oct 26 LIQ N030",
+    "VENCIMIENTO SALDO $ SALDO U$S PAGO MIN. $ PAGO MIN. U$S",
+    "28 Oct 26 47.749,99 5,00 9.000,00",
+    "VTO. ANTERIOR 30 Sep 26 SALDO ANTERIOR $ 1.000,00 U$S 0,00 PROXIMO CIERRE 12 Nov 26",
+    "FECHA COMPROBANTE DETALLE DE TRANSACCION PESOS DOLAR",
+    "01.10.26 SU PAGO EN PESOS -1.000,00 0,00",
+    "04.11.24 002008 HELADERAS SRL C.24/24 35.249,99 0,00",
+    "09.10.26 994406 ESTACION DE SERVICIO 12.500,00 0,00",
+    "12.10.26 112233 SPOTIFY 0,00 5,00",
+    "TARJETA 4919 Total Consumos de PEREZ JUAN 47.749,99 5,00",
+    "15.10.26 IMPUESTO DE SELLOS $ 500,00 0,00",
+    "SALDO ACTUAL 48.249,99 5,00",
+]
+
+
+def test_banco_nacion_new_format():
+    assert banco_nacion.detect(BN_NEW_LINES)
+    data = banco_nacion.parse_lines(BN_NEW_LINES)
+    assert (data["closing_date"], data["due_date"]) == ("2026-10-15", "2026-10-28")
+    assert data["saldo_actual_ars"] == "48249.99"
+
+    (stmt,) = data["statements"]
+    assert stmt["block_total"] == {"ars": "47749.99", "usd": "5.00"}
+    heladera, nafta, spotify = stmt["items"]
+    assert (heladera["date"], heladera["cupon"], heladera["amount"]) == ("2024-11-04", "002008", "35249.99")
+    assert (heladera["installment_number"], heladera["installment_count"]) == (24, 24)
+    assert (nafta["description"], nafta["currency"]) == ("ESTACION DE SERVICIO", "ARS")
+    assert (spotify["amount"], spotify["currency"]) == ("5.00", "USD")
+    assert data["excluded"]["payments"][0]["amount"] == "-1000.00"
+    assert data["excluded"]["fees"][0]["description"] == "IMPUESTO DE SELLOS"
+
+
 # ---------------------------------------------- Banco Nación Mastercard -----
 
 BNMC_LINES = [
