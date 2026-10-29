@@ -18,7 +18,7 @@ import {
   SummaryFigure, ChainRow,
 } from "@/components/ui/summary-card";
 import {
-  fmtAmount, GROUP_LABELS, GROUP_NOUNS, periodLabel, STATUS_CHIP,
+  fmtAmount, GROUP_HINTS, GROUP_LABELS, GROUP_NOUNS, groupActionLabel, periodLabel, STATUS_CHIP,
   type Action, type ApplyResult, type CurrencyTotals, type SessionDetail,
 } from "../shared";
 
@@ -425,7 +425,7 @@ export default function ConciliarDetailPage() {
           {session.status === "unexplained" && (
             <Card className="border-amber-200 bg-amber-50">
               <p className="text-sm text-amber-900 font-medium">
-                La diferencia no queda explicada al centavo. Revisá los grupos con cuidado antes de aplicar.
+                La diferencia no queda explicada al centavo. Revisá cada cambio con cuidado antes de confirmarlo.
               </p>
             </Card>
           )}
@@ -436,13 +436,18 @@ export default function ConciliarDetailPage() {
             const pending = proposedCount(klass);
             return (
               <Card key={klass} className="p-0 md:p-0">
-                <div className="flex items-center gap-2 px-4 md:px-5 pt-4">
-                  <h3 className="font-semibold text-foreground text-sm md:text-base">
-                    {GROUP_LABELS[klass] ?? klass}
-                  </h3>
-                  <span className="text-xs text-muted-foreground">
-                    {actions.length === 1 ? "1 ítem" : `${actions.length} ítems`}
-                  </span>
+                <div className="px-4 md:px-5 pt-4">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-foreground text-sm md:text-base">
+                      {GROUP_LABELS[klass] ?? klass}
+                    </h3>
+                    <span className="text-xs text-muted-foreground">
+                      {actions.length === 1 ? "1 ítem" : `${actions.length} ítems`}
+                    </span>
+                  </div>
+                  {GROUP_HINTS[klass] && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{GROUP_HINTS[klass]}</p>
+                  )}
                 </div>
                 <div className="divide-y mt-2">
                   {actions.map(a => (
@@ -456,10 +461,16 @@ export default function ConciliarDetailPage() {
                   ))}
                 </div>
                 <div className="px-4 md:px-5 py-3 border-t bg-muted/40 rounded-b-2xl flex items-center gap-3 flex-wrap">
-                  <Button onClick={() => applyGroup(klass)} disabled={applying !== null || pending === 0}>
-                    {applying === klass && <Loader2 className="w-4 h-4 animate-spin" />}
-                    Aplicar grupo ({pending})
-                  </Button>
+                  {pending > 0 ? (
+                    <Button onClick={() => applyGroup(klass)} disabled={applying !== null}>
+                      {applying === klass && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {groupActionLabel(klass, pending)}
+                    </Button>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-sm text-emerald-700 font-medium">
+                      <Check className="w-4 h-4" /> Hecho
+                    </span>
+                  )}
                   {applyMsg[klass] && (
                     <p className="text-xs text-muted-foreground">{applyMsg[klass]}</p>
                   )}
@@ -473,7 +484,7 @@ export default function ConciliarDetailPage() {
               {anyApplied && (
                 <Button variant="outline" onClick={undoLast} disabled={undoing}>
                   {undoing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4" />}
-                  Deshacer último grupo
+                  Deshacer lo último
                 </Button>
               )}
               {pendingParts.length > 0 && (

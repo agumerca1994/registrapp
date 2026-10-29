@@ -147,6 +147,33 @@ export const GROUP_LABELS: Record<string, string> = {
   surplus: "Sobrantes",
 };
 
+// Qué es cada grupo, en una línea: el título solo ("Sobrantes") no dice
+// respecto de qué sobran.
+export const GROUP_HINTS: Record<string, string> = {
+  dates: "El cierre y el vencimiento que figuran en el resumen del banco.",
+  missing: "Están en el resumen del banco y no en la app.",
+  double_count: "Cargados en la app con otro cargo sumado.",
+  amount_diff: "Están en los dos lados, pero con otro monto en la app.",
+  usd_fix: "Consumos en dólares que no coinciden con los del banco.",
+  rounding: "El banco cobró unos centavos distinto en estas cuotas.",
+  surplus: "Están en la app, pero el banco no los cobró en este resumen.",
+};
+
+/** El botón de un grupo dice lo que hace, no "aplicar grupo". */
+export function groupActionLabel(klass: string, n: number): string {
+  const pl = (one: string, many: string) => (n === 1 ? one : many);
+  switch (klass) {
+    case "dates": return "Completar fechas";
+    case "missing": return `Cargar ${n} ${pl("faltante", "faltantes")}`;
+    case "double_count": return `Corregir ${n} ${pl("cargo", "cargos")}`;
+    case "amount_diff": return `Corregir ${n} ${pl("monto", "montos")}`;
+    case "usd_fix": return `Corregir ${n} en dólares`;
+    case "rounding": return `Ajustar ${n} ${pl("redondeo", "redondeos")}`;
+    case "surplus": return `Borrar ${n} ${pl("sobrante", "sobrantes")}`;
+    default: return `Aplicar ${n}`;
+  }
+}
+
 // Para la línea "Quedan: 2 redondeos · 1 sobrante" del pie del detalle.
 export const GROUP_NOUNS: Record<string, [string, string]> = {
   dates: ["fecha por corregir", "fechas por corregir"],
