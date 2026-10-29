@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
-import { formatARS, formatPct, formatDate } from "@/lib/utils";
+import { formatARS, formatPct, formatDate, getErrorMessage } from "@/lib/utils";
 import { X, Settings2, ChevronRight, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { MonthField } from "@/components/ui/form";
@@ -116,6 +116,7 @@ export default function MacroPage() {
   const [records, setRecords] = useState<MacroVar[]>([]);
   const [loading, setLoading] = useState(true);
   const [backfilling, setBackfilling] = useState(false);
+  const [backfillError, setBackfillError] = useState("");
   const [detailRecord, setDetailRecord] = useState<MacroVar | null>(null);
   const [showConfig, setShowConfig] = useState(false);
   const [visibleVars, setVisibleVars] = useState<Record<string, boolean>>(DEFAULT_VISIBLE);
@@ -163,11 +164,12 @@ export default function MacroPage() {
     if (!backfillFrom) return;
     const [year, month] = backfillFrom.split("-").map(Number);
     setBackfilling(true);
+    setBackfillError("");
     try {
       await api.post(`/macro/backfill?from_year=${year}&from_month=${month}`, {}, { timeout: 120000 });
       await loadDisplay(range);
     } catch (e) {
-      console.error("Backfill failed", e);
+      setBackfillError(getErrorMessage(e, "No se pudo traer el historial. Probá de nuevo en un rato."));
     } finally {
       setBackfilling(false);
     }
@@ -228,6 +230,7 @@ export default function MacroPage() {
                 {backfilling ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando…</> : "Cargar historial"}
               </Button>
             </div>
+            {backfillError && <p className="text-xs text-destructive">{backfillError}</p>}
           </div>
         </Card>
       )}

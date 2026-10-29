@@ -34,6 +34,7 @@ export default function ProveedoresPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [spend, setSpend] = useState<Record<number, Spend>>({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [filter, setFilter] = useState<Filter>("todos");
   const [editing, setEditing] = useState<Payee | null>(null);
   const [creating, setCreating] = useState(false);
@@ -57,8 +58,14 @@ export default function ProveedoresPage() {
     setSpend(bySpend);
   };
 
+  // Sin esto, un error de red se leía como "todavía no cargaste proveedores".
+  const retry = () => {
+    setLoading(true);
+    setLoadError(false);
+    load().catch(() => setLoadError(true)).finally(() => setLoading(false));
+  };
   useEffect(() => {
-    load().finally(() => setLoading(false));
+    retry();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -95,6 +102,11 @@ export default function ProveedoresPage() {
 
       {loading ? (
         <Card className="h-32 animate-pulse" />
+      ) : loadError ? (
+        <Card className="p-4 md:p-5 space-y-3">
+          <p className="text-sm text-destructive">No se pudo cargar la lista de proveedores y empleados.</p>
+          <Button onClick={retry}>Reintentar</Button>
+        </Card>
       ) : visible.length === 0 ? (
         <Card className="p-4 md:p-5 space-y-3">
           <p className="text-sm text-muted-foreground">

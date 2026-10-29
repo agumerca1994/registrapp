@@ -12,7 +12,7 @@ test("el + del dashboard abre 'Nuevo egreso'", async ({ browser }) => {
   });
   const page = await iphone.newPage();
   await page.goto("/dashboard");
-  await page.getByRole("button", { name: "Registrar gasto" }).click();
+  await page.getByRole("button", { name: "Registrar egreso" }).click();
 
   await expect(page.getByRole("heading", { name: "Nuevo egreso" })).toBeVisible();
   // La marca se borra de la URL enseguida...

@@ -1027,14 +1027,14 @@ export default function SharedExpensesPage() {
 
           <FormGrid>
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-muted-foreground">Descripción *</label>
+              <label className="text-xs font-medium text-muted-foreground">Descripción</label>
               <input required value={title} onChange={e => setTitle(e.target.value)}
                 className={FIELD}
                 placeholder="ej: Supermercado del fin de semana" />
             </div>
 
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Monto *</label>
+              <label className="text-xs font-medium text-muted-foreground">Monto</label>
               <input
                 required
                 type="text"
@@ -1047,7 +1047,7 @@ export default function SharedExpensesPage() {
             </div>
 
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Fecha *</label>
+              <label className="text-xs font-medium text-muted-foreground">Fecha</label>
               <DateField required value={expenseDate} onChange={setExpenseDate} />
             </div>
 
@@ -1060,7 +1060,7 @@ export default function SharedExpensesPage() {
               </label>
               {differentPaymentDate && (
                 <div className="mt-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Fecha de pago *</label>
+                  <label className="text-xs font-medium text-muted-foreground">Fecha de pago</label>
                   <DateField required value={paymentDate} onChange={setPaymentDate} />
                   <p className="text-xs text-muted-foreground/70 mt-1">
                     Se usa para saber en qué mes aparece este gasto en la vista por persona. No cambia tus Egresos.
@@ -1071,7 +1071,7 @@ export default function SharedExpensesPage() {
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-medium text-muted-foreground">Categoría *</label>
+                <label className="text-xs font-medium text-muted-foreground">Categoría</label>
                 <button type="button" onClick={() => setShowCatForm(v => {
                   if (!v) setCatColor(pickCategoryColor(categories.map(c => c.color)));
                   return !v;
@@ -1114,7 +1114,7 @@ export default function SharedExpensesPage() {
             </div>
 
             <div>
-              <label className="text-xs font-medium text-muted-foreground">División *</label>
+              <label className="text-xs font-medium text-muted-foreground">División</label>
               <SelectField value={splitType} onChange={v => handleSplitTypeChange(v as "equal" | "custom")}
                 options={[
                   { value: "equal", label: "Equitativa" },
@@ -1125,7 +1125,7 @@ export default function SharedExpensesPage() {
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-medium text-muted-foreground">Participantes *</label>
+              <label className="text-xs font-medium text-muted-foreground">Participantes</label>
               <button type="button" onClick={addParticipant}
                 className="text-xs text-primary hover:underline flex items-center gap-1">
                 <Plus className="w-3 h-3" /> Agregar persona

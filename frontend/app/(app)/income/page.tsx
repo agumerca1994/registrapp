@@ -277,11 +277,11 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
 
               <FormGrid>
                 {[
-                  ["date_col", "Columna de fecha *", true],
-                  ["amount_col", "Columna de neto *", true],
-                  ["bruto_col", "Columna de bruto"],
-                  ["deducciones_col", "Columna de deducciones"],
-                  ["notes_col", "Columna de notas"],
+                  ["date_col", "Columna de fecha", true],
+                  ["amount_col", "Columna de neto", true],
+                  ["bruto_col", "Columna de bruto (opcional)"],
+                  ["deducciones_col", "Columna de deducciones (opcional)"],
+                  ["notes_col", "Columna de notas (opcional)"],
                 ].map(([key, label, required]) => (
                   <div key={key as string}>
                     <label className="text-xs font-medium text-muted-foreground">{label as string}</label>
@@ -293,7 +293,7 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
                   </div>
                 ))}
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground">Fuente de ingreso *</label>
+                  <label className="text-xs font-medium text-muted-foreground">Fuente de ingreso</label>
                   <SelectField
                     value={mapping.source_id}
                     onChange={v => setMapping(m => ({ ...m, source_id: v }))}
@@ -305,7 +305,7 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
               {!mapping.source_id && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-muted rounded-xl p-4">
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground">Nombre *</label>
+                    <label className="text-xs font-medium text-muted-foreground">Nombre</label>
                     <input className={FIELD}
                       placeholder="Ej: Sueldo Empresa"
                       value={mapping.new_source_name}

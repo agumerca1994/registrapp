@@ -36,7 +36,7 @@ import { isBusiness } from "@/lib/account";
 const DASHBOARD_TOUR_STEPS: Step[] = [
   {
     target: "[data-tour='nav-dashboard']",
-    content: "Este es tu Dashboard: cómo cerró el mes, en pesos y en dólares.",
+    content: "Esto es Inicio: cómo cerró el mes, en pesos y en dólares.",
     placement: "right",
     skipBeacon: true,
   },
@@ -673,7 +673,7 @@ function HouseholdDashboard() {
           abrir la app, y es un `Fab` y no un botón dentro del contenido porque
           en el teléfono el dashboard scrollea y un botón que se va de pantalla
           no sirve para la acción principal. */}
-      <Fab label="Registrar gasto" data-tour="dashboard-registrar"
+      <Fab label="Registrar egreso" data-tour="dashboard-registrar"
         onClick={() => router.push("/expenses?nuevo=1")} />
     </div>
   );

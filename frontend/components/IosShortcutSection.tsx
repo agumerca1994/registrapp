@@ -234,13 +234,6 @@ export function IosShortcutSection() {
           podés apagar <strong>Preguntar antes de ejecutar</strong> para que
           salga sin confirmación extra.
         </p>
-
-        <p className="text-[11px] text-muted-foreground">
-          Lo que falta para que esto sea detección real en las billeteras es un
-          disparador <em>por notificación</em>, que se active cuando la app te avisa
-          que el pago salió. Apple lo suma en iOS 27; cuando llegue, este mismo atajo
-          sirve sin tocar nada, sólo se le cambia el disparador.
-        </p>
       </div>
     </Card>
   );

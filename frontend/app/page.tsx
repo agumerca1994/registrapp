@@ -161,7 +161,7 @@ export default function Home() {
         <section id="ia" className="scroll-mt-20 max-w-6xl mx-auto px-4 md:px-8 py-14">
           <div className="rounded-3xl border-2 border-ink bg-card p-5 md:p-10 shadow-hero grid lg:grid-cols-2 gap-8 md:gap-10 items-center">
             <div className="min-w-0">
-              <p className="text-sm font-semibold uppercase tracking-wider text-primary">Con inteligencia artificial</p>
+              <p className="text-sm font-semibold uppercase tracking-wider text-primary">Conectado a Claude</p>
               <h2 className="mt-2 font-display font-bold text-3xl md:text-4xl tracking-tight text-balance">
                 Hablá de tu plata con tu asistente de IA
               </h2>

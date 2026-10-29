@@ -4,6 +4,7 @@ import { useState } from "react";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/utils";
 import { COUNTRIES } from "@/lib/countries";
+import { Listbox } from "@/components/ui/listbox";
 
 export default function WhatsAppVerifyForm({ onVerified, onSkip }: {
   onVerified: () => void | Promise<void>;
@@ -68,17 +69,13 @@ export default function WhatsAppVerifyForm({ onVerified, onSkip }: {
           Vinculá tu número para empezar.
         </p>
         <div className="flex gap-2">
-          <select
+          <Listbox
             value={prefix}
-            onChange={e => { setPrefix(e.target.value); setLocalPhone(""); }}
-            className="border rounded-lg px-2 py-2 text-sm bg-white shrink-0"
-          >
-            {COUNTRIES.map(c => (
-              <option key={c.prefix} value={c.prefix}>
-                {c.flag} +{c.prefix}
-              </option>
-            ))}
-          </select>
+            onChange={v => { setPrefix(v); setLocalPhone(""); }}
+            options={COUNTRIES.map(c => ({ value: c.prefix, label: `${c.flag} +${c.prefix}` }))}
+            className="shrink-0"
+            triggerClassName="border rounded-lg px-2 py-2 text-sm bg-white flex items-center gap-1 whitespace-nowrap"
+          />
           <input
             type="tel"
             value={localPhone}
@@ -92,7 +89,7 @@ export default function WhatsAppVerifyForm({ onVerified, onSkip }: {
             disabled={loading || !localPhone.trim()}
             className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50 shrink-0"
           >
-            {loading ? "Enviando..." : "Enviar código"}
+            {loading ? "Enviando…" : "Enviar código"}
           </button>
         </div>
         {error && <p className="text-xs text-red-600">{error}</p>}

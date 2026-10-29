@@ -38,6 +38,7 @@ export default function ProductosPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [levels, setLevels] = useState<Record<number, StockLevel>>({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [creating, setCreating] = useState(false);
   const [moving, setMoving] = useState<{ action: StockAction; productId?: number } | null>(null);
@@ -52,7 +53,13 @@ export default function ProductosPage() {
     setProducts(p.data);
     setLevels(Object.fromEntries(s.data.map(l => [l.product_id, l])));
   };
-  useEffect(() => { load().finally(() => setLoading(false)); }, []);
+  // Sin esto, un error de red se leía como "todavía no cargaste productos".
+  const retry = () => {
+    setLoading(true);
+    setLoadError(false);
+    load().catch(() => setLoadError(true)).finally(() => setLoading(false));
+  };
+  useEffect(retry, []);
 
   const active = products.filter(p => p.is_active);
   const archived = products.filter(p => !p.is_active);
@@ -90,6 +97,11 @@ export default function ProductosPage() {
 
       {loading ? (
         <Card className="h-32 animate-pulse" />
+      ) : loadError ? (
+        <Card className="p-4 md:p-5 space-y-3">
+          <p className="text-sm text-destructive">No se pudo cargar la lista de productos.</p>
+          <Button onClick={retry}>Reintentar</Button>
+        </Card>
       ) : active.length === 0 ? (
         <Card className="p-4 md:p-5 space-y-3">
           <p className="text-sm text-muted-foreground">

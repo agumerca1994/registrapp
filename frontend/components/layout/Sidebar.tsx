@@ -29,7 +29,7 @@ interface NavItem {
 // El del hogar no se toca: orden, labels y `data-tour` son los que esperan la
 // guía del dashboard y los baselines visuales.
 const nav: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, tour: "nav-dashboard" },
+  { href: "/dashboard", label: "Inicio", icon: LayoutDashboard, tour: "nav-dashboard" },
   { href: "/income", label: "Ingresos", icon: TrendingUp, tour: "nav-income" },
   { href: "/expenses", label: "Egresos", icon: TrendingDown, tour: "nav-expenses" },
   { href: "/divisas", label: "Divisas", icon: ArrowLeftRight, tour: "nav-divisas" },

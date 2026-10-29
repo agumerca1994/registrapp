@@ -227,13 +227,13 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                 {!editLoan && (
                   <>
                     <div>
-                      <label className="text-xs font-medium text-muted-foreground">Primera cuota *</label>
+                      <label className="text-xs font-medium text-muted-foreground">Primera cuota</label>
                       <MonthField required
                         value={form.first_payment_date}
                         onChange={v => setForm(p => ({ ...p, first_payment_date: v }))} />
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-muted-foreground">Cantidad de cuotas *</label>
+                      <label className="text-xs font-medium text-muted-foreground">Cantidad de cuotas</label>
                       <input
                         type="text" inputMode="numeric" pattern="[0-9]*" required
                         value={form.total_cuotas} onChange={f("total_cuotas")}
@@ -277,7 +277,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
 
                 {isUva && (
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground">Cuota en UVAs *</label>
+                    <label className="text-xs font-medium text-muted-foreground">Cuota en UVAs</label>
                     <input
                       type="text" inputMode="decimal" required
                       placeholder="ej: 750,74"
@@ -289,7 +289,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
 
                 {form.loan_type === "tasa_fija" && (
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground">Cuota mensual ($) *</label>
+                    <label className="text-xs font-medium text-muted-foreground">Cuota mensual ($)</label>
                     <input
                       type="text" inputMode="decimal" required
                       placeholder="ej: 150.000,00"
@@ -590,7 +590,7 @@ export default function MortgagePage() {
       {/* Payment history — flat, secondary to the hero summary above */}
       {records.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Historial de cuotas</p>
+          <p className="text-sm font-medium text-foreground mb-2">Historial de cuotas</p>
           <Card className="p-0 md:p-0 divide-y">
             {records.map(r => (
               <div key={r.id} className="flex items-center justify-between gap-2 px-4 py-3">

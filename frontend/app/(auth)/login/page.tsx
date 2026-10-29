@@ -8,13 +8,9 @@ import { isInAppBrowser, isIOS } from "@/lib/browser";
 
 // Pre-login is the one screen with no chrome around it, so it carries the
 // brand itself: a full-bleed violet field instead of the app's off-white
-// background. It's painted with layered radial gradients rather than blurred
-// blob divs — same look, no `filter: blur()` over rounded corners, which is
-// what broke on real iOS/Safari before.
-const BRAND_FIELD =
-  "radial-gradient(120% 80% at 15% -10%, #7B6DF5 0%, rgba(123,109,245,0) 60%)," +
-  "radial-gradient(90% 60% at 110% 105%, #3F34A8 0%, rgba(63,52,168,0) 55%)," +
-  "linear-gradient(165deg, #5B4FE9 0%, #4A3FC4 55%, #3D338F 100%)";
+// background. Flat on purpose: the layered radial gradients it had read as
+// the generic "AI landing" glow, and the brand is the color, not the blur.
+const BRAND_FIELD = "#4A3FC4";
 
 function GoogleIcon() {
   return (

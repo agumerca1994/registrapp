@@ -82,12 +82,12 @@ function AddReminderModal({
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="text-xs font-medium text-muted-foreground">Texto *</label>
+            <label className="text-xs font-medium text-muted-foreground">Texto</label>
             <input required className={FIELD} placeholder="ej: Pagar tarjeta Visa"
               value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground">Fecha *</label>
+            <label className="text-xs font-medium text-muted-foreground">Fecha</label>
             <DateField required value={dateStr} onChange={setDateStr} />
           </div>
           <p className="text-xs text-muted-foreground/70">
@@ -148,7 +148,7 @@ function DayDetail({
               {ev.amount !== undefined && <span className="font-medium shrink-0">{formatARS(ev.amount)}</span>}
               {ev.kind === "reminder" && ev.reminder && (
                 <button onClick={() => onDeleteReminder(ev.reminder!.id)}
-                  title="Eliminar recordatorio"
+                  title="Eliminar recordatorio" aria-label="Eliminar recordatorio"
                   className="text-primary/50 hover:text-destructive shrink-0">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -235,8 +235,13 @@ export default function CalendarioPage() {
   }
 
   async function handleDeleteReminder(id: number) {
-    await api.delete(`/reminders/${id}`);
-    await load();
+    if (!confirm("¿Eliminar este recordatorio?")) return;
+    try {
+      await api.delete(`/reminders/${id}`);
+      await load();
+    } catch (e) {
+      alert(getErrorMessage(e, "No se pudo eliminar el recordatorio. Probá de nuevo."));
+    }
   }
 
   const selectedEvents = eventsForDay(selectedDay);
