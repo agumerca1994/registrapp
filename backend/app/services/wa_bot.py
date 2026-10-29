@@ -27,11 +27,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.expense import EXPENSE_SOURCE_WHATSAPP, ExpenseCategory, ExpenseEntry
+from app.models.income import IncomeEntry, IncomeSource
 from app.models.reconciliation import ACTION_PROPOSED, ReconciliationAction
 from app.models.tenant import TENANT_KIND_BUSINESS, Tenant
 from app.models.user import User
 from app.models.wa_message import WaMessage
-from app.services import ai_capture, expenses as expenses_service, quick_capture, reconcile as reconcile_service
+from app.services import ai_capture, expenses as expenses_service, income_capture, quick_capture, reconcile as reconcile_service
 from app.services.business import capture as business_capture
 from app.services.category_suggest import invalidate as invalidate_suggest
 from app.services.clock import ar_today
@@ -55,6 +56,7 @@ MSG_HELP = (
     "No te entendí 🤔\n\n"
     "Podés mandarme:\n"
     "• Un gasto: *12 lucas verdulería* · *15000 supermercado* · *usd 20 regalo ayer*\n"
+    "• Un ingreso: *cobré 850 lucas sueldo* · *me transfirieron 30 lucas alquiler* · *cobré usd 500 freelance*\n"
     "• El *PDF del resumen* de tu tarjeta, y dejo tus datos al día\n"
     "• El *PDF de un comprobante* de pago o transferencia\n"
     "• *deshacer* — borra lo último que cargué\n"
@@ -135,7 +137,7 @@ MSG_BUSINESS_HELP = (
     "• *deshacer* — borra lo último que cargué"
 )
 
-_EDIT_RE = re.compile(r"^editar\s+(monto|categor[ií]a|descripci[oó]n)\s+(.+)$", re.IGNORECASE)
+_EDIT_RE = re.compile(r"^editar\s+(monto|categor[ií]a|descripci[oó]n|fuente)\s+(.+)$", re.IGNORECASE)
 _UNDO_RE = re.compile(r"^(deshacer|deshace|anular)\b", re.IGNORECASE)
 _INTEREST_RE = re.compile(r"^me\s+interesa\b", re.IGNORECASE)
 _NUMBER_RE = re.compile(r"^\s*([1-9])\s*$")
@@ -401,11 +403,17 @@ async def _handle_pdf(
             logger.warning("WA receipt sin match: %s", diagnose(pages))
         if receipt is not None and receipt.direction == "in":
             # Plata que entró: guardarla como gasto descuadraba el mes dos
-            # veces (un ingreso que falta y un egreso que sobra).
+            # veces (un ingreso que falta y un egreso que sobra). En un hogar
+            # es un ingreso; en un negocio, sus ingresos son las ventas.
             await record_event(
                 db, tenant_id=user.tenant_id, user_id=user.id, channel="whatsapp",
                 input_kind="pdf", outcome="parsed_code", bank_detected="transferencia_recibida",
             )
+            if not await _is_business(db, user):
+                return await _capture_incoming(
+                    db, user, inbound, receipt.amount, receipt.currency,
+                    receipt.receipt_date, receipt.counterparty,
+                )
             who = f" de {receipt.counterparty}" if receipt.counterparty else ""
             reply = (
                 f"📥 Es el comprobante de una transferencia que *recibiste* "
@@ -519,6 +527,21 @@ async def _handle_pdf(
     return [reply]
 
 
+async def _capture_incoming(
+    db: AsyncSession, user: User, inbound: InboundMessage,
+    amount: Decimal, currency: str, when, counterparty: str | None,
+) -> list[str]:
+    """Una transferencia que entró (comprobante en PDF o captura) → ingreso.
+    El término es quien la mandó: así la regla que deja la respuesta ("de Juan
+    Pérez" → Alquiler) hace que la próxima de esa persona no pregunte."""
+    draft = quick_capture.QuickDraft(
+        amount=amount, currency=currency, expense_date=when or ar_today(),
+        term=(counterparty or "").strip(), legacy=False,
+    )
+    notes = f"Transferencia de {counterparty}" if counterparty else "Transferencia recibida"
+    return await _capture_income(db, user, inbound, draft, notes=notes, refund=True)
+
+
 async def _pending_group_counts(db: AsyncSession, session_id: int) -> dict[str, int]:
     rows = (await db.scalars(
         select(ReconciliationAction).where(
@@ -618,6 +641,18 @@ async def _read_with_ai(
 
     if reading.kind == ai_capture.KIND_STATEMENT:
         return None if is_pdf else await reply_with(MSG_AI_STATEMENT_IMAGE)
+    if reading.kind in (ai_capture.KIND_INCOMING, ai_capture.KIND_PAYSLIP) and reading.amount \
+            and reading.amount <= quick_capture.MAX_AMOUNT and not await _is_business(db, user):
+        if reading.kind == ai_capture.KIND_PAYSLIP:
+            draft = quick_capture.QuickDraft(
+                amount=reading.amount, currency=reading.currency,
+                expense_date=reading.receipt_date or ar_today(),
+                term=reading.merchant or "Sueldo", legacy=False,
+            )
+            return await _capture_income(db, user, inbound, draft, notes=reading.merchant or None)
+        return await _capture_incoming(
+            db, user, inbound, reading.amount, reading.currency, reading.receipt_date, reading.merchant,
+        )
     if reading.kind == ai_capture.KIND_INCOMING:
         amount = f" ({_fmt_amount(reading)})" if reading.amount else ""
         who = f" de {reading.merchant}" if reading.merchant else ""
@@ -757,6 +792,10 @@ async def _handle_text(db: AsyncSession, user: User, inbound: InboundMessage) ->
     if handled is not None:
         return handled
 
+    handled = await _do_pending_income_by_name(db, user, inbound)
+    if handled is not None:
+        return handled
+
     handled = await _do_pending_category_by_name(db, user, inbound)
     if handled is not None:
         return handled
@@ -766,6 +805,10 @@ async def _handle_text(db: AsyncSession, user: User, inbound: InboundMessage) ->
         _remember(db, user.id, "out", "text", text=MSG_EMPLOYEE_ONLY)
         await db.commit()
         return [MSG_EMPLOYEE_ONLY]
+
+    handled = await _do_income(db, user, inbound)
+    if handled is not None:
+        return handled
 
     handled = await _do_pending_description(db, user, inbound)
     if handled is not None:
@@ -798,6 +841,178 @@ async def _do_business(
         await db.commit()
         return [MSG_BUSINESS_HELP]
     return await business_bot.handle_intent(db, user, inbound, intent)
+
+
+# --------------------------------------------------------------- ingresos ---
+# "cobré 850 lucas sueldo", una transferencia recibida (PDF o captura) o un
+# recibo de sueldo leído por la IA → un IncomeEntry, por `income_capture`.
+# Sólo en un hogar: un negocio no tiene ingresos a mano, sus ventas arman el
+# ingreso de cada día (y `tenants.set_kind` cuenta los ingresos como del hogar).
+
+_CANCEL_WORDS = {"no", "cancelar", "cancela", "dejalo", "dejala", "nada"}
+
+
+async def _do_income(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str] | None:
+    draft = income_capture.parse_income_text(inbound.text)
+    if draft is None or await _is_business(db, user):
+        return None
+    return await _capture_income(db, user, inbound, draft)
+
+
+async def _capture_income(
+    db: AsyncSession,
+    user: User,
+    inbound: InboundMessage,
+    draft: quick_capture.QuickDraft,
+    *,
+    notes: str | None = None,
+    refund: bool = False,
+) -> list[str]:
+    """Resolver la fuente, preguntar si hace falta, guardar y responder.
+    `refund` = plata que entró por una transferencia: puede ser alguien
+    devolviendo su parte de un gasto compartido, que la app a propósito no
+    registra (la tenencia y los gastos ya son netos), así que la pregunta
+    ofrece no cargarla."""
+    sources = await income_capture.writable_sources(db, user.tenant_id)
+    source = await income_capture.resolve_source(db, user.tenant_id, draft.term, sources)
+    if source is not None:
+        return await _save_income(db, user, inbound, draft, source, notes)
+
+    options = [s.name for s in sources][: income_capture.MAX_OPTIONS]
+    new_name = draft.term if draft.term and income_capture.match_by_name(sources, draft.term) is None else None
+    choices = _income_choices(options, new_name, refund)
+    who = f" de *{draft.term}*" if draft.term else ""
+    if choices:
+        listed = "\n".join(f"{i + 1}️⃣ {label}" for i, (_k, label) in enumerate(choices))
+        reply = (
+            f"💰 ¿De qué fuente es el ingreso{who} ({_fmt_amount(draft)})?\n{listed}\n"
+            "Respondé el número, o el nombre de la fuente (si no existe, la creo)."
+        )
+    else:
+        reply = (
+            f"💰 ¿De qué es el ingreso de {_fmt_amount(draft)}? Escribime el nombre "
+            "de la fuente (sueldo, alquiler, un cliente…) y la creo."
+        )
+    _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id, text=inbound.text or None)
+    _remember(db, user.id, "out", "text", text=reply, pending={
+        "type": "income_pick", "draft": _draft_dict(draft), "options": options,
+        "new": new_name, "refund": refund, "notes": notes,
+    })
+    await db.commit()
+    return [reply]
+
+
+def _income_choices(options: list[str], new_name: str | None, refund: bool) -> list[tuple[str, str]]:
+    """Las opciones numeradas, en el orden en que se muestran y se contestan."""
+    choices = [("source", name) for name in options]
+    if new_name:
+        choices.append(("new", f"Nueva fuente «{new_name}»"))
+    if refund:
+        choices.append(("refund", "No es un ingreso (me devolvieron plata de un gasto)"))
+    return choices
+
+
+async def _answer_income_pick(
+    db: AsyncSession, user: User, inbound: InboundMessage, row: WaMessage, number: int
+) -> list[str]:
+    pending = row.pending or {}
+    choices = _income_choices(pending.get("options") or [], pending.get("new"), bool(pending.get("refund")))
+    if not choices:
+        return ["Escribime el nombre de la fuente del ingreso (sueldo, alquiler, un cliente…)."]
+    if not (1 <= number <= len(choices)):
+        return [f"Respondé un número del 1 al {len(choices)}, o el nombre de la fuente."]
+    kind, label = choices[number - 1]
+    if kind == "refund":
+        return await _cancel_income(db, user, inbound, row, "👍 No lo cargo: un reintegro no es un ingreso.")
+    sources = await income_capture.writable_sources(db, user.tenant_id)
+    if kind == "new":
+        name = pending["new"]
+        source = income_capture.match_by_name(sources, name) or await income_capture.create_source(
+            db, user.tenant_id, name
+        )
+    else:
+        source = income_capture.match_by_name(sources, label)
+        if source is None:
+            return ["Esa fuente ya no existe — respondé con el nombre de otra."]
+    return await _income_from_pending(db, user, inbound, row, source)
+
+
+async def _do_pending_income_by_name(
+    db: AsyncSession, user: User, inbound: InboundMessage
+) -> list[str] | None:
+    """La pregunta de fuente también acepta el nombre escrito, y uno que no
+    existe crea la fuente (la pregunta lo avisa). Un texto con números es otra
+    cosa — un gasto o un ingreso nuevo — y sigue su camino."""
+    row = await _open_pending(db, user.id)
+    if row is None or (row.pending or {}).get("type") != "income_pick":
+        return None
+    from app.services.search import fold_text
+
+    text = inbound.text.strip()
+    if fold_text(text) in _CANCEL_WORDS:
+        return await _cancel_income(db, user, inbound, row, "👍 Listo, no lo cargo.")
+    if not text or any(c.isdigit() for c in text) or len(text) > 60:
+        return None
+    sources = await income_capture.writable_sources(db, user.tenant_id)
+    source = income_capture.match_by_name(sources, text) or await income_capture.create_source(
+        db, user.tenant_id, text
+    )
+    return await _income_from_pending(db, user, inbound, row, source)
+
+
+async def _cancel_income(
+    db: AsyncSession, user: User, inbound: InboundMessage, row: WaMessage, reply: str
+) -> list[str]:
+    row.pending = None
+    _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+    await db.commit()
+    return [reply]
+
+
+async def _income_from_pending(
+    db: AsyncSession, user: User, inbound: InboundMessage, row: WaMessage, source: IncomeSource
+) -> list[str]:
+    pending = row.pending or {}
+    draft = _draft_from_dict(pending["draft"])
+    # Contestar la pregunta ES la regla término→fuente: la próxima transferencia
+    # de la misma persona, o el próximo "cobré … sueldo de octubre", no pregunta.
+    await income_capture.learn(db, user.tenant_id, draft.term, source.id)
+    row.pending = None
+    return await _save_income(db, user, inbound, draft, source, pending.get("notes"))
+
+
+async def _save_income(
+    db: AsyncSession,
+    user: User,
+    inbound: InboundMessage,
+    draft: quick_capture.QuickDraft,
+    source: IncomeSource,
+    notes: str | None,
+) -> list[str]:
+    from app.services.search import fold_text
+
+    if notes is None and draft.term and fold_text(draft.term) != fold_text(source.name):
+        notes = draft.term
+    entry = await income_capture.create_income(
+        db, tenant_id=user.tenant_id, user_id=user.id, draft=draft, source=source, notes=notes,
+    )
+    dupes = await income_capture.same_month(db, entry)
+    _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id, text=inbound.text or None,
+              ref_type="income", ref_id=entry.id)
+    await db.commit()
+
+    when = "" if entry.period_date == ar_today() else f" · {entry.period_date.strftime('%d/%m')}"
+    lines = [f"💰 Ingreso: {_fmt_amount(draft)} · {source.name}{when}"]
+    if dupes:
+        listed = ", ".join(_fmt_amount(d) for d in dupes[:3])
+        lines.append(
+            f"⚠️ Ya había {'otro ingreso' if len(dupes) == 1 else f'{len(dupes)} ingresos'} "
+            f"de «{source.name}» en {entry.period_date.strftime('%m/%Y')} ({listed}). "
+            "Si es el mismo, respondé *deshacer*."
+        )
+    else:
+        lines.append("Respondé *deshacer*, o *editar monto / fuente / descripción …*")
+    return ["\n".join(lines)]
 
 
 _NO_WORDS = {"no", "n", "nop", "no gracias", "listo", "ok", "asi esta", "dejalo", "dejala"}
@@ -1071,11 +1286,13 @@ def _fmt_amount(draft) -> str:
 async def _do_undo(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
     from app.services.business import bot as business_bot
 
-    ref = await _last_ref(db, user.id, ("expense", *business_bot.BUSINESS_REFS), inbound.quoted_wa_id)
+    ref = await _last_ref(db, user.id, ("expense", "income", *business_bot.BUSINESS_REFS), inbound.quoted_wa_id)
     if ref is None:
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
         await db.commit()
         return ["No tengo nada para deshacer en los últimos 7 días."]
+    if ref.ref_type == "income":
+        return await _undo_income(db, user, inbound, ref)
     if ref.ref_type != "expense":
         return await business_bot.undo(db, user, inbound, ref)
     entry = await db.get(ExpenseEntry, ref.ref_id)
@@ -1100,10 +1317,20 @@ async def _do_undo(db: AsyncSession, user: User, inbound: InboundMessage) -> lis
 async def _do_edit(
     db: AsyncSession, user: User, inbound: InboundMessage, field_name: str, value: str
 ) -> list[str]:
-    # El monto se corrige en lo último que se cargó, gasto o venta; la
-    # categoría y la descripción son sólo de los gastos.
-    types = ("expense", "sale") if field_name == "monto" else ("expense",)
+    # El monto se corrige en lo último que se cargó: gasto, ingreso o venta.
+    # La descripción, en un gasto o un ingreso (sus notas); la categoría es
+    # sólo de los gastos y la fuente sólo de los ingresos.
+    types = {
+        "monto": ("expense", "income", "sale"),
+        "fuente": ("income",),
+    }.get(field_name, ("expense", "income") if field_name.startswith("descripci") else ("expense",))
     ref = await _last_ref(db, user.id, types, inbound.quoted_wa_id)
+    if ref is not None and ref.ref_type == "income":
+        return await _edit_income(db, user, inbound, ref, field_name, value)
+    if field_name == "fuente":
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        await db.commit()
+        return ["No tengo un ingreso reciente para editar."]
     if ref is not None and ref.ref_type == "sale":
         from app.services.business import bot as business_bot
 
@@ -1122,14 +1349,7 @@ async def _do_edit(
         return [f"✏️ Listo: {_money(formatted, entry.currency)} · {entry.description}"]
 
     if field_name == "monto":
-        amount = quick_capture._parse_number(value.replace("$", "").strip())
-        if amount is None:
-            m = quick_capture._AMOUNT_RE.search(value)
-            if m:
-                amount = quick_capture._parse_number(m.group(1))
-                mult = quick_capture._MULTIPLIER.get((m.group(2) or "").lower())
-                if amount is not None and mult:
-                    amount = amount * mult
+        amount = _parse_edit_amount(value)
         if amount is None:
             await db.commit()
             return ["No entendí el monto. Probá: *editar monto 13000*"]
@@ -1152,6 +1372,75 @@ async def _do_edit(
     invalidate_suggest(user.tenant_id)
     formatted = f"{entry.amount:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
     return [f"✏️ Listo: {_money(formatted, entry.currency)} · {entry.description}"]
+
+
+def _parse_edit_amount(value: str) -> Decimal | None:
+    amount = quick_capture._parse_number(value.replace("$", "").strip())
+    if amount is None:
+        m = quick_capture._AMOUNT_RE.search(value)
+        if m:
+            amount = quick_capture._parse_number(m.group(1))
+            mult = quick_capture._MULTIPLIER.get((m.group(2) or "").lower())
+            if amount is not None and mult:
+                amount = amount * mult
+    return amount
+
+
+async def _load_income(db: AsyncSession, user: User, ref: WaMessage) -> IncomeEntry | None:
+    entry = await db.get(IncomeEntry, ref.ref_id)
+    return entry if entry is not None and entry.tenant_id == user.tenant_id else None
+
+
+async def _undo_income(db: AsyncSession, user: User, inbound: InboundMessage, ref: WaMessage) -> list[str]:
+    entry = await _load_income(db, user, ref)
+    _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+    if entry is None:
+        await db.commit()
+        return ["Ese ingreso ya no está."]
+    name = await db.scalar(select(IncomeSource.name).where(IncomeSource.id == entry.source_id))
+    what = f"{_fmt_amount(entry)} · {name}"
+    await db.delete(entry)
+    ref.ref_type = None
+    ref.ref_id = None
+    await db.commit()
+    return [f"🗑️ Deshecho: ingreso {what}"]
+
+
+async def _edit_income(
+    db: AsyncSession, user: User, inbound: InboundMessage, ref: WaMessage, field_name: str, value: str
+) -> list[str]:
+    entry = await _load_income(db, user, ref)
+    _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+    if entry is None:
+        await db.commit()
+        return ["Ese ingreso ya no está."]
+    # Con detalle cargado en la app, el neto y la fuente dependen de él:
+    # tocarlos desde acá descuadraría la cuenta sin decirlo.
+    has_detail = entry.bruto is not None or entry.deducciones is not None
+    if has_detail and field_name in ("monto", "fuente"):
+        await db.commit()
+        return ["Ese ingreso tiene el detalle cargado en la app: corregilo ahí, así la cuenta sigue cerrando."]
+
+    sources = await income_capture.writable_sources(db, user.tenant_id)
+    if field_name == "monto":
+        amount = _parse_edit_amount(value)
+        if amount is None:
+            await db.commit()
+            return ["No entendí el monto. Probá: *editar monto 850000*"]
+        entry.amount = amount
+    elif field_name == "fuente":
+        source = income_capture.match_by_name(sources, value)
+        if source is None:
+            names = ", ".join(s.name for s in sources[:12]) or "ninguna"
+            await db.commit()
+            return [f"No hay una fuente «{value}». Tenés: {names}"]
+        entry.source_id = source.id
+    else:
+        entry.notes = value[:500]
+    await db.commit()
+    name = await db.scalar(select(IncomeSource.name).where(IncomeSource.id == entry.source_id))
+    notes = f" · {entry.notes}" if entry.notes else ""
+    return [f"✏️ Listo: ingreso {_fmt_amount(entry)} · {name}{notes}"]
 
 
 async def _do_interest(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
@@ -1183,6 +1472,9 @@ async def _do_pending_answer(
         from app.services.business import bot as business_bot
 
         return await business_bot.answer_number(db, user, inbound, row, number)
+
+    if ptype == "income_pick":
+        return await _answer_income_pick(db, user, inbound, row, number)
 
     if ptype == "category_pick":
         options = pending.get("options") or []

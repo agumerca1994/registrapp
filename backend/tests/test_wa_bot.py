@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from sqlalchemy import select
 
 from app.models.expense import ExpenseCategory, ExpenseEntry
+from app.models.income import IncomeEntry
 from app.models.reconciliation import CaptureEvent
 from app.models.wa_message import WaMessage
 from app.services import wa_bot
@@ -317,17 +318,112 @@ def _serve_pdf_text(monkeypatch, text):
     monkeypatch.setattr(common, "extract_pages_text", lambda _src: [text])
 
 
-async def test_incoming_transfer_receipt_is_not_an_expense(db, monkeypatch):
+async def test_incoming_transfer_receipt_asks_source_and_can_be_a_refund(db, monkeypatch):
     from tests.test_transfer_receipt import MP_INCOMING
 
     _serve_pdf_text(monkeypatch, MP_INCOMING)
     replies = await wa_bot.handle(db, USER, _pdf_in())
 
-    assert "recibiste" in replies[0]
+    assert "¿De qué fuente" in replies[0]
     assert "Juan Perez" in replies[0]
     assert (await db.scalar(select(ExpenseEntry))) is None
     event = await db.scalar(select(CaptureEvent))
     assert event.bank_detected == "transferencia_recibida"
+
+    # 1 = Nueva fuente «Juan Perez», 2 = es un reintegro.
+    replies = await wa_bot.handle(db, USER, _in("2", wa_id="W2"))
+    assert "No lo cargo" in replies[0]
+    assert (await db.scalar(select(IncomeEntry))) is None
+
+
+# --------------------------------------------------------------- ingresos ---
+
+async def _source(db, name, kind=None):
+    from app.models.income import IncomeSource, IncomeType
+
+    src = IncomeSource(tenant_id=1, name=name, income_type=kind or IncomeType.other)
+    db.add(src)
+    await db.flush()
+    return src
+
+
+def test_parse_income_text():
+    from app.services.income_capture import parse_income_text
+
+    d = parse_income_text("cobré 850 lucas de sueldo")
+    assert d.amount == Decimal("850000.00") and d.term == "sueldo" and d.currency == "ARS"
+    d = parse_income_text("me transfirieron usd 500 freelance ayer")
+    assert d.currency == "USD" and d.term == "freelance"
+    assert parse_income_text("cobré 120000").term == ""
+    # Sin verbo es un gasto, como siempre ("sueldo" puede ser el de la empleada).
+    assert parse_income_text("850 lucas sueldo") is None
+    assert parse_income_text("cobré el sueldo") is None
+    assert parse_income_text("recibí la factura de luz 45 lucas") is None
+    assert parse_income_text("me llegó la boleta del gas 30 lucas") is None
+
+
+async def test_income_with_known_source(db):
+    await _source(db, "Sueldo")
+    replies = await wa_bot.handle(db, USER, _in("cobré 850 lucas sueldo de octubre"))
+    assert "💰 Ingreso: $850.000,00 · Sueldo" in replies[0]
+    entry = await db.scalar(select(IncomeEntry))
+    assert entry.amount == Decimal("850000.00")
+    assert entry.notes == "sueldo de octubre"
+    assert (await db.scalar(select(ExpenseEntry))) is None
+
+
+async def test_income_unknown_source_by_name_creates_it_and_learns(db):
+    from app.models.income import IncomeSource, IncomeType
+
+    await _source(db, "Sueldo")
+    replies = await wa_bot.handle(db, USER, _in("me pagaron 200 lucas diseño web", wa_id="W1"))
+    assert "1️⃣ Sueldo" in replies[0] and "2️⃣ Nueva fuente «diseño web»" in replies[0]
+
+    replies = await wa_bot.handle(db, USER, _in("Freelance", wa_id="W2"))
+    assert "Freelance" in replies[0]
+    src = await db.scalar(select(IncomeSource).where(IncomeSource.name == "Freelance"))
+    assert src is not None and src.income_type == IncomeType.other
+
+    # Aprendido: el mismo término ya no pregunta.
+    replies = await wa_bot.handle(db, USER, _in("cobré 150 lucas diseño web", wa_id="W3"))
+    assert "💰 Ingreso: $150.000,00 · Freelance" in replies[0]
+
+
+async def test_income_new_source_option_and_type_guess(db):
+    from app.models.income import IncomeSource, IncomeType
+
+    replies = await wa_bot.handle(db, USER, _in("cobré 400 lucas aguinaldo", wa_id="W1"))
+    assert "1️⃣ Nueva fuente «aguinaldo»" in replies[0]
+    await wa_bot.handle(db, USER, _in("1", wa_id="W2"))
+    src = await db.scalar(select(IncomeSource))
+    assert src.name == "aguinaldo" and src.income_type == IncomeType.aguinaldo
+
+
+async def test_income_duplicate_warning_undo_and_edit(db):
+    await _source(db, "Sueldo")
+    await _source(db, "Alquiler")
+    await wa_bot.handle(db, USER, _in("cobré 850 lucas sueldo", wa_id="W1"))
+    replies = await wa_bot.handle(db, USER, _in("cobré 850 lucas sueldo", wa_id="W2"))
+    assert "Ya había otro ingreso" in replies[0]
+
+    replies = await wa_bot.handle(db, USER, _in("deshacer", wa_id="W3"))
+    assert "Deshecho: ingreso $850.000,00 · Sueldo" in replies[0]
+    assert len((await db.scalars(select(IncomeEntry))).all()) == 1
+
+    replies = await wa_bot.handle(db, USER, _in("editar monto 900 lucas", wa_id="W4"))
+    assert "900.000,00" in replies[0]
+    replies = await wa_bot.handle(db, USER, _in("editar fuente alquiler", wa_id="W5"))
+    assert "Alquiler" in replies[0]
+    entry = await db.scalar(select(IncomeEntry))
+    assert entry.amount == Decimal("900000")
+
+
+async def test_income_question_gives_way_to_a_new_expense(db):
+    await _cat(db, "Kiosco")
+    await wa_bot.handle(db, USER, _in("cobré 100 lucas", wa_id="W1"))
+    replies = await wa_bot.handle(db, USER, _in("5000 kiosco", wa_id="W2"))
+    assert "✅" in replies[0]
+    assert (await db.scalar(select(IncomeEntry))) is None
 
 
 async def test_outgoing_transfer_receipt_still_becomes_an_expense(db, monkeypatch):

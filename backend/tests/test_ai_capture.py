@@ -113,11 +113,40 @@ async def test_credit_card_payment_is_not_loaded(db, ai):
     assert (await db.scalar(select(ExpenseEntry))) is None
 
 
-async def test_incoming_transfer_is_not_an_expense(db, ai):
+async def test_incoming_transfer_becomes_income_not_expense(db, ai):
+    from app.models.income import IncomeEntry, IncomeSource, IncomeType
+
+    db.add(IncomeSource(tenant_id=1, name="Alquiler", income_type=IncomeType.other))
+    await db.flush()
     ai.reading = _reading(kind="transferencia_recibida", merchant="Juan Perez")
-    replies = await wa_bot.handle(db, USER, _img())
-    assert "recibiste" in replies[0] and "Juan Perez" in replies[0]
+    replies = await wa_bot.handle(db, USER, _img("I1"))
+    assert "¿De qué fuente" in replies[0] and "Juan Perez" in replies[0]
+    assert "No es un ingreso" in replies[0]
+
+    replies = await wa_bot.handle(db, USER, InboundMessage(phone="549383", wa_id="T1", kind="text", text="1"))
+    assert "💰 Ingreso: $15.400,00 · Alquiler" in replies[0]
+    entry = await db.scalar(select(IncomeEntry))
+    assert entry.notes == "Transferencia de Juan Perez"
     assert (await db.scalar(select(ExpenseEntry))) is None
+
+    # La respuesta quedó como regla: la próxima de Juan Perez no pregunta.
+    replies = await wa_bot.handle(db, USER, _img("I2"))
+    assert "💰 Ingreso" in replies[0] and "Alquiler" in replies[0]
+
+
+async def test_payslip_becomes_income(db, ai):
+    from app.models.income import IncomeEntry, IncomeSource, IncomeType
+
+    db.add(IncomeSource(tenant_id=1, name="Sueldo", income_type=IncomeType.salary))
+    await db.flush()
+    ai.reading = _reading(kind="recibo_sueldo", merchant="Acme SA", amount=Decimal("850000"))
+    replies = await wa_bot.handle(db, USER, _img("I1"))
+    assert "1️⃣ Sueldo" in replies[0]
+    # Un recibo de sueldo no es un reintegro: esa opción no va.
+    assert "No es un ingreso" not in replies[0]
+    replies = await wa_bot.handle(db, USER, InboundMessage(phone="549383", wa_id="T1", kind="text", text="1"))
+    entry = await db.scalar(select(IncomeEntry))
+    assert entry.amount == Decimal("850000")
 
 
 async def test_unreadable_image_and_statement_photo(db, ai):

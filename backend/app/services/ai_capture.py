@@ -1,5 +1,6 @@
 """Leer un comprobante con IA: la foto de un ticket, la captura de una
-transferencia o un PDF que el código no reconoce → un gasto.
+transferencia o un PDF que el código no reconoce → un gasto (o, en un hogar,
+un ingreso: una transferencia recibida o un recibo de sueldo).
 
 Es la fase de IA del embudo (`capture_events`), y entra sólo donde el código
 ya se rindió: un PDF que ningún parser de resúmenes ni `transfer_receipt` lee,
@@ -31,9 +32,11 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Lo que la lectura puede decir que es el archivo. Sólo "gasto" se carga.
+# Lo que la lectura puede decir que es el archivo. "gasto" se carga como
+# gasto; "transferencia_recibida" y "recibo_sueldo", como ingreso en un hogar.
 KIND_EXPENSE = "gasto"
 KIND_INCOMING = "transferencia_recibida"
+KIND_PAYSLIP = "recibo_sueldo"
 KIND_STATEMENT = "resumen_tarjeta"
 KIND_OTHER = "no_es_comprobante"
 
@@ -44,7 +47,7 @@ PAYMENT_METHODS = ("efectivo", "debito", "transferencia", "tarjeta_credito", "de
 _SCHEMA = {
     "type": "object",
     "properties": {
-        "kind": {"type": "string", "enum": [KIND_EXPENSE, KIND_INCOMING, KIND_STATEMENT, KIND_OTHER]},
+        "kind": {"type": "string", "enum": [KIND_EXPENSE, KIND_INCOMING, KIND_PAYSLIP, KIND_STATEMENT, KIND_OTHER]},
         "amount": {"type": "number"},
         "currency": {"type": "string", "enum": ["ARS", "USD"]},
         "date": {"type": "string"},
@@ -58,20 +61,23 @@ _SCHEMA = {
 
 _SYSTEM = """Leés comprobantes de pago para RegistrApp, una app de finanzas de un hogar \
 o un comercio chico de la Argentina. Te llega UN archivo (foto, captura o PDF) que \
-alguien mandó por WhatsApp para registrar un gasto. Devolvé lo que dice el comprobante; \
+alguien mandó por WhatsApp para registrar un gasto o un ingreso. Devolvé lo que dice el comprobante; \
 no inventes nada que no esté escrito.
 
 - kind: "gasto" si es algo que la persona PAGÓ (ticket, factura, comprobante de \
 transferencia o de pago enviado, recibo). "transferencia_recibida" si es plata que le \
-ENTRÓ (te transfirieron, transferencia recibida). "resumen_tarjeta" si es el resumen \
+ENTRÓ (te transfirieron, transferencia recibida, depósito). "recibo_sueldo" si es un \
+recibo de sueldo o de haberes. "resumen_tarjeta" si es el resumen \
 mensual de una tarjeta de crédito con muchos consumos. "no_es_comprobante" si no es \
 ninguna de esas cosas o no se lee.
 - amount: el TOTAL pagado, como número con punto decimal (en la Argentina "15.000,50" \
-es 15000.50). En un ticket es el total final, no un subtotal ni una línea. 0 si no hay.
+es 15000.50). En un ticket es el total final, no un subtotal ni una línea. En un \
+recibo de sueldo es el NETO a cobrar. 0 si no hay.
 - currency: "USD" sólo si el monto está en dólares (U$S, USD, US$); si no, "ARS".
 - date: la fecha del pago en formato AAAA-MM-DD, o "" si no figura.
 - merchant: a quién se le pagó: el comercio, la empresa o la persona destinataria, \
-corto y como se lo conoce ("Carrefour", "Juan Pérez", "Edenor"). "" si no figura.
+corto y como se lo conoce ("Carrefour", "Juan Pérez", "Edenor"). En una transferencia \
+recibida, quién la mandó; en un recibo de sueldo, el empleador. "" si no figura.
 - payment_method: "tarjeta_credito" sólo si el comprobante dice que se pagó con \
 tarjeta de CRÉDITO; "debito" con tarjeta de débito; "transferencia" si es una \
 transferencia o un pago con dinero en cuenta (Mercado Pago, billeteras, QR); \

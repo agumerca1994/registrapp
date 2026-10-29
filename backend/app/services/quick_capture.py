@@ -83,6 +83,15 @@ def _parse_number(raw: str) -> Decimal | None:
 
 def parse_quick_text(text: str, today: date | None = None) -> QuickDraft | None:
     """Texto libre → borrador de gasto, o None si no hay un monto claro."""
+    draft = parse_amount_text(text, today)
+    if draft is None or not draft.term:
+        return None
+    return draft
+
+
+def parse_amount_text(text: str, today: date | None = None) -> QuickDraft | None:
+    """Monto, moneda y fecha de un texto; lo que sobra queda en `term`, que
+    puede venir vacío. Lo comparten el gasto y el ingreso ("cobré 850 lucas")."""
     today = today or ar_today()
     original = text.strip()
     if not original:
@@ -117,8 +126,6 @@ def parse_quick_text(text: str, today: date | None = None) -> QuickDraft | None:
 
     term = (working[: m.start()] + " " + working[m.end():]).strip()
     term = re.sub(r"\s{2,}", " ", term).strip(" .,;:-")
-    if not term:
-        return None
 
     return QuickDraft(
         amount=value, currency=currency, expense_date=expense_date,
