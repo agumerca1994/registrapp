@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import HomeRedirect from "@/components/marketing/HomeRedirect";
 import { Phone, Screen } from "@/components/marketing/Frames";
+import SiteFooter from "@/components/marketing/SiteFooter";
 
 export const metadata: Metadata = {
   title: "RegistrApp · Las cuentas claras, en casa y en tu negocio",
@@ -214,15 +215,7 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="border-t border-border" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-        <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 text-sm text-muted-foreground flex flex-wrap gap-x-6 gap-y-2">
-          <span className="font-semibold text-foreground">RegistrApp</span>
-          <Link href="/hogar" className="hover:text-foreground">Hogar</Link>
-          <Link href="/negocio" className="hover:text-foreground">Negocio</Link>
-          <Link href="/conectar" className="hover:text-foreground">Conectar con Claude</Link>
-          <Link href="/login" className="sm:ml-auto hover:text-foreground">Entrar a la app</Link>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

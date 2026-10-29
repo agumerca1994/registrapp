@@ -446,6 +446,18 @@ Dos landings públicas, una por tipo de cuenta, cada una con su instructivo:
 - Lo específico de RegistrApp está en `.claude/instructivo/registrapp.md`: el login con el emulador, los endpoints, las guías a marcar, el reloj fijo y las trampas.
 - Las salidas de los scripts van **fuera del repo** (`/private/tmp/registrapp-instructivo/`): una captura suelta en el árbol ya frenó un deploy.
 
+### Documentos legales (`/legal`) — borrador
+`/legal` (índice), `/legal/privacidad`, `/legal/terminos-hogar` y `/legal/terminos-negocio`: públicas, fuera de `(app)`, enlazadas desde `components/marketing/SiteFooter.tsx`, el pie común de todas las páginas públicas. Se armaron sobre las plantillas CC0 de General Legal (privacy policy GDPR y terms of use), **reescritas para la ley argentina**: Ley 25.326 (con la leyenda obligatoria de la AAIP), Ley 24.240 y el Código Civil y Comercial. Por eso no hay arbitraje, ni renuncia de derechos, ni exclusión total de responsabilidad, y la jurisdicción es la del domicilio del usuario.
+- Titular, mail, versión, fecha y la marca de borrador están en `lib/legal.ts`, con la lista de lo que falta para quitar el borrador. Las cláusulas comunes a los dos términos están en `components/legal/terms.tsx`.
+- **El texto describe lo que el código hace.** Si cambia algo que la política afirma, cambia la política: un proveedor nuevo que recibe datos, analítica o cookies (hoy no hay), un plazo de guarda (7 días del bot, 15 minutos de los links, 30 días de los tokens) o quién ve qué.
+
+**"Eliminar mi cuenta" está prometido y todavía no existe.** La política (sección "Eliminar tu cuenta") y los dos términos dicen que se hace desde Configuración y que es irreversible. Las tiendas también lo exigen (Apple 5.1.1(v), Google). Lo que hay que construir:
+- Va en Configuración, con una confirmación que obligue a escribir algo (por ejemplo, el alias). Es definitivo y no hay papelera.
+- Se borran los datos personales: nombre, alias, mail, teléfono, `device_tokens`, `mcp_tokens` y el usuario de Firebase Auth.
+- Si es la última persona del tenant, se borra el tenant con todo lo cargado.
+- Si quedan otras personas, lo del tenant se queda con ellas. En un negocio, el dueño hereda al socio más antiguo, con la misma regla que ya usa irse del negocio. Falta decidir qué pasa si sólo quedan empleados: hoy irse del negocio da 400 en ese caso.
+- Los splits en otros hogares conservan `member_name`, porque es un hecho histórico, y se pierde el `user_id`.
+
 ### Conciliación de resúmenes (`services/reconcile/` + `/reconcile` + `/conciliar`)
 El usuario sube el PDF del resumen del banco y el motor lo compara contra lo cargado, propone correcciones por grupos y las aplica sólo al confirmar. **Todo determinista, sin IA** — el algoritmo del doc de conciliación, en código y testeado contra el resumen BBVA real de agosto 2026 (fixture privado) y un escenario sintético con sus casos (Aerolíneas duplicado, taxi doble-contado, PlayStation cargado como Google One, redondeos de cuota 2..N). El router `/reconcile` es una cáscara; la lógica vive en el servicio para que la pantalla, el conector MCP (`tools_reconcile.py`: el texto del resumen entra por `detect_and_parse_text`, mismos parsers) y el futuro bot de WhatsApp no puedan divergir.
 

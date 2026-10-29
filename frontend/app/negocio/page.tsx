@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   BarChart3, Boxes, Download, MessageCircle, Play, ReceiptText, ShoppingBag, Users,
 } from "lucide-react";
+import SiteFooter from "@/components/marketing/SiteFooter";
 
 export const metadata: Metadata = {
   title: "RegistrApp Negocio",
@@ -174,12 +175,7 @@ export default function NegocioPage() {
         </section>
       </main>
 
-      <footer className="border-t border-border" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-        <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 text-sm text-muted-foreground flex flex-wrap gap-4 justify-between">
-          <span>RegistrApp</span>
-          <Link href="/login" className="hover:text-foreground">Entrar a la app</Link>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
