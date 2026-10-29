@@ -151,3 +151,39 @@ def test_usd_disambiguates_by_merchant():
     report = matching.match_statement(bank, app)
     matched = {p.bank.description.split()[0]: p.app.description for p in report.pairs_of(matching.MATCHED)}
     assert matched == {"SPOTIFY": "Spotify", "NETFLIX.COM": "Netflix"}
+
+
+def test_cuota_with_shifted_numbering_matches_by_amount():
+    """La app dice 8/12 y el banco 10/12, mismo monto: es la misma cuota. Antes
+    exigía el mismo n/N y todo el plan quedaba como sobrante + faltante."""
+    bank = [
+        _bank(0, 9, "WWW.FRAVEGA.COM-BNA", "21179.16", cuota=(10, 12)),
+        _bank(1, 4, "CARRIER SRL", "54541.62", cuota=(20, 24)),
+        _bank(2, 12, "YPF COMBUSTIBLE", "110000.00"),
+    ]
+    app = [
+        _app(1, 9, "WWW.FRAVEGA.COM-BNA", "21179.16", cuota=(8, 12), is_root=False),
+        _app(2, 4, "Aire acondicionado", "54541.62", cuota=(24, 24), is_root=False),
+    ]
+    report = matching.match_statement(bank, app)
+
+    assert {p.app.id for p in report.pairs_of(matching.MATCHED)} == {1, 2}
+    assert [b.description for b in report.missing] == ["YPF COMBUSTIBLE"]
+    assert report.surplus == []
+    assert report.closes
+
+
+def test_shifted_cuota_needs_same_plan_to_match():
+    """Mismo monto pero otro total de cuotas y nada del comercio en común: son
+    planes distintos, no se emparejan."""
+    bank = [_bank(0, 9, "FRAVEGA", "1000.00", cuota=(3, 6))]
+    app = [_app(1, 9, "Heladera", "1000.00", cuota=(2, 12), is_root=False)]
+    report = matching.match_statement(bank, app)
+    assert report.pairs == []
+
+
+def test_shifted_cuota_rounding():
+    bank = [_bank(0, 9, "TECNOB", "44670.36", cuota=(13, 18))]
+    app = [_app(1, 9, "TECNOB", "44670.33", cuota=(11, 18), is_root=False)]
+    report = matching.match_statement(bank, app)
+    assert [p.klass for p in report.pairs] == [matching.ROUNDING]

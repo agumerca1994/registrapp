@@ -172,6 +172,25 @@ def _match_currency(
         candidates.sort(key=lambda a: (-_overlap(a.tokens, b.tokens), _date_dist(a.item_date, b.item_date)))
         take(Pair(b, candidates[0], MATCHED))
 
+    # 2b. Cuota con la numeración corrida: mismo monto exacto, pero la app dice
+    #     8/12 y el banco 10/12 (un plan cargado empezando en otro mes, o
+    #     importado a mitad de camino). Es la misma cuota y no hay plata que
+    #     corregir; exigir el mismo n/N mandaba el plan entero a "sobra" y a
+    #     "falta" a la vez. Pide el mismo total de cuotas o algo del comercio en
+    #     común, para no emparejar dos planes distintos que comparten monto.
+    for b in list(bank_left):
+        if b.cuota is None:
+            continue
+        candidates = [
+            a for a in app_left
+            if a.cuota is not None and a.amount == b.amount
+            and (a.cuota[1] == b.cuota[1] or _overlap(a.tokens, b.tokens) > 0)
+        ]
+        if not candidates:
+            continue
+        candidates.sort(key=lambda a: (a.cuota[1] != b.cuota[1], -_overlap(a.tokens, b.tokens)))
+        take(Pair(b, candidates[0], MATCHED))
+
     # 3. Redondeo: misma cuota n/N y diferencia de hasta $5 o 0,1%.
     for b in list(bank_left):
         if b.cuota is None:
@@ -179,6 +198,15 @@ def _match_currency(
         candidates = [
             a for a in app_left if a.cuota == b.cuota and _within_tolerance(b.amount, a.amount)
         ]
+        if not candidates:
+            # Con la numeración corrida (ver 2b), el redondeo pide además el
+            # mismo total de cuotas y el comercio en común: con monto distinto
+            # no hay otra cosa que diga que es el mismo plan.
+            candidates = [
+                a for a in app_left
+                if a.cuota is not None and a.cuota[1] == b.cuota[1]
+                and _overlap(a.tokens, b.tokens) > 0 and _within_tolerance(b.amount, a.amount)
+            ]
         if not candidates:
             continue
         candidates.sort(key=lambda a: (abs(b.amount - a.amount), -_overlap(a.tokens, b.tokens)))
