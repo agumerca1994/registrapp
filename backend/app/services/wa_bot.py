@@ -22,7 +22,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -60,7 +60,8 @@ MSG_HELP = (
     "• El *PDF del resumen* de tu tarjeta, y dejo tus datos al día\n"
     "• El *PDF de un comprobante* de pago o transferencia\n"
     "• *deshacer* — borra lo último que cargué\n"
-    "• *editar monto / categoría / descripción …*"
+    "• *categoría súper* — cambia la categoría de lo último (o citá el mensaje del gasto)\n"
+    "• *editar monto / descripción …*"
 )
 
 
@@ -137,7 +138,13 @@ MSG_BUSINESS_HELP = (
     "• *deshacer* — borra lo último que cargué"
 )
 
-_EDIT_RE = re.compile(r"^editar\s+(monto|categor[ií]a|descripci[oó]n|fuente)\s+(.+)$", re.IGNORECASE)
+_EDIT_RE = re.compile(
+    r"^(?:editar|cambiar|corregir)\s+(?:la\s+|el\s+)?(monto|categor[ií]a|descripci[oó]n|fuente)"
+    r"\s+(?:a\s+|por\s+|es\s+)?(.+)$",
+    re.IGNORECASE,
+)
+# El atajo que se ofrece después de cada gasto: "categoría súper".
+_CATEGORY_RE = re.compile(r"^categor[ií]a\s*:?\s+(.+)$", re.IGNORECASE)
 _UNDO_RE = re.compile(r"^(deshacer|deshace|anular)\b", re.IGNORECASE)
 _INTEREST_RE = re.compile(r"^me\s+interesa\b", re.IGNORECASE)
 _NUMBER_RE = re.compile(r"^\s*([1-9])\s*$")
@@ -246,6 +253,74 @@ def _cutoff() -> datetime:
     return datetime.now() - timedelta(days=MEMORY_DAYS)
 
 
+# Las respuestas del bot que confirman algo se guardan con `ref_type`
+# "r:<tipo>": citarlas apunta a esa entidad, pero nunca cuentan como "lo
+# último que se cargó" (si no, *deshacer* encontraría la respuesta en vez del
+# mensaje original y el siguiente *deshacer* daría con un gasto ya borrado).
+_REPLY_PREFIX = "r:"
+
+
+async def memory_mark(db: AsyncSession, user_id: int) -> int:
+    """La última fila de memoria antes de procesar un mensaje: lo que
+    `handle()` cree después tiene un id mayor."""
+    return await db.scalar(
+        select(func.max(WaMessage.id)).where(WaMessage.user_id == user_id)
+    ) or 0
+
+
+async def link_replies(db: AsyncSession, user_id: int, mark: int, sent_ids: list[str | None]) -> None:
+    """Ata las respuestas enviadas a la entidad que creó o tocó este mensaje,
+    para que citar "✅ … — Supermercado" y escribir *editar categoría …* (o
+    sólo el nombre de la categoría) corrija ESE gasto y no el último. Nunca
+    levanta: perder el vínculo es perder un atajo, no el gasto."""
+    ids = [i for i in sent_ids if i]
+    if not ids:
+        return
+    try:
+        ref = await db.scalar(
+            select(WaMessage).where(
+                WaMessage.user_id == user_id,
+                WaMessage.id > mark,
+                WaMessage.ref_type.is_not(None),
+            ).order_by(WaMessage.id.desc()).limit(1)
+        )
+        if ref is None or ref.ref_type.startswith(_REPLY_PREFIX):
+            return
+        for wa_id in ids:
+            _remember(db, user_id, "out", "text", wa_id=wa_id[:64],
+                      ref_type=f"{_REPLY_PREFIX}{ref.ref_type}"[:20], ref_id=ref.ref_id)
+        await db.commit()
+    except Exception:
+        logger.exception("WA: no pude vincular las respuestas (user %s)", user_id)
+        await db.rollback()
+
+
+async def _quoted_ref(db: AsyncSession, user_id: int, quoted_wa_id: str | None) -> WaMessage | None:
+    """La fila de la entidad del mensaje citado: el propio mensaje del
+    usuario, o — si citó una respuesta del bot — el mensaje original que esa
+    respuesta confirma."""
+    if not quoted_wa_id:
+        return None
+    quoted = await db.scalar(
+        select(WaMessage).where(
+            WaMessage.user_id == user_id,
+            WaMessage.wa_message_id == quoted_wa_id,
+        )
+    )
+    if quoted is None or not quoted.ref_type or not quoted.ref_type.startswith(_REPLY_PREFIX):
+        return quoted
+    original = await db.scalar(
+        select(WaMessage).where(
+            WaMessage.user_id == user_id,
+            WaMessage.ref_type == quoted.ref_type[len(_REPLY_PREFIX):],
+            WaMessage.ref_id == quoted.ref_id,
+        ).order_by(WaMessage.id.desc()).limit(1)
+    )
+    # Ya deshecho: la fila original perdió su ref. Se devuelve la respuesta
+    # tal cual, y el que llama encuentra que la entidad ya no está.
+    return original or quoted
+
+
 async def _last_ref(
     db: AsyncSession, user_id: int, ref_type: str | tuple[str, ...], quoted_wa_id: str | None = None
 ) -> WaMessage | None:
@@ -257,15 +332,13 @@ async def _last_ref(
         WaMessage.ref_type.in_(types),
         WaMessage.created_at >= _cutoff(),
     )
-    if quoted_wa_id:
-        quoted = await db.scalar(
-            select(WaMessage).where(
-                WaMessage.user_id == user_id,
-                WaMessage.wa_message_id == quoted_wa_id,
-            )
-        )
-        if quoted and quoted.ref_type in types:
-            return quoted
+    quoted = await _quoted_ref(db, user_id, quoted_wa_id)
+    if quoted and quoted.ref_type in types:
+        return quoted
+    if quoted and (quoted.ref_type or "").startswith(_REPLY_PREFIX):
+        # Citó la confirmación de algo que ya se deshizo: corregir otra cosa
+        # en su lugar sería peor que decir que no está.
+        return None
     return await db.scalar(q.order_by(WaMessage.id.desc()).limit(1))
 
 
@@ -778,6 +851,12 @@ async def _handle_text(db: AsyncSession, user: User, inbound: InboundMessage) ->
     edit = _EDIT_RE.match(text)
     if edit:
         return await _do_edit(db, user, inbound, edit.group(1).lower(), edit.group(2).strip())
+    short = _CATEGORY_RE.match(text)
+    if short:
+        return await _do_edit(db, user, inbound, "categoría", short.group(1).strip())
+    handled = await _do_quoted_category(db, user, inbound, text)
+    if handled is not None:
+        return handled
     if _INTEREST_RE.match(text):
         return await _do_interest(db, user, inbound)
     num = _NUMBER_RE.match(text)
@@ -1223,7 +1302,7 @@ async def _capture_draft(
         reply = _offer_description(db, user, entry, base)
         await db.commit()
         return [reply]
-    return [base + "\nRespondé *deshacer*, o *editar monto/categoría/descripción …*"]
+    return [base + "\nRespondé *deshacer*, *categoría …* para cambiarla, o *editar monto / descripción …*"]
 
 
 async def _learn_merchant_rule(
@@ -1250,7 +1329,10 @@ def _offer_description(db: AsyncSession, user: User, entry, base_line: str) -> s
     descripción actual es el nombre del comercio o el término crudo (categoría
     elegida a mano o sugerida) — cuando el usuario ya escribió lo que quería,
     repreguntar es ruido."""
-    reply = base_line + "\n¿Le agregás una descripción? Escribila, o respondé *no*."
+    reply = (
+        base_line + "\n¿Le agregás una descripción? Escribila, o respondé *no*."
+        "\n¿Categoría equivocada? Mandá *categoría* y el nombre."
+    )
     _remember(db, user.id, "out", "text", text=reply,
               pending={"type": "description_offer", "entry_id": entry.id})
     return reply
@@ -1355,23 +1437,108 @@ async def _do_edit(
             return ["No entendí el monto. Probá: *editar monto 13000*"]
         entry.amount = amount
     else:
-        cats = (await db.scalars(
-            select(ExpenseCategory).where(ExpenseCategory.tenant_id == user.tenant_id)
-        )).all()
-        from app.services.search import fold_text
-
-        cat = next((c for c in cats if fold_text(c.name) == fold_text(value)), None)
-        if cat is None:
-            names = ", ".join(sorted(c.name for c in cats)[:12])
-            await db.commit()
-            return [f"No hay una categoría «{value}». Tenés: {names}"]
-        entry.category_id = cat.id
+        return await _recategorize(db, user, inbound, ref, entry, value)
 
     _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
     await db.commit()
     invalidate_suggest(user.tenant_id)
     formatted = f"{entry.amount:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
     return [f"✏️ Listo: {_money(formatted, entry.currency)} · {entry.description}"]
+
+
+def _match_category(cats, value: str) -> tuple[ExpenseCategory | None, list[str]]:
+    """El nombre escrito → una categoría: exacto, o una sola que lo contenga
+    ("super" → "Supermercado"). Con varias candidatas devuelve sus nombres
+    para preguntar; elegir una sería adivinar."""
+    from app.services.search import fold_text
+
+    folded = fold_text(value).strip()
+    if not folded:
+        return None, []
+    exact = next((c for c in cats if fold_text(c.name).strip() == folded), None)
+    if exact:
+        return exact, []
+    partial = [
+        c for c in cats
+        if folded in fold_text(c.name) or (len(fold_text(c.name)) >= 4 and fold_text(c.name) in folded)
+    ]
+    if len(partial) == 1:
+        return partial[0], []
+    return None, sorted(c.name for c in partial)[:6]
+
+
+async def _recategorize(
+    db: AsyncSession, user: User, inbound: InboundMessage, ref: WaMessage,
+    entry: ExpenseEntry, value: str,
+) -> list[str]:
+    cats = (await db.scalars(
+        select(ExpenseCategory).where(ExpenseCategory.tenant_id == user.tenant_id)
+    )).all()
+    cat, candidates = _match_category(cats, value)
+    _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+    if cat is None:
+        await db.commit()
+        if candidates:
+            return [f"¿Cuál de estas? {', '.join(candidates)}\nMandá *categoría* y el nombre completo."]
+        names = ", ".join(sorted(c.name for c in cats)[:12])
+        return [f"No hay una categoría «{value}». Tenés: {names}"]
+
+    before = next((c.name for c in cats if c.id == entry.category_id), None)
+    entry.category_id = cat.id
+    # Corregir la categoría corrige también lo aprendido: si no, el próximo
+    # gasto del mismo comercio vuelve a caer en la equivocada.
+    if entry.currency != "USD":
+        terms = {entry.description}
+        original = await _original_text(db, user.id, ref)
+        parsed = quick_capture.parse_quick_text(original) if original else None
+        if parsed is not None:
+            terms.add(parsed.term)
+        for term in filter(None, terms):
+            await _learn_merchant_rule(db, user.tenant_id, term, cat.id)
+    await db.commit()
+    invalidate_suggest(user.tenant_id)
+    was = f" (antes: {before})" if before and before != cat.name else ""
+    return [f"✏️ Listo: {_fmt_amount(entry)} · {entry.description} — {cat.name}{was}"]
+
+
+async def _original_text(db: AsyncSession, user_id: int, ref: WaMessage) -> str | None:
+    """El texto con el que se pidió el gasto. Si se contestó una pregunta de
+    categoría, la fila con la referencia es la respuesta ("2"): el texto
+    original es el último mensaje entrante con texto antes de ella."""
+    if not ref.text:
+        return None  # un comprobante: no hay texto que aprender
+    if quick_capture.parse_quick_text(ref.text) is not None:
+        return ref.text
+    return await db.scalar(
+        select(WaMessage.text).where(
+            WaMessage.user_id == user_id,
+            WaMessage.direction == "in",
+            WaMessage.id < ref.id,
+        ).order_by(WaMessage.id.desc()).limit(1)
+    )
+
+
+async def _do_quoted_category(
+    db: AsyncSession, user: User, inbound: InboundMessage, text: str
+) -> list[str] | None:
+    """Responder citando un gasto (o la confirmación del bot) con sólo el
+    nombre de una categoría la cambia. Sin cita, o si el texto no es una
+    categoría, None y el mensaje sigue su camino."""
+    if not inbound.quoted_wa_id or any(c.isdigit() for c in text):
+        return None
+    ref = await _quoted_ref(db, user.id, inbound.quoted_wa_id)
+    if ref is None or ref.ref_type != "expense":
+        return None
+    cats = (await db.scalars(
+        select(ExpenseCategory).where(ExpenseCategory.tenant_id == user.tenant_id)
+    )).all()
+    cat, _ = _match_category(cats, text)
+    if cat is None:
+        return None
+    entry = await db.get(ExpenseEntry, ref.ref_id)
+    if entry is None or entry.tenant_id != user.tenant_id or entry.source != EXPENSE_SOURCE_WHATSAPP:
+        return None
+    return await _recategorize(db, user, inbound, ref, entry, cat.name)
 
 
 def _parse_edit_amount(value: str) -> Decimal | None:

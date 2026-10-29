@@ -98,7 +98,8 @@ async def whatsapp_webhook(
 
     # El bot escribe y commitea; las respuestas salen recién después — un
     # mensaje nunca anuncia algo que no quedó guardado.
+    mark = await wa_bot.memory_mark(db, user.id)
     replies = await wa_bot.handle(db, user, inbound)
-    for reply in replies:
-        await send_wa_msg(inbound.phone, reply)
+    sent_ids = [await send_wa_msg(inbound.phone, reply) for reply in replies]
+    await wa_bot.link_replies(db, user.id, mark, sent_ids)
     return {"status": "ok", "replies": len(replies)}

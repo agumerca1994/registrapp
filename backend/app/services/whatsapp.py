@@ -42,10 +42,13 @@ async def resolve_whatsapp_jid(client: httpx.AsyncClient, phone: str) -> str | N
     return None
 
 
-async def send_wa_msg(phone: str, msg: str) -> None:
+async def send_wa_msg(phone: str, msg: str) -> str | None:
+    """Manda el texto y devuelve el id del mensaje enviado (`key.id` de
+    Evolution), o None. El bot lo guarda para que responder citando su
+    confirmación apunte al gasto que confirma."""
     if not settings.EVOLUTION_API_URL or not settings.EVOLUTION_INSTANCE:
         logger.info("Evolution API not configured, skipping WhatsApp send")
-        return
+        return None
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resolved = await resolve_whatsapp_jid(client, phone)
@@ -57,10 +60,15 @@ async def send_wa_msg(phone: str, msg: str) -> None:
             )
             if resp.status_code >= 400:
                 logger.warning(f"WhatsApp send failed {resp.status_code} to {phone} (resolved {target}): {resp.text[:300]}")
-            else:
-                logger.info(f"WhatsApp sent to {phone} (resolved {target}): {resp.status_code}")
+                return None
+            logger.info(f"WhatsApp sent to {phone} (resolved {target}): {resp.status_code}")
+            try:
+                return ((resp.json() or {}).get("key") or {}).get("id")
+            except ValueError:
+                return None
     except Exception as e:
         logger.warning(f"WhatsApp send error to {phone}: {e}")
+        return None
 
 
 async def download_media_base64(message_key: dict, raw_message: dict | None = None) -> bytes | None:

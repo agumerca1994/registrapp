@@ -514,3 +514,68 @@ async def test_an_employee_cannot_load_expenses_or_statements(db):
     replies = await wa_bot.handle(db, employee, _pdf_in("E2"))
     assert "Como empleado" in replies[0]
     assert (await db.scalar(select(ExpenseEntry))) is None
+
+
+# ------------------------------------------------- cambiar la categoría ---
+
+async def test_category_shortcut_partial_name_and_relearns(db):
+    from app.services import category_suggest
+
+    category_suggest.invalidate(1)
+    await _cat(db, "Supermercado")
+    await _cat(db, "Farmacia")
+    await wa_bot.handle(db, USER, _in("12 lucas cosas del chino", wa_id="W1"))
+    await wa_bot.handle(db, USER, _in("2", wa_id="W2"))  # Farmacia: el error
+
+    replies = await wa_bot.handle(db, USER, _in("categoría super", wa_id="W3"))
+    assert "Supermercado (antes: Farmacia)" in replies[0]
+    super_ = await db.scalar(select(ExpenseCategory).where(ExpenseCategory.name == "Supermercado"))
+    assert (await db.scalar(select(ExpenseEntry))).category_id == super_.id
+
+    # Lo aprendido también se corrigió: el próximo va directo a Supermercado.
+    category_suggest.invalidate(1)
+    replies = await wa_bot.handle(db, USER, _in("8 lucas cosas del chino", wa_id="W4"))
+    assert "Supermercado" in replies[0]
+
+
+async def test_change_category_phrasings_and_ambiguity(db):
+    await _cat(db, "Kiosco")
+    await _cat(db, "Salud mental")
+    await _cat(db, "Salud física")
+    await wa_bot.handle(db, USER, _in("5000 kiosco", wa_id="W1"))
+    replies = await wa_bot.handle(db, USER, _in("cambiar categoría a salud", wa_id="W2"))
+    assert "¿Cuál de estas?" in replies[0]
+    replies = await wa_bot.handle(db, USER, _in("cambiar la categoría por salud mental", wa_id="W3"))
+    assert "— Salud mental (antes: Kiosco)" in replies[0]
+
+
+async def test_quoting_the_bot_reply_fixes_that_expense_not_the_last(db):
+    await _cat(db, "Kiosco")
+    await _cat(db, "Nafta")
+    await _cat(db, "Super")
+
+    mark = await wa_bot.memory_mark(db, 1)
+    await wa_bot.handle(db, USER, _in("5000 kiosco", wa_id="W1"))
+    await wa_bot.link_replies(db, 1, mark, ["BOT1"])
+    mark = await wa_bot.memory_mark(db, 1)
+    await wa_bot.handle(db, USER, _in("20000 nafta", wa_id="W2"))
+    await wa_bot.link_replies(db, 1, mark, ["BOT2"])
+
+    # Citar la confirmación del primero, con sólo el nombre de la categoría.
+    replies = await wa_bot.handle(db, USER, _in("super", wa_id="W3", quoted="BOT1"))
+    assert "Super (antes: Kiosco)" in replies[0]
+    entries = (await db.scalars(select(ExpenseEntry).order_by(ExpenseEntry.id))).all()
+    super_ = await db.scalar(select(ExpenseCategory).where(ExpenseCategory.name == "Super"))
+    nafta = await db.scalar(select(ExpenseCategory).where(ExpenseCategory.name == "Nafta"))
+    assert entries[0].category_id == super_.id and entries[1].category_id == nafta.id
+
+    # La respuesta vinculada no cuenta como "lo último": deshacer dos veces
+    # borra los dos gastos, en orden.
+    await wa_bot.handle(db, USER, _in("deshacer", wa_id="W4"))
+    replies = await wa_bot.handle(db, USER, _in("deshacer", wa_id="W5"))
+    assert "Deshecho" in replies[0]
+    assert (await db.scalar(select(ExpenseEntry))) is None
+
+    # Citar la confirmación de algo ya deshecho no edita otra cosa.
+    replies = await wa_bot.handle(db, USER, _in("categoría nafta", wa_id="W6", quoted="BOT1"))
+    assert "No tengo un gasto" in replies[0]
