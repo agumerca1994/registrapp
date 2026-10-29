@@ -40,7 +40,7 @@ const PLATFORMS = [
   { icon: Laptop, title: "En la compu",
     text: "Todo a la vista en pantalla grande: el mes completo, las tarjetas y los resúmenes." },
   { icon: Smartphone, title: "En el celular",
-    text: "Se instala como una app desde el navegador, en iPhone y en Android. Cargás un gasto o una venta en segundos." },
+    text: "Se instala como una app desde el navegador, en iPhone y en Android. Cargás el gasto o la venta en el momento." },
   { icon: MessageCircle, title: "Por WhatsApp",
     text: "Escribís «12 lucas verdulería» y queda cargado. Le mandás el PDF del resumen de la tarjeta y lo compara con lo tuyo." },
   { icon: Bot, title: "Con tu asistente de IA",
@@ -48,7 +48,7 @@ const PLATFORMS = [
 ];
 
 const AI_POINTS = [
-  "Te contesta con tus números reales, no con promedios.",
+  "Te contesta con los números que cargaste en RegistrApp.",
   "Puede cargar o corregir por vos: un recibo de sueldo, un gasto, una compra en cuotas.",
   "Antes de guardar cualquier cosa te muestra qué va a hacer, y sólo sigue si confirmás.",
   "Se conecta desde Configuración y lo desconectás cuando quieras.",
@@ -84,10 +84,10 @@ export default function Home() {
             </h1>
             <p className="mt-5 text-lg text-muted-foreground max-w-xl">
               RegistrApp ordena tus ingresos, gastos, tarjetas, dólares y ventas. Lo usás desde la compu, el celular,
-              WhatsApp o tu asistente de IA, y a fin de mes sabés exactamente cómo te fue.
+              WhatsApp o tu asistente de IA, y a fin de mes ves cómo te fue.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link href="/login" className={`${PILL} bg-primary text-primary-foreground`}>Empezar</Link>
+              <Link href="/login" className={`${PILL} bg-primary text-primary-foreground`}>Crear mi cuenta</Link>
               <a href="#versiones" className={`${PILL} bg-white`}>Ver las versiones</a>
             </div>
             <p className="mt-4 text-sm text-muted-foreground">Entrás con tu cuenta de Google y elegís si es para tu hogar o tu negocio.</p>
@@ -126,7 +126,7 @@ export default function Home() {
                 <div className="hidden sm:block"><Screen src={image} alt={`Inicio de ${name}`} /></div>
                 <Phone src={phone} alt={`${name} en el celular`} className="sm:hidden mx-auto w-[62%] max-w-[230px]" />
                 <Link href={href} className="mt-auto inline-flex items-center gap-1.5 font-semibold text-primary hover:underline">
-                  Conocé {name} <ArrowRight className="w-4 h-4" />
+                  Ver {name} <ArrowRight className="w-4 h-4" />
                 </Link>
               </article>
             ))}
@@ -138,7 +138,7 @@ export default function Home() {
           <div className="min-w-0">
             <h2 className="font-display font-bold text-3xl md:text-4xl tracking-tight">Donde estés, como te quede cómodo</h2>
             <p className="mt-3 text-lg text-muted-foreground max-w-2xl">
-              Es la misma cuenta en todos lados: lo que cargás en el celular aparece en la compu al instante.
+              Es la misma cuenta en todos lados: lo que cargás en el celular lo ves en la compu.
             </p>
             <div className="mt-8 grid sm:grid-cols-2 gap-4">
               {PLATFORMS.map(({ icon: Icon, title, text }) => (
@@ -206,8 +206,8 @@ export default function Home() {
         <section className="max-w-6xl mx-auto px-4 md:px-8 pt-4 pb-16">
           <div className="rounded-2xl border-2 border-ink bg-primary text-primary-foreground p-6 md:p-10 flex flex-wrap items-center gap-6 justify-between shadow-chip">
             <div className="min-w-0">
-              <h2 className="font-display font-bold text-3xl tracking-tight">Empezá hoy</h2>
-              <p className="mt-2 text-primary-foreground/85 text-lg">Entrás con Google y elegís hogar o negocio. Lo configurás en un minuto.</p>
+              <h2 className="font-display font-bold text-3xl tracking-tight">Probala con tu cuenta de Google</h2>
+              <p className="mt-2 text-primary-foreground/85 text-lg">Elegís si es para tu hogar o tu negocio, le ponés nombre y empezás a cargar.</p>
             </div>
             <Link href="/login" className={`${PILL} bg-white text-foreground`}>Crear mi cuenta</Link>
           </div>

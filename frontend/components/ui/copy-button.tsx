@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
  * unos meses "Copiar" se viera y se comportara distinto según de qué tarjeta lo
  * tocaras.
  *
- * El cambio de texto a "¡Copiado!" no es decoración: `navigator.clipboard`
+ * El cambio de texto a "Copiado" no es decoración: `navigator.clipboard`
  * no da ninguna señal visible, y un botón que no acusa recibo se toca tres
  * veces.
  */
@@ -34,7 +34,7 @@ export function CopyButton({ value, label = "Copiar", className }: {
       }}
     >
       {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-      {copied ? "¡Copiado!" : label}
+      {copied ? "Copiado" : label}
     </Button>
   );
 }

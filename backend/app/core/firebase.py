@@ -24,5 +24,5 @@ async def get_current_user(
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token Firebase inválido o expirado",
+            detail="Tu sesión venció o no es válida. Volvé a iniciar sesión.",
         )

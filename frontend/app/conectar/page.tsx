@@ -29,9 +29,9 @@ const PILL = "inline-flex items-center gap-2 rounded-full border-2 border-ink px
 
 const BENEFITS = [
   { icon: Brain, title: "Con tus números",
-    text: "Contesta con tus ingresos, gastos, tarjetas y cuotas reales, no con promedios ni con lo que le contás de memoria." },
+    text: "Contesta con los ingresos, gastos, tarjetas y cuotas que cargaste en RegistrApp." },
   { icon: MessageSquareText, title: "Como hablás",
-    text: "«¿Me alcanza para la tele?», «anotá 12 lucas de verdulería». Sin menús ni planillas." },
+    text: "«¿Me alcanza para la tele?», «anotá 12 lucas de verdulería». Le escribís como a una persona." },
   { icon: ShieldCheck, title: "Tu contraseña queda afuera",
     text: "Iniciás sesión con Google en la página de RegistrApp. La IA recibe un permiso, nunca tu contraseña." },
   { icon: SlidersHorizontal, title: "Vos decidís",

@@ -335,7 +335,7 @@ export default function ExpenseFormModal({
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
               <Button type="submit" disabled={saving || blockedByCards} data-tour="expense-save">
-                {saving ? "Guardando..." : "Guardar"}
+                {saving ? "Guardando…" : "Guardar egreso"}
               </Button>
             </div>
           </form>

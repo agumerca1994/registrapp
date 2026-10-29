@@ -11,12 +11,15 @@ export function cn(...inputs: ClassValue[]) {
 // errors — rendering that array directly as a React child crashes the page
 // ("Objects are not valid as a React child"). Always route error display
 // through this instead of reading `err.response?.data?.detail` directly.
-export function getErrorMessage(err: unknown, fallback = "Ocurrió un error"): string {
+export function getErrorMessage(err: unknown, fallback = "No se pudo completar. Probá de nuevo en un rato."): string {
   const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
   if (typeof detail === "string" && detail.trim()) return detail;
   if (Array.isArray(detail) && detail.length > 0) {
     return detail
       .map((item) => (item && typeof item === "object" && "msg" in item ? String((item as { msg: unknown }).msg) : String(item)))
+      // Pydantic antepone "Value error, " a los ValueError de los schemas, que
+      // ya vienen escritos para la persona.
+      .map((msg) => msg.replace(/^Value error, /, ""))
       .join(" ");
   }
   return fallback;

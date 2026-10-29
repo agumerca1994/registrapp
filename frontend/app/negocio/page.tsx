@@ -106,7 +106,7 @@ export default function NegocioPage() {
         <section className="max-w-6xl mx-auto px-4 md:px-8 py-12 grid lg:grid-cols-2 gap-8 items-center">
           <Screen src="/negocio/nueva-venta.jpg" alt="El formulario de nueva venta con productos y medio de pago" />
           <div className="min-w-0">
-            <h2 className="font-display font-bold text-3xl tracking-tight">Una venta, en segundos</h2>
+            <h2 className="font-display font-bold text-3xl tracking-tight">La venta, mientras cobrás</h2>
             <p className="mt-3 text-lg text-muted-foreground">
               Tocás los productos, elegís cómo te pagaron y listo. El total sale de los precios y el stock se descuenta solo.
               Al final del día, contás la caja y la app te dice si coincide.
@@ -164,7 +164,7 @@ export default function NegocioPage() {
           <div className="rounded-2xl border-2 border-ink bg-primary text-primary-foreground p-8 md:p-10 flex flex-wrap items-center gap-6 justify-between shadow-chip">
             <div className="min-w-0">
               <h2 className="font-display font-bold text-3xl tracking-tight">Probalo con tu negocio</h2>
-              <p className="mt-2 text-primary-foreground/85 text-lg">Entrás con Google y lo configurás en un minuto.</p>
+              <p className="mt-2 text-primary-foreground/85 text-lg">Entrás con Google, le ponés nombre a tu negocio y cargás tus productos.</p>
             </div>
             <Link href="/login"
               className="inline-flex items-center rounded-full border-2 border-ink bg-white text-foreground px-5 py-3 font-semibold shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none">

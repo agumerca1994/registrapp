@@ -109,10 +109,9 @@ async def send_due_reminders() -> None:
                     card = await db.get(CreditCard, stmt.card_id)
                     card_alias = card.alias if card else None
 
-            msg = f"🔔 Recordatorio de pago: {reminder.title}"
+            msg = f"Recordatorio para hoy, {reminder.remind_date.strftime('%d/%m')}: {reminder.title}"
             if card_alias:
                 msg += f" ({card_alias})"
-            msg += f"\n\nFecha: {reminder.remind_date.strftime('%d/%m/%Y')}"
 
             await _send_wa_msg(user.whatsapp_phone, msg)
 

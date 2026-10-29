@@ -34,7 +34,7 @@ const INCOME_TOUR_STEPS: Step[] = [
   },
   {
     target: "[data-tour='income-import']",
-    content: "Si tenés varios ingresos para cargar, podés importarlos de una desde un Excel o CSV.",
+    content: "En este menú están Importar, para cargar varios ingresos de una desde un Excel o CSV, y Fuentes, para editar los campos de cada fuente.",
     placement: "bottom",
   },
 ];
@@ -91,7 +91,7 @@ function EntryDetailModal({
       <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground">{entry.source.name}</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="divide-y text-sm">
@@ -179,7 +179,7 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
       setMapping(m => ({ ...m, date_col: cols[0] ?? "", amount_col: cols[cols.length - 1] ?? "" }));
       setStep("map");
     } catch {
-      setError("No se pudo leer el archivo. Verificá que sea .xlsx o .csv");
+      setError("No se pudo leer el archivo. Tiene que ser un Excel (.xlsx) o un CSV.");
     } finally {
       setLoadingPreview(false);
     }
@@ -188,10 +188,10 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
   const handleImport = async () => {
     if (!file || !preview) return;
     if (!mapping.date_col || !mapping.amount_col) {
-      setError("Seleccioná las columnas de fecha y monto"); return;
+      setError("Elegí la columna de fecha y la de neto."); return;
     }
     if (!mapping.source_id && !mapping.new_source_name.trim()) {
-      setError("Seleccioná o creá una fuente de ingreso"); return;
+      setError("Elegí una fuente o escribí el nombre de la nueva."); return;
     }
     setError("");
     setStep("importing");
@@ -212,24 +212,24 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
       setResult(data);
       setStep("done");
     } catch (e: unknown) {
-      setError(getErrorMessage(e, "Error al importar"));
+      setError(getErrorMessage(e, "No se pudo importar el archivo. Probá de nuevo."));
       setStep("map");
     }
   };
 
-  const NO_COL = "— sin mapear —";
+  const NO_COL = "Ninguna";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
       <Card className="p-0 md:p-0 w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h3 className="font-semibold text-foreground">Importar ingresos</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {(["Archivo", "Mapeo", "Procesando", "Resultado"]).map((label, i) => (
+            {(["Archivo", "Columnas", "Importando", "Resultado"]).map((label, i) => (
               <span key={label} className="flex items-center gap-1">
                 {i > 0 && <span className="text-muted-foreground/40">›</span>}
                 <span className={i === ["upload","map","importing","done"].indexOf(step) ? "text-primary font-medium" : ""}>{label}</span>
@@ -288,7 +288,7 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
                     <SelectField
                       value={mapping[key as keyof typeof mapping]}
                       onChange={v => setMapping(m => ({ ...m, [key as string]: v }))}
-                      placeholder={required ? "— elegir —" : NO_COL}
+                      placeholder={required ? "Elegí una columna" : NO_COL}
                       options={preview.columns.map(c => ({ value: c, label: c }))} />
                   </div>
                 ))}
@@ -326,7 +326,7 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
           {step === "importing" && (
             <div className="flex flex-col items-center gap-4 py-10">
               <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-              <p className="text-sm text-muted-foreground">Importando registros...</p>
+              <p className="text-sm text-muted-foreground">Importando ingresos…</p>
             </div>
           )}
 
@@ -335,8 +335,8 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
               <div className="flex items-center gap-3">
                 <CheckCircle2 className="w-8 h-8 text-emerald-500 shrink-0" />
                 <div>
-                  <p className="font-semibold text-foreground">Importación completada</p>
-                  <p className="text-sm text-muted-foreground">{result.imported + result.skipped} registros procesados</p>
+                  <p className="font-semibold text-foreground">Importación terminada</p>
+                  <p className="text-sm text-muted-foreground">{result.imported + result.skipped} filas procesadas</p>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3">
@@ -627,11 +627,11 @@ export default function IncomePage() {
           ) : (
             <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
               <CalendarDays className="w-4 h-4 text-primary shrink-0" />
-              <button onClick={prev} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+              <button onClick={prev} aria-label="Mes anterior" className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
-              <button onClick={next} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+              <button onClick={next} aria-label="Mes siguiente" className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -679,7 +679,7 @@ export default function IncomePage() {
             onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-foreground">{editId ? "Editar ingreso" : "Nuevo ingreso"}</h3>
-            <button type="button" onClick={closeForm} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+            <button type="button" onClick={closeForm} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
           </div>
           <form onSubmit={handleSubmit} className="space-y-3">
           {/* Same ARS/USD toggle position as the expense form. A USD income
@@ -708,7 +708,7 @@ export default function IncomePage() {
                     <Settings2 className="w-4 h-4" />
                   </button>
                 )}
-                <button type="button" onClick={() => setSourceModal({ fromForm: true })} title="Nueva fuente"
+                <button type="button" onClick={() => setSourceModal({ fromForm: true })} title="Nueva fuente" aria-label="Nueva fuente"
                   className="mt-1 px-2.5 border rounded-lg text-muted-foreground hover:bg-accent shrink-0 text-lg leading-none">+</button>
               </div>
             </div>
@@ -737,7 +737,7 @@ export default function IncomePage() {
               <label className="text-xs font-medium text-muted-foreground">
                 Neto
                 {!netoManual.current && hasMath && (
-                  <span className="text-muted-foreground font-normal ml-1">— calculado automáticamente</span>
+                  <span className="text-muted-foreground font-normal ml-1">(se calcula solo)</span>
                 )}
               </label>
               <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
@@ -766,7 +766,7 @@ export default function IncomePage() {
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Guardando..." : "Guardar"}
+              {loading ? "Guardando…" : "Guardar ingreso"}
             </Button>
           </div>
           </form>

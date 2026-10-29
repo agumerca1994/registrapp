@@ -220,9 +220,9 @@ async def get_invite_info(
         .options(selectinload(SharedExpenseSplit.shared_expense))
     )
     if not split:
-        raise HTTPException(status_code=404, detail="Invitacion no encontrada o ya reclamada")
+        raise HTTPException(status_code=404, detail="La invitación no existe o ya fue usada")
     if split.invite_expires_at and split.invite_expires_at < datetime.utcnow():
-        raise HTTPException(status_code=410, detail="La invitacion ha expirado")
+        raise HTTPException(status_code=410, detail="La invitación venció. Pedile a quien te la mandó que te comparta el gasto de nuevo.")
 
     shared = split.shared_expense
     creator = await db.get(User, shared.created_by_user_id)
@@ -270,9 +270,9 @@ async def claim_invite(
         .options(selectinload(SharedExpenseSplit.shared_expense))
     )
     if not split:
-        raise HTTPException(status_code=404, detail="Invitacion no encontrada o ya reclamada")
+        raise HTTPException(status_code=404, detail="La invitación no existe o ya fue usada")
     if split.invite_expires_at and split.invite_expires_at < datetime.utcnow():
-        raise HTTPException(status_code=410, detail="La invitacion ha expirado")
+        raise HTTPException(status_code=410, detail="La invitación venció. Pedile a quien te la mandó que te comparta el gasto de nuevo.")
 
     # Auto-accept: create ExpenseEntry immediately (same as accept flow)
     shared = split.shared_expense

@@ -105,7 +105,7 @@ async def create_item_in_statement(
     if body.currency == "USD":
         category_id = await get_or_create_usd_category(user.tenant_id, db)
     elif category_id is None:
-        raise HTTPException(status_code=422, detail="category_id es requerido para gastos en ARS")
+        raise HTTPException(status_code=422, detail="Elegí una categoría: los gastos en pesos la necesitan")
     else:
         await assert_owns_category(category_id, user.tenant_id, db)
 
@@ -229,7 +229,7 @@ async def apply_item_update(
     if scope not in ("root", "item", "root_and_future"):
         raise ValueError(f"scope inválido: {scope!r}")
     if scope != "item" and item.installment_group_id is not None:
-        raise HTTPException(status_code=400, detail="Para editar una cuota, ve al resumen de la cuota 1")
+        raise HTTPException(status_code=400, detail="Para editar una cuota, andá al resumen de la cuota 1")
     if "category_id" in updates:
         await assert_owns_category(updates["category_id"], tenant_id, db)
 
@@ -263,7 +263,7 @@ async def _delete_entry(entry_id: int | None, db: AsyncSession) -> None:
 async def delete_item_tree(item: CreditCardItem, db: AsyncSession) -> None:
     """Borra un ítem y su egreso; si es la raíz de un plan en cuotas, todas las cuotas."""
     if item.installment_group_id is not None:
-        raise HTTPException(status_code=400, detail="Para eliminar, ve al resumen de la cuota 1")
+        raise HTTPException(status_code=400, detail="Para eliminar, andá al resumen de la cuota 1")
 
     if item.item_type == "installment":
         group_items = await db.scalars(

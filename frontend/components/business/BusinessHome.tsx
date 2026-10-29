@@ -180,7 +180,7 @@ export default function BusinessHome() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" data-tour="home-breakdowns">
               {data.sales_by_method.length > 0 && (
                 <BreakdownBarsCard
-                  title={`Ventas por medio de pago — ${periodLabel}`}
+                  title={`Ventas por medio de pago · ${periodLabel}`}
                   rows={data.sales_by_method.map((m) => ({
                     key: m.method, label: PAYMENT_METHOD_LABELS[m.method], color: METHOD_COLORS[m.method],
                     total: m.total, total_usd: 0, ars_equivalent: Number(m.total),
@@ -189,7 +189,7 @@ export default function BusinessHome() {
               )}
               {data.top_products.length > 0 && (
                 <BreakdownBarsCard
-                  title={`Lo más vendido — ${periodLabel}`}
+                  title={`Lo más vendido · ${periodLabel}`}
                   rows={data.top_products.map((p, i) => ({
                     key: `${p.product_id ?? "libre"}-${i}`,
                     label: `${p.name} × ${Number(p.qty).toLocaleString("es-AR")}`,
@@ -200,7 +200,7 @@ export default function BusinessHome() {
               )}
               {data.expenses_by_category.length > 0 && (
                 <BreakdownBarsCard
-                  title={`Egresos por categoría — ${periodLabel}`}
+                  title={`Egresos por categoría · ${periodLabel}`}
                   rows={data.expenses_by_category.map((cat) => ({
                     key: cat.category_name, label: cat.category_name, color: cat.color,
                     total: cat.total, total_usd: cat.total_usd, ars_equivalent: cat.ars_equivalent,
@@ -209,7 +209,7 @@ export default function BusinessHome() {
               )}
               {data.spend_by_payee.length > 0 && (
                 <BreakdownBarsCard
-                  title={`Proveedores y empleados — ${periodLabel}`}
+                  title={`Proveedores y empleados · ${periodLabel}`}
                   rows={data.spend_by_payee.map((p) => ({
                     key: String(p.payee_id), label: p.name, color: PAYEE_COLORS[p.kind],
                     // Sin cotización acá: las barras van por pesos, y lo pagado
@@ -231,7 +231,7 @@ export default function BusinessHome() {
           )}
         </>
       ) : (
-        <p className="text-muted-foreground text-sm">No hay datos para este mes.</p>
+        <p className="text-muted-foreground text-sm">No se pudo cargar el resumen del mes.</p>
       )}
 
       {/* Lo de todos los días en un comercio es vender: el `+` de Inicio abre una

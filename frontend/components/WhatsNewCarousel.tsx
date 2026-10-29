@@ -337,12 +337,12 @@ function SlideHero() {
       <Body className="flex flex-col">
         <Headline>Dejá de cargar gastos a mano</Headline>
         <p className="text-[15px] text-muted-foreground leading-relaxed">
-          ¿Sabías que ahora podés cargar gastos desde tus resúmenes o comprobantes de compras y
-          transferencias?
+          Ahora podés cargar gastos desde tus resúmenes y desde los comprobantes de compras y
+          transferencias.
         </p>
         <p className="text-[15px] text-muted-foreground leading-relaxed">
-          Compartí tus comprobantes y resúmenes con el bot de WhatsApp, o entrá a la app y subí tus
-          resúmenes: el resto lo hace RegistrApp.
+          Mandale tus comprobantes y resúmenes al bot de WhatsApp, o subí los resúmenes desde la
+          app. RegistrApp carga los gastos y vos revisás.
         </p>
         {/* Al pie, apilados, justo sobre el divisor del pie fijo. Crece en vez
             de mt-auto: el space-y de Body pisa el margen de los hijos. */}
@@ -402,7 +402,7 @@ function SlideResumen() {
 
       <Body>
         <StepChip>1 · Subí tu resumen</StepChip>
-        <Headline>Subí el PDF y tus gastos se cargan en un instante</Headline>
+        <Headline>Subí el PDF y RegistrApp carga los consumos</Headline>
         <ul className="space-y-2 pt-1">
           <Bullet>Carga lo que falta, corrige montos y borra duplicados</Bullet>
           <Bullet>Crea la tarjeta y el resumen si no existen</Bullet>
@@ -474,8 +474,8 @@ function SlideBot() {
         <Headline>Escribile como le escribís a un amigo</Headline>
         <p className="text-[15px] text-muted-foreground leading-relaxed">
           Mandá un gasto en texto, como te salga. También podés mandarle en PDF un resumen o el
-          comprobante de una compra, y el bot lo registra automáticamente. Obvio que podés deshacer
-          o editar lo cargado.
+          comprobante de una compra, y el bot lo carga. Si algo quedó mal, lo deshacés o lo
+          corregís desde el chat.
         </p>
       </Body>
     </Slide>
@@ -491,7 +491,7 @@ const WAYS = [
 
 function SlideCierre() {
   return (
-    <Slide label="Empezá ya">
+    <Slide label="Por dónde empezar">
       <Band className="h-[20%] min-h-[130px] bg-[#FFF1D6]" style={DOTS_BG}>
         <div className="absolute inset-x-0 bottom-0 top-[env(safe-area-inset-top)] flex items-center justify-center gap-4" aria-hidden="true">
           {/* Íconos de línea y no emoji: los emoji del sistema cambian de
@@ -509,7 +509,7 @@ function SlideCierre() {
       </Band>
 
       <Body>
-        <StepChip>3 · Empezá ya</StepChip>
+        <StepChip>3 · Por dónde empezar</StepChip>
         <Headline>Dos formas de cargar sin cargar</Headline>
         <ol className="space-y-2.5 pt-1">
           {WAYS.map(({ Icon, tile, title, line }, i) => (

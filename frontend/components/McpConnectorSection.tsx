@@ -262,7 +262,7 @@ export default function McpConnectorSection() {
               maxLength={100}
             />
             <SelectField value={expiry} onChange={setExpiry}
-              options={EXPIRY_OPTIONS.map(o => ({ value: o.value, label: `Vence en ${o.label.toLowerCase()}` }))} />
+              options={EXPIRY_OPTIONS.map(o => ({ value: o.value, label: o.value === "never" ? o.label : `Vence en ${o.label}` }))} />
             <div className="flex gap-2">
               <Button onClick={createToken} disabled={busy}>
                 {busy ? "Creando..." : "Crear"}

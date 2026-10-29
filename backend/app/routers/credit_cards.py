@@ -299,7 +299,7 @@ async def finalize_statement(
     if not stmt or stmt.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Resumen no encontrado")
     if stmt.status == "closed":
-        raise HTTPException(status_code=400, detail="El resumen ya esta cerrado")
+        raise HTTPException(status_code=400, detail="El resumen ya está cerrado")
 
     card = stmt.card
 
@@ -393,7 +393,7 @@ async def find_statement_for_expense(
         )
     )
     if not item or item.statement.tenant_id != user.tenant_id:
-        raise HTTPException(status_code=404, detail="No se encontro el resumen para este gasto")
+        raise HTTPException(status_code=404, detail="No se encontró el resumen de este gasto")
 
     # If this is a non-root installment, navigate to root's statement
     if item.installment_group_id:
@@ -488,7 +488,7 @@ async def update_item(
         )
     )
     if not item or item.statement.tenant_id != user.tenant_id:
-        raise HTTPException(status_code=404, detail="Item no encontrado")
+        raise HTTPException(status_code=404, detail="Ítem no encontrado")
 
     await apply_item_update(item, body.model_dump(exclude_none=True), user.tenant_id, db)
     await db.commit()
@@ -514,7 +514,7 @@ async def delete_item(
         .options(selectinload(CreditCardItem.statement))
     )
     if not item or item.statement.tenant_id != user.tenant_id:
-        raise HTTPException(status_code=404, detail="Item no encontrado")
+        raise HTTPException(status_code=404, detail="Ítem no encontrado")
 
     await delete_item_tree(item, db)
     await db.commit()

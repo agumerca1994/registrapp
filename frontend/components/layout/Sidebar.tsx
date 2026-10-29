@@ -126,7 +126,7 @@ const BUILD_DATE = process.env.NEXT_PUBLIC_BUILD_DATE
 
 function greeting(displayName?: string | null, email?: string | null): string {
   const firstName = displayName?.trim().split(/\s+/)[0] || email?.split("@")[0];
-  return firstName ? `¡Bienvenido de nuevo, ${firstName}!` : "¡Bienvenido de nuevo!";
+  return firstName ? `Hola, ${firstName}` : "Hola";
 }
 
 function Avatar({ photoURL, className }: { photoURL?: string | null; className?: string }) {

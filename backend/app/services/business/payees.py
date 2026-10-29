@@ -16,7 +16,7 @@ from app.services.business.common import match_by_name, name_and_key
 
 def _check_kind(kind: str) -> str:
     if kind not in PAYEE_KINDS:
-        raise HTTPException(status_code=422, detail=f"kind debe ser uno de {PAYEE_KINDS}")
+        raise HTTPException(status_code=422, detail=f"El tipo tiene que ser uno de: {', '.join(PAYEE_KINDS)}")
     return kind
 
 

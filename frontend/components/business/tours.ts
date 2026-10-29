@@ -51,7 +51,7 @@ export const PAYEES_INTRO_STEPS: Step[] = [
 export const EXPENSE_BUSINESS_STEPS: Step[] = [
   step("expense-payee", "Elegí a quién le pagaste. Si tiene categoría habitual, se completa sola."),
   step("expense-stock", "Si compraste mercadería para vender (como 12 Coca-Cola), activá Sí y cargá productos y cantidades. La materia prima no va acá."),
-  step("expense-save", "Tocá Guardar para registrar el gasto."),
+  step("expense-save", "Tocá Guardar egreso para registrarlo."),
 ];
 
 export const HOME_INTRO_STEPS: Step[] = [
@@ -63,7 +63,7 @@ export const HOME_INTRO_STEPS: Step[] = [
 ];
 
 export const CARDS_INTRO_STEPS: Step[] = [
-  step("cards-new", "Dá de alta una tarjeta con este botón: banco, alias y los últimos 4 números."),
+  step("cards-new", "Con este botón creás una tarjeta: banco, alias y los últimos 4 números."),
   step("cards-upload", "Subí el PDF del resumen y RegistrApp carga los consumos y los compara con lo que ya tenías."),
 ];
 

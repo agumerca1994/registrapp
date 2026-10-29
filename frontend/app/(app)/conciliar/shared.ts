@@ -139,12 +139,12 @@ export const STATUS_CHIP: Record<SessionStatus, { label: string; tone: "neutral"
 
 export const GROUP_LABELS: Record<string, string> = {
   dates: "Fechas del resumen",
-  missing: "Faltantes",
+  missing: "Faltan en la app",
   double_count: "Cargos sumados dos veces",
   amount_diff: "Montos distintos",
-  usd_fix: "USD mal identificados",
-  rounding: "Redondeos de cuota",
-  surplus: "Sobrantes",
+  usd_fix: "Dólares que no coinciden",
+  rounding: "Centavos de diferencia en cuotas",
+  surplus: "No están en el resumen",
 };
 
 // Qué es cada grupo, en una línea: el título solo ("Sobrantes") no dice
@@ -164,12 +164,12 @@ export function groupActionLabel(klass: string, n: number): string {
   const pl = (one: string, many: string) => (n === 1 ? one : many);
   switch (klass) {
     case "dates": return "Completar fechas";
-    case "missing": return `Cargar ${n} ${pl("faltante", "faltantes")}`;
+    case "missing": return `Cargar ${n} ${pl("consumo", "consumos")}`;
     case "double_count": return `Corregir ${n} ${pl("cargo", "cargos")}`;
     case "amount_diff": return `Corregir ${n} ${pl("monto", "montos")}`;
     case "usd_fix": return `Corregir ${n} en dólares`;
-    case "rounding": return `Ajustar ${n} ${pl("redondeo", "redondeos")}`;
-    case "surplus": return `Borrar ${n} ${pl("sobrante", "sobrantes")}`;
+    case "rounding": return `Ajustar ${n} ${pl("cuota", "cuotas")}`;
+    case "surplus": return `Borrar ${n} ${pl("consumo", "consumos")}`;
     default: return `Aplicar ${n}`;
   }
 }
@@ -177,12 +177,12 @@ export function groupActionLabel(klass: string, n: number): string {
 // Para la línea "Quedan: 2 redondeos · 1 sobrante" del pie del detalle.
 export const GROUP_NOUNS: Record<string, [string, string]> = {
   dates: ["fecha por corregir", "fechas por corregir"],
-  missing: ["faltante", "faltantes"],
+  missing: ["consumo que falta", "consumos que faltan"],
   double_count: ["cargo duplicado", "cargos duplicados"],
   amount_diff: ["monto distinto", "montos distintos"],
   usd_fix: ["USD por corregir", "USD por corregir"],
-  rounding: ["redondeo", "redondeos"],
-  surplus: ["sobrante", "sobrantes"],
+  rounding: ["cuota por ajustar", "cuotas por ajustar"],
+  surplus: ["consumo de más", "consumos de más"],
 };
 
 /** Un monto en la moneda del renglón — nunca se mezclan ni se suman. */

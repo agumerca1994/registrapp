@@ -209,9 +209,9 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (participants.length < 2) { setError("Agrega al menos 1 persona mas"); return; }
+    if (participants.length < 2) { setError("Agregá al menos una persona más"); return; }
     if (participants.some(p => p.type !== "self" && !p.member_name.trim())) {
-      setError("Todos los participantes deben tener nombre"); return;
+      setError("Hay un participante sin elegir"); return;
     }
     setSharing(true);
     setError("");
@@ -238,7 +238,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
       await api.post("/credit-cards/items/" + item.id + "/share", { splits, split_type: splitType });
       onDone();
     } catch (err: unknown) {
-      setError(getErrorMessage(err, "Error al compartir"));
+      setError(getErrorMessage(err, "No se pudo compartir el gasto"));
     }
     setSharing(false);
   };
@@ -248,17 +248,17 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
       <UiCard className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground">Compartir gasto</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="bg-muted rounded-lg px-3 py-2 text-sm space-y-0.5">
           <p className="font-medium text-foreground">{item.description}</p>
           <p className="text-muted-foreground">{item.currency === "USD" ? formatUSD(item.amount) : formatARS(item.amount)} por cuota</p>
           {cuotasRestantes > 1 && (
-            <p className="text-xs text-amber-600 mt-1">Se compartiran las {cuotasRestantes} cuotas del plan</p>
+            <p className="text-xs text-amber-600 mt-1">Se comparten las {cuotasRestantes} cuotas del plan</p>
           )}
           {item.item_type === "recurring" && (
-            <p className="text-xs text-primary mt-1">Solo se comparte el mes actual</p>
+            <p className="text-xs text-primary mt-1">Sólo se comparte el mes actual</p>
           )}
         </div>
 
@@ -267,7 +267,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
             {(["equal", "custom"] as const).map(t => (
               <button key={t} type="button" onClick={() => setSplitType(t)}
                 className={"flex-1 py-1.5 text-xs rounded-full border-2 font-medium transition-colors " + (splitType === t ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent")}>
-                {t === "equal" ? "Division igual" : "Personalizado"}
+                {t === "equal" ? "División igual" : "Personalizado"}
               </button>
             ))}
           </div>
@@ -277,7 +277,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
               <p className="text-xs font-medium text-muted-foreground">Participantes</p>
               <button type="button" onClick={addParticipant}
                 className="text-xs text-primary hover:underline flex items-center gap-1">
-                <Plus className="w-3 h-3" /> Agregar
+                <Plus className="w-3 h-3" /> Agregar persona
               </button>
             </div>
 
@@ -299,7 +299,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                       <span className="block text-xs text-muted-foreground truncate">
                         {p.type === "self" ? "Vos" : p.user_id ? "Usuario de RegistrApp"
                           : p.contact ? `Se le invita a ${p.contact}`
-                          : p.member_name ? "Sin cuenta — sólo para anotar tu parte" : ""}
+                          : p.member_name ? "Sin cuenta, sólo para anotar tu parte" : ""}
                       </span>
                     </span>
                     {p.type !== "self" && (
@@ -350,8 +350,8 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
             {splitType === "custom" && totalAmount > 0 && (
               <div className={"mt-2 text-xs rounded-lg px-3 py-2 " + (overBudget ? "bg-destructive/10 text-destructive font-medium" : "bg-accent text-primary")}>
                 {overBudget
-                  ? "La division supera el total: " + formatARS(customTotal) + " de " + formatARS(totalAmount)
-                  : "Distribuido: " + formatARS(customTotal) + " | Restante: " + formatARS(totalAmount - customTotal)
+                  ? "La división supera el total: " + formatARS(customTotal) + " de " + formatARS(totalAmount)
+                  : "Repartido: " + formatARS(customTotal) + " · Falta repartir: " + formatARS(totalAmount - customTotal)
                 }
               </div>
             )}
@@ -387,21 +387,21 @@ function DeleteItemModal({
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
       <UiCard className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-foreground">Eliminar {isInstallment ? "cuotas" : "item"}</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          <h3 className="font-semibold text-foreground">Eliminar {isInstallment ? "cuotas" : "gasto"}</h3>
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
         {isInstallment ? (
           <p className="text-sm text-muted-foreground">
-            Se eliminarán <strong>todas las {item.installment_count} cuotas</strong> de &quot;{item.description}&quot; y sus gastos en todos los resumenes.
+            Se eliminarán <strong>todas las {item.installment_count} cuotas</strong> de &quot;{item.description}&quot; y sus gastos en todos los resúmenes.
           </p>
         ) : (
-          <p className="text-sm text-muted-foreground">Se eliminara <strong>{item.description}</strong> y su gasto en Egresos.</p>
+          <p className="text-sm text-muted-foreground">Se elimina <strong>{item.description}</strong> junto con su gasto en Egresos.</p>
         )}
         <div className="flex gap-2">
           <Button variant="outline" onClick={onClose} className="flex-1">Cancelar</Button>
           <Button variant="destructive" onClick={async () => { setDeleting(true); await onConfirm(isInstallment); setDeleting(false); }}
             disabled={deleting} className="flex-1">
-            {deleting ? "Eliminando..." : "Eliminar"}
+            {deleting ? "Eliminando..." : isInstallment ? "Eliminar cuotas" : "Eliminar gasto"}
           </Button>
         </div>
       </UiCard>
@@ -446,8 +446,8 @@ function EditItemModal({
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
       <UiCard className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-foreground">Editar item</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          <h3 className="font-semibold text-foreground">Editar gasto</h3>
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -476,7 +476,7 @@ function EditItemModal({
           <div className="flex justify-between gap-2 pt-1">
             <button type="button" onClick={() => { onClose(); onDelete(item); }}
               className="px-3 py-2 rounded-lg text-sm text-destructive hover:bg-destructive/10 border border-destructive/30">
-              Eliminar
+              Eliminar gasto
             </button>
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
@@ -503,7 +503,7 @@ function NewCategoryModal({ existingColors, onSave, onClose }: {
       <UiCard className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground">Nueva categoría</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={async (e) => { e.preventDefault(); setSaving(true); await onSave(form); setSaving(false); }} className="space-y-3">
           <div>
@@ -524,7 +524,7 @@ function NewCategoryModal({ existingColors, onSave, onClose }: {
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
             <Button type="submit" disabled={saving}>
-              {saving ? "Guardando..." : "Crear"}
+              {saving ? "Creando..." : "Crear categoría"}
             </Button>
           </div>
         </form>
@@ -737,22 +737,22 @@ export default function StatementDetailPage() {
     <div className="space-y-4 md:space-y-6">
       <div className="sticky top-0 z-10 bg-background pt-2 pb-3 -mx-4 px-4 md:-mx-8 md:px-8">
         <div className="flex items-center gap-3">
-        <button onClick={() => router.push(`/tarjetas/${cardId}`)} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">
+        <button onClick={() => router.push(`/tarjetas/${cardId}`)} aria-label="Volver a la tarjeta" className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">
           <ChevronLeft className="w-5 h-5" />
         </button>
         <div className="flex-1 min-w-0">
           <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">
             {MONTH_NAMES[statement.month - 1]} {statement.year}
           </h2>
-          <p className="text-sm text-muted-foreground">{card.alias} - {card.bank}</p>
+          <p className="text-sm text-muted-foreground">{card.alias} · {card.bank}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {features.reconcile && (
             <UploadStatementButton cardId={cardId} />
           )}
-          <Button onClick={() => setShowAddForm(true)}>
+          <Button onClick={() => setShowAddForm(true)} aria-label="Agregar gasto">
             <Plus className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Agregar</span>
+            <span className="hidden sm:inline">Agregar gasto</span>
           </Button>
         </div>
         </div>
@@ -762,7 +762,7 @@ export default function StatementDetailPage() {
       {showAddForm && (
         <UiCard className="p-4">
           <form onSubmit={handleAddItem} className="space-y-3">
-          <p className="text-sm font-medium text-foreground">Nuevo item</p>
+          <p className="text-sm font-medium text-foreground">Nuevo gasto</p>
 
           {/* Currency toggle — always at top */}
           <CurrencyToggle
@@ -770,7 +770,7 @@ export default function StatementDetailPage() {
             onChange={cur => setForm(p => ({ ...p, currency: cur, category_id: cur === "USD" ? "" : p.category_id, item_type: cur === "USD" ? "single" : p.item_type }))} />
           {form.currency === "USD" && (
             <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
-              Se agrega automáticamente a la categoría <strong>Consumo en dólares</strong>
+              Se agrega automáticamente a la categoría <strong>Consumo en dólares</strong>.
             </p>
           )}
 
@@ -789,7 +789,7 @@ export default function StatementDetailPage() {
                   onChange={v => setForm((p) => ({ ...p, category_id: v }))}
                   placeholder="Categoría"
                   options={categories.map((c) => ({ value: String(c.id), label: c.name }))} />
-                <button type="button" onClick={() => setShowNewCat(true)} title="Nueva categoría"
+                <button type="button" onClick={() => setShowNewCat(true)} title="Nueva categoría" aria-label="Nueva categoría"
                   className="mt-1 px-2.5 border-2 border-ink rounded-lg text-muted-foreground hover:bg-accent shrink-0 text-lg leading-none">+</button>
               </div>
             </div>
@@ -809,7 +809,7 @@ export default function StatementDetailPage() {
                     className={`flex-1 py-1.5 text-xs rounded-full border-2 font-medium transition-colors ${
                       form.item_type === t ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent"
                     }`}>
-                    {t === "single" ? "Unico" : t === "installment" ? "Cuotas" : "Recurrente"}
+                    {t === "single" ? "Único" : t === "installment" ? "Cuotas" : "Recurrente"}
                   </button>
                 ))}
               </div>
@@ -819,20 +819,20 @@ export default function StatementDetailPage() {
             {form.item_type === "installment" ? (
               <>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground">Cant. cuotas</label>
+                  <label className="text-xs font-medium text-muted-foreground">Cantidad de cuotas</label>
                   <input type="number" min="2" className={FIELD}
                     value={form.installment_count} onChange={(e) => handleInstallmentCountChange(e.target.value)} required />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground">Monto por cuota ($)</label>
+                  <label className="text-xs font-medium text-muted-foreground">Monto por cuota</label>
                   <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
                     value={form.amount} onChange={(e) => handleAmountChange("amount", e.target.value)} required />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground">Monto total ($)</label>
+                  <label className="text-xs font-medium text-muted-foreground">Monto total</label>
                   <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
                     value={form.purchase_total} onChange={(e) => handleAmountChange("purchase_total", e.target.value)} />
-                  <p className="text-xs text-muted-foreground/70 mt-0.5">Modificar uno auto-calcula el otro</p>
+                  <p className="text-xs text-muted-foreground/70 mt-0.5">Si cambiás uno, el otro se calcula solo.</p>
                 </div>
               </>
             ) : (
@@ -846,7 +846,7 @@ export default function StatementDetailPage() {
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" onClick={() => { setShowAddForm(false); setForm(EMPTY_ITEM); }}>Cancelar</Button>
             <Button type="submit" disabled={adding}>
-              {adding ? "Agregando..." : "Agregar"}
+              {adding ? "Agregando..." : "Agregar gasto"}
             </Button>
           </div>
           </form>
@@ -910,9 +910,9 @@ export default function StatementDetailPage() {
           el cual el monto fijo deja la descripcion en dos palabras. */}
       <UiCard className="p-0 md:p-0">
         {statement.items.length === 0 ? (
-          <p className="p-6 text-sm text-muted-foreground">No hay items en este resumen.</p>
+          <p className="p-6 text-sm text-muted-foreground">Este resumen todavía no tiene gastos.</p>
         ) : visibleItems.length === 0 ? (
-          <p className="p-6 text-sm text-muted-foreground">Ningún item coincide con la búsqueda/filtro.</p>
+          <p className="p-6 text-sm text-muted-foreground">Ningún gasto coincide con la búsqueda o los filtros.</p>
         ) : (
           <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] px-4">
             {visibleItems.map((item, idx) => {

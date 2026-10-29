@@ -87,7 +87,7 @@ function CardModal({
       <UiCard className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground">{initial ? "Editar tarjeta" : "Nueva tarjeta"}</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <FormGrid>
@@ -197,25 +197,25 @@ function DeleteCardModal({
       <UiCard className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground">Eliminar tarjeta</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
         <p className="text-sm text-muted-foreground">
           Se eliminarán <strong>{card.alias} ({card.bank})</strong> y todos sus resúmenes.
-          ¿Qué hacemos con los gastos en Egresos ya generados?
+          ¿Qué pasa con los gastos de esta tarjeta que ya figuran en Egresos?
         </p>
         <div className="space-y-2">
           <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-accent">
             <input type="radio" name="mode" value="keep" checked={mode === "keep"} onChange={() => setMode("keep")} className="mt-0.5" />
             <div>
               <p className="text-sm font-medium text-foreground">Mantener los gastos</p>
-              <p className="text-xs text-muted-foreground">Los gastos quedan en Egresos sin asociación a la tarjeta</p>
+              <p className="text-xs text-muted-foreground">Siguen en Egresos, ya sin la tarjeta asociada.</p>
             </div>
           </label>
           <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-accent">
             <input type="radio" name="mode" value="delete" checked={mode === "delete"} onChange={() => setMode("delete")} className="mt-0.5" />
             <div>
               <p className="text-sm font-medium text-foreground">Eliminar todos los gastos</p>
-              <p className="text-xs text-muted-foreground">Se borran permanentemente todos los gastos de esta tarjeta</p>
+              <p className="text-xs text-muted-foreground">Se borran de Egresos todos los gastos de esta tarjeta. No se puede deshacer.</p>
             </div>
           </label>
         </div>
@@ -227,7 +227,7 @@ function DeleteCardModal({
             disabled={deleting}
             className="flex-1"
           >
-            {deleting ? "Eliminando..." : "Eliminar"}
+            {deleting ? "Eliminando..." : "Eliminar tarjeta"}
           </Button>
         </div>
       </UiCard>
@@ -377,8 +377,8 @@ export default function TarjetasPage() {
       {cards.length === 0 ? (
         <UiCard className="p-8 text-center text-muted-foreground">
           <CreditCard className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No hay tarjetas registradas.</p>
-          <p className="text-xs mt-1">Agregá tu primera tarjeta para empezar.</p>
+          <p className="text-sm">Todavía no cargaste ninguna tarjeta.</p>
+          <p className="text-xs mt-1">Agregala con el botón +.</p>
         </UiCard>
       ) : (
         <>
@@ -419,7 +419,7 @@ export default function TarjetasPage() {
 
           {visibleCards.length === 0 ? (
             <UiCard className="p-8 text-center text-muted-foreground">
-              <p className="text-sm">Ninguna tarjeta coincide con la búsqueda/filtro.</p>
+              <p className="text-sm">Ninguna tarjeta coincide con la búsqueda o los filtros.</p>
             </UiCard>
           ) : (
             <div className="space-y-3">

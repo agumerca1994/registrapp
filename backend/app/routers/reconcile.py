@@ -54,7 +54,7 @@ async def _owned_session(
         )
     )
     if not session:
-        raise HTTPException(status_code=404, detail="Sesión no encontrada")
+        raise HTTPException(status_code=404, detail="No se encontró ese resumen subido")
     return session
 
 
@@ -122,7 +122,7 @@ async def create_session(
     if len(pdf_bytes) > MAX_PDF_BYTES:
         raise HTTPException(status_code=413, detail="El PDF supera los 10 MB")
     if not pdf_bytes:
-        raise HTTPException(status_code=422, detail="Archivo vacío")
+        raise HTTPException(status_code=422, detail="El archivo está vacío")
 
     session = await reconcile_service.start_session(
         db, user=user, pdf_bytes=pdf_bytes, channel="app", card_id=card_id
@@ -269,7 +269,7 @@ async def choose(
     user = await _get_db_user(firebase_user, db)
     session = await _owned_session(session_id, user, db)
     if session.status == SESSION_NEEDS_AI:
-        raise HTTPException(status_code=409, detail="Esta sesión no pudo leerse; no hay nada que elegir")
+        raise HTTPException(status_code=409, detail="Este resumen no se pudo leer, así que no hay nada que elegir")
 
     card_id = body.card_id
     if body.new_card is not None:
@@ -325,11 +325,11 @@ async def patch_action(
         )
     )
     if not action:
-        raise HTTPException(status_code=404, detail="Acción no encontrada")
+        raise HTTPException(status_code=404, detail="No se encontró ese cambio")
     # Un ítem que se corrige en la app también se puede descartar ("lo dejo
     # así"): si no, queda pendiente para siempre y la sesión no se cierra.
     if action.status != ACTION_PROPOSED and not (body.discard and action.status == ACTION_NEEDS_APP):
-        raise HTTPException(status_code=409, detail="La acción ya no está propuesta")
+        raise HTTPException(status_code=409, detail="Ese cambio ya no está pendiente. Recargá la página.")
 
     if body.discard:
         action.status = "discarded"

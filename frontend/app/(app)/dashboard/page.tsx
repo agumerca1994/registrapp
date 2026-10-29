@@ -36,13 +36,13 @@ import { isBusiness } from "@/lib/account";
 const DASHBOARD_TOUR_STEPS: Step[] = [
   {
     target: "[data-tour='nav-dashboard']",
-    content: "Este es tu Dashboard: un resumen mensual de ingresos, egresos y balance.",
+    content: "Este es tu Dashboard: cómo cerró el mes, en pesos y en dólares.",
     placement: "right",
     skipBeacon: true,
   },
   {
     target: "[data-tour='nav-income']",
-    content: "En Ingresos registrás tus sueldos u otras entradas de dinero, con bruto/deducciones/neto.",
+    content: "En Ingresos cargás el sueldo y cualquier otra plata que entre, con el detalle del recibo si lo querés.",
     placement: "right",
   },
   {
@@ -52,17 +52,17 @@ const DASHBOARD_TOUR_STEPS: Step[] = [
   },
   {
     target: "[data-tour='nav-shared']",
-    content: "Gastos compartidos te permite dividir un gasto con otras personas, del hogar o invitadas por WhatsApp/email.",
+    content: "En Gastos compartidos dividís un gasto con otras personas, sean del hogar o no.",
     placement: "right",
   },
   {
     target: "[data-tour='nav-tarjetas']",
-    content: "En Tarjetas administrás tus resúmenes de tarjeta de crédito, incluyendo compras en cuotas.",
+    content: "En Tarjetas cargás los resúmenes de tus tarjetas de crédito, con las compras en cuotas.",
     placement: "right",
   },
   {
     target: "[data-tour='nav-calendario']",
-    content: "El Calendario de pagos te muestra los vencimientos de tarjetas y tus recordatorios de pago.",
+    content: "En el Calendario de pagos ves los vencimientos de las tarjetas y tus recordatorios.",
     placement: "right",
   },
 ];
@@ -159,7 +159,7 @@ function DonutChartCard({ title, subtitle, data, centerLabel, formatValue = form
   return (
     <Card className="p-4 md:p-5">
       <h3 className="font-semibold text-foreground mb-4 text-sm md:text-base">
-        {title} — {subtitle}
+        {title} en {subtitle}
       </h3>
       <div className="flex flex-col sm:flex-row items-center gap-6">
         <div className="relative shrink-0 w-full sm:w-[220px] h-[220px]">
@@ -587,7 +587,7 @@ function HouseholdDashboard() {
 
               {(data.expenses_by_category.length > 0 || data.total_expenses_usd > 0) && (
                 <BreakdownBarsCard
-                  title={`Egresos por categoría — ${periodLabel}`}
+                  title={`Egresos por categoría en ${periodLabel}`}
                   rows={data.expenses_by_category.map(cat => ({
                     key: cat.category_name, label: cat.category_name, color: cat.color,
                     total: cat.total, total_usd: cat.total_usd, ars_equivalent: cat.ars_equivalent,
@@ -601,7 +601,7 @@ function HouseholdDashboard() {
           )}
         </>
       ) : (
-        <p className="text-muted-foreground text-sm">No hay datos para este mes.</p>
+        <p className="text-muted-foreground text-sm">No se pudo cargar el resumen de este mes. Probá recargar la página.</p>
       )}
 
       {mounted && !chartsLoading && (

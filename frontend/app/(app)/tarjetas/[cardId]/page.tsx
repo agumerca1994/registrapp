@@ -39,26 +39,26 @@ function DeleteStatementModal({ statement, onConfirm, onClose }: {
       <UiCard className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground">Eliminar resumen</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
         <p className="text-sm text-muted-foreground">
-          ¿Qué hacemos con los gastos de <strong>{MONTH_NAMES[statement.month - 1]} {statement.year}</strong>?
+          ¿Qué pasa con los gastos del resumen de <strong>{MONTH_NAMES[statement.month - 1]} {statement.year}</strong>?
         </p>
         <div className="space-y-2">
           <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-accent">
             <input type="radio" name="mode" value="keep" checked={mode === "keep"} onChange={() => setMode("keep")} className="mt-0.5" />
-            <div><p className="text-sm font-medium text-foreground">Mantener los gastos</p><p className="text-xs text-muted-foreground">Quedan en Egresos sin el resumen</p></div>
+            <div><p className="text-sm font-medium text-foreground">Mantener los gastos</p><p className="text-xs text-muted-foreground">Siguen en Egresos, ya sin el resumen.</p></div>
           </label>
           <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-accent">
             <input type="radio" name="mode" value="delete" checked={mode === "delete"} onChange={() => setMode("delete")} className="mt-0.5" />
-            <div><p className="text-sm font-medium text-foreground">Eliminar los gastos</p><p className="text-xs text-muted-foreground">Se borran todos los gastos de este resumen</p></div>
+            <div><p className="text-sm font-medium text-foreground">Eliminar los gastos</p><p className="text-xs text-muted-foreground">Se borran de Egresos todos los gastos de este resumen.</p></div>
           </label>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={onClose} className="flex-1">Cancelar</Button>
           <Button variant="destructive" onClick={async () => { setDeleting(true); await onConfirm(mode); setDeleting(false); }}
             disabled={deleting} className="flex-1">
-            {deleting ? "Eliminando..." : "Eliminar"}
+            {deleting ? "Eliminando..." : "Eliminar resumen"}
           </Button>
         </div>
       </UiCard>
@@ -85,7 +85,7 @@ function NewStatementModal({ onSave, onClose }: {
     try {
       await onSave(parseInt(year), parseInt(month), closingDate, dueDate);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, "Error al crear el resumen"));
+      setError(getErrorMessage(err, "No se pudo crear el resumen"));
     }
     setSaving(false);
   };
@@ -95,7 +95,7 @@ function NewStatementModal({ onSave, onClose }: {
       <UiCard className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground">Crear resumen</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <FormGrid>
@@ -121,7 +121,7 @@ function NewStatementModal({ onSave, onClose }: {
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
             <Button type="submit" disabled={saving}>
-              {saving ? "Creando..." : "Crear"}
+              {saving ? "Creando..." : "Crear resumen"}
             </Button>
           </div>
         </form>
@@ -147,7 +147,7 @@ function EditStatementModal({ statement, onSave, onClose }: {
     try {
       await onSave(closingDate, dueDate);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, "Error al actualizar el resumen"));
+      setError(getErrorMessage(err, "No se pudieron guardar las fechas del resumen"));
     }
     setSaving(false);
   };
@@ -159,7 +159,7 @@ function EditStatementModal({ statement, onSave, onClose }: {
           <h3 className="font-semibold text-foreground">
             Editar {MONTH_NAMES[statement.month - 1]} {statement.year}
           </h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <FormGrid>
@@ -263,7 +263,7 @@ export default function CardDetailPage() {
   return (
     <div className="space-y-4 md:space-y-6">
       <div className="sticky top-0 z-10 bg-background pt-2 pb-3 -mx-4 px-4 md:-mx-8 md:px-8 flex items-center gap-3">
-        <button onClick={() => router.push("/tarjetas")} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">
+        <button onClick={() => router.push("/tarjetas")} aria-label="Volver a Tarjetas" className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">
           <ChevronLeft className="w-5 h-5" />
         </button>
         <BankLogo bankName={card.bank} size={36} className="shrink-0" />
@@ -280,8 +280,8 @@ export default function CardDetailPage() {
 
       {statements.length === 0 ? (
         <UiCard className="p-8 text-center text-muted-foreground">
-          <p className="text-sm">No hay resúmenes para esta tarjeta.</p>
-          <p className="text-xs mt-1">Creá el primer resumen mensual.</p>
+          <p className="text-sm">Esta tarjeta todavía no tiene resúmenes.</p>
+          <p className="text-xs mt-1">Creá el primero con el botón +.</p>
         </UiCard>
       ) : (
         <div className="space-y-3">

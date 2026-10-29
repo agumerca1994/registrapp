@@ -23,7 +23,7 @@ const FEATURES = [
   { icon: TrendingUp, title: "Sueldos con su detalle",
     text: "Bruto, descuentos y bonos de cada recibo. El neto se calcula solo, y ves por qué un mes cobraste distinto." },
   { icon: ReceiptText, title: "Gastos por categoría",
-    text: "Cargás un gasto en segundos y ves en qué se va la plata del mes, categoría por categoría." },
+    text: "Cada gasto con su categoría, y ves en qué se va la plata del mes." },
   { icon: CreditCard, title: "Tarjetas y cuotas",
     text: "Cada compra en su resumen. Las cuotas se reparten solas en los meses que vienen." },
   { icon: DollarSign, title: "Pesos y dólares, por separado",
@@ -37,7 +37,7 @@ const FEATURES = [
 const STEPS = [
   { title: "Entrá con Google", text: "Creá tu hogar y ponele nombre." },
   { title: "Sumá a tu familia", text: "Con el código del hogar, ven y cargan lo mismo que vos." },
-  { title: "Cargá ingresos y gastos", text: "El cierre del mes se arma solo." },
+  { title: "Cargá ingresos y gastos", text: "En Inicio ves cómo cierra el mes." },
 ];
 
 
@@ -106,7 +106,7 @@ export default function HogarPage() {
         <section className="max-w-6xl mx-auto px-4 md:px-8 py-12 grid lg:grid-cols-2 gap-8 items-center">
           <Screen src="/hogar/nuevo-gasto.jpg" height={776} alt="El formulario de un gasto nuevo, compartido en partes iguales con otra persona" />
           <div className="min-w-0">
-            <h2 className="font-display font-bold text-3xl tracking-tight">Un gasto, en segundos</h2>
+            <h2 className="font-display font-bold text-3xl tracking-tight">Un solo formulario para cualquier gasto</h2>
             <p className="mt-3 text-lg text-muted-foreground">
               Categoría, monto y listo. Si lo pagaste con tarjeta elegís la tarjeta y las cuotas; si lo compartís,
               elegís con quién y la app divide los montos.
@@ -190,7 +190,7 @@ export default function HogarPage() {
           <div className="rounded-2xl border-2 border-ink bg-primary text-primary-foreground p-8 md:p-10 flex flex-wrap items-center gap-6 justify-between shadow-chip">
             <div className="min-w-0">
               <h2 className="font-display font-bold text-3xl tracking-tight">Probalo con tu hogar</h2>
-              <p className="mt-2 text-primary-foreground/85 text-lg">Entrás con Google y lo configurás en un minuto.</p>
+              <p className="mt-2 text-primary-foreground/85 text-lg">Entrás con Google, le ponés nombre a tu hogar y empezás a cargar.</p>
             </div>
             <Link href="/login"
               className="inline-flex items-center rounded-full border-2 border-ink bg-white text-foreground px-5 py-3 font-semibold shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none">

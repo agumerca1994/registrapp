@@ -18,7 +18,7 @@ const spaceGrotesk = Space_Grotesk({
 
 export const metadata: Metadata = {
   title: "RegistrApp",
-  description: "Finanzas personales inteligentes",
+  description: "Las cuentas de tu casa y de tu negocio: ingresos, gastos, tarjetas, dólares y ventas.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

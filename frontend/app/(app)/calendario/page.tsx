@@ -68,7 +68,7 @@ function AddReminderModal({
     try {
       await onSave(title.trim(), dateStr);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, "Error al crear el recordatorio"));
+      setError(getErrorMessage(err, "No se pudo guardar el recordatorio. Probá de nuevo."));
     }
     setSaving(false);
   };
@@ -78,7 +78,7 @@ function AddReminderModal({
       <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground">Nuevo recordatorio</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
@@ -91,13 +91,13 @@ function AddReminderModal({
             <DateField required value={dateStr} onChange={setDateStr} />
           </div>
           <p className="text-xs text-muted-foreground/70">
-            Se te va a avisar por WhatsApp ese día (si tenés tu WhatsApp vinculado en Configuración).
+            Ese día te llega un WhatsApp, si vinculaste tu número en Configuración.
           </p>
           {error && <p className="text-xs text-destructive">{error}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
             <Button type="submit" disabled={saving}>
-              {saving ? "Guardando..." : "Guardar"}
+              {saving ? "Guardando…" : "Guardar recordatorio"}
             </Button>
           </div>
         </form>
@@ -132,7 +132,7 @@ function DayDetail({
 
       {events.length === 0 ? (
         <p className="text-sm text-muted-foreground/70">
-          {isCurrent ? "Hoy no vence ni cierra nada, y no tenés recordatorios." : "Sin eventos este día."}
+          {isCurrent ? "Hoy no vence ni cierra nada, y no tenés recordatorios." : "Ese día no vence ni cierra nada, y no hay recordatorios."}
         </p>
       ) : (
         <div className="space-y-2">
@@ -250,11 +250,11 @@ export default function CalendarioPage() {
 
       <Card variant="hero" className="p-3 md:p-4" data-tour="cal-grid">
         <div className="flex items-center justify-between mb-3">
-          <button onClick={() => setMonth(subMonths(month, 1))} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">
+          <button onClick={() => setMonth(subMonths(month, 1))} aria-label="Mes anterior" className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">
             <ChevronLeft className="w-5 h-5" />
           </button>
           <p className="font-semibold text-foreground capitalize">{format(month, "MMMM yyyy", { locale: es })}</p>
-          <button onClick={() => setMonth(addMonths(month, 1))} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">
+          <button onClick={() => setMonth(addMonths(month, 1))} aria-label="Mes siguiente" className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>

@@ -30,7 +30,7 @@ import { EXPENSES_BUSINESS_INTRO_STEPS } from "@/components/business/tours";
 const EXPENSES_TOUR_STEPS: Step[] = [
   {
     target: "[data-tour='expenses-add']",
-    content: "Con este botón registrás un nuevo egreso, eligiendo una categoría.",
+    content: "Con este botón cargás un egreso: en efectivo, con tarjeta o compartido.",
     placement: "bottom",
     skipBeacon: true,
   },
@@ -73,7 +73,7 @@ function EntryDetailModal({
             <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: entry.category.color || "#6366f1" }} />
             <h3 className="font-semibold text-foreground">{entry.description || entry.category.name}</h3>
           </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
         <div className="divide-y text-sm">
           <div className="flex justify-between py-2">
@@ -98,7 +98,7 @@ function EntryDetailModal({
           )}
           <div className="flex justify-between py-2">
             <span className="font-medium text-foreground">Monto</span>
-            <span className="font-bold text-rose-600 text-base">{formatARS(entry.amount)}</span>
+            <span className="font-bold text-rose-600 text-base">{entry.currency === "USD" ? formatUSD(entry.amount) : formatARS(entry.amount)}</span>
           </div>
           {isCreditCard && (
             <div className="flex justify-between py-2">
@@ -117,7 +117,7 @@ function EntryDetailModal({
         </div>
         {isCreditCard ? (
           <div className="pt-1">
-            <p className="text-xs text-muted-foreground mb-2 text-center">Este gasto es de tarjeta. Para editar o eliminar, ir al resumen.</p>
+            <p className="text-xs text-muted-foreground mb-2 text-center">Este gasto es de tarjeta: se edita o se elimina desde su resumen.</p>
             <Button onClick={onViewStatement} className="w-full">
               <ExternalLink className="w-4 h-4" /> Ver en resumen
             </Button>
@@ -265,7 +265,7 @@ export default function ExpensesPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Eliminar este egreso?")) return;
+    if (!confirm("¿Eliminar este egreso?")) return;
     await api.delete(`/expenses/entries/${id}`);
     setSelected(s => { const n = new Set(s); n.delete(id); return n; });
     setDetailEntry(null);
@@ -279,7 +279,7 @@ export default function ExpensesPage() {
       setDetailEntry(null);
       router.push(`/tarjetas/${card_id}/${statement_id}`);
     } catch {
-      alert("No se encontro el resumen de tarjeta.");
+      alert("No se encontró el resumen de tarjeta de este gasto.");
     }
   };
 
@@ -295,7 +295,7 @@ export default function ExpensesPage() {
     setSelected(s => s.size === selectableEntries.length ? new Set() : new Set(selectableEntries.map(e => e.id)));
 
   const handleBulkDelete = async () => {
-    if (!confirm(`Eliminar ${selected.size} egreso${selected.size !== 1 ? "s" : ""}?`)) return;
+    if (!confirm(`¿Eliminar ${selected.size} egreso${selected.size !== 1 ? "s" : ""}?`)) return;
     setBulkDeleting(true);
     await Promise.all([...selected].map(id => api.delete(`/expenses/entries/${id}`)));
     setSelected(new Set());
@@ -324,11 +324,11 @@ export default function ExpensesPage() {
           ) : (
             <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
               <CalendarDays className="w-4 h-4 text-primary shrink-0" />
-              <button onClick={prev} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+              <button onClick={prev} aria-label="Mes anterior" className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
-              <button onClick={next} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+              <button onClick={next} aria-label="Mes siguiente" className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>

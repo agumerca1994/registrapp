@@ -90,7 +90,7 @@ export default function OnboardingPage() {
             <h1 className="text-2xl font-display font-bold text-foreground">Vinculá tu WhatsApp</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            Para terminar de configurar tu cuenta, necesitamos vincular y verificar tu número de WhatsApp. Este paso es obligatorio para poder recibir invitaciones y recordatorios.
+            Falta un paso: vincular tu número de WhatsApp. Por ahí te llegan los recordatorios de pago, y podés cargar movimientos mandando un mensaje.
           </p>
           <WhatsAppVerifyForm onVerified={handleWhatsAppVerified} onSkip={handleWhatsAppVerified} />
         </Card>
@@ -195,7 +195,7 @@ export default function OnboardingPage() {
           {error && <p className="text-destructive text-sm">{error}</p>}
 
           <Button type="submit" disabled={loading}>
-            {loading ? "Configurando..." : mode === "create" ? (business ? "Crear negocio" : "Crear hogar") : "Unirme"}
+            {loading ? "Configurando…" : mode === "create" ? (business ? "Crear negocio" : "Crear hogar") : "Unirme"}
           </Button>
         </form>
       </Card>

@@ -64,7 +64,7 @@ async def resolve_category_id(
     if category_id is None:
         if currency == "USD":
             return await get_or_create_usd_category(tenant_id, db)
-        raise HTTPException(status_code=422, detail="category_id es requerido para gastos en ARS")
+        raise HTTPException(status_code=422, detail="Elegí una categoría: los gastos en pesos la necesitan")
     from app.routers.expenses import assert_owns_category  # import tardío: ciclo router↔service
 
     await assert_owns_category(category_id, tenant_id, db)

@@ -2,7 +2,7 @@
   "id": "/",
   "name": "RegistrApp",
   "short_name": "RegistrApp",
-  "description": "Finanzas personales inteligentes",
+  "description": "Las cuentas de tu casa y de tu negocio: ingresos, gastos, tarjetas, dólares y ventas.",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",

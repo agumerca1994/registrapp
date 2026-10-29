@@ -25,11 +25,11 @@ import {
 interface Category { id: number; name: string; color?: string; is_fixed: boolean; }
 
 const REASON_TEXTS: Record<string, string> = {
-  no_parser: "Todavía no sé leer los resúmenes de este banco automáticamente.",
-  totals_mismatch: "Leí el resumen pero las sumas no coinciden con los totales del banco, así que no propongo cambios.",
+  no_parser: "La app todavía no lee resúmenes de este banco.",
+  totals_mismatch: "Los consumos que se leyeron no suman el total que imprimió el banco, así que no se propone ningún cambio.",
   encrypted: "El PDF tiene contraseña. Descargalo sin contraseña y volvé a subirlo.",
-  no_text: "No pude extraer texto del archivo.",
-  no_items: "Reconocí el resumen pero no encontré ningún consumo adentro, así que no propongo cambios.",
+  no_text: "No se pudo sacar texto del archivo. Pasa con los PDF escaneados o armados con fotos.",
+  no_items: "Se reconoció el banco, pero no apareció ningún consumo en el resumen, así que no se propone ningún cambio.",
 };
 
 /** La cadena de una moneda: diferencia, explicada, sin explicar. */
@@ -146,7 +146,7 @@ export default function ConciliarDetailPage() {
       const otros = d.skipped.length - sinCat;
       if (sinCat) parts.push(`${sinCat} sin categoría (elegí una y volvé a aplicar)`);
       if (otros) parts.push(`${otros} ${otros === 1 ? "salteado" : "salteados"}`);
-      if (d.propagated_future_cuotas) parts.push(`${d.propagated_future_cuotas} cuotas futuras propagadas`);
+      if (d.propagated_future_cuotas) parts.push(`${d.propagated_future_cuotas} cuotas siguientes cargadas en sus resúmenes`);
       setApplyMsg(prev => ({ ...prev, [klass]: parts.join(" · ") }));
       setError(null);
       await load();
@@ -214,7 +214,7 @@ export default function ConciliarDetailPage() {
   if (!features.reconcile) {
     return (
       <div className="max-w-4xl">
-        <p className="text-sm text-muted-foreground">Esta función no está disponible.</p>
+        <p className="text-sm text-muted-foreground">Subir resumen no está disponible por ahora.</p>
       </div>
     );
   }
@@ -296,7 +296,7 @@ export default function ConciliarDetailPage() {
               </p>
               {interested ? (
                 <Button variant="outline" disabled>
-                  <Check className="w-4 h-4" /> ¡Anotado! Te vamos a avisar.
+                  <Check className="w-4 h-4" /> Anotamos tu interés
                 </Button>
               ) : (
                 <Button variant="outline" onClick={sendInterest} disabled={sendingInterest}>
@@ -341,7 +341,7 @@ export default function ConciliarDetailPage() {
                 }`}>
                 <Plus className="w-4 h-4 text-muted-foreground shrink-0" />
                 <span className="flex-1 font-medium text-foreground">
-                  {session.choices.cards.length ? "Es otra tarjeta — crearla" : "Crear la tarjeta de este resumen"}
+                  {session.choices.cards.length ? "Es otra tarjeta: crearla" : "Crear la tarjeta de este resumen"}
                 </span>
               </button>
               {newCardOpen && (
@@ -383,7 +383,7 @@ export default function ConciliarDetailPage() {
           <div className="flex justify-end pt-1">
             <Button onClick={confirmChoice}
               disabled={choosing || (selCard == null && selStmt == null && !(newCardOpen && newCardAlias.trim()))}>
-              {choosing && <Loader2 className="w-4 h-4 animate-spin" />} Confirmar
+              {choosing && <Loader2 className="w-4 h-4 animate-spin" />} Comparar con lo cargado
             </Button>
           </div>
         </Card>

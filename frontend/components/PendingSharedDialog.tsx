@@ -22,7 +22,7 @@ const money = (amount: number, currency: "ARS" | "USD") =>
 
 function sharedBy(exp: PendingShared): string {
   const creator = exp.splits.find(s => s.user_id === exp.created_by_user_id);
-  return creator?.member_name || "Alguien de tu hogar";
+  return creator?.member_name || "Te lo compartieron";
 }
 
 /**
@@ -138,7 +138,7 @@ export function PendingSharedDialog() {
         {/* Aceptar crea el gasto en tus egresos, y eso no se ve en ningún lado
             del diálogo — conviene decirlo antes y no después. */}
         <p className="text-xs text-muted-foreground">
-          Si aceptás, se agrega a tus egresos por tu parte.
+          Si aceptás, tu parte se suma a tus Egresos.
         </p>
 
         {error && (
@@ -163,7 +163,7 @@ export function PendingSharedDialog() {
             <button
               onClick={() => setIndex(i => Math.max(0, i - 1))}
               disabled={index === 0}
-              aria-label="Anterior"
+              aria-label="Gasto anterior"
               className="p-1 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-30 disabled:hover:bg-transparent"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -174,7 +174,7 @@ export function PendingSharedDialog() {
             <button
               onClick={() => setIndex(i => Math.min(pending.length - 1, i + 1))}
               disabled={index >= pending.length - 1}
-              aria-label="Siguiente"
+              aria-label="Gasto siguiente"
               className="p-1 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-30 disabled:hover:bg-transparent"
             >
               <ChevronRight className="w-4 h-4" />

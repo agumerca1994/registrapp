@@ -80,7 +80,7 @@ export default function LoginPage() {
 
         <h1 className="mt-7 font-display font-bold text-4xl tracking-tight">RegistrApp</h1>
         <p className="mt-3 text-[15px] text-white/80 leading-snug max-w-[17rem]">
-          Tus finanzas del hogar, claras y al día
+          Las cuentas de tu casa o de tu negocio, al día
         </p>
 
         {inAppBrowser && (
@@ -107,7 +107,7 @@ export default function LoginPage() {
           className={`${inAppBrowser ? "mt-5" : "mt-12"} w-full h-14 gap-3 text-base font-semibold`}
         >
           <GoogleIcon />
-          {entering ? "Entrando…" : "Ingresa con tu cuenta de Google"}
+          {entering ? "Entrando…" : "Entrá con tu cuenta de Google"}
         </Button>
       </main>
     </div>

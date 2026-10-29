@@ -65,7 +65,7 @@ class SharedExpenseUpdate(BaseModel):
     def validate_splits(self) -> "SharedExpenseUpdate":
         if self.splits is not None:
             if self.total_amount is None:
-                raise ValueError("total_amount es requerido al editar los montos de los participantes")
+                raise ValueError("Para cambiar los montos de los participantes también hace falta el total")
             total_splits = sum(s.amount for s in self.splits)
             if abs(total_splits - self.total_amount) > Decimal("0.01"):
                 raise ValueError(
@@ -154,5 +154,5 @@ class ConvertToArsBody(BaseModel):
             if self.rate <= 0:
                 raise ValueError("La cotización debe ser mayor a 0")
             if self.rate_type not in RATE_TYPES:
-                raise ValueError(f"rate_type debe ser uno de: {', '.join(RATE_TYPES)}")
+                raise ValueError(f"El tipo de cotización tiene que ser uno de: {', '.join(RATE_TYPES)}")
         return self

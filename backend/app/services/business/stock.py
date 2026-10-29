@@ -80,7 +80,7 @@ async def record_movement(
 ) -> StockMovement:
     """Producción, merma o ingreso a mano. `qty` va en positivo: el tipo decide el signo."""
     if kind not in MANUAL_KINDS:
-        raise HTTPException(status_code=422, detail=f"kind debe ser uno de {tuple(MANUAL_KINDS)}")
+        raise HTTPException(status_code=422, detail=f"El tipo de movimiento tiene que ser uno de: {', '.join(MANUAL_KINDS)}")
     _positive(qty)
     if unit_cost is not None and unit_cost < 0:
         raise HTTPException(status_code=422, detail="El costo no puede ser negativo")

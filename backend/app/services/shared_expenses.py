@@ -260,7 +260,7 @@ async def load_owned(user: User, shared_id: int, db: AsyncSession, action: str) 
     if not shared:
         raise HTTPException(status_code=404, detail="Gasto compartido no encontrado")
     if shared.created_by_user_id != user.id:
-        raise HTTPException(status_code=403, detail=f"Solo el creador puede {action} este gasto")
+        raise HTTPException(status_code=403, detail=f"Sólo quien creó este gasto lo puede {action}")
     return shared
 
 
@@ -274,7 +274,7 @@ async def create_shared(user: User, body: SharedExpenseCreate, db: AsyncSession)
         if body.currency == "USD":
             category_id = await get_or_create_usd_category(user.tenant_id, db)
         else:
-            raise HTTPException(status_code=422, detail="category_id es requerido para gastos en ARS")
+            raise HTTPException(status_code=422, detail="Elegí una categoría: los gastos en pesos la necesitan")
     else:
         await assert_owns_category(body.category_id, user.tenant_id, db)
         category_id = body.category_id
@@ -372,7 +372,7 @@ async def update_shared(user: User, shared_id: int, body: SharedExpenseUpdate, d
     if shared.credit_card_item_id is not None:
         raise HTTPException(
             status_code=400,
-            detail="Este gasto viene de un resumen de tarjeta — editalo desde Tarjetas",
+            detail="Este gasto viene de un resumen de tarjeta: editalo desde Tarjetas",
         )
 
     touches_money = (
@@ -381,7 +381,7 @@ async def update_shared(user: User, shared_id: int, body: SharedExpenseUpdate, d
     if touches_money and shared.locked:
         raise HTTPException(
             status_code=400,
-            detail="Ya fue aceptado por otro participante — solo se puede editar el título y las fechas",
+            detail="Otro participante ya lo aceptó, así que sólo se pueden editar el título y las fechas",
         )
     # Mismo agujero que tenía el alta: el egreso de cada participante embebe la
     # categoría, así que un id ajeno se leía de vuelta. Antes de tocar nada.
@@ -525,7 +525,7 @@ async def accept_shared(user: User, shared_id: int, db: AsyncSession) -> SharedE
     # link — the link is now a shortcut, not the only way in.
     split = my_split(user, shared.splits)
     if not split or split.status != "pending":
-        raise HTTPException(status_code=400, detail="No hay un split pendiente para este usuario")
+        raise HTTPException(status_code=400, detail="No tenés una parte pendiente en este gasto")
 
     await accept_one_split(user, shared, split, db)
 
@@ -554,7 +554,7 @@ async def reject_shared(user: User, shared_id: int, db: AsyncSession) -> SharedE
 
     split = my_split(user, shared.splits)
     if not split or split.status != "pending":
-        raise HTTPException(status_code=400, detail="No hay un split pendiente para este usuario")
+        raise HTTPException(status_code=400, detail="No tenés una parte pendiente en este gasto")
 
     split.status = "rejected"
     consume_invite(user, split)

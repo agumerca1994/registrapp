@@ -18,7 +18,7 @@ _SIGN_RULES: dict[str, int | None] = {
 def _validate_operation(op_type: str, foreign_amount: Decimal, ars_amount: Decimal | None,
                         rate: Decimal | None, rate_type: str | None) -> None:
     if op_type not in OP_TYPES:
-        raise ValueError(f"op_type debe ser uno de: {', '.join(OP_TYPES)}")
+        raise ValueError("Tipo de operación inválido: tiene que ser compra, venta, tenencia inicial o ajuste.")
     if foreign_amount == 0:
         raise ValueError("El monto no puede ser cero")
 
@@ -26,7 +26,7 @@ def _validate_operation(op_type: str, foreign_amount: Decimal, ars_amount: Decim
     if expected == 1 and foreign_amount < 0:
         raise ValueError("El monto debe ser positivo para una compra o tenencia inicial")
     if expected == -1 and foreign_amount > 0:
-        raise ValueError("El monto de una venta debe ser negativo (sale divisa)")
+        raise ValueError("En una venta el monto va en negativo, porque sale divisa")
 
     if op_type in ("buy", "sell"):
         if ars_amount is None or ars_amount <= 0:
@@ -40,7 +40,7 @@ def _validate_operation(op_type: str, foreign_amount: Decimal, ars_amount: Decim
     if rate is not None and rate <= 0:
         raise ValueError("La cotización debe ser mayor a 0")
     if rate_type is not None and rate_type not in RATE_TYPES:
-        raise ValueError(f"rate_type debe ser uno de: {', '.join(RATE_TYPES)}")
+        raise ValueError(f"El tipo de cotización tiene que ser uno de: {', '.join(RATE_TYPES)}")
 
 
 class CurrencyOperationCreate(BaseModel):
@@ -115,7 +115,7 @@ class CurrencySettingsUpdate(BaseModel):
         # source — there's no MacroVariable column behind it.
         valid = [r for r in RATE_TYPES if r != "personalizado"]
         if self.fx_rate_type not in valid:
-            raise ValueError(f"fx_rate_type debe ser uno de: {', '.join(valid)}")
+            raise ValueError(f"El tipo de cotización tiene que ser uno de: {', '.join(valid)}")
         return self
 
 

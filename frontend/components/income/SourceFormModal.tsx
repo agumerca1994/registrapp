@@ -68,9 +68,9 @@ export function SourceFormModal({ source, onSaved, onClose }: {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (rows.some(r => !r.name.trim())) { setError("Cada campo necesita un nombre"); return; }
+    if (rows.some(r => !r.name.trim())) { setError("Cada campo necesita un nombre."); return; }
     const names = rows.map(r => r.name.trim().toLowerCase());
-    if (new Set(names).size !== names.length) { setError("Hay dos campos con el mismo nombre"); return; }
+    if (new Set(names).size !== names.length) { setError("Hay dos campos con el mismo nombre."); return; }
     setSaving(true);
     setError("");
     const body = {
@@ -95,7 +95,7 @@ export function SourceFormModal({ source, onSaved, onClose }: {
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground">{editing ? "Editar fuente" : "Nueva fuente"}</h3>
-          <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          <button type="button" onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={submit} className="space-y-4">
           <FormGrid>
@@ -170,7 +170,7 @@ export function SourceFormModal({ source, onSaved, onClose }: {
 
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-            <Button type="submit" disabled={saving}>{saving ? "Guardando..." : editing ? "Guardar" : "Crear"}</Button>
+            <Button type="submit" disabled={saving}>{saving ? "Guardando…" : editing ? "Guardar fuente" : "Crear fuente"}</Button>
           </div>
         </form>
       </Card>
@@ -192,7 +192,7 @@ export function SourcesListModal({ sources, onEdit, onNew, onClose }: {
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground">Fuentes de ingreso</h3>
-          <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+          <button type="button" onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
         {sources.length === 0 ? (
           <p className="text-sm text-muted-foreground">Todavía no hay fuentes.</p>

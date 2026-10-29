@@ -38,21 +38,21 @@ function buildHouseholdInviteMessage(name: string, code: string, appUrl: string,
   // el alta de negocios abierta.
   const joinLabel = features.businessSignup ? "Unirme con un código" : "Unirme a un hogar";
   return [
-    "Hola! " + name + " te invita a sumarte a su " + (business ? "negocio" : "hogar") + " en RegistrApp.",
+    "¡Hola! " + name + " te invita a sumarte a su " + (business ? "negocio" : "hogar") + " en RegistrApp.",
     "",
     "Para unirte:",
-    "1. Ingresa a " + appUrl,
-    "2. Inicia sesión con Google",
-    "3. Elige la opción " + joinLabel,
-    "4. Ingresa el código: " + code,
+    "1. Entrá a " + appUrl,
+    "2. Iniciá sesión con Google",
+    "3. Elegí la opción " + joinLabel,
+    "4. Escribí el código: " + code,
   ].join(String.fromCharCode(10));
 }
 
 function buildFriendInviteMessage(name: string, appUrl: string): string {
   return [
-    "Hola! " + name + " te invita a probar RegistrApp, una app para llevar tus ingresos, gastos y gastos compartidos.",
+    "¡Hola! " + name + " te invita a probar RegistrApp, una app para llevar tus ingresos, gastos y gastos compartidos.",
     "",
-    "Entra a " + appUrl + " e inicia sesión con Google para crear tu cuenta.",
+    "Entrá a " + appUrl + " e iniciá sesión con Google para crear tu cuenta.",
   ].join(String.fromCharCode(10));
 }
 
@@ -176,7 +176,7 @@ function InviteFriendSection() {
               className={`${FIELD} flex-1 mt-0`} />
           </div>
           <Button onClick={sendWhatsApp} disabled={!localPhone.trim()}>
-            Enviar invitacion
+            Mandar invitación
           </Button>
           <p className="text-xs text-muted-foreground">Para Argentina: sin 0 inicial ni 15.</p>
         </div>
@@ -200,7 +200,7 @@ function WhatsAppSection() {
       await api.patch("/auth/me", { whatsapp_notifications: !appUser?.whatsapp_notifications });
       await refreshUser();
     } catch (e: unknown) {
-      setError(getErrorMessage(e, "No se pudo guardar"));
+      setError(getErrorMessage(e, "No se pudo guardar la preferencia"));
     } finally {
       setSavingPref(false);
     }
@@ -225,7 +225,7 @@ function WhatsAppSection() {
       await api.delete("/auth/me/whatsapp");
       await refreshUser();
     } catch (e: unknown) {
-      setError(getErrorMessage(e, "Error al desvincular"));
+      setError(getErrorMessage(e, "No se pudo desvincular el número"));
     } finally {
       setLoading(false);
     }
@@ -239,7 +239,7 @@ function WhatsAppSection() {
           <h3 className="font-semibold text-foreground">WhatsApp</h3>
         </div>
         <p className="text-sm text-muted-foreground">
-          Enviale mensajes al bot para registrar tus movimientos, ej:{" "}
+          Mandale un mensaje al bot para cargar un gasto, por ejemplo:{" "}
           <span className="font-mono bg-muted px-1 rounded">15000 supermercado</span>
         </p>
       </div>
@@ -381,7 +381,7 @@ export default function SettingsPage() {
           <div className="flex gap-2 shrink-0">
             <Button variant="outline" onClick={copyId}>
               {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-              {copied ? "Copiado!" : "Copiar"}
+              {copied ? "Copiado" : "Copiar"}
             </Button>
             <Button variant="outline" onClick={shareHouseholdCodeByWhatsApp} className="text-emerald-700">
               <MessageCircle className="w-4 h-4" />
@@ -475,7 +475,7 @@ export default function SettingsPage() {
 
       <Card className="p-6 space-y-2">
         <h3 className="font-semibold text-foreground">Guía de la app</h3>
-        <p className="text-sm text-muted-foreground">¿Necesitás ayuda? Reiniciá la guía de funcionalidades.</p>
+        <p className="text-sm text-muted-foreground">Vuelven a aparecer las explicaciones de cada pantalla y las novedades.</p>
         <Button
           variant="outline"
           onClick={() => {

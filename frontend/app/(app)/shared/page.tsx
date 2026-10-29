@@ -96,7 +96,7 @@ function participantHint(p: ParticipantRow): string {
     const num = `${p.invite_phone_prefix}${p.invite_phone_local}`;
     return `Se le invita al +${num.replace(/^\+/, "")}`;
   }
-  if (p.member_name) return "Sin cuenta — sólo para anotar tu parte";
+  if (p.member_name) return "Sin cuenta, sólo para anotar tu parte";
   return "";
 }
 
@@ -266,7 +266,7 @@ function EditExpenseModal({
       await api.patch(`/shared-expenses/${expense.id}`, body);
       onSaved();
     } catch (err: unknown) {
-      setError(getErrorMessage(err, "Error al editar el gasto"));
+      setError(getErrorMessage(err, "No se pudieron guardar los cambios"));
     } finally {
       setSaving(false);
     }
@@ -277,14 +277,14 @@ function EditExpenseModal({
       <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground">Editar gasto</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {!unlocked && (
           <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-            Ya fue aceptado por otro participante — solo se puede corregir el título y las fechas.
+            Ya lo aceptó otro participante: sólo se pueden corregir el título y las fechas.
           </p>
         )}
 
@@ -335,7 +335,7 @@ function EditExpenseModal({
                   ))}
                 </div>
                 <p className={`text-xs mt-1.5 ${splitsClose ? "text-muted-foreground" : "text-destructive"}`}>
-                  Distribuido: {fmtByCurrency(splitsSum, expense.currency)} / Total: {fmtByCurrency(total, expense.currency)}
+                  Repartido: {fmtByCurrency(splitsSum, expense.currency)} de {fmtByCurrency(total, expense.currency)}
                 </p>
               </div>
             </>
@@ -432,7 +432,7 @@ function ConvertToArsModal({
       });
       onSaved();
     } catch (err: unknown) {
-      setError(getErrorMessage(err, "Error al convertir"));
+      setError(getErrorMessage(err, "No se pudo convertir a pesos"));
     } finally { setSaving(false); }
   }
 
@@ -444,7 +444,7 @@ function ConvertToArsModal({
       });
       onSaved();
     } catch (err: unknown) {
-      setError(getErrorMessage(err, "Error al revertir"));
+      setError(getErrorMessage(err, "No se pudo volver a dólares"));
     } finally { setSaving(false); }
   }
 
@@ -453,7 +453,7 @@ function ConvertToArsModal({
       <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground">Convertir a pesos</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -478,7 +478,7 @@ function ConvertToArsModal({
             <div key={s.id} className="flex items-center justify-between text-sm gap-2">
               <span className="text-muted-foreground truncate">{s.member_name}</span>
               <span className="font-medium text-foreground whitespace-nowrap">
-                {formatUSD(s.amount)} → {rateNum > 0 ? formatARS(Number(s.amount) * rateNum) : "—"}
+                {formatUSD(s.amount)} → {rateNum > 0 ? formatARS(Number(s.amount) * rateNum) : "-"}
               </span>
             </div>
           ))}
@@ -494,7 +494,7 @@ function ConvertToArsModal({
           )}
           <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
           <Button type="button" onClick={handleConfirm} disabled={saving || rateNum <= 0}>
-            {saving ? "Guardando..." : "Confirmar"}
+            {saving ? "Convirtiendo..." : "Convertir"}
           </Button>
         </div>
       </Card>
@@ -697,7 +697,7 @@ export default function SharedExpensesPage() {
     e.preventDefault();
     setFormError("");
     if (overBudget) {
-      setFormError("La division supera el monto total"); return;
+      setFormError("La división supera el monto total"); return;
     }
     const splits = participants.map((p, idx) => ({
       user_id: p.type === "member" ? p.user_id : null,
@@ -721,7 +721,7 @@ export default function SharedExpensesPage() {
       return;
     }
     if (splits.some(s => !s.member_name.trim())) {
-      setFormError("Todos los participantes deben tener nombre"); return;
+      setFormError("Hay un participante sin elegir"); return;
     }
     setSaving(true);
     try {
@@ -733,7 +733,7 @@ export default function SharedExpensesPage() {
       });
       resetForm(); setShowForm(false); await load();
     } catch (err: unknown) {
-      setFormError(getErrorMessage(err, "Error al crear el gasto compartido"));
+      setFormError(getErrorMessage(err, "No se pudo crear el gasto compartido"));
     } finally { setSaving(false); }
   }
 
@@ -748,13 +748,13 @@ export default function SharedExpensesPage() {
   async function handleDelete(sharedId: number, isGrouped: boolean) {
     const msg = isGrouped
       ? "Se eliminará esta cuota y todas las cuotas futuras del plan. Las cuotas ya pasadas no se van a tocar. ¿Continuar?"
-      : "Eliminar este gasto compartido? Se borraran todos los egresos parciales asociados.";
+      : "¿Eliminar este gasto compartido? También se borra la parte de cada participante en Egresos.";
     if (!confirm(msg)) return;
     try {
       await api.delete(`/shared-expenses/${sharedId}`);
       await load();
     } catch (err) {
-      alert(getErrorMessage(err, "No se pudo eliminar"));
+      alert(getErrorMessage(err, "No se pudo eliminar el gasto compartido"));
     }
   }
 
@@ -846,7 +846,7 @@ export default function SharedExpensesPage() {
 
   function shareByWhatsApp() {
     if (!selectedPerson) return;
-    const lines = [`📊 Gastos compartidos con ${selectedPerson.name} — ${personPeriodLabel}`];
+    const lines = [`Gastos compartidos con ${selectedPerson.name}, ${personPeriodLabel}`];
 
     if (owedToMeExpenses.length > 0) {
       lines.push("", "Te debe:");
@@ -934,7 +934,7 @@ export default function SharedExpensesPage() {
                       {isCreator && (
                         <DropdownMenu.Root>
                           <DropdownMenu.Trigger asChild>
-                            <button className="p-1 text-muted-foreground hover:text-foreground transition-colors outline-none" title="Más acciones">
+                            <button className="p-1 text-muted-foreground hover:text-foreground transition-colors outline-none" title="Más acciones" aria-label="Más acciones">
                               <MoreVertical className="w-3.5 h-3.5" />
                             </button>
                           </DropdownMenu.Trigger>
@@ -1020,7 +1020,7 @@ export default function SharedExpensesPage() {
             onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-foreground">Nuevo gasto compartido</h3>
-            <button type="button" onClick={() => setShowForm(false)}
+            <button type="button" onClick={() => setShowForm(false)} aria-label="Cerrar"
               className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -1034,7 +1034,7 @@ export default function SharedExpensesPage() {
             </div>
 
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Monto ($) *</label>
+              <label className="text-xs font-medium text-muted-foreground">Monto *</label>
               <input
                 required
                 type="text"
@@ -1063,7 +1063,7 @@ export default function SharedExpensesPage() {
                   <label className="text-xs font-medium text-muted-foreground">Fecha de pago *</label>
                   <DateField required value={paymentDate} onChange={setPaymentDate} />
                   <p className="text-xs text-muted-foreground/70 mt-1">
-                    Se usa para saber en qué mes aparece este gasto en la vista por persona — no afecta tus Egresos.
+                    Se usa para saber en qué mes aparece este gasto en la vista por persona. No cambia tus Egresos.
                   </p>
                 </div>
               )}
@@ -1077,7 +1077,7 @@ export default function SharedExpensesPage() {
                   return !v;
                 })}
                   className="text-xs text-primary hover:underline">
-                  + Crear
+                  + Nueva categoría
                 </button>
               </div>
               {showCatForm && (
@@ -1086,7 +1086,7 @@ export default function SharedExpensesPage() {
                     <input
                       value={catName}
                       onChange={e => setCatName(e.target.value)}
-                      placeholder="Nombre categoría"
+                      placeholder="Nombre de la categoría"
                       className={`${FIELD} mt-0 flex-1`}
                     />
                     <input type="color" value={catColor}
@@ -1098,7 +1098,7 @@ export default function SharedExpensesPage() {
                       className="text-xs border px-2 py-1 rounded-lg hover:bg-card">Cancelar</button>
                     <button type="button" disabled={savingCat || !catName.trim()} onClick={saveCat}
                       className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded-lg disabled:opacity-60">
-                      Guardar
+                      Crear
                     </button>
                   </div>
                 </div>
@@ -1108,13 +1108,13 @@ export default function SharedExpensesPage() {
                 options={categories.map(c => ({ value: String(c.id), label: c.name }))} />
               {!showCatForm && categories.length === 0 && (
                 <p className="text-xs text-amber-600 mt-1">
-                  No hay categorías. Usa <strong>+ Crear</strong> para agregar una.
+                  Todavía no hay categorías. Creá una con <strong>+ Nueva categoría</strong>.
                 </p>
               )}
             </div>
 
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Division *</label>
+              <label className="text-xs font-medium text-muted-foreground">División *</label>
               <SelectField value={splitType} onChange={v => handleSplitTypeChange(v as "equal" | "custom")}
                 options={[
                   { value: "equal", label: "Equitativa" },
@@ -1128,7 +1128,7 @@ export default function SharedExpensesPage() {
               <label className="text-xs font-medium text-muted-foreground">Participantes *</label>
               <button type="button" onClick={addParticipant}
                 className="text-xs text-primary hover:underline flex items-center gap-1">
-                <Plus className="w-3 h-3" /> Agregar
+                <Plus className="w-3 h-3" /> Agregar persona
               </button>
             </div>
 
@@ -1170,7 +1170,7 @@ export default function SharedExpensesPage() {
 
                     {splitType === "custom" ? (
                       <div>
-                        <label className="text-xs text-muted-foreground">Monto ($)</label>
+                        <label className="text-xs text-muted-foreground">Monto</label>
                         <input
                           type="text"
                           inputMode="decimal"
@@ -1205,8 +1205,8 @@ export default function SharedExpensesPage() {
             {splitType === "custom" && total > 0 && (
               <div className={`mt-2 text-xs rounded-lg px-3 py-2 ${overBudget ? "bg-destructive/10 text-destructive font-medium" : "bg-accent text-primary"}`}>
                 {overBudget
-                  ? `La division supera el total: asignaste ${formatARS(manualSum)} de ${formatARS(total)}`
-                  : `Distribuido: ${formatARS(assignedSum)} | Restante: ${formatARS(total - assignedSum)}`
+                  ? `La división supera el total: asignaste ${formatARS(manualSum)} de ${formatARS(total)}`
+                  : `Repartido: ${formatARS(assignedSum)} · Falta repartir: ${formatARS(total - assignedSum)}`
                 }
               </div>
             )}
@@ -1218,7 +1218,7 @@ export default function SharedExpensesPage() {
           <div className="flex gap-2 justify-end">
             <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
             <Button type="submit" disabled={saving || overBudget}>
-              {saving ? "Generando..." : "Generar gasto"}
+              {saving ? "Compartiendo..." : "Compartir gasto"}
             </Button>
           </div>
           </form>
@@ -1231,11 +1231,11 @@ export default function SharedExpensesPage() {
           <div className="flex justify-end">
             <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
               <CalendarDays className="w-4 h-4 text-primary shrink-0" />
-              <button onClick={personPrev} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+              <button onClick={personPrev} aria-label="Mes anterior" className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{personPeriodLabel}</span>
-              <button onClick={personNext} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+              <button onClick={personNext} aria-label="Mes siguiente" className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -1306,7 +1306,7 @@ export default function SharedExpensesPage() {
       ) : expenses.length === 0 ? (
         <Card className="p-8 text-center text-muted-foreground text-sm">
           <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
-          No hay gastos compartidos registrados.
+          Todavía no hay gastos compartidos. Con el botón + cargás uno y elegís con quién dividirlo.
         </Card>
       ) : (
         <div className="space-y-3">
@@ -1352,7 +1352,7 @@ export default function SharedExpensesPage() {
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {isGrouped
-                          ? `${fmtDate(cuotas[0].expense_date)} — ${fmtDate(cuotas[cuotas.length - 1].expense_date)}`
+                          ? `${fmtDate(cuotas[0].expense_date)} a ${fmtDate(cuotas[cuotas.length - 1].expense_date)}`
                           : fmtDate(exp.expense_date)}
                       </p>
                     </div>
@@ -1361,7 +1361,7 @@ export default function SharedExpensesPage() {
                       {isCreator && (
                         <DropdownMenu.Root>
                           <DropdownMenu.Trigger asChild>
-                            <button className="p-1.5 text-muted-foreground hover:text-foreground transition-colors outline-none" title="Más acciones">
+                            <button className="p-1.5 text-muted-foreground hover:text-foreground transition-colors outline-none" title="Más acciones" aria-label="Más acciones">
                               <MoreVertical className="w-4 h-4" />
                             </button>
                           </DropdownMenu.Trigger>
@@ -1433,7 +1433,7 @@ export default function SharedExpensesPage() {
                           {split.invite_token && isCreator && (
                             <button
                               onClick={() => copyInviteLink(split.invite_token!)}
-                              title="Copiar link de invitacion"
+                              title="Copiar link de invitación" aria-label="Copiar link de invitación"
                               className={`p-1 rounded transition-colors ${copiedToken === split.invite_token ? "text-emerald-600" : "text-muted-foreground hover:text-primary"}`}
                             >
                               {copiedToken === split.invite_token
@@ -1465,7 +1465,7 @@ export default function SharedExpensesPage() {
                   )}
                   {pendingCount > 0 && isCreator && (
                     <p className="text-xs text-muted-foreground pt-1 border-t">
-                      {pendingCount} participante{pendingCount > 1 ? "s" : ""} aun no acepto
+                      {pendingCount > 1 ? `${pendingCount} participantes todavía no aceptaron` : "1 participante todavía no aceptó"}
                     </p>
                   )}
                 </Card>

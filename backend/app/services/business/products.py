@@ -18,9 +18,9 @@ from app.services.business.common import match_by_name, name_and_key
 def _check(kind: str | None = None, unit: str | None = None, price: Decimal | None = None,
            min_stock: Decimal | None = None) -> None:
     if kind is not None and kind not in PRODUCT_KINDS:
-        raise HTTPException(status_code=422, detail=f"kind debe ser uno de {PRODUCT_KINDS}")
+        raise HTTPException(status_code=422, detail=f"El tipo tiene que ser uno de: {', '.join(PRODUCT_KINDS)}")
     if unit is not None and unit not in PRODUCT_UNITS:
-        raise HTTPException(status_code=422, detail=f"unit debe ser uno de {PRODUCT_UNITS}")
+        raise HTTPException(status_code=422, detail=f"La unidad tiene que ser una de: {', '.join(PRODUCT_UNITS)}")
     if price is not None and price < 0:
         raise HTTPException(status_code=422, detail="El precio no puede ser negativo")
     if min_stock is not None and min_stock < 0:

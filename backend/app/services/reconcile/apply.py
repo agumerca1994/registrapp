@@ -114,7 +114,7 @@ async def apply_group(
     stmt = await db.get(CreditCardStatement, session.statement_id)
     card = await db.get(CreditCard, session.card_id) if session.card_id else None
     if stmt is None or card is None:
-        raise HTTPException(status_code=409, detail="La sesión no tiene resumen o tarjeta asignados")
+        raise HTTPException(status_code=409, detail="Primero elegí la tarjeta y el mes de este resumen")
 
     actions = (
         await db.scalars(
@@ -126,7 +126,7 @@ async def apply_group(
         )
     ).all()
     if not actions:
-        raise HTTPException(status_code=400, detail="No hay acciones propuestas en ese grupo")
+        raise HTTPException(status_code=400, detail="No queda nada para aplicar en ese grupo")
 
     applied_at = datetime.now()
     propagate = await is_latest_statement(db, stmt)
@@ -249,7 +249,7 @@ async def undo_last_group(db: AsyncSession, session: ReconciliationSession, user
         .limit(1)
     )
     if last is None:
-        raise HTTPException(status_code=400, detail="No hay ningún grupo aplicado para deshacer")
+        raise HTTPException(status_code=400, detail="No hay nada aplicado para deshacer")
 
     actions = (
         await db.scalars(

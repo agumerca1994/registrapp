@@ -305,7 +305,7 @@ export function ParticipantPicker({
                 onClick={() => pick({ kind: "guest", member_name: inviting.name.trim() })}
                 className="w-full text-xs text-muted-foreground hover:text-foreground"
               >
-                Agregar sin cuenta, sólo para anotar mi parte
+                Agregar sin cuenta, sólo para anotar tu parte
               </button>
             )}
           </div>
@@ -387,7 +387,7 @@ export function ParticipantPicker({
                 icon={<UserPlus className="w-4 h-4" />}
                 title={`Invitar a "${term}"`}
                 subtitle={isContactish(term)
-                  ? (term.includes("@") ? "Le compartís el gasto por mail" : "Le llega una invitación por WhatsApp")
+                  ? (term.includes("@") ? "Después le pasás vos el link de invitación" : "Le llega una invitación por WhatsApp")
                   : "Pedile el mail o el teléfono en el paso siguiente"}
                 onClick={() => startInvite(term)}
               />

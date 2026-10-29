@@ -110,7 +110,7 @@ export default function ResumenesPage() {
       await api.delete(`/reconcile/${s.id}`);
       await Promise.all([load(), refreshPending()]);
     } catch (e) {
-      setError(getErrorMessage(e, "No se pudo eliminar"));
+      setError(getErrorMessage(e, "No se pudo eliminar el resumen subido"));
     }
   };
 
@@ -128,7 +128,7 @@ export default function ResumenesPage() {
     return (
       <div className="max-w-4xl space-y-4">
         {header}
-        <p className="text-sm text-muted-foreground">Esta función no está disponible.</p>
+        <p className="text-sm text-muted-foreground">Subir resumen no está disponible por ahora.</p>
       </div>
     );
   }
@@ -140,7 +140,7 @@ export default function ResumenesPage() {
       <Card>
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           <p className="flex-1 min-w-0 text-sm text-muted-foreground">
-            Subí el PDF del resumen de tu tarjeta y RegistrApp carga, corrige y ordena tus gastos.
+            Subí el PDF del resumen de tu tarjeta. Se compara con lo que ya cargaste y no cambia nada hasta que lo confirmes.
           </p>
           <div className="self-start sm:self-auto">
             <UploadStatementButton primary />

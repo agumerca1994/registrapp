@@ -185,7 +185,7 @@ async def join_tenant(
 
     tenant = await db.scalar(select(Tenant).where(Tenant.code == body.tenant_code.strip().upper()))
     if not tenant:
-        raise HTTPException(status_code=404, detail="Codigo de hogar incorrecto")
+        raise HTTPException(status_code=404, detail="No hay ningún hogar con ese código. Revisalo y probá de nuevo.")
     # A un negocio se entra como empleado: el código circula por el mostrador,
     # y quien lo usa no tiene por qué ver los números. El dueño lo hace socio
     # (PATCH /auth/members/{id}/role).
@@ -403,7 +403,7 @@ async def link_whatsapp(
 
     if not settings.EVOLUTION_API_URL or not settings.EVOLUTION_INSTANCE:
         logger.error("Evolution API not configured")
-        raise HTTPException(status_code=503, detail="WhatsApp no esta configurado en el servidor")
+        raise HTTPException(status_code=503, detail="WhatsApp no está disponible en este momento. Probá más tarde.")
 
     from app.routers.shared_expenses import _resolve_whatsapp_jid
 
@@ -426,7 +426,7 @@ async def link_whatsapp(
                     "Evolution rechazó el código para %s: HTTP %s %s",
                     target, resp.status_code, resp.text[:200],
                 )
-                raise HTTPException(status_code=502, detail=f"Error al enviar el codigo ({resp.status_code})")
+                raise HTTPException(status_code=502, detail=f"No se pudo enviar el código ({resp.status_code}). Probá de nuevo en unos minutos.")
     except httpx.RequestError as e:
         logger.error(f"Evolution API connection error: {e}")
         raise HTTPException(status_code=502, detail="No se pudo conectar con WhatsApp")
@@ -466,7 +466,7 @@ async def verify_whatsapp(
         or not user.whatsapp_verify_expires
         or user.whatsapp_verify_expires < datetime.utcnow()
     ):
-        raise HTTPException(status_code=400, detail="Codigo incorrecto o expirado")
+        raise HTTPException(status_code=400, detail="El código es incorrecto o venció.")
 
     # Sin contador de intentos, 6 dígitos con 10 minutos de validez se agotan por
     # fuerza bruta bien dentro de la ventana.
@@ -479,7 +479,7 @@ async def verify_whatsapp(
     if not secrets.compare_digest(user.whatsapp_verify_code, body.code):
         user.whatsapp_verify_attempts += 1
         await db.commit()
-        raise HTTPException(status_code=400, detail="Codigo incorrecto o expirado")
+        raise HTTPException(status_code=400, detail="El código es incorrecto o venció.")
 
     user.whatsapp_phone = user.whatsapp_pending_phone
     user.whatsapp_pending_phone = None
@@ -584,9 +584,9 @@ async def remove_member(
 ):
     user = await db.scalar(select(User).where(User.firebase_uid == firebase_user["uid"]))
     if not user or user.role != UserRole.admin:
-        raise HTTPException(status_code=403, detail="Solo un admin puede eliminar miembros")
+        raise HTTPException(status_code=403, detail="Sólo un administrador puede eliminar miembros.")
     if user.id == member_id:
-        raise HTTPException(status_code=400, detail="No podes eliminarte a vos mismo desde aqui")
+        raise HTTPException(status_code=400, detail="No podés eliminarte a vos mismo. Para irte del hogar, tocá «Salir».")
     target = await db.scalar(
         select(User).where(User.id == member_id, User.tenant_id == user.tenant_id)
     )

@@ -196,7 +196,7 @@ export function ProfileSection() {
             <button
               onClick={copy}
               aria-label={copied ? "Alias copiado" : "Copiar alias"}
-              title={copied ? "¡Copiado!" : "Copiar al portapapeles"}
+              title={copied ? "Copiado" : "Copiar al portapapeles"}
               className="ml-1 -mr-0.5 p-0.5 rounded hover:bg-primary/15 transition-colors"
             >
               {copied

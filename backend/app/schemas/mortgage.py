@@ -22,11 +22,11 @@ class MortgageLoanCreate(BaseModel):
     @model_validator(mode="after")
     def check_required_fields(self):
         if self.loan_type not in LOAN_TYPES:
-            raise ValueError(f"loan_type debe ser uno de: {', '.join(LOAN_TYPES)}")
+            raise ValueError("Tipo de préstamo inválido. Elegí uno de la lista.")
         if self.loan_type in UVA_LOAN_TYPES and not self.cuota_uva:
-            raise ValueError("cuota_uva es requerido para préstamos UVA")
+            raise ValueError("Un préstamo UVA necesita la cuota en UVA")
         if self.loan_type == "tasa_fija" and not self.cuota_pesos:
-            raise ValueError("cuota_pesos es requerido para tasa fija")
+            raise ValueError("Un préstamo a tasa fija necesita la cuota en pesos")
         return self
 
 

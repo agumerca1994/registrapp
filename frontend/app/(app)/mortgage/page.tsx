@@ -61,10 +61,10 @@ const LOAN_TYPE_LABELS: Record<string, string> = {
 };
 
 const LOAN_TYPE_DESC: Record<string, string> = {
-  uva_frances:   "Cuota fija en UVAs, el monto en pesos varía con el índice UVA",
-  uva_aleman:    "Capital fijo en UVAs por cuota, interés decrece cada mes",
+  uva_frances:   "Cuota fija en UVAs; en pesos varía con el valor de la UVA",
+  uva_aleman:    "Capital fijo en UVAs por cuota; el interés baja cada mes",
   tasa_fija:     "Cuota fija en pesos, sin ajuste por inflación",
-  tasa_variable: "Sin auto-registro (tipo sin monto predecible)",
+  tasa_variable: "La cuota no se registra sola, porque su monto no se puede prever",
 };
 
 const EMPTY_FORM = {
@@ -167,7 +167,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
       onSaved();
       onClose();
     } catch (e: unknown) {
-      setError(getErrorMessage(e, "Error al guardar"));
+      setError(getErrorMessage(e, "No se pudo guardar la hipoteca. Probá de nuevo."));
     } finally {
       setSaving(false);
     }
@@ -188,7 +188,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
           <h3 className="font-semibold text-foreground">
             {editLoan ? "Editar hipoteca" : step === 1 ? "Tipo de hipoteca" : "Configurar hipoteca"}
           </h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -314,7 +314,7 @@ function LoanConfigModal({ editLoan, onClose, onSaved }: {
                       <label className="text-xs font-medium text-muted-foreground">Capital original en UVAs (opcional)</label>
                       <input
                         type="text" inputMode="decimal"
-                        placeholder="para desglose capital/interés"
+                        placeholder="Para separar capital e interés"
                         value={form.original_capital_uva} onChange={f("original_capital_uva")}
                         className={inputCls}
                       />
@@ -364,14 +364,17 @@ function DeleteLoanModal({ loanId, onClose, onDeleted }: {
   onDeleted: () => void;
 }) {
   const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
 
   const handleDelete = async (keepHistory: boolean) => {
     setDeleting(true);
+    setError("");
     try {
       await api.delete(`/mortgage/loans/${loanId}?keep_history=${keepHistory}`);
       onDeleted();
       onClose();
-    } catch {
+    } catch (err) {
+      setError(getErrorMessage(err, "No se pudo eliminar la hipoteca. Probá de nuevo."));
       setDeleting(false);
     }
   };
@@ -381,7 +384,7 @@ function DeleteLoanModal({ loanId, onClose, onDeleted }: {
       <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground">Eliminar hipoteca</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -411,9 +414,10 @@ function DeleteLoanModal({ loanId, onClose, onDeleted }: {
         {deleting && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            Eliminando...
+            Eliminando…
           </div>
         )}
+        {error && <p className="text-xs text-destructive">{error}</p>}
       </Card>
     </div>
   );
@@ -503,7 +507,7 @@ export default function MortgagePage() {
           <div>
             <p className="text-sm font-medium text-foreground">No tenés ninguna hipoteca configurada</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Configurá tu hipoteca y el sistema registrará las cuotas automáticamente cada mes.
+              Cargá los datos del crédito y cada mes la cuota se registra sola, con su egreso.
             </p>
           </div>
           <Button onClick={() => { setEditLoan(null); setShowConfig(true); }}>
@@ -550,7 +554,7 @@ export default function MortgagePage() {
                 )}
               </p>
             ) : (
-              <p className="text-sm text-muted-foreground mt-1">Sin valor UVA disponible aún</p>
+              <p className="text-sm text-muted-foreground mt-1">Todavía no hay valor de la UVA para pasar la cuota a pesos.</p>
             )}
           </div>
 
@@ -572,7 +576,7 @@ export default function MortgagePage() {
             {summary.paid_this_month ? (
               <p className="font-medium">✓ Cuota de {format(new Date(), "MMMM yyyy", { locale: es })} registrada</p>
             ) : (
-              <p>Próxima cuota: <strong>{fmtDate(summary.next_payment_date)}</strong> — se registrará automáticamente</p>
+              <p>Próxima cuota: <strong>{fmtDate(summary.next_payment_date)}</strong>.{summary.loan.loan_type === "tasa_variable" ? " Cargala a mano cuando sepas el monto." : " Se registra sola."}</p>
             )}
             {summary.paid_this_month && (
               <p className="text-xs mt-0.5 text-emerald-600">
@@ -605,6 +609,7 @@ export default function MortgagePage() {
                   <span className="w-[16ch] shrink-0 text-sm font-semibold text-foreground text-right truncate">{formatARS(r.payment_amount)}</span>
                   <button
                     onClick={() => handleDeleteRecord(r.id)}
+                    aria-label="Eliminar cuota"
                     className="text-xs text-muted-foreground/40 hover:text-destructive transition-colors"
                   >
                     ✕

@@ -156,7 +156,7 @@ export default function DivisasPage() {
       setOps(o.data);
       setError(null);
     } catch (e) {
-      setError(getErrorMessage(e));
+      setError(getErrorMessage(e, "No se pudieron cargar los dólares de este mes. Probá recargar la página."));
     } finally {
       setLoading(false);
     }
@@ -255,7 +255,7 @@ export default function DivisasPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const usd = parseAmount(form.usd);
-    if (!usd) { setError("Ingresá un monto en dólares"); return; }
+    if (!usd) { setError("Ingresá el monto en dólares."); return; }
 
     // The API takes a signed amount: positive means currency came in.
     let foreign = Math.abs(usd);
@@ -271,7 +271,7 @@ export default function DivisasPage() {
     };
     if (hasArsLeg) {
       const ars = parseAmount(form.ars);
-      if (!ars) { setError("Ingresá el monto en pesos"); return; }
+      if (!ars) { setError("Ingresá el monto en pesos."); return; }
       payload.ars_amount = ars;
       const rate = parseAmount(form.rate);
       if (rate) payload.rate = rate;
@@ -286,7 +286,7 @@ export default function DivisasPage() {
       await load();
       setError(null);
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(getErrorMessage(err, "No se pudo guardar la operación. Probá de nuevo."));
     } finally {
       setSaving(false);
     }
@@ -298,7 +298,7 @@ export default function DivisasPage() {
       await api.delete(`/currency/operations/${op.id}`);
       await load();
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(getErrorMessage(err, "No se pudo eliminar la operación. Probá de nuevo."));
     }
   };
 
@@ -314,11 +314,11 @@ export default function DivisasPage() {
         <div className="flex items-center gap-1 shrink-0">
           <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
             <CalendarDays className="w-4 h-4 text-primary shrink-0" />
-            <button onClick={prev} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+            <button onClick={prev} aria-label="Mes anterior" className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
               <ChevronLeft className="w-4 h-4" />
             </button>
             <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
-            <button onClick={next} className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
+            <button onClick={next} aria-label="Mes siguiente" className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -447,7 +447,7 @@ export default function DivisasPage() {
                   <p className={`mt-1.5 pt-1.5 border-t border-amber-200 font-semibold ${shortfall > 0 ? "text-rose-700" : "text-emerald-700"}`}>
                     {shortfall > 0
                       ? `Faltan ${formatUSD(shortfall)} si nadie te transfirió todavía`
-                      : `Te alcanza — te quedarían ${formatUSD(-shortfall)} en la cuenta`}
+                      : `Te alcanza: te quedarían ${formatUSD(-shortfall)} en la cuenta`}
                   </p>
                   {others > 0 && (
                     <p className="mt-1 text-[11px] text-amber-700/90">
@@ -506,7 +506,7 @@ export default function DivisasPage() {
             <h3 className="font-semibold text-foreground">
               {editId ? "Editar operación" : "Nueva operación"}
             </h3>
-            <button type="button" onClick={closeForm} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+            <button type="button" onClick={closeForm} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
           </div>
           <form onSubmit={handleSubmit} className="space-y-3">
 
@@ -634,7 +634,7 @@ export default function DivisasPage() {
 
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
-              <Button type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar"}</Button>
+              <Button type="submit" disabled={saving}>{saving ? "Guardando…" : "Guardar operación"}</Button>
             </div>
           </form>
           </Card>
@@ -674,11 +674,11 @@ export default function DivisasPage() {
                   {isIn ? "+" : "−"}{formatUSD(Math.abs(amount))}
                 </p>
                 <div className="flex gap-1 shrink-0">
-                  <button onClick={() => openEdit(op)} aria-label="Editar"
+                  <button onClick={() => openEdit(op)} aria-label="Editar operación"
                     className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent transition-colors">
                     <Pencil className="w-4 h-4" />
                   </button>
-                  <button onClick={() => handleDelete(op)} aria-label="Eliminar"
+                  <button onClick={() => handleDelete(op)} aria-label="Eliminar operación"
                     className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-rose-600 transition-colors">
                     <Trash2 className="w-4 h-4" />
                   </button>

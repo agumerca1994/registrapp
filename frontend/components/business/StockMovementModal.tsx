@@ -13,7 +13,7 @@ export type StockAction = "produccion" | "conteo" | "merma" | "compra";
 
 const COPY: Record<StockAction, { title: string; qty: string; help: string }> = {
   produccion: { title: "Cargar producción", qty: "Cuántas hiciste", help: "Suma al stock: lo que salió de la cocina." },
-  conteo: { title: "Contar stock", qty: "Cuántas quedan", help: "Lo que hay ahora. La diferencia con el libro queda como ajuste." },
+  conteo: { title: "Contar stock", qty: "Cuántas quedan", help: "Lo que hay ahora. La diferencia con lo que figuraba queda como ajuste." },
   merma: { title: "Cargar merma", qty: "Cuántas se perdieron", help: "Resta del stock: lo que se tiró, se rompió o venció." },
   compra: { title: "Ingreso de mercadería", qty: "Cuántas entraron", help: "Para lo comprado con tarjeta o sin cargar el gasto: suma al stock." },
 };

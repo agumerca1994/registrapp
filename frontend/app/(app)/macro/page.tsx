@@ -86,7 +86,7 @@ function MacroDetailModal({ record, visibleVars, onClose }: {
               Automático
             </Chip>
           </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
+          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -178,12 +178,13 @@ export default function MacroPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Variables macro</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Actualización automática diaria</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Se actualizan solas todos los días</p>
         </div>
         <button
           onClick={() => setShowConfig(v => !v)}
           className={`p-1.5 rounded-full transition-colors ${showConfig ? "bg-accent text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
           title="Configurar variables"
+          aria-label="Configurar variables"
         >
           <Settings2 className="w-4 h-4 text-muted-foreground" />
         </button>
@@ -213,7 +214,7 @@ export default function MacroPage() {
           <div className="border-t pt-3 space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Cargar datos históricos</p>
             <p className="text-xs text-muted-foreground/70">
-              Carga un registro por día desde la fecha elegida hasta hoy (acumulativo).
+              Trae un registro por día desde el mes elegido hasta hoy y lo suma a lo que ya está cargado.
             </p>
             <div className="flex items-center gap-2">
               <MonthField className="flex-1"
@@ -224,7 +225,7 @@ export default function MacroPage() {
                 disabled={backfilling || !backfillFrom}
                 className="whitespace-nowrap"
               >
-                {backfilling ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando...</> : "Cargar"}
+                {backfilling ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando…</> : "Cargar historial"}
               </Button>
             </div>
           </div>
@@ -259,7 +260,7 @@ export default function MacroPage() {
         ) : records.length === 0 ? (
           <div className="p-6 text-sm text-muted-foreground space-y-1">
             <p>Sin datos para el período seleccionado.</p>
-            <p className="text-xs">Usá el panel ⚙️ para cargar el historial.</p>
+            <p className="text-xs">Para traer el historial, tocá Configurar variables, arriba a la derecha.</p>
           </div>
         ) : records.map(r => (
           <button

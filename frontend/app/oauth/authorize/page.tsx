@@ -52,7 +52,7 @@ function AuthorizeInner() {
       .catch(err => {
         const status = err?.response?.status;
         if (status === 404) setLoadError("Esta solicitud no existe o ya fue usada.");
-        else if (status === 410) setLoadError("La solicitud expiró. Volvé a intentar desde la app.");
+        else if (status === 410) setLoadError("La solicitud venció. Volvé a conectar desde el asistente.");
         else setLoadError("No se pudo cargar la solicitud. Probá de nuevo.");
       });
   }, [txn]);
@@ -110,7 +110,7 @@ function AuthorizeInner() {
       <Shell>
         {header}
         <p className="text-sm text-muted-foreground">
-          Iniciá sesión con Google para decidir si le das acceso a los datos de tu hogar.
+          Iniciá sesión con Google para decidir si le das acceso a tu cuenta.
         </p>
         <Button onClick={loginWithGoogle} className="w-full">
           Continuar con Google
@@ -124,10 +124,10 @@ function AuthorizeInner() {
       <Shell>
         {header}
         <p className="text-sm text-muted-foreground">
-          Antes de conectar una app necesitás crear o unirte a un hogar en RegistrApp.
+          Antes de conectar una app necesitás crear tu cuenta en RegistrApp, o unirte a una con un código.
         </p>
         <Button asChild className="w-full">
-          <a href="/onboarding">Ir a crear mi hogar</a>
+          <a href="/onboarding">Crear mi cuenta</a>
         </Button>
       </Shell>
     );
@@ -186,7 +186,7 @@ function AuthorizeInner() {
 
       <div className="flex gap-2">
         <Button onClick={() => decide("consent")} disabled={busy} className="flex-1">
-          {busy ? "..." : "Autorizar"}
+          {busy ? "Autorizando…" : "Autorizar"}
         </Button>
         <Button variant="outline" onClick={() => decide("deny")} disabled={busy} className="flex-1">
           Cancelar

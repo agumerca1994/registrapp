@@ -56,7 +56,7 @@ export default function BaseFields({
                 onChange={category_id => set({ category_id })}
                 placeholder={draft.currency === "USD" ? "Consumo en dólares" : "Categoría"}
                 options={categories.map(c => ({ value: String(c.id), label: c.name }))} />
-              <button type="button" title="Nueva categoría" onClick={onNewCategory}
+              <button type="button" title="Nueva categoría" aria-label="Nueva categoría" onClick={onNewCategory}
                 className="mt-1 px-2.5 border-2 border-ink rounded-lg text-muted-foreground hover:bg-accent shrink-0 text-lg leading-none">+</button>
             </div>
           </div>

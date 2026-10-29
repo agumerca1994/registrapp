@@ -55,7 +55,7 @@ export function CreditCardVisual({
       <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
-            <button className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors outline-none" title="Más acciones">
+            <button className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors outline-none" title="Más acciones" aria-label="Más acciones">
               <MoreVertical className="w-4 h-4" />
             </button>
           </DropdownMenu.Trigger>

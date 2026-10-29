@@ -39,9 +39,9 @@ export default function InvitePage() {
       .then(r => setInfo(r.data))
       .catch(err => {
         const status = err?.response?.status;
-        if (status === 404) setLoadError("Esta invitacion no existe o ya fue reclamada.");
-        else if (status === 410) setLoadError("Esta invitacion ha expirado (mas de 30 dias).");
-        else setLoadError("No se pudo cargar la invitacion. Intenta de nuevo.");
+        if (status === 404) setLoadError("Esta invitación no existe o ya la aceptó alguien.");
+        else if (status === 410) setLoadError("Esta invitación venció: duran 30 días. Pedile a quien te la mandó que la comparta de nuevo.");
+        else setLoadError("No se pudo cargar la invitación. Probá de nuevo.");
       });
   }, [token]);
 
@@ -53,7 +53,7 @@ export default function InvitePage() {
       setClaimed(true);
       setTimeout(() => router.push("/shared"), 2000);
     } catch (err: unknown) {
-      setClaimError(getErrorMessage(err, "Error al reclamar la invitacion"));
+      setClaimError(getErrorMessage(err, "No se pudo aceptar la invitación"));
     } finally {
       setClaiming(false);
     }
@@ -72,7 +72,7 @@ export default function InvitePage() {
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card variant="hero" className="max-w-sm w-full text-center space-y-4">
           <AlertCircle className="w-10 h-10 text-destructive mx-auto" />
-          <p className="font-semibold text-foreground">Invitacion no disponible</p>
+          <p className="font-semibold text-foreground">Invitación no disponible</p>
           <p className="text-sm text-muted-foreground">{loadError}</p>
           <Button onClick={() => router.push("/")} className="w-full">
             Ir al inicio
@@ -87,8 +87,8 @@ export default function InvitePage() {
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card variant="hero" className="max-w-sm w-full text-center space-y-4">
           <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto" />
-          <p className="font-semibold text-foreground">Invitacion reclamada</p>
-          <p className="text-sm text-muted-foreground">Redirigiendo a Gastos Compartidos...</p>
+          <p className="font-semibold text-foreground">Invitación aceptada</p>
+          <p className="text-sm text-muted-foreground">Te llevamos a Compartidos…</p>
         </Card>
       </div>
     );
@@ -149,7 +149,7 @@ export default function InvitePage() {
           <div className="space-y-2">
             <Button onClick={handleClaim} disabled={claiming} className="w-full">
               {claiming ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-              {claiming ? "Procesando..." : info && info.cuotas_count > 1 ? `Aceptar las ${info.cuotas_count} cuotas` : "Aceptar y agregar a mis gastos"}
+              {claiming ? "Aceptando…" : info && info.cuotas_count > 1 ? `Aceptar las ${info.cuotas_count} cuotas` : "Aceptar y agregar a mis gastos"}
             </Button>
             <p className="text-xs text-center text-muted-foreground">
               Sesión iniciada como <strong>{appUser.display_name || appUser.email}</strong>
@@ -158,7 +158,7 @@ export default function InvitePage() {
         ) : (
           <div className="space-y-2">
             <p className="text-sm text-center text-muted-foreground">
-              Inicia sesión para aceptar este gasto compartido
+              Iniciá sesión para aceptar este gasto compartido
             </p>
             <Button
               onClick={() => {

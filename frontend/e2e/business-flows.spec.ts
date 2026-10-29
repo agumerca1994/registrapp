@@ -101,7 +101,7 @@ test("proveedor → gasto asignado → Inicio lo muestra", async ({ page, reques
 
     // 4. Inicio: a quién se le pagó.
     await page.goto("/dashboard");
-    await expect(page.getByText(/Proveedores y empleados —/)).toBeVisible();
+    await expect(page.getByText(/Proveedores y empleados · /)).toBeVisible();
     await expect(page.getByText(name)).toBeVisible();
   } finally {
     const entries: { id: number; description?: string }[] = await a.get(`/expenses/entries?q=${desc}`);
@@ -155,7 +155,7 @@ test("producto → venta → dos ventas a la vez → cierre → Inicio", async (
     // 4. Inicio: el resultado del mes y las ventas por medio de pago.
     await page.goto("/dashboard");
     await expect(page.getByText(/^Resultado de /)).toBeVisible();
-    await expect(page.getByText(/Ventas por medio de pago —/)).toBeVisible();
+    await expect(page.getByText(/Ventas por medio de pago · /)).toBeVisible();
   } finally {
     await clearDay(a, day);
     await a.patch(`/products/${product.id}`, { is_active: false });
