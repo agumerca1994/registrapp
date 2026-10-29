@@ -453,6 +453,7 @@ async def _handle_pdf(
             "totals_mismatch": "Leí el resumen pero las sumas no coinciden con los totales del banco, así que no propongo cambios.",
             "encrypted": "El PDF tiene contraseña. Descargalo sin contraseña y volvé a mandarlo.",
             "no_text": "No pude extraer texto del archivo.",
+            "no_items": "Reconocí el resumen pero no encontré ningún consumo adentro, así que no propongo cambios.",
         }.get(session.reason or "", "No pude leer el resumen.")
         if session.reason != "encrypted":
             # A un PDF protegido no lo arregla ningún plan: le falta la contraseña.

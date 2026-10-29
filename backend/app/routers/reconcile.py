@@ -152,6 +152,10 @@ async def list_sessions(
     if status:
         q = q.where(ReconciliationSession.status == status)
     sessions = (await db.scalars(q)).all()
+    for s in sessions:
+        # Las que quedaron "para revisar" sin nada propuesto pasan a "al día".
+        await reconcile_engine.settle_status(db, s)
+    await db.commit()
     result = []
     for s in sessions:
         pending = await db.scalar(
@@ -233,6 +237,10 @@ async def get_session(
 ):
     user = await _get_db_user(firebase_user, db)
     session = await _owned_session(session_id, user, db)
+    # Abrirla la compara de nuevo con lo cargado hoy: lo corregido en la app
+    # deja de figurar y una sesión vieja toma las reglas actuales.
+    await reconcile_engine.refresh_session(db, session, user)
+    await db.commit()
     return await _session_out(session, db)
 
 
@@ -324,6 +332,8 @@ async def patch_action(
 
     if body.discard:
         action.status = "discarded"
+        await db.flush()
+        await reconcile_engine.settle_status(db, session)
     else:
         payload = dict(action.payload or {})
         if body.category_id is not None:

@@ -302,3 +302,63 @@ async def test_surplus_child_cuota_goes_to_the_app_with_its_reason(db):
     assert by_desc["Heladera"].payload["why_app"] == "child"
     assert by_desc["Gasto viejo"].status == "proposed"
     assert by_desc["Gasto viejo"].payload["why_app"] is None
+
+
+async def test_a_statement_read_with_no_items_proposes_nothing(db, monkeypatch):
+    """El banco reconocido pero cero consumos (y sin total impreso) era una
+    sesión "lista" que mandaba todo lo cargado a "sobra". Es una lectura
+    fallida: se frena como `needs_ai` / `no_items`."""
+    from app.services.reconcile import engine
+    from app.services.statement_parsers import ParseResult
+
+    cat, card, stmt, _ = await _setup(db)
+    monkeypatch.setattr(engine, "detect_and_parse", lambda _b: ParseResult(
+        status="ok", bank_id="banco_nacion",
+        data={"bank": "Banco Nación", "year": 2026, "month": 9, "statements": [{"items": []}]},
+    ))
+    session = await engine.start_session(db, user=USER, pdf_bytes=b"%PDF")
+    assert (session.status, session.reason) == ("needs_ai", "no_items")
+    assert (await db.scalars(
+        select(ReconciliationAction).where(ReconciliationAction.session_id == session.id)
+    )).all() == []
+
+
+async def test_refresh_keeps_discards_and_closes_when_nothing_is_left(db):
+    from app.services.reconcile import refresh_session
+
+    cat, card, stmt, session = await _setup(db)
+    await resolve_session(db, session, USER)
+    await apply_group(db, session, USER, "dates")
+    missing = await db.scalar(select(ReconciliationAction).where(ReconciliationAction.klass == "missing"))
+    missing.payload = {**missing.payload, "category_id": cat.id, "category_source": "user"}
+    await db.flush()
+    surplus = await db.scalar(select(ReconciliationAction).where(ReconciliationAction.klass == "surplus"))
+    surplus.status = "discarded"   # "dejarlo así"
+    await db.flush()
+
+    # Al reabrir, el faltante conserva la categoría elegida y el descartado no vuelve.
+    await refresh_session(db, session, USER)
+    proposed = (await db.scalars(
+        select(ReconciliationAction).where(ReconciliationAction.status == "proposed")
+    )).all()
+    assert [(a.klass, a.payload["category_id"]) for a in proposed] == [("missing", cat.id)]
+    assert session.status == "applied"
+
+    await apply_group(db, session, USER, "missing")
+    await refresh_session(db, session, USER)
+    assert session.status == "closed"
+
+
+async def test_refresh_closes_an_old_session_read_with_no_items(db):
+    from app.services.reconcile import refresh_session
+
+    cat, card, stmt, session = await _setup(db)
+    session.parsed = {**session.parsed, "items": [], "block_totals": {}}
+    await resolve_session(db, session, USER)
+    assert (await db.scalars(select(ReconciliationAction))).all()  # el bug: todo "sobra"
+
+    await refresh_session(db, session, USER)
+    assert (session.status, session.reason) == ("needs_ai", "no_items")
+    assert not (await db.scalars(
+        select(ReconciliationAction).where(ReconciliationAction.status.in_(["proposed", "needs_app"]))
+    )).all()

@@ -22,11 +22,15 @@ from sqlalchemy.orm import selectinload
 
 from app.models.credit_card import CreditCard, CreditCardItem, CreditCardStatement
 from app.models.reconciliation import (
+    ACTION_APPLIED,
+    ACTION_DISCARDED,
     ACTION_NEEDS_APP,
     ACTION_PROPOSED,
     CaptureEvent,
     ReconciliationAction,
     ReconciliationSession,
+    SESSION_APPLIED,
+    SESSION_CLOSED,
     SESSION_NEEDS_AI,
     SESSION_NEEDS_CHOICE,
     SESSION_READY,
@@ -165,7 +169,15 @@ async def start_session(
         block_totals.get(cur) is not None and sums.get(cur, Decimal("0")) != block_totals[cur]
         for cur in block_totals
     )
-    outcome, reason = ("parsed_code", None) if not mismatch else ("needs_ai", "totals_mismatch")
+    # Un resumen reconocido sin un solo consumo es una lectura fallida, no un
+    # mes vacío: sin este freno el control de totales comparaba 0 contra
+    # nada, pasaba, y cada ítem cargado salía como "sobra" (caso real: Visa
+    # BN de octubre 2026, 10 cuotas "a corregir" que estaban bien).
+    empty = not items
+    if empty:
+        outcome, reason = "needs_ai", "no_items"
+    else:
+        outcome, reason = ("parsed_code", None) if not mismatch else ("needs_ai", "totals_mismatch")
     await record_event(
         db,
         tenant_id=user.tenant_id,
@@ -179,13 +191,99 @@ async def start_session(
         pages_with_movements=len(result.pages_with_movements),
         est_input_tokens=result.est_input_tokens,
     )
-    if mismatch:
-        session.reason = "totals_mismatch"
+    if empty or mismatch:
+        session.reason = reason
         await db.flush()
         return session
 
     await resolve_session(db, session, user, explicit_card_id=card_id)
+    await settle_status(db, session)
     return session
+
+
+async def settle_status(db: AsyncSession, session: ReconciliationSession) -> None:
+    """El estado de una sesión abierta según lo que le queda: sin nada
+    propuesto está al día (lo que va a la app no traba el cierre), con algo
+    ya aplicado está en curso. Centralizado para que la lista, la pantalla,
+    el bot y el MCP digan lo mismo."""
+    if session.status not in (SESSION_READY, SESSION_UNEXPLAINED, SESSION_APPLIED):
+        return
+    statuses = set((await db.scalars(
+        select(ReconciliationAction.status).where(ReconciliationAction.session_id == session.id)
+    )).all())
+    if ACTION_PROPOSED not in statuses:
+        if session.status != SESSION_UNEXPLAINED or ACTION_APPLIED in statuses:
+            session.status = SESSION_CLOSED
+    elif ACTION_APPLIED in statuses:
+        session.status = SESSION_APPLIED
+    await db.flush()
+
+
+def _action_key(a: ReconciliationAction) -> tuple:
+    """Identidad de una acción entre dos armados: el ítem que toca, o el
+    cargo del banco en un faltante (que todavía no tiene ítem)."""
+    p = a.payload or {}
+    if a.item_id is not None:
+        return (a.klass, a.item_id)
+    return (a.klass, p.get("date"), p.get("amount"), p.get("bank_description") or p.get("description"))
+
+
+async def refresh_session(db: AsyncSession, session: ReconciliationSession, user) -> None:
+    """Vuelve a comparar una sesión abierta contra lo que hoy hay cargado.
+
+    Lo que se corrigió en la app desde que se subió el PDF deja de figurar, y
+    una sesión armada con reglas viejas se pone al día. Conserva lo que la
+    persona ya decidió: lo descartado sigue descartado, y la categoría o la
+    descripción elegidas para un faltante se mantienen. Sólo flush."""
+    if session.status not in (SESSION_READY, SESSION_UNEXPLAINED, SESSION_APPLIED):
+        return
+    if not (session.parsed or {}).get("items"):
+        # Sesiones armadas antes del freno de arriba: se cierran como lectura fallida.
+        for a in (await db.scalars(
+            select(ReconciliationAction).where(
+                ReconciliationAction.session_id == session.id,
+                ReconciliationAction.status.in_([ACTION_PROPOSED, ACTION_NEEDS_APP]),
+            )
+        )).all():
+            await db.delete(a)
+        session.status, session.reason = SESSION_NEEDS_AI, "no_items"
+        await db.flush()
+        return
+    if session.statement_id is None or await db.get(CreditCardStatement, session.statement_id) is None:
+        return
+
+    before = (await db.scalars(
+        select(ReconciliationAction).where(ReconciliationAction.session_id == session.id)
+    )).all()
+    discarded = {_action_key(a) for a in before if a.status == ACTION_DISCARDED}
+    edits = {
+        _action_key(a): a.payload for a in before
+        if a.status == ACTION_PROPOSED and a.klass == matching.MISSING
+    }
+
+    await resolve_session(db, session, user, explicit_statement_id=session.statement_id)
+    if session.status == SESSION_NEEDS_CHOICE:
+        return
+
+    for a in (await db.scalars(
+        select(ReconciliationAction).where(
+            ReconciliationAction.session_id == session.id,
+            ReconciliationAction.status.in_([ACTION_PROPOSED, ACTION_NEEDS_APP]),
+        )
+    )).all():
+        key = _action_key(a)
+        if key in discarded:
+            await db.delete(a)
+            continue
+        old = edits.get(key)
+        if old and a.klass == matching.MISSING:
+            payload = dict(a.payload or {})
+            for field in ("category_id", "category_source", "description"):
+                if old.get(field) is not None:
+                    payload[field] = old[field]
+            a.payload = payload
+    await db.flush()
+    await settle_status(db, session)
 
 
 async def resolve_session(

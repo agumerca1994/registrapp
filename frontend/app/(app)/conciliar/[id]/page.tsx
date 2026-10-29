@@ -29,6 +29,7 @@ const REASON_TEXTS: Record<string, string> = {
   totals_mismatch: "Leí el resumen pero las sumas no coinciden con los totales del banco, así que no propongo cambios.",
   encrypted: "El PDF tiene contraseña. Descargalo sin contraseña y volvé a subirlo.",
   no_text: "No pude extraer texto del archivo.",
+  no_items: "Reconocí el resumen pero no encontré ningún consumo adentro, así que no propongo cambios.",
 };
 
 /** La cadena de una moneda: diferencia, explicada, sin explicar. */
@@ -511,10 +512,13 @@ function ActionRow({ klass, action, categories, fixHref, descDraft, setDescDraft
     <span className="flex items-center gap-1 shrink-0">
       {fixHref ? (
         <Link href={fixHref} title="Abrir este ítem en el resumen">
-          <Chip locked className="hover:bg-accent transition-colors">Corregir en la app →</Chip>
+          {/* En el celular, "en la app" no entra al lado del monto. */}
+          <Chip locked className="hover:bg-accent transition-colors">
+            Corregir<span className="hidden sm:inline">&nbsp;en la app</span> →
+          </Chip>
         </Link>
       ) : (
-        <Chip locked>Corregir en la app</Chip>
+        <Chip locked>Corregir<span className="hidden sm:inline">&nbsp;en la app</span></Chip>
       )}
       <button onClick={() => patchAction(action.id, { discard: true })}
         aria-label="Dejarlo así" title="Dejarlo así"
