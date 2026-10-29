@@ -36,6 +36,7 @@ from app.services.currency import (
     RATE_TYPE_COLUMN, cash_out_date, get_fx_ars_flow, get_latest_rate,
     get_tenant_rate_type, get_usd_holding, statement_due_date, with_statement,
 )
+from app.services.clock import ar_today
 
 
 class CategorySummary(BaseModel):
@@ -366,7 +367,13 @@ async def history_series(db: AsyncSession, tenant_id: int) -> list[HistoryPoint]
             data[k]["uva_value"] = r.uva
             data[k]["inflation_pct"] = r.inflation
 
-    return [HistoryPoint(period=k, **data[k]) for k in sorted(data.keys())]
+    # History ends at the current month. Instalment propagation loads every
+    # future cuota up front, and by cash-out date those land in months that
+    # haven't happened: left in, "the last 12 months" became a year of
+    # 2027–2028 commitments with no income. Those belong to
+    # upcoming_commitments, not to the history.
+    current = period_key(ar_today())
+    return [HistoryPoint(period=k, **data[k]) for k in sorted(data.keys()) if k <= current]
 
 
 # ---------------------------------------------------------------------------
