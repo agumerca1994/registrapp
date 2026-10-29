@@ -579,3 +579,35 @@ async def test_quoting_the_bot_reply_fixes_that_expense_not_the_last(db):
     # Citar la confirmación de algo ya deshecho no edita otra cosa.
     replies = await wa_bot.handle(db, USER, _in("categoría nafta", wa_id="W6", quoted="BOT1"))
     assert "No tengo un gasto" in replies[0]
+
+
+async def test_category_after_an_income_changes_its_source_not_the_last_expense(db):
+    from app.models.income import IncomeSource
+
+    await _cat(db, "Kiosco")
+    await _source(db, "Sueldo")
+    await _source(db, "Freelance")
+    await wa_bot.handle(db, USER, _in("5000 kiosco", wa_id="W1"))
+    await wa_bot.handle(db, USER, _in("cobré 200 lucas sueldo", wa_id="W2"))
+
+    replies = await wa_bot.handle(db, USER, _in("categoría free", wa_id="W3"))
+    assert "Freelance (antes: Sueldo)" in replies[0]
+    freelance = await db.scalar(select(IncomeSource).where(IncomeSource.name == "Freelance"))
+    assert (await db.scalar(select(IncomeEntry))).source_id == freelance.id
+    kiosco = await db.scalar(select(ExpenseCategory).where(ExpenseCategory.name == "Kiosco"))
+    assert (await db.scalar(select(ExpenseEntry))).category_id == kiosco.id
+
+
+async def test_income_source_fix_relearns_and_works_quoting(db):
+    await _source(db, "Sueldo")
+    await _source(db, "Freelance")
+    await wa_bot.handle(db, USER, _in("me pagaron 90 lucas diseño web", wa_id="W1"))
+    mark = await wa_bot.memory_mark(db, 1)
+    await wa_bot.handle(db, USER, _in("1", wa_id="W2"))  # Sueldo: el error
+    await wa_bot.link_replies(db, 1, mark, ["BOT1"])
+
+    replies = await wa_bot.handle(db, USER, _in("freelance", wa_id="W3", quoted="BOT1"))
+    assert "Freelance (antes: Sueldo)" in replies[0]
+
+    replies = await wa_bot.handle(db, USER, _in("me pagaron 50 lucas diseño web", wa_id="W4"))
+    assert "💰 Ingreso: $50.000,00 · Freelance" in replies[0]

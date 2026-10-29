@@ -144,7 +144,7 @@ _EDIT_RE = re.compile(
     re.IGNORECASE,
 )
 # El atajo que se ofrece después de cada gasto: "categoría súper".
-_CATEGORY_RE = re.compile(r"^categor[ií]a\s*:?\s+(.+)$", re.IGNORECASE)
+_CATEGORY_RE = re.compile(r"^(categor[ií]a|fuente)\s*:?\s+(.+)$", re.IGNORECASE)
 _UNDO_RE = re.compile(r"^(deshacer|deshace|anular)\b", re.IGNORECASE)
 _INTEREST_RE = re.compile(r"^me\s+interesa\b", re.IGNORECASE)
 _NUMBER_RE = re.compile(r"^\s*([1-9])\s*$")
@@ -853,7 +853,7 @@ async def _handle_text(db: AsyncSession, user: User, inbound: InboundMessage) ->
         return await _do_edit(db, user, inbound, edit.group(1).lower(), edit.group(2).strip())
     short = _CATEGORY_RE.match(text)
     if short:
-        return await _do_edit(db, user, inbound, "categoría", short.group(1).strip())
+        return await _do_edit(db, user, inbound, short.group(1).lower(), short.group(2).strip())
     handled = await _do_quoted_category(db, user, inbound, text)
     if handled is not None:
         return handled
@@ -1090,7 +1090,7 @@ async def _save_income(
             "Si es el mismo, respondé *deshacer*."
         )
     else:
-        lines.append("Respondé *deshacer*, o *editar monto / fuente / descripción …*")
+        lines.append("Respondé *deshacer*, *fuente …* para cambiarla, o *editar monto / descripción …*")
     return ["\n".join(lines)]
 
 
@@ -1400,14 +1400,17 @@ async def _do_edit(
     db: AsyncSession, user: User, inbound: InboundMessage, field_name: str, value: str
 ) -> list[str]:
     # El monto se corrige en lo último que se cargó: gasto, ingreso o venta.
-    # La descripción, en un gasto o un ingreso (sus notas); la categoría es
-    # sólo de los gastos y la fuente sólo de los ingresos.
+    # La descripción y la categoría, en un gasto o un ingreso — la
+    # "categoría" de un ingreso es su fuente: quien acaba de cargar un sueldo
+    # y escribe *categoría …* habla de ese ingreso, no del último gasto.
     types = {
         "monto": ("expense", "income", "sale"),
         "fuente": ("income",),
-    }.get(field_name, ("expense", "income") if field_name.startswith("descripci") else ("expense",))
+    }.get(field_name, ("expense", "income"))
     ref = await _last_ref(db, user.id, types, inbound.quoted_wa_id)
     if ref is not None and ref.ref_type == "income":
+        if field_name.startswith("categor"):
+            field_name = "fuente"
         return await _edit_income(db, user, inbound, ref, field_name, value)
     if field_name == "fuente":
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
@@ -1446,10 +1449,10 @@ async def _do_edit(
     return [f"✏️ Listo: {_money(formatted, entry.currency)} · {entry.description}"]
 
 
-def _match_category(cats, value: str) -> tuple[ExpenseCategory | None, list[str]]:
-    """El nombre escrito → una categoría: exacto, o una sola que lo contenga
-    ("super" → "Supermercado"). Con varias candidatas devuelve sus nombres
-    para preguntar; elegir una sería adivinar."""
+def _match_name(cats, value: str):
+    """El nombre escrito → una categoría (o una fuente de ingreso): exacto, o
+    una sola que lo contenga ("super" → "Supermercado"). Con varias candidatas
+    devuelve sus nombres para preguntar; elegir una sería adivinar."""
     from app.services.search import fold_text
 
     folded = fold_text(value).strip()
@@ -1474,7 +1477,7 @@ async def _recategorize(
     cats = (await db.scalars(
         select(ExpenseCategory).where(ExpenseCategory.tenant_id == user.tenant_id)
     )).all()
-    cat, candidates = _match_category(cats, value)
+    cat, candidates = _match_name(cats, value)
     _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
     if cat is None:
         await db.commit()
@@ -1518,6 +1521,28 @@ async def _original_text(db: AsyncSession, user_id: int, ref: WaMessage) -> str 
     )
 
 
+async def _income_terms(db: AsyncSession, user_id: int, ref: WaMessage, entry: IncomeEntry) -> set[str]:
+    """Los términos con los que se resolvió la fuente de un ingreso: el del
+    texto original ("cobré … diseño web") y, en una transferencia, quien la
+    mandó (que quedó en las notas)."""
+    terms: set[str] = set()
+    notes = entry.notes or ""
+    if notes.startswith("Transferencia de "):
+        terms.add(notes[len("Transferencia de "):])
+    original = ref.text
+    if original and income_capture.parse_income_text(original) is None:
+        # La fila es la respuesta a la pregunta de fuente: el pedido es el anterior.
+        original = await db.scalar(
+            select(WaMessage.text).where(
+                WaMessage.user_id == user_id, WaMessage.direction == "in", WaMessage.id < ref.id,
+            ).order_by(WaMessage.id.desc()).limit(1)
+        )
+    parsed = income_capture.parse_income_text(original) if original else None
+    if parsed is not None and parsed.term:
+        terms.add(parsed.term)
+    return terms
+
+
 async def _do_quoted_category(
     db: AsyncSession, user: User, inbound: InboundMessage, text: str
 ) -> list[str] | None:
@@ -1527,12 +1552,18 @@ async def _do_quoted_category(
     if not inbound.quoted_wa_id or any(c.isdigit() for c in text):
         return None
     ref = await _quoted_ref(db, user.id, inbound.quoted_wa_id)
+    if ref is not None and ref.ref_type == "income":
+        sources = await income_capture.writable_sources(db, user.tenant_id)
+        source, _ = _match_name(sources, text)
+        if source is None:
+            return None
+        return await _edit_income(db, user, inbound, ref, "fuente", source.name)
     if ref is None or ref.ref_type != "expense":
         return None
     cats = (await db.scalars(
         select(ExpenseCategory).where(ExpenseCategory.tenant_id == user.tenant_id)
     )).all()
-    cat, _ = _match_category(cats, text)
+    cat, _ = _match_name(cats, text)
     if cat is None:
         return None
     entry = await db.get(ExpenseEntry, ref.ref_id)
@@ -1596,12 +1627,21 @@ async def _edit_income(
             return ["No entendí el monto. Probá: *editar monto 850000*"]
         entry.amount = amount
     elif field_name == "fuente":
-        source = income_capture.match_by_name(sources, value)
+        source, candidates = _match_name(sources, value)
         if source is None:
-            names = ", ".join(s.name for s in sources[:12]) or "ninguna"
             await db.commit()
+            if candidates:
+                return [f"¿Cuál de estas? {', '.join(candidates)}\nMandá *fuente* y el nombre completo."]
+            names = ", ".join(s.name for s in sources[:12]) or "ninguna"
             return [f"No hay una fuente «{value}». Tenés: {names}"]
+        before = await db.scalar(select(IncomeSource.name).where(IncomeSource.id == entry.source_id))
         entry.source_id = source.id
+        # Igual que con las categorías: lo aprendido se corrige con el error.
+        for term in await _income_terms(db, user.id, ref, entry):
+            await income_capture.learn(db, user.tenant_id, term, source.id)
+        await db.commit()
+        was = f" (antes: {before})" if before and before != source.name else ""
+        return [f"✏️ Listo: ingreso {_fmt_amount(entry)} · {source.name}{was}"]
     else:
         entry.notes = value[:500]
     await db.commit()
