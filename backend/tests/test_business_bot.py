@@ -62,7 +62,7 @@ async def test_a_sale_with_products_amount_and_method(db):
     empanada, coca = await _rotiseria(db)
     reply = await _say(db, "vendí 3 empanadas y 1 coca 6500 efectivo")
 
-    assert reply.startswith("✅ Venta de hoy: 3 Empanada de carne + 1 Coca-Cola · $6.500,00 en efectivo")
+    assert reply.startswith("✅ Venta de hoy: 3 Empanada de carne + 1 Coca-Cola · $6.500 en efectivo")
     sale = await db.scalar(select(Sale))
     assert (sale.total, sale.source, sale.sale_date) == (D(6500), "whatsapp", business_today())
     assert [(ln.product_id, ln.qty) for ln in sale.lines] == [(empanada.id, 3), (coca.id, 1)]
@@ -77,7 +77,7 @@ async def test_a_sale_with_products_amount_and_method(db):
 async def test_without_an_amount_it_uses_the_list_price(db):
     await _rotiseria(db)
     reply = await _say(db, "vendí 2 empanadas")
-    assert "$3.000,00 en efectivo (a precio de lista)" in reply
+    assert "$3.000 en efectivo (a precio de lista)" in reply
     assert (await db.scalar(select(Sale))).total == D(3000)
 
 
@@ -88,7 +88,7 @@ async def test_without_amount_or_price_it_asks_and_resumes(db):
     assert await _count(db, Sale) == 0
 
     reply = await _say(db, "4 lucas mp")
-    assert "✅ Venta de hoy: 2 Tartas · $4.000,00 en Mercado Pago" in reply
+    assert "✅ Venta de hoy: 2 Tartas · $4.000 en Mercado Pago" in reply
     sale = await db.scalar(select(Sale))
     # Lo que no es un producto queda como texto, no se inventa un producto.
     assert [(ln.product_id, ln.description) for ln in sale.lines] == [(None, "Tartas")]
@@ -100,7 +100,7 @@ async def test_two_products_that_match_are_asked(db):
     pollo = await products.create_product(db, 1, name="Empanada de pollo", sale_price=D(1500))
     reply = await _say(db, "vendí 2 empanadas 3000")
     assert reply.startswith("¿Cuál es «Empanadas»?")
-    assert "1️⃣ Empanada de carne" in reply and "2️⃣ Empanada de pollo" in reply and "3️⃣ Ninguno" in reply
+    assert "1. Empanada de carne" in reply and "2. Empanada de pollo" in reply and "3. Ninguno" in reply
 
     await _say(db, "2")
     sale = await db.scalar(select(Sale))
@@ -118,10 +118,10 @@ async def test_quantity_and_money_without_a_verb_asks_sale_or_purchase(db):
 async def test_edit_the_amount_and_undo_a_sale(db):
     await _rotiseria(db)
     await _say(db, "vendí 2 empanadas 3000")
-    assert "$3.500,00 en efectivo" in await _say(db, "editar monto 3500")
+    assert "$3.500 en efectivo" in await _say(db, "editar monto 3500")
     assert (await db.scalar(select(IncomeEntry))).amount == D(3500)
 
-    assert "Deshecha la venta de hoy de $3.500,00" in await _say(db, "deshacer")
+    assert "Deshecha la venta de hoy de $3.500" in await _say(db, "deshacer")
     assert await _count(db, Sale) == 0
     assert await _count(db, IncomeEntry) == 0
 
@@ -132,8 +132,8 @@ async def test_the_close_counts_by_method_and_compares_with_tickets(db):
     await _rotiseria(db)
     await _say(db, "vendí 2 empanadas 3000")
     reply = await _say(db, "cierre: 200 lucas efectivo, 150 mp")
-    assert reply.startswith("✅ Cierre de hoy: efectivo $200.000,00 · Mercado Pago $150.000,00 = $350.000,00")
-    assert "Ventas cargadas: $3.000,00 · sin ticket: $347.000,00" in reply
+    assert reply.startswith("✅ Cierre de hoy: efectivo $200.000 · Mercado Pago $150.000 = $350.000")
+    assert "Ventas cargadas: $3.000 · sin ticket: $347.000" in reply
     # El día suma lo contado.
     assert (await db.scalar(select(IncomeEntry))).amount == D(350000)
 
@@ -162,7 +162,7 @@ async def test_a_stock_purchase_is_an_expense_with_stock_and_undo_takes_both(db)
     await _cat(db, "Mercadería")
     reply = await _say(db, "compré 12 coca a 18 lucas")
 
-    assert "✅ $18.000,00 · 12 Coca-Cola — Mercadería" in reply
+    assert "✅ $18.000 · 12 Coca-Cola · Mercadería" in reply
     assert "📦 Coca-Cola: hay 12" in reply
     entry = await db.scalar(select(ExpenseEntry))
     assert entry.amount == D(18000)  # no $12: el 12 es la cantidad
@@ -179,7 +179,7 @@ async def test_raw_material_is_a_plain_expense_without_stock(db):
     await _rotiseria(db)
     await _cat(db, "Materia prima")
     reply = await _say(db, "compré 3 kilos de pan a 6 lucas")
-    assert "¿En qué categoría va *Pan* ($6.000,00)?" in reply
+    assert "¿En qué categoría va *Pan* ($6.000)?" in reply
 
     await _say(db, "materia prima")
     entry = await db.scalar(select(ExpenseEntry))
@@ -205,7 +205,7 @@ async def test_paying_an_employee_goes_to_their_category(db):
     sueldos = await _cat(db, "Sueldos")
     juan = await payees.create_payee(db, 1, name="Juan Pérez", kind="empleado")
     reply = await _say(db, "pagué 80 lucas a juan")
-    assert "✅ $80.000,00 · Juan Pérez — Sueldos" in reply
+    assert "✅ $80.000 · Juan Pérez · Sueldos" in reply
     entry = await db.scalar(select(ExpenseEntry))
     assert (entry.payee_id, entry.category_id) == (juan.id, sueldos.id)
 

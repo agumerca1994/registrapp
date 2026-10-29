@@ -114,8 +114,7 @@ async def _drop_superseded(db, user_id: int) -> None:
 # ── Formato ───────────────────────────────────────────────────────────────────
 
 def _money(amount) -> str:
-    formatted = f"{Decimal(amount):,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
-    return wa._money(formatted, "ARS")
+    return wa._money(Decimal(amount), "ARS")
 
 
 def _when(day: date) -> str:
@@ -128,7 +127,7 @@ def _when(day: date) -> str:
 
 
 def _key(n: int) -> str:
-    return f"{n}️⃣"
+    return f"{n}."
 
 
 def _names(names: list[str]) -> str:
@@ -362,10 +361,11 @@ async def _sale(db, ctx, inbound, st: dict, day: date) -> list[str]:
     out += await _stock_warnings(db, ctx.tenant_id, [p for p in products.values() if p.track_stock])
     if await sales.get_close(db, ctx.tenant_id, day) is not None:
         out.append(
-            "ℹ️ Ese día ya tiene cierre, y el día suma lo contado. Si esta venta no estaba "
-            "en la caja al cerrar, mandá el cierre de nuevo."
+            "Ojo: ese día ya cerraste la caja. Si esta venta no estaba en lo que contaste, "
+            "mandá el cierre de nuevo."
         )
-    out.append(MSG_UNDO_HINT)
+    if await wa._show_hints(db, ctx.id):
+        out.append(MSG_UNDO_HINT)
     return await _done(db, ctx, inbound, "\n".join(out), ref_type="sale", ref_id=sale.id)
 
 
@@ -407,7 +407,8 @@ async def _close(db, ctx, inbound, st: dict, day: date) -> list[str]:
         # Deshacer borraría el cierre entero, también lo que había antes.
         out.append("Reemplazó al cierre que ya tenía ese día. Si algo no quedó bien, mandalo de nuevo.")
         return await _done(db, ctx, inbound, "\n".join(out))
-    out.append(MSG_UNDO_HINT)
+    if await wa._show_hints(db, ctx.id):
+        out.append(MSG_UNDO_HINT)
     return await _done(db, ctx, inbound, "\n".join(out), ref_type="close", ref_id=close.id)
 
 
@@ -495,7 +496,8 @@ async def _production(db, ctx, inbound, st: dict, day: date) -> list[str]:
         out.append(f"Creé {_names(created)} en Productos: el precio de venta se pone desde la app.")
     if missing:
         out.append(_not_found(ctx, missing))
-    out.append(MSG_UNDO_HINT)
+    if await wa._show_hints(db, ctx.id):
+        out.append(MSG_UNDO_HINT)
     return await _done(db, ctx, inbound, "\n".join(out), ref_type="stock", ref_id=done[0][2].id)
 
 
@@ -525,7 +527,8 @@ async def _count(db, ctx, inbound, st: dict, day: date) -> list[str]:
     if missing:
         out.append(_not_found(ctx, missing))
     if moves:
-        out.append(MSG_UNDO_HINT)
+        if await wa._show_hints(db, ctx.id):
+            out.append(MSG_UNDO_HINT)
     ref = ("stock", moves[0].id) if moves else (None, None)
     return await _done(db, ctx, inbound, "\n".join(out), ref_type=ref[0], ref_id=ref[1])
 

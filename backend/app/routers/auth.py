@@ -416,9 +416,8 @@ async def link_whatsapp(
             payload = {
                 "number": target,
                 "text": (
-                    "RegistrApp - Verificacion de WhatsApp\n\n"
-                    f"Tu codigo de verificacion es: {code}\n"
-                    "_Valido por 10 minutos._"
+                    f"Tu código de RegistrApp es *{code}*.\n"
+                    "_Vale por 10 minutos._"
                 ),
             }
             resp = await client.post(url, json=payload, headers=headers)

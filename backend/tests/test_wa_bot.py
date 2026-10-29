@@ -73,7 +73,7 @@ async def test_text_expense_with_exact_category(db):
     await _cat(db, "Verdulería")
     replies = await wa_bot.handle(db, USER, _in("12 lucas verdulería"))
 
-    assert "✅ $12.000,00" in replies[0]
+    assert "✅ $12.000" in replies[0]
     assert "Verdulería" in replies[0]
     entry = await db.scalar(select(ExpenseEntry))
     assert entry.amount == Decimal("12000.00")
@@ -108,7 +108,7 @@ async def test_edit_amount_and_category(db):
     await wa_bot.handle(db, USER, _in("5000 kiosco", wa_id="W1"))
 
     replies = await wa_bot.handle(db, USER, _in("editar monto 13000", wa_id="W2"))
-    assert "13.000,00" in replies[0]
+    assert "13.000" in replies[0]
     entry = await db.scalar(select(ExpenseEntry))
     assert entry.amount == Decimal("13000")
 
@@ -127,7 +127,7 @@ async def test_ambiguous_category_asks_then_number_answers(db):
 
     replies = await wa_bot.handle(db, USER, _in("12 lucas cosas del chino", wa_id="W1"))
     assert "¿En qué categoría" in replies[0]
-    assert "1️⃣ Supermercado" in replies[0]
+    assert "1. Supermercado" in replies[0]
     assert (await db.scalar(select(ExpenseEntry))) is None  # nada creado todavía
 
     replies = await wa_bot.handle(db, USER, _in("1", wa_id="W2"))
@@ -158,7 +158,7 @@ async def test_unparseable_text_records_funnel_event(db):
 
 async def test_usd_expense_goes_to_usd_category(db):
     replies = await wa_bot.handle(db, USER, _in("usd 20 regalo", wa_id="W1"))
-    assert "U$D 20,00" in replies[0]
+    assert "U$D 20" in replies[0]
     entry = await db.scalar(select(ExpenseEntry))
     assert entry.currency == "USD"
     cat = await db.get(ExpenseCategory, entry.category_id)
@@ -365,7 +365,7 @@ def test_parse_income_text():
 async def test_income_with_known_source(db):
     await _source(db, "Sueldo")
     replies = await wa_bot.handle(db, USER, _in("cobré 850 lucas sueldo de octubre"))
-    assert "💰 Ingreso: $850.000,00 · Sueldo" in replies[0]
+    assert "✅ Ingreso: $850.000 · Sueldo" in replies[0]
     entry = await db.scalar(select(IncomeEntry))
     assert entry.amount == Decimal("850000.00")
     assert entry.notes == "sueldo de octubre"
@@ -377,7 +377,7 @@ async def test_income_unknown_source_by_name_creates_it_and_learns(db):
 
     await _source(db, "Sueldo")
     replies = await wa_bot.handle(db, USER, _in("me pagaron 200 lucas diseño web", wa_id="W1"))
-    assert "1️⃣ Sueldo" in replies[0] and "2️⃣ Nueva fuente «diseño web»" in replies[0]
+    assert "1. Sueldo" in replies[0] and "2. Nueva fuente «diseño web»" in replies[0]
 
     replies = await wa_bot.handle(db, USER, _in("Freelance", wa_id="W2"))
     assert "Freelance" in replies[0]
@@ -386,14 +386,14 @@ async def test_income_unknown_source_by_name_creates_it_and_learns(db):
 
     # Aprendido: el mismo término ya no pregunta.
     replies = await wa_bot.handle(db, USER, _in("cobré 150 lucas diseño web", wa_id="W3"))
-    assert "💰 Ingreso: $150.000,00 · Freelance" in replies[0]
+    assert "✅ Ingreso: $150.000 · Freelance" in replies[0]
 
 
 async def test_income_new_source_option_and_type_guess(db):
     from app.models.income import IncomeSource, IncomeType
 
     replies = await wa_bot.handle(db, USER, _in("cobré 400 lucas aguinaldo", wa_id="W1"))
-    assert "1️⃣ Nueva fuente «aguinaldo»" in replies[0]
+    assert "1. Nueva fuente «aguinaldo»" in replies[0]
     await wa_bot.handle(db, USER, _in("1", wa_id="W2"))
     src = await db.scalar(select(IncomeSource))
     assert src.name == "aguinaldo" and src.income_type == IncomeType.aguinaldo
@@ -407,11 +407,11 @@ async def test_income_duplicate_warning_undo_and_edit(db):
     assert "Ya había otro ingreso" in replies[0]
 
     replies = await wa_bot.handle(db, USER, _in("deshacer", wa_id="W3"))
-    assert "Deshecho: ingreso $850.000,00 · Sueldo" in replies[0]
+    assert "Deshecho: ingreso $850.000 · Sueldo" in replies[0]
     assert len((await db.scalars(select(IncomeEntry))).all()) == 1
 
     replies = await wa_bot.handle(db, USER, _in("editar monto 900 lucas", wa_id="W4"))
-    assert "900.000,00" in replies[0]
+    assert "900.000" in replies[0]
     replies = await wa_bot.handle(db, USER, _in("editar fuente alquiler", wa_id="W5"))
     assert "Alquiler" in replies[0]
     entry = await db.scalar(select(IncomeEntry))
@@ -492,7 +492,7 @@ async def test_business_plain_expense_still_works(db):
     await _business(db)
     await _cat(db, "Alquiler")
     replies = await wa_bot.handle(db, USER, _in("45 lucas alquiler"))
-    assert "✅ $45.000,00" in replies[0]
+    assert "✅ $45.000" in replies[0]
 
 
 async def test_household_sale_like_text_keeps_the_old_behavior(db):
@@ -546,7 +546,7 @@ async def test_change_category_phrasings_and_ambiguity(db):
     replies = await wa_bot.handle(db, USER, _in("cambiar categoría a salud", wa_id="W2"))
     assert "¿Cuál de estas?" in replies[0]
     replies = await wa_bot.handle(db, USER, _in("cambiar la categoría por salud mental", wa_id="W3"))
-    assert "— Salud mental (antes: Kiosco)" in replies[0]
+    assert "· Salud mental (antes: Kiosco)" in replies[0]
 
 
 async def test_quoting_the_bot_reply_fixes_that_expense_not_the_last(db):
@@ -610,4 +610,33 @@ async def test_income_source_fix_relearns_and_works_quoting(db):
     assert "Freelance (antes: Sueldo)" in replies[0]
 
     replies = await wa_bot.handle(db, USER, _in("me pagaron 50 lucas diseño web", wa_id="W4"))
-    assert "💰 Ingreso: $50.000,00 · Freelance" in replies[0]
+    assert "✅ Ingreso: $50.000 · Freelance" in replies[0]
+
+
+# ------------------------------------------------------------ cómo suena ---
+
+def test_money_drops_zero_cents():
+    from app.services.whatsapp import _money
+
+    assert _money(Decimal("12000")) == "$12.000"
+    assert _money(Decimal("20.5"), "USD") == "U$D 20,50"
+    assert _money("12.000,00") == "$12.000,00"  # ya formateado: pasa tal cual
+
+
+async def test_correction_hints_stop_after_a_few_captures(db):
+    await _cat(db, "Verdulería")
+    replies = [
+        (await wa_bot.handle(db, USER, _in(f"{n} lucas verdulería", wa_id=f"W{n}")))[0]
+        for n in range(1, 6)
+    ]
+    assert all("Si algo está mal" in r for r in replies[:3])
+    assert all("Si algo está mal" not in r for r in replies[3:])
+    # Deshacer sigue funcionando aunque ya no se lo recuerde.
+    assert "Deshecho" in (await wa_bot.handle(db, USER, _in("deshacer", wa_id="W9")))[0]
+
+
+def test_reconcile_groups_read_as_sentences():
+    assert wa_bot._groups_text({"missing": 2, "rounding": 1}, wa_bot._GROUP_FOUND) == (
+        "2 consumos que faltan · 1 diferencia de centavos"
+    )
+    assert wa_bot._groups_text({"surplus": 1}, wa_bot._GROUP_DONE) == "1 consumo de más borrado"

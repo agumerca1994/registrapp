@@ -63,7 +63,7 @@ async def test_image_becomes_expense_with_ai_suggested_category(db, ai):
     ai.reading = _reading(category="salud")
     replies = await wa_bot.handle(db, USER, _img(caption="remedios"))
 
-    assert "✅ $15.400,00 · Farmacity — Salud (sugerida)" in replies[0]
+    assert "✅ $15.400 · Farmacity · Salud (sugerida)" in replies[0]
     entry = await db.scalar(select(ExpenseEntry))
     assert entry.amount == Decimal("15400.00")
     assert entry.payment_method == "debito"
@@ -124,14 +124,14 @@ async def test_incoming_transfer_becomes_income_not_expense(db, ai):
     assert "No es un ingreso" in replies[0]
 
     replies = await wa_bot.handle(db, USER, InboundMessage(phone="549383", wa_id="T1", kind="text", text="1"))
-    assert "💰 Ingreso: $15.400,00 · Alquiler" in replies[0]
+    assert "✅ Ingreso: $15.400 · Alquiler" in replies[0]
     entry = await db.scalar(select(IncomeEntry))
     assert entry.notes == "Transferencia de Juan Perez"
     assert (await db.scalar(select(ExpenseEntry))) is None
 
     # La respuesta quedó como regla: la próxima de Juan Perez no pregunta.
     replies = await wa_bot.handle(db, USER, _img("I2"))
-    assert "💰 Ingreso" in replies[0] and "Alquiler" in replies[0]
+    assert "✅ Ingreso" in replies[0] and "Alquiler" in replies[0]
 
 
 async def test_payslip_becomes_income(db, ai):
@@ -141,7 +141,7 @@ async def test_payslip_becomes_income(db, ai):
     await db.flush()
     ai.reading = _reading(kind="recibo_sueldo", merchant="Acme SA", amount=Decimal("850000"))
     replies = await wa_bot.handle(db, USER, _img("I1"))
-    assert "1️⃣ Sueldo" in replies[0]
+    assert "1. Sueldo" in replies[0]
     # Un recibo de sueldo no es un reintegro: esa opción no va.
     assert "No es un ingreso" not in replies[0]
     replies = await wa_bot.handle(db, USER, InboundMessage(phone="549383", wa_id="T1", kind="text", text="1"))
@@ -163,7 +163,7 @@ async def test_unreadable_image_and_statement_photo(db, ai):
 async def test_usd_receipt_goes_to_usd_category(db, ai):
     ai.reading = _reading(currency="USD", amount=Decimal("20.00"), merchant="Amazon")
     replies = await wa_bot.handle(db, USER, _img())
-    assert "U$D 20,00" in replies[0]
+    assert "U$D 20" in replies[0]
     assert "Consumo en dólares" in replies[0]
 
 
@@ -199,7 +199,7 @@ async def test_daily_limit(db, ai, monkeypatch):
 async def test_image_without_ai_keeps_old_message(db, monkeypatch):
     monkeypatch.setattr(ai_capture, "enabled", lambda: False)
     replies = await wa_bot.handle(db, USER, _img())
-    assert "sólo puedo leer comprobantes en *PDF*" in replies[0]
+    assert "sólo leo comprobantes en *PDF*" in replies[0]
 
 
 async def test_unknown_pdf_is_read_by_ai(db, ai, monkeypatch):
@@ -215,7 +215,7 @@ async def test_unknown_pdf_is_read_by_ai(db, ai, monkeypatch):
     ai.reading = _reading(merchant="Edenor", amount=Decimal("32100.00"), category="Luz",
                           payment_method="transferencia")
     replies = await wa_bot.handle(db, USER, InboundMessage(phone="549383", wa_id="P1", kind="pdf"))
-    assert "✅ $32.100,00 · Edenor — Luz" in replies[0]
+    assert "✅ $32.100 · Edenor · Luz" in replies[0]
 
 
 # ------------------------------------------------------------- lectura ---
@@ -241,3 +241,11 @@ def test_sniff_media_type():
 
 def test_disabled_without_key():
     assert ai_capture.enabled() is False
+
+
+async def test_incoming_transfer_without_amount_asks_to_write_it(db, ai):
+    ai.reading = _reading(kind="transferencia_recibida", merchant="Juan Perez", amount=None)
+    replies = await wa_bot.handle(db, USER, _img("I1"))
+
+    assert "no pude leer bien el monto" in replies[0]
+    assert "lo que pagaste" not in replies[0]

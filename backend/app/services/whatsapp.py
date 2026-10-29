@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import re
+from decimal import Decimal
 
 import httpx
 
@@ -113,23 +114,31 @@ async def download_media_base64(message_key: dict, raw_message: dict | None = No
         return None
 
 
+def fmt_number(amount) -> str:
+    """12000 → "12.000", 20.5 → "20,50". Sin ",00": en un chat nadie lo escribe."""
+    text = f"{Decimal(str(amount)):,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
+    return text[:-3] if text.endswith(",00") else text
+
+
 def _money(amount, currency: str = "ARS") -> str:
     """Un monto con su símbolo. Antes todo salía con "$", también los gastos en
-    dólares, y el invitado leía un importe en pesos que no era."""
-    return f"U$D {amount}" if currency == "USD" else f"${amount}"
+    dólares, y el invitado leía un importe en pesos que no era. Un número se
+    formatea acá; un texto ya formateado pasa tal cual."""
+    shown = amount if isinstance(amount, str) else fmt_number(amount)
+    return f"U$D {shown}" if currency == "USD" else f"${shown}"
 
 
 async def send_whatsapp_invite(phone: str, creator_name: str, title: str, amount, token: str, cuotas_count: int = 1, currency: str = "ARS") -> None:
     link = f"{settings.FRONTEND_URL}/invite/{token}"
     if cuotas_count > 1:
         msg = (
-            f"Hola! {creator_name} te invito a compartir un gasto: '{title}' "
-            f"en {cuotas_count} cuotas de {_money(amount, currency)} c/u.\n\nEntra al link para ver el detalle y aceptarlas:\n{link}"
+            f"¡Hola! {creator_name} te invitó a compartir un gasto: *{title}*, "
+            f"en {cuotas_count} cuotas de {_money(amount, currency)}.\n\nEntrá al link para ver el detalle y aceptarlas:\n{link}"
         )
     else:
         msg = (
-            f"Hola! {creator_name} te invito a compartir un gasto: '{title}' "
-            f"por {_money(amount, currency)}.\n\nEntra al link para verlo y aceptarlo:\n{link}"
+            f"¡Hola! {creator_name} te invitó a compartir un gasto: *{title}*, "
+            f"por {_money(amount, currency)}.\n\nEntrá al link para verlo y aceptarlo:\n{link}"
         )
     await send_wa_msg(phone, msg)
 
@@ -138,14 +147,14 @@ async def send_whatsapp_member_notify(phone: str, creator_name: str, title: str,
     app_url = f"{settings.FRONTEND_URL}/shared"
     if cuotas_count > 1:
         msg = (
-            f"Hola! {creator_name} te compartio el gasto '{title}' "
-            f"en {cuotas_count} cuotas de {_money(total_amount, currency)} c/u.\nTu parte por cuota: {_money(split_amount, currency)}.\n"
-            f"Ingresa a la app para aceptarlas: {app_url}"
+            f"¡Hola! {creator_name} compartió con vos el gasto *{title}*, "
+            f"en {cuotas_count} cuotas de {_money(total_amount, currency)}.\nTu parte por cuota: {_money(split_amount, currency)}.\n"
+            f"Aceptalas en la app: {app_url}"
         )
     else:
         msg = (
-            f"Hola! {creator_name} te compartio el gasto '{title}' "
+            f"¡Hola! {creator_name} compartió con vos el gasto *{title}*, "
             f"por {_money(total_amount, currency)}.\nTu parte: {_money(split_amount, currency)}.\n"
-            f"Ingresa a la app para aceptarlo: {app_url}"
+            f"Aceptalo en la app: {app_url}"
         )
     await send_wa_msg(phone, msg)

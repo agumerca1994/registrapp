@@ -95,7 +95,7 @@ async def test_asks_password_then_reads_with_it(db, bot):
     assert await db.scalar(select(ExpenseEntry)) is None  # un DNI no es un gasto
 
     replies = await wa_bot.handle(db, USER, _text(DNI, "T2"))
-    assert "8.200,00" in replies[0]
+    assert "8.200" in replies[0]
     data, kwargs = bot.calls[0]
     assert not pdf_unlock.needs_password(data)
     assert kwargs["caption"] == ""  # la contraseña no viaja como comentario
