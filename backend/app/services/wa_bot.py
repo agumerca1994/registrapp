@@ -442,7 +442,9 @@ async def _handle_pdf(
         if handled is not None:
             return handled
 
-    _remember(db, user.id, "in", "pdf", wa_id=inbound.wa_id)
+    # La sesión puede llamar a la IA (categorías de los faltantes), que tarda:
+    # el mensaje se registra antes, así un reintento del webhook no arma otra.
+    inbound = await _claim_inbound(db, user, inbound)
     session = await reconcile_service.start_session(
         db, user=user, pdf_bytes=pdf, channel="whatsapp"
     )
@@ -554,7 +556,10 @@ async def _claim_inbound(db: AsyncSession, user: User, inbound: InboundMessage) 
     """Guarda el mensaje entrante y commitea ANTES de la llamada a la IA, que
     tarda segundos: si Evolution reintenta el webhook mientras tanto,
     `already_seen` lo frena y el gasto no se carga dos veces. Devuelve el
-    mensaje sin `wa_id`, para que lo que sigue no vuelva a registrarlo."""
+    mensaje sin `wa_id`, para que lo que sigue no vuelva a registrarlo. Uno
+    ya registrado (sin `wa_id`) pasa de largo."""
+    if inbound.wa_id is None:
+        return inbound
     _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id, text=inbound.text or None)
     await db.commit()
     return replace(inbound, wa_id=None)

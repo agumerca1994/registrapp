@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.credit_card import CreditCard, CreditCardItem, CreditCardStatement
+from app.models.expense import ExpenseCategory
 from app.models.reconciliation import (
     ACTION_APPLIED,
     ACTION_DISCARDED,
@@ -197,8 +198,54 @@ async def start_session(
         return session
 
     await resolve_session(db, session, user, explicit_card_id=card_id)
+    if channel != "mcp":
+        # Por el conector el que lee ya es una IA y elige la categoría él.
+        await suggest_missing_with_ai(db, session)
     await settle_status(db, session)
     return session
+
+
+async def suggest_missing_with_ai(db: AsyncSession, session: ReconciliationSession) -> int:
+    """Categoría para los faltantes en pesos que la regla del hogar y el
+    historial dejaron vacíos: una llamada a la IA por resumen, eligiendo entre
+    las categorías del hogar. Queda como sugerencia ("suggest:ai") que la
+    pantalla muestra igual que las otras; nunca pisa una categoría elegida.
+
+    Se llama al armar la sesión y al elegir tarjeta/período, no al reabrirla:
+    `refresh_session` conserva lo sugerido. Devuelve cuántos completó."""
+    from app.services import ai_capture
+    from app.services.search import fold_text
+
+    if not ai_capture.enabled():
+        return 0
+    pending = [
+        a for a in (await db.scalars(
+            select(ReconciliationAction).where(
+                ReconciliationAction.session_id == session.id,
+                ReconciliationAction.klass == matching.MISSING,
+                ReconciliationAction.status == ACTION_PROPOSED,
+            )
+        )).all()
+        if (a.payload or {}).get("currency", "ARS") == "ARS" and (a.payload or {}).get("category_id") is None
+    ]
+    if not pending:
+        return 0
+    cats = (await db.scalars(
+        select(ExpenseCategory).where(ExpenseCategory.tenant_id == session.tenant_id)
+    )).all()
+    by_name = {}
+    for c in cats:
+        by_name.setdefault(fold_text(c.name), c)
+    picks = await ai_capture.suggest_categories(
+        [a.payload.get("bank_description") or a.payload.get("description") or "" for a in pending],
+        [c.name for c in cats],
+    )
+    for i, name in picks.items():
+        cat = by_name.get(fold_text(name))
+        if cat is not None:
+            pending[i].payload = {**pending[i].payload, "category_id": cat.id, "category_source": "suggest:ai"}
+    await db.flush()
+    return len(picks)
 
 
 async def settle_status(db: AsyncSession, session: ReconciliationSession) -> None:

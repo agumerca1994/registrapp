@@ -627,7 +627,9 @@ function ActionRow({ klass, action, categories, fixHref, descDraft, setDescDraft
               }}
             />
             {suggested && !picked && (
-              <p className="text-[11px] text-muted-foreground">sugerida</p>
+              <p className="text-[11px] text-muted-foreground">
+                {p.category_source === "suggest:ai" ? "sugerida por IA" : "sugerida"}
+              </p>
             )}
             {picked && p.category_id != null && (
               <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">

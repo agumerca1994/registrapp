@@ -154,13 +154,27 @@ async def read_receipt(
         logger.warning("IA: formato de archivo no reconocido (%d bytes)", len(data))
         return None
 
-    import anthropic
-
     prompt = (
         f"Hoy es {today.isoformat()}.\n"
         f"Categorías: {', '.join(categories) if categories else '(ninguna)'}\n"
         + (f"La persona escribió junto al archivo: {caption}\n" if caption else "")
     )
+    answer = await _structured_call(
+        _SYSTEM, [_content_block(data, media_type), {"type": "text", "text": prompt}], _SCHEMA,
+    )
+    if answer is None:
+        return None
+    raw, input_tokens = answer
+    reading = parse_reading(raw, today)
+    reading.input_tokens = input_tokens
+    return reading
+
+
+async def _structured_call(system: str, content: list, schema: dict) -> tuple[dict, int | None] | None:
+    """Una llamada con salida validada contra `schema` → (json, tokens de
+    entrada), o None con un WARNING en el log. Nunca levanta excepción."""
+    import anthropic
+
     # Si el clasificador de seguridad declina (raro con un ticket, pero una
     # foto puede traer cualquier cosa), la API reintenta sola con otro modelo
     # en vez de devolver una negativa. Haiku no lo acepta: ahí va sin.
@@ -173,13 +187,10 @@ async def read_receipt(
         response = await client.beta.messages.create(
             model=settings.WA_AI_MODEL,
             max_tokens=4096,
-            system=_SYSTEM,
-            output_config={"effort": "low", "format": {"type": "json_schema", "schema": _SCHEMA}},
+            system=system,
+            output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema}},
             **fallback,
-            messages=[{
-                "role": "user",
-                "content": [_content_block(data, media_type), {"type": "text", "text": prompt}],
-            }],
+            messages=[{"role": "user", "content": content}],
         )
     except anthropic.APIStatusError as e:
         logger.warning("IA: la API respondió %s: %s", e.status_code, str(e.message)[:300])
@@ -199,6 +210,56 @@ async def read_receipt(
     except json.JSONDecodeError:
         logger.warning("IA: la salida no es JSON: %s", text[:200])
         return None
-    reading = parse_reading(raw, today)
-    reading.input_tokens = getattr(response.usage, "input_tokens", None)
-    return reading
+    return raw, getattr(response.usage, "input_tokens", None)
+
+
+_CATEGORY_SYSTEM = """Clasificás consumos de una tarjeta de crédito de un hogar de la \
+Argentina en las categorías que usa ese hogar. Cada consumo viene como lo imprime el \
+banco: el nombre del comercio, a veces cortado o con la sucursal ("SHELL AV VELEZ \
+SARSFIE", "MERPAGO*KIOSCO", "WWW.FRAVEGA.COM-BNA"). Para cada uno devolvé el nombre \
+EXACTO de la categoría que mejor le corresponde, o "" si ninguna encaja con claridad: \
+mejor sin categoría que una equivocada."""
+
+MAX_CATEGORY_ITEMS = 80
+
+
+async def suggest_categories(descriptions: list[str], categories: list[str]) -> dict[int, str]:
+    """Categoría sugerida para cada consumo, por posición en `descriptions`:
+    {índice: nombre de categoría}. Sólo trae los que la IA pudo ubicar en una
+    categoría existente (la salida está atada a la lista: no inventa). Una
+    sola llamada para todo el resumen; {} si la IA está apagada o falla."""
+    categories = list(dict.fromkeys(c for c in categories if c))
+    if not enabled() or not descriptions or not categories:
+        return {}
+    descriptions = descriptions[:MAX_CATEGORY_ITEMS]
+    schema = {
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "n": {"type": "integer"},
+                        "category": {"type": "string", "enum": [*categories, ""]},
+                    },
+                    "required": ["n", "category"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": ["items"],
+        "additionalProperties": False,
+    }
+    listing = "\n".join(f"{i}. {d}" for i, d in enumerate(descriptions))
+    prompt = f"Categorías: {', '.join(categories)}\n\nConsumos:\n{listing}"
+    answer = await _structured_call(_CATEGORY_SYSTEM, [{"type": "text", "text": prompt}], schema)
+    if answer is None:
+        return {}
+    raw, _tokens = answer
+    out: dict[int, str] = {}
+    for row in raw.get("items") or []:
+        n, cat = row.get("n"), row.get("category")
+        if isinstance(n, int) and 0 <= n < len(descriptions) and cat in categories:
+            out[n] = cat
+    return out

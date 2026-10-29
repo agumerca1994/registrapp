@@ -362,3 +362,54 @@ async def test_refresh_closes_an_old_session_read_with_no_items(db):
     assert not (await db.scalars(
         select(ReconciliationAction).where(ReconciliationAction.status.in_(["proposed", "needs_app"]))
     )).all()
+
+
+async def test_ai_fills_only_missing_items_without_category(db, monkeypatch):
+    """La IA completa la categoría de los faltantes que la regla y el historial
+    dejaron vacíos, como sugerencia; reabrir la sesión no la vuelve a llamar."""
+    from app.services import ai_capture
+    from app.services.reconcile import refresh_session
+    from app.services.reconcile.engine import suggest_missing_with_ai
+
+    cat, card, stmt, session = await _setup(db)
+    nafta = ExpenseCategory(tenant_id=1, name="Combustible", color="#f97316", is_fixed=False)
+    db.add(nafta)
+    await db.flush()
+    calls = []
+
+    async def _suggest(descriptions, categories):
+        calls.append((descriptions, categories))
+        return {0: "Combustible"}
+
+    monkeypatch.setattr(ai_capture, "enabled", lambda: True)
+    monkeypatch.setattr(ai_capture, "suggest_categories", _suggest)
+    await resolve_session(db, session, USER)
+    missing = await db.scalar(select(ReconciliationAction).where(ReconciliationAction.klass == "missing"))
+    missing.payload = {**missing.payload, "category_id": None, "category_source": None}
+    await db.flush()
+
+    assert await suggest_missing_with_ai(db, session) == 1
+    assert calls[0][0] == ["VERDULERIA DON PEPE"]
+    assert (missing.payload["category_id"], missing.payload["category_source"]) == (nafta.id, "suggest:ai")
+
+    await refresh_session(db, session, USER)
+    again = await db.scalar(select(ReconciliationAction).where(ReconciliationAction.klass == "missing"))
+    assert again.payload["category_id"] == nafta.id
+    assert len(calls) == 1
+
+
+async def test_suggest_categories_keeps_only_known_names(monkeypatch):
+    from app.services import ai_capture
+
+    async def _call(system, content, schema):
+        assert schema["properties"]["items"]["items"]["properties"]["category"]["enum"] == ["Comida", "Salud", ""]
+        return {"items": [
+            {"n": 0, "category": "Salud"},
+            {"n": 1, "category": ""},
+            {"n": 7, "category": "Comida"},       # fuera de rango
+        ]}, 120
+
+    monkeypatch.setattr(ai_capture, "enabled", lambda: True)
+    monkeypatch.setattr(ai_capture, "_structured_call", _call)
+    out = await ai_capture.suggest_categories(["FARMACITY", "XYZ"], ["Comida", "Salud", "Comida"])
+    assert out == {0: "Salud"}

@@ -295,6 +295,7 @@ async def choose(
         explicit_statement_id=body.statement_id,
         save_card_rule=body.save_card_rule,
     )
+    await reconcile_engine.suggest_missing_with_ai(db, session)
     await db.commit()
     return await _session_out(session, db)
 
