@@ -8,7 +8,7 @@ export interface ChatMessage { from: "user" | "assistant"; text: string }
 
 /**
  * El ejemplo del último paso, con el estilo de la sección de IA de la home.
- * No es una captura del asistente: son burbujas de RegistrApp con las
+ * No es una captura del asistente: son burbujas de tero con las
  * respuestas armadas a partir de lo que devolvieron las tools reales contra
  * una cuenta de demo, y lo dice arriba.
  *

@@ -1,0 +1,722 @@
+<title>tero en la app</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&family=Fredoka:wght@600&display=swap">
+<style>
+/* Layout: arriba la película en un celular con su guion al lado; abajo las dos pantallas web, interactivas. */
+:root {
+  --page: #eeeef4; --panel: #ffffff; --text: #1e1a2e; --muted: #626074; --line: #dedde8;
+  --app: #f7f7fb; --ink: #1e1a2e; --violet: #5b4fe9; --violet-soft: #ecebfd; --ok: #22b55a; --bad: #e5383b;
+  --sans: "Inter", system-ui, sans-serif; --display: "Space Grotesk", "Inter", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --page: #141419; --panel: #1e1e26; --text: #eeeef2; --muted: #a3a2b2; --line: #31313c; color-scheme: dark } }
+:root[data-theme="dark"] { --page: #141419; --panel: #1e1e26; --text: #eeeef2; --muted: #a3a2b2; --line: #31313c; color-scheme: dark }
+body { background: var(--page); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 36px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 40px; }
+.head { display: grid; gap: 10px; }
+.head .logo-big svg { height: 56px; width: auto; display: block; }
+h1 { font-family: var(--display); font-size: clamp(26px, 4vw, 38px); margin: 0; letter-spacing: -0.02em; }
+h2 { font-family: var(--display); font-size: 24px; margin: 0 0 4px; }
+.lead { margin: 0; max-width: 70ch; color: var(--muted); }
+
+/* ---------- Video ---------- */
+.vid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 28px; align-items: center; }
+.vid video { width: 300px; max-width: 100%; border-radius: 18px; background: #0d0c12; display: block; }
+@media (max-width: 760px) { .vid { grid-template-columns: 1fr; justify-items: center; } }
+
+/* ---------- Película ---------- */
+.reel { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 32px; align-items: start; }
+.phone { width: 380px; max-width: 100%; aspect-ratio: 380 / 780; background: #0d0c12; border-radius: 52px; padding: 10px; position: relative; box-shadow: 0 30px 60px -20px rgba(30,26,46,.45); }
+.phone .screen-box { width: 100%; height: 100%; border-radius: 42px; overflow: hidden; position: relative; background: var(--app); }
+.phone .screen { position: absolute; left: 0; top: 0; width: 360px; height: 760px; transform-origin: 0 0; }
+.island { position: absolute; top: 18px; left: 50%; translate: -50% 0; width: 110px; height: 30px; background: #0d0c12; border-radius: 20px; z-index: 30; }
+.script { display: grid; gap: 14px; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.controls button, .wbtn { font: 600 14px var(--sans); color: var(--text); background: var(--panel); border: 2px solid var(--line); border-radius: 999px; padding: 7px 16px; cursor: pointer; }
+.controls button:hover, .wbtn:hover { border-color: var(--text); }
+button:focus-visible { outline: 3px solid #f2a516; outline-offset: 2px; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; counter-reset: s; }
+.steps li { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px 10px 46px; position: relative; color: var(--muted); counter-increment: s; transition: border-color .2s, color .2s; }
+.steps li::before { content: counter(s); position: absolute; left: 14px; top: 10px; width: 22px; height: 22px; border-radius: 50%; background: var(--line); color: var(--text); font: 700 12px/22px var(--sans); text-align: center; }
+.steps li b { color: var(--text); display: block; }
+.steps li.on { border-color: var(--violet); color: var(--text); }
+.steps li.on::before { background: var(--violet); color: #fff; }
+
+/* ---------- Pantallas de la app (siempre en modo claro: son capturas) ---------- */
+.app { font-family: var(--sans); color: var(--ink); background: var(--app); }
+.scene { position: absolute; inset: 0; opacity: 0; transition: opacity .45s ease; pointer-events: none; overflow: hidden; }
+.scene.on { opacity: 1; pointer-events: auto; }
+.statusbar { height: 52px; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 30px 6px; font: 600 14px var(--sans); color: var(--ink); }
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 18px 12px; border-bottom: 1px solid #e6e5f0; background: #fff; }
+.topbar .lg svg { height: 26px; width: auto; display: block; }
+.topbar small { display: block; color: #6b6880; font-size: 12px; margin-top: 2px; }
+.month { margin: 14px 18px 0 auto; width: max-content; border: 2px solid var(--ink); border-radius: 999px; padding: 5px 14px; font: 700 13px var(--sans); box-shadow: 3px 3px 0 var(--ink); background: #fff; }
+.hero { margin: 14px 18px 0; background: #fff; border: 2px solid var(--ink); border-radius: 20px; box-shadow: 6px 6px 0 var(--violet); padding: 14px 16px; }
+.hero .k { font: 600 11px var(--sans); letter-spacing: .06em; color: #6b6880; text-transform: uppercase; }
+.hero .v { font: 700 28px var(--display); margin: 4px 0 2px; letter-spacing: -0.01em; }
+.hero .d { font-size: 12.5px; color: #d6334a; }
+.hero .u { border-top: 1px solid #ecebf3; margin-top: 12px; padding-top: 10px; }
+.hero .u .v { font-size: 24px; }
+.hero .u .d { color: #15925a; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 18px 0; }
+.tile { display: flex; gap: 8px; align-items: center; font-size: 12px; color: #6b6880; }
+.tile i { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; font-style: normal; font-size: 14px; }
+.tile b { display: block; color: var(--ink); font-size: 14px; font-variant-numeric: tabular-nums; }
+.card { margin: 16px 18px 0; background: #fff; border: 1px solid #e6e5f0; border-radius: 18px; padding: 14px 16px; }
+.card h4 { margin: 0 0 8px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.card h4 .chip { margin-left: auto; }
+.chip { border: 2px solid var(--ink); border-radius: 999px; padding: 2px 10px; font: 600 11px var(--sans); box-shadow: 2px 2px 0 var(--ink); background: #fff; white-space: nowrap; }
+.bar { height: 8px; border-radius: 99px; background: #eeedf7; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--violet); border-radius: 99px; width: 0; transition: width 1.6s cubic-bezier(.3,.7,.3,1); }
+.fab { position: absolute; right: 20px; bottom: 96px; width: 56px; height: 56px; border-radius: 50%; background: var(--violet); border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); color: #fff; font: 400 32px/50px var(--sans); text-align: center; }
+.tabbar { position: absolute; left: 12px; right: 12px; bottom: 22px; height: 62px; background: #fff; border: 2px solid var(--ink); border-radius: 20px; box-shadow: 4px 4px 0 var(--violet); display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; text-align: center; font-size: 10.5px; color: #6b6880; }
+.tabbar span.on { color: var(--violet); font-weight: 600; }
+.tabbar em { display: block; font-style: normal; font-size: 17px; line-height: 1.1; }
+.homebar { position: absolute; bottom: 7px; left: 50%; translate: -50% 0; width: 130px; height: 5px; border-radius: 9px; background: var(--ink); opacity: .85; }
+
+/* Login celular */
+.login { display: grid; justify-items: center; align-content: center; gap: 14px; height: 100%; padding: 0 28px; text-align: center; background: radial-gradient(120% 70% at 50% 28%, #ecebfd 0%, var(--app) 62%); }
+.login .wm svg { height: 52px; width: auto; display: block; }
+.login p { margin: 0; color: #5a5770; font-size: 15px; max-width: 26ch; }
+.gbtn { margin-top: 18px; width: 100%; border: 2px solid var(--ink); border-radius: 16px; box-shadow: 4px 4px 0 var(--ink); background: #fff; padding: 13px; font: 600 15px var(--sans); display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--ink); }
+.gdot { width: 18px; height: 18px; border-radius: 50%; background: conic-gradient(#ea4335 0 25%, #fbbc05 0 50%, #34a853 0 75%, #4285f4 0); }
+.fine { font-size: 11.5px !important; color: #8a879c !important; }
+
+/* Hoja de nuevo gasto */
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; border-top: 2px solid var(--ink); border-radius: 26px 26px 0 0; padding: 18px 20px 40px; transform: translateY(105%); transition: transform .45s cubic-bezier(.3,.8,.3,1); box-shadow: 0 -20px 50px rgba(30,26,46,.18); z-index: 10; }
+.sheet.open { transform: translateY(0); }
+.sheet h3 { margin: 0 0 14px; font: 700 18px var(--display); }
+.field { border: 2px solid var(--ink); border-radius: 14px; padding: 10px 14px; margin-bottom: 12px; }
+.field small { display: block; color: #6b6880; font-size: 11px; }
+.field .amt { font: 700 26px var(--display); min-height: 34px; }
+.cats { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.cats .chip.sel { background: var(--violet); color: #fff; }
+.save { width: 100%; background: var(--violet); color: #fff; border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); border-radius: 14px; padding: 12px; font: 700 15px var(--sans); }
+.scrim { position: absolute; inset: 0; background: rgba(30,26,46,.32); opacity: 0; transition: opacity .35s; z-index: 9; }
+.scrim.on { opacity: 1; }
+
+/* Avisos */
+.toast { position: absolute; left: 14px; right: 14px; top: 58px; background: #fff; border: 2px solid var(--ink); border-radius: 18px; box-shadow: 4px 4px 0 var(--ink); padding: 10px 14px 10px 8px; display: flex; gap: 8px; align-items: center; transform: translateY(-160%); transition: transform .5s cubic-bezier(.3,1.3,.5,1); z-index: 20; }
+.toast.on { transform: translateY(0); }
+.toast b { display: block; font-size: 14px; }
+.toast span { font-size: 12.5px; color: #6b6880; }
+.notif { position: absolute; left: 10px; right: 10px; top: 54px; background: rgba(255,255,255,.92); backdrop-filter: blur(8px); border-radius: 22px; padding: 11px 13px; display: flex; gap: 10px; align-items: center; box-shadow: 0 10px 30px rgba(30,26,46,.22); transform: translateY(-170%); transition: transform .55s cubic-bezier(.3,1.2,.5,1); z-index: 25; font-size: 13px; }
+.notif.on { transform: translateY(0); }
+.notif b { font-size: 13px; } .notif small { color: #8a879c; margin-left: auto; align-self: flex-start; }
+.notif .ic { flex: none; }
+.duecard { border: 2px solid var(--ink); box-shadow: 4px 4px 0 var(--bad); }
+.duecard .amt { font: 700 22px var(--display); }
+.goal .amt { font: 700 20px var(--display); }
+.goal .done { color: var(--ok); font-weight: 700; font-size: 13px; opacity: 0; transition: opacity .4s; }
+.goal.complete .done { opacity: 1; }
+.goal.complete .bar > span { background: var(--ok); }
+.tap { position: absolute; width: 44px; height: 44px; border-radius: 50%; background: rgba(30,26,46,.22); border: 2px solid rgba(255,255,255,.9); translate: -50% -50%; opacity: 0; z-index: 40; pointer-events: none; }
+.tap.go { animation: tap .55s ease-out; }
+@keyframes tap { 0% { opacity: 0; scale: 1.5 } 30% { opacity: 1; scale: 1 } 70% { opacity: 1; scale: .85 } 100% { opacity: 0; scale: 1.1 } }
+
+/* WhatsApp */
+.wa { height: 100%; background: #efe7de; display: grid; grid-template-rows: auto 1fr; }
+.wa-top { background: #f7f7f7; padding: 54px 14px 10px; display: flex; gap: 10px; align-items: center; border-bottom: 1px solid #ddd; }
+.wa-top b { display: block; font-size: 15px; } .wa-top small { color: #6b6880; font-size: 12px; }
+.wa-body { padding: 14px 12px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.msg { max-width: 78%; padding: 7px 10px 6px; border-radius: 12px; font-size: 14px; box-shadow: 0 1px 1px rgba(0,0,0,.08); opacity: 0; transform: translateY(8px); transition: opacity .3s, transform .3s; }
+.msg.on { opacity: 1; transform: none; }
+.msg.me { align-self: flex-end; background: #d9fdd3; border-top-right-radius: 3px; }
+.msg.bot { align-self: flex-start; background: #fff; border-top-left-radius: 3px; }
+.msg.stk { background: none; box-shadow: none; padding: 0; }
+
+/* ---------- Web ---------- */
+.webs { display: grid; gap: 28px; }
+.webcard { display: grid; gap: 10px; }
+.browser { border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: #fff; box-shadow: 0 24px 50px -24px rgba(30,26,46,.35); }
+.chrome { height: 36px; background: #ecebf2; display: flex; align-items: center; gap: 7px; padding: 0 14px; }
+.chrome i { width: 11px; height: 11px; border-radius: 50%; background: #d4d2de; }
+.chrome .url { margin-left: 14px; background: #fff; border-radius: 8px; padding: 3px 12px; font: 500 12px var(--sans); color: #6b6880; flex: 1; max-width: 340px; }
+.viewport { position: relative; width: 100%; aspect-ratio: 1280 / 760; overflow: hidden; }
+.desk { position: absolute; left: 0; top: 0; width: 1280px; height: 760px; transform-origin: 0 0; }
+.wlogin { display: grid; grid-template-columns: 1.15fr 1fr; height: 100%; }
+.wlogin .left { background: var(--violet); display: grid; place-items: center; align-content: center; gap: 26px; color: #fff; position: relative; overflow: hidden; }
+.wlogin .left::after { content: ""; position: absolute; width: 520px; height: 520px; border-radius: 50%; background: rgba(255,255,255,.07); right: -160px; bottom: -200px; }
+.wlogin .left .wm svg { height: 72px; width: auto; display: block; }
+.wlogin .left p { margin: 0; font-size: 20px; max-width: 26ch; text-align: center; opacity: .9; }
+.wlogin .right { display: grid; align-content: center; padding: 0 96px; gap: 16px; }
+.wlogin h3 { font: 700 34px var(--display); margin: 0; letter-spacing: -0.01em; }
+.wlogin .right p { margin: 0; color: #5a5770; font-size: 16px; }
+.wlogin .gbtn { max-width: 380px; margin-top: 10px; }
+.wlogin .alt { font-size: 14px; color: #5a5770; margin-top: 18px; }
+.wlogin .alt b { color: var(--violet); }
+.wdash { display: grid; grid-template-columns: 240px 1fr; height: 100%; }
+.side { border-right: 1px solid #e6e5f0; background: #fff; display: grid; grid-template-rows: auto 1fr auto; }
+.side .brand { padding: 22px 22px 16px; border-bottom: 1px solid #e6e5f0; }
+.side .brand svg { height: 30px; width: auto; display: block; }
+.side .brand small { display: block; color: #6b6880; font-size: 12px; margin-top: 4px; }
+.side nav { padding: 14px 14px; display: grid; gap: 4px; align-content: start; }
+.side nav span { padding: 9px 12px; border-radius: 10px; font-size: 14px; color: #3d3a52; }
+.side nav span.on { background: var(--violet); color: #fff; font-weight: 600; }
+.side .me { padding: 14px 18px; border-top: 1px solid #e6e5f0; font-size: 13px; color: #5a5770; display: flex; align-items: center; gap: 8px; }
+.main { padding: 22px 30px; position: relative; overflow: hidden; }
+.main .row { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
+.main .month { margin: 0; }
+.main .hero { margin: 18px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 22px 26px; }
+.main .hero .u { border-top: 0; margin: 0; padding: 0 0 0 26px; border-left: 1px solid #ecebf3; }
+.main .hero .v { font-size: 36px; }
+.main .tiles { grid-template-columns: repeat(3, 1fr); margin: 22px 0 0; }
+.main .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+.main .card { margin: 0; }
+.cat { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 13px; margin-bottom: 8px; }
+.cat .bar { grid-column: 1 / -1; height: 5px; }
+.main .fab { right: 34px; bottom: 30px; }
+.wtoast { position: absolute; right: 28px; bottom: 100px; width: 330px; background: #fff; border: 2px solid var(--ink); border-radius: 18px; box-shadow: 5px 5px 0 var(--ink); padding: 12px 16px 12px 10px; display: flex; gap: 10px; align-items: center; transform: translateX(130%); transition: transform .5s cubic-bezier(.3,1.3,.5,1); z-index: 20; }
+.wtoast.on { transform: none; }
+.wtoast b { display: block; font-size: 15px; } .wtoast span { font-size: 13px; color: #6b6880; }
+.wactions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* ---------- La t andando por la app ---------- */
+.alive { display: grid; gap: 22px; }
+.trio { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 22px; justify-items: center; align-items: start; }
+.demo { margin: 0; display: grid; gap: 12px; justify-items: center; max-width: 320px; }
+.demo figcaption { color: var(--muted); font-size: 14px; text-align: center; }
+.demo figcaption b { display: block; color: var(--text); font-size: 15px; }
+.phone.sm { width: 290px; }
+.splash { height: 100%; background: var(--violet); display: grid; place-items: center; align-content: center; gap: 22px; }
+.splash .wm { opacity: 0; transform: translateY(16px); transition: opacity .6s, transform .6s cubic-bezier(.3,1.3,.5,1); }
+.splash .wm.on { opacity: 1; transform: none; }
+.splash .wm svg { height: 50px; width: auto; display: block; }
+.fab2 { position: absolute; right: 20px; bottom: 96px; width: 56px; height: 56px; border-radius: 50%; background: var(--violet); border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); display: grid; place-items: center; z-index: 12; transition: transform .3s; }
+.fab2 .plus { position: absolute; color: #fff; font: 400 32px/1 var(--sans); transition: transform .35s, opacity .25s; }
+.fab2 .ft { position: absolute; transform: scale(0); transition: transform .45s cubic-bezier(.3,1.6,.5,1); line-height: 0; }
+.fab2.open { transform: scale(1.14); }
+.fab2.open .plus { transform: rotate(135deg) scale(.4); opacity: 0; }
+.fab2.open .ft { transform: scale(1); }
+.speed { position: absolute; right: 22px; z-index: 12; display: flex; align-items: center; gap: 8px; background: #fff; border: 2px solid var(--ink); border-radius: 999px; padding: 7px 14px; font: 600 13px var(--sans); box-shadow: 3px 3px 0 var(--ink); opacity: 0; transform: translateY(20px) scale(.85); transition: opacity .25s, transform .4s cubic-bezier(.3,1.4,.5,1), background .2s, color .2s; }
+.speed.on { opacity: 1; transform: none; }
+.speed.pick { background: var(--ok); color: #fff; }
+/* Variante: la t sale del + y queda flotando, grande y sin botón. */
+.fab3 { position: absolute; right: 20px; bottom: 96px; width: 56px; height: 56px; border-radius: 50%; background: var(--violet); border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); color: #fff; font: 400 32px/50px var(--sans); text-align: center; z-index: 12; transition: transform .3s cubic-bezier(.5,0,.5,1); }
+.fab3.hide { transform: scale(0) rotate(90deg); }
+.floatT { position: absolute; right: 2px; bottom: 84px; width: 124px; height: 124px; z-index: 13; transform-origin: 80% 88%; transform: scale(.22); opacity: 0; transition: transform .6s cubic-bezier(.3,1.5,.45,1), opacity .2s; pointer-events: none; line-height: 0; }
+.floatT.on { transform: translate(-8px, -54px) scale(1); opacity: 1; }
+.floatShadow { position: absolute; right: 30px; bottom: 96px; width: 74px; height: 12px; border-radius: 50%; background: rgba(30,26,46,.25); filter: blur(3px); z-index: 12; transform: scale(.2); opacity: 0; transition: transform .5s, opacity .3s; }
+.floatShadow.on { transform: scale(1); opacity: 1; }
+.scrim.soft { background: rgba(30,26,46,.22); }
+.speed.far { right: 136px; }
+.loadscr { height: calc(100% - 52px); display: grid; place-items: center; align-content: center; gap: 12px; text-align: center; padding: 0 30px; }
+.loadscr h3 { font: 700 22px var(--display); margin: 6px 0 0; }
+.loadscr p { margin: 0; color: #6b6880; min-height: 22px; }
+.lbar { width: 200px; height: 8px; border-radius: 9px; background: #e6e4f7; overflow: hidden; margin-top: 6px; }
+.lbar span { display: block; height: 100%; width: 0; background: var(--violet); transition: width .7s ease; border-radius: 9px; }
+.loaders { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 14px; }
+.ld { background: #fff; border: 1px solid #e6e5f0; border-radius: 20px; padding: 24px 20px; display: grid; justify-items: center; align-content: end; gap: 6px; min-height: 230px; text-align: center; color: var(--ink); }
+.ld b { font-size: 15px; } .ld small { color: #6b6880; font-size: 13px; max-width: 30ch; }
+.ld > :first-child { margin-bottom: auto; }
+.track { position: relative; width: 100%; height: 96px; }
+.track .line { position: absolute; left: 0; right: 0; bottom: 6px; height: 6px; border-radius: 9px; background: #e6e4f7; overflow: hidden; }
+.track .line span { display: block; height: 100%; background: var(--violet); width: 0; animation: walkbar 3.6s linear infinite; }
+.walker { position: absolute; bottom: 10px; left: 0; animation: walk 3.6s linear infinite; line-height: 0; }
+@keyframes walk { from { left: -6% } to { left: 84% } }
+@keyframes walkbar { from { width: 0 } to { width: 100% } }
+.think { display: grid; justify-items: center; gap: 4px; }
+.dots span { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--violet); margin: 0 3px; animation: dot 1.2s infinite; }
+.dots span:nth-child(2) { animation-delay: .2s } .dots span:nth-child(3) { animation-delay: .4s }
+@keyframes dot { 0%, 80%, 100% { opacity: .25; transform: translateY(0) } 40% { opacity: 1; transform: translateY(-5px) } }
+.tv.tv-walk .tv-anim { animation: tv-hop .28s ease-in-out infinite alternate; }
+.tv.tv-think .tv-crest { animation: tv-crest-wave .9s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .walker, .track .line span, .dots span { animation: none !important; } }
+@media (max-width: 900px) { .reel { grid-template-columns: 1fr; justify-items: center; } .script { width: 100%; } }
+
+/* ---------- La t (avatar) ---------- */
+.tv .tv-anim { transform-box: view-box; transform-origin: 100px 172px; animation: tv-breathe 3.4s ease-in-out infinite; }
+.tv .tv-crest { transform-box: view-box; }
+.tv .tv-face { transform-box: view-box; transform-origin: 94px 96px; transform: scale(.2); opacity: 0; transition: transform .3s cubic-bezier(.3,1.7,.5,1), opacity .18s; }
+.tv.tv--gasto .tv-face, .tv.tv--alerta .tv-face, .tv.tv--meta .tv-face, .tv.tv--pasado .tv-face, .tv.tv--duda .tv-face, .tv.tv--toque .tv-face, .tv.tv--hola .tv-face { transform: scale(1); opacity: 1; }
+.tv .tv-happy, .tv .tv-squint, .tv .tv-doubt, .tv .tv-open, .tv .tv-pop { display: none; }
+.tv.tv--gasto .tv-happy, .tv.tv--meta .tv-happy, .tv.tv--toque .tv-happy { display: inline; }
+.tv.tv--gasto .tv-eyes, .tv.tv--meta .tv-eyes, .tv.tv--toque .tv-eyes, .tv.tv--pasado .tv-eyes, .tv.tv--duda .tv-eyes { display: none; }
+.tv.tv--pasado .tv-squint, .tv.tv--duda .tv-doubt { display: inline; }
+.tv.tv--alerta .tv-open, .tv.tv--meta .tv-open, .tv.tv--hola .tv-open { display: inline; }
+.tv.tv--alerta .tv-shut, .tv.tv--meta .tv-shut, .tv.tv--hola .tv-shut { display: none; }
+.tv.tv--gasto .tv-p-gasto, .tv.tv--alerta .tv-p-alerta, .tv.tv--meta .tv-p-meta, .tv.tv--duda .tv-p-duda { display: inline; }
+.tv .tv-eyes { transform-box: fill-box; transform-origin: center; animation: tv-blink 4.6s infinite; }
+.tv .tv-pop > g { opacity: 0; animation: tv-spark 1.1s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+.tv .tv-pop > g:nth-child(2) { animation-delay: .28s } .tv .tv-pop > g:nth-child(3) { animation-delay: .56s } .tv .tv-pop > g:nth-child(4) { animation-delay: .84s }
+.tv.tv--gasto .tv-anim { animation: tv-hop .32s cubic-bezier(.3,.7,.4,1) 4 alternate; }
+.tv.tv--alerta .tv-anim { animation: tv-shake .26s ease-in-out 6; }
+.tv.tv--alerta .tv-crest { animation: tv-crest-up .5s ease-out forwards; }
+.tv.tv--meta .tv-anim { animation: tv-jump .36s cubic-bezier(.3,.7,.4,1) infinite alternate; }
+.tv.tv--pasado .tv-anim { animation: tv-droop .5s ease-out forwards; }
+.tv.tv--duda .tv-anim { animation: tv-tilt .4s ease-out forwards; }
+.tv.tv--toque .tv-anim, .tv.tv--hola .tv-anim { animation: tv-squash .5s ease-out; }
+.tv.tv--hola .tv-crest { animation: tv-crest-wave .6s ease-in-out 2; }
+.tv.tv-enter .tv-anim { animation: tv-enter .8s cubic-bezier(.3,1.4,.5,1) both; }
+@keyframes tv-breathe { 0%,100% { transform: scale(1, 1) } 50% { transform: scale(1.012, .988) } }
+@keyframes tv-blink { 0%,92%,100% { transform: scaleY(1) } 95% { transform: scaleY(.12) } }
+@keyframes tv-hop { from { transform: translateY(0) scale(1, 1) } to { transform: translateY(-16px) scale(.97, 1.03) } }
+@keyframes tv-shake { 0%,100% { transform: rotate(0) } 25% { transform: rotate(-5deg) } 75% { transform: rotate(5deg) } }
+@keyframes tv-crest-up { 0% { transform: scaleY(1) } 60% { transform: scaleY(1.24) } 100% { transform: scaleY(1.18) } }
+@keyframes tv-crest-wave { 0%,100% { transform: scaleY(1) } 50% { transform: scaleY(1.15) } }
+@keyframes tv-jump { from { transform: translateY(0) } to { transform: translateY(-24px) } }
+@keyframes tv-droop { to { transform: translateY(8px) rotate(-4deg) scale(1.02, .96) } }
+@keyframes tv-tilt { to { transform: rotate(10deg) } }
+@keyframes tv-squash { 0% { transform: scale(1, 1) } 30% { transform: scale(1.08, .9) } 60% { transform: scale(.96, 1.05) } 100% { transform: scale(1, 1) } }
+@keyframes tv-spark { 0% { opacity: 0; transform: scale(.2) } 30% { opacity: 1 } 100% { opacity: 0; transform: scale(1.3) } }
+@keyframes tv-enter { 0% { opacity: 0; transform: translateY(30px) scale(.6) } 100% { opacity: 1; transform: none } }
+@media (prefers-reduced-motion: reduce) { .tv, .tv * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="head">
+    <div class="logo-big" id="headlogo"></div>
+    <h1>Así se vería tero en la app</h1>
+    <p class="lead">Mocks del celular y de la web con el logo nuevo y la t como personaje. La película de abajo corre sola: login, inicio, cargar un gasto, un vencimiento, una meta cumplida y el bot de WhatsApp. Los datos son de una cuenta de ejemplo.</p>
+  </header>
+
+  <section class="vid" aria-label="Video">
+    <video src="/*VIDEO*/" controls muted loop playsinline preload="metadata"></video>
+    <div><h2>El video</h2><p class="lead">La película grabada, 34 segundos: login, inicio, cargar un gasto, la confirmación, un vencimiento, una meta cumplida y el bot de WhatsApp. Abajo está la misma película en vivo, para pausarla y verla paso a paso.</p></div>
+  </section>
+
+  <section class="reel" aria-label="Película en el celular">
+    <div class="phone"><div class="screen-box"><div class="island"></div><div class="screen app" id="screen">
+      <!-- 1. Login -->
+      <div class="scene" data-s="0"><div class="login">
+        <div id="loginT"></div>
+        <div class="wm" id="loginLogo"></div>
+        <p>Tus cuentas, ordenadas. Escribile por WhatsApp o usá la app.</p>
+        <div class="gbtn" id="gbtn"><span class="gdot"></span>Continuar con Google</div>
+        <p class="fine">Al continuar aceptás los términos y la política de privacidad.</p>
+      </div></div>
+      <!-- 2-6. Inicio -->
+      <div class="scene" data-s="1">
+        <div class="statusbar"><span>9:41</span><span>●●● 100%</span></div>
+        <div class="topbar"><div><div class="lg" id="topLogo"></div><small>¡Hola de nuevo, Martín!</small></div><div id="topT"></div></div>
+        <div class="month">‹ &nbsp;Octubre 2026&nbsp; ›</div>
+        <div class="hero"><div class="k">Cierre de octubre 2026</div><div class="v" id="pesos">$ 1.326.609</div><div class="d">↘ −44,7% vs mes anterior</div>
+          <div class="u"><div class="v">U$D 3.100</div><div class="d">↗ +U$D 600 este mes</div></div></div>
+        <div class="tiles"><div class="tile"><i style="background:#e7f8ee">↗</i><div>Ingresos<b>$ 4.069.000</b></div></div>
+          <div class="tile"><i style="background:#fdecef">↘</i><div>Egresos<b id="egresos">$ 1.812.390</b></div></div></div>
+        <div class="card duecard" id="due" hidden><h4><span id="dueT"></span>Visa BBVA<span class="chip">Vence el jueves</span></h4><div class="amt">$ 412.900</div><div style="font-size:12.5px;color:#6b6880">Te conviene tener la plata en la cuenta el miércoles.</div></div>
+        <div class="card goal" id="goal" hidden><h4><span id="goalT"></span>Vacaciones<span class="done">¡Meta cumplida!</span></h4><div class="amt" id="goalAmt">U$D 1.080 de 1.200</div><div class="bar" style="margin-top:8px"><span id="goalBar"></span></div></div>
+        <div class="card" id="mort"><h4>🏠 Hipoteca<span class="chip">Próximo vencimiento: 10 nov</span></h4><div style="font-size:12.5px;color:#6b6880">Cuota 21 de 240</div><div class="amt" style="font:700 20px var(--display)">$ 817.201</div></div>
+        <div class="fab" id="fab">+</div>
+        <div class="tabbar"><span class="on"><em>▦</em>Inicio</span><span><em>↗</em>Ingresos</span><span><em>↘</em>Egresos</span><span><em>▭</em>Tarjetas</span><span><em>⋯</em>Más</span></div>
+        <div class="scrim" id="scrim"></div>
+        <div class="sheet" id="sheet"><h3>Nuevo gasto</h3>
+          <div class="field"><small>Monto</small><div class="amt" id="typed"></div></div>
+          <div class="cats"><span class="chip" id="catSuper">Súper</span><span class="chip">Hogar</span><span class="chip">Transporte</span><span class="chip">Salidas</span></div>
+          <div class="save" id="saveBtn">Guardar</div></div>
+        <div class="toast" id="toast"><span id="toastT"></span><div><b>Anotado: $12.000 en Súper</b><span>Este mes llevás $184.300 en Súper.</span></div></div>
+        <div class="notif" id="notif"><span class="ic" id="notifIcon"></span><div><b>tero</b><br>La Visa vence el jueves: $412.900</div><small>ahora</small></div>
+      </div>
+      <!-- 7. WhatsApp -->
+      <div class="scene" data-s="2"><div class="wa">
+        <div class="wa-top"><span id="waIcon"></span><div><b>tero</b><small>en línea</small></div></div>
+        <div class="wa-body">
+          <div class="msg me">12 lucas súper</div>
+          <div class="msg bot">✅ Anotado: $12.000 en Súper. Este mes llevás $184.300.</div>
+          <div class="msg stk" id="stk1"></div>
+          <div class="msg me">qué tengo que pagar esta semana?</div>
+          <div class="msg bot">⚠️ La Visa vence el jueves: $412.900. Y el viernes, la cuota de la hipoteca.</div>
+          <div class="msg stk" id="stk2"></div>
+        </div>
+      </div></div>
+      <div class="tap" id="tap"></div>
+      <div class="homebar"></div>
+    </div></div></div>
+
+    <div class="script">
+      <h2>La película</h2>
+      <div class="controls"><button type="button" id="play">Pausar</button><button type="button" id="again">Empezar de nuevo</button></div>
+      <ol class="steps" id="steps">
+        <li><b>Login</b>La t entra, saluda con el copete y te espera mirando el botón.</li>
+        <li><b>Inicio</b>El logo arriba a la izquierda y la t chiquita a la derecha, quieta.</li>
+        <li><b>Cargar un gasto</b>Se escribe el monto y se guarda.</li>
+        <li><b>Confirmación</b>La t se llena de verde de abajo hacia arriba, con tildes alrededor.</li>
+        <li><b>Un vencimiento</b>Llega la notificación y la t se llena de rojo, con signos de exclamación.</li>
+        <li><b>Meta cumplida</b>La barra llega al 100% y la t festeja entre estrellitas.</li>
+        <li><b>El bot en WhatsApp</b>La t es la foto del bot y responde con stickers.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="alive" aria-label="La t andando por la app">
+    <div><h2>La t andando por la app</h2><p class="lead">La t no se queda en el logo: abre la app, aparece cuando tocás el botón + y te acompaña mientras algo carga. Las cuatro pantallas corren solas, en loop. Para el botón + hay dos variantes: la t adentro del botón, con las acciones, o la t que sale del botón sola y hace sus gestos.</p></div>
+    <div class="trio">
+      <figure class="demo"><div class="phone sm"><div class="screen-box"><div class="island"></div><div class="screen app">
+        <div class="splash"><div id="splashT"></div><div class="wm" id="splashLogo"></div></div><div class="homebar" style="background:#fff"></div>
+      </div></div></div><figcaption><b>Al abrir la app</b>La t se dibuja llenándose de abajo hacia arriba, saluda con el copete y aparece el nombre.</figcaption></figure>
+
+      <figure class="demo"><div class="phone sm"><div class="screen-box"><div class="island"></div><div class="screen app" id="fabScreen">
+        <div class="statusbar"><span>9:41</span><span>●●● 100%</span></div>
+        <div class="topbar"><div><div class="lg" id="fabLogo"></div><small>¡Hola de nuevo, Martín!</small></div></div>
+        <div class="hero"><div class="k">Cierre de octubre 2026</div><div class="v">$ 1.326.609</div><div class="d">↘ −44,7% vs mes anterior</div><div class="u"><div class="v">U$D 3.100</div><div class="d">↗ +U$D 600 este mes</div></div></div>
+        <div class="tiles"><div class="tile"><i style="background:#e7f8ee">↗</i><div>Ingresos<b>$ 4.069.000</b></div></div><div class="tile"><i style="background:#fdecef">↘</i><div>Egresos<b>$ 1.812.390</b></div></div></div>
+        <div class="card"><h4>🏠 Hipoteca<span class="chip">Próximo: 10 nov</span></h4><div style="font:700 20px var(--display)">$ 817.201</div></div>
+        <div class="tabbar"><span class="on"><em>▦</em>Inicio</span><span><em>↗</em>Ingresos</span><span><em>↘</em>Egresos</span><span><em>▭</em>Tarjetas</span><span><em>⋯</em>Más</span></div>
+        <div class="scrim" id="scrim2"></div>
+        <div class="speed" style="bottom:168px">💸 Gasto</div>
+        <div class="speed" style="bottom:218px">💰 Ingreso</div>
+        <div class="speed" style="bottom:268px">👥 Gasto compartido</div>
+        <div class="speed" style="bottom:318px">📷 Foto del ticket</div>
+        <div class="fab2" id="fab2"><span class="plus">+</span><span class="ft" id="fabT"></span></div>
+        <div class="tap"></div><div class="homebar"></div>
+      </div></div></div><figcaption><b>El + con la t adentro</b>Al tocarlo, el + se da vuelta, sale la t y despliega las acciones. Mira la que elegís y la festeja.</figcaption></figure>
+
+      <figure class="demo"><div class="phone sm"><div class="screen-box"><div class="island"></div><div class="screen app" id="floatScreen">
+        <div class="statusbar"><span>9:41</span><span>●●● 100%</span></div>
+        <div class="topbar"><div><div class="lg" id="floatLogo"></div><small>¡Hola de nuevo, Martín!</small></div></div>
+        <div class="hero"><div class="k">Cierre de octubre 2026</div><div class="v">$ 1.326.609</div><div class="d">↘ −44,7% vs mes anterior</div><div class="u"><div class="v">U$D 3.100</div><div class="d">↗ +U$D 600 este mes</div></div></div>
+        <div class="tiles"><div class="tile"><i style="background:#e7f8ee">↗</i><div>Ingresos<b>$ 4.069.000</b></div></div><div class="tile"><i style="background:#fdecef">↘</i><div>Egresos<b>$ 1.812.390</b></div></div></div>
+        <div class="card"><h4>🏠 Hipoteca<span class="chip">Próximo: 10 nov</span></h4><div style="font:700 20px var(--display)">$ 817.201</div></div>
+        <div class="tabbar"><span class="on"><em>▦</em>Inicio</span><span><em>↗</em>Ingresos</span><span><em>↘</em>Egresos</span><span><em>▭</em>Tarjetas</span><span><em>⋯</em>Más</span></div>
+        <div class="floatShadow" id="floatShadow"></div>
+        <div class="floatT" id="floatT"></div>
+        <div class="fab3" id="fab3">+</div>
+        <div class="tap"></div><div class="homebar"></div>
+      </div></div></div><figcaption><b>La t sale del +</b>El botón se achica y desde ahí sale la t, suelta y más grande. Saluda, mira para los costados, se ríe y vuelve a meterse en el botón.</figcaption></figure>
+
+      <figure class="demo"><div class="phone sm"><div class="screen-box"><div class="island"></div><div class="screen app">
+        <div class="statusbar"><span>9:41</span><span>●●● 100%</span></div>
+        <div class="loadscr"><div id="loadT"></div><h3 id="loadTitle">Leyendo tu resumen</h3><p id="loadSub"></p><div class="lbar"><span id="lbar"></span></div><p class="fine">Visa BBVA · resumen de octubre</p></div>
+        <div class="homebar"></div>
+      </div></div></div><figcaption><b>Pantalla de carga</b>Mientras lee el resumen de la tarjeta, la t se va llenando. Si todo coincide, se pone verde.</figcaption></figure>
+    </div>
+
+    <div><h2 style="font-size:20px">Variantes de "cargando"</h2><p class="lead">Para usar en cualquier lugar de la app, según cuánto dura la espera.</p></div>
+    <div class="loaders">
+      <div class="ld"><div id="ldFill"></div><b>Se va llenando</b><small>Esperas cortas: guardar un gasto, leer un comprobante.</small></div>
+      <div class="ld"><div class="track"><div class="walker" id="ldWalk"></div><div class="line"><span></span></div></div><b>Camina sobre la barra</b><small>Cuando hay un progreso de verdad: importar movimientos, subir un PDF.</small></div>
+      <div class="ld"><div class="think"><div id="ldThink"></div><div class="dots"><span></span><span></span><span></span></div></div><b>Pensando</b><small>Mientras el bot o la IA arman una respuesta.</small></div>
+    </div>
+  </section>
+
+  <section class="webs" aria-label="Pantallas web">
+    <div><h2>En la web</h2><p class="lead">Las dos pantallas responden: la t del login te sigue con el cuerpo cuando movés el mouse, y en el inicio podés disparar las reacciones con los botones.</p></div>
+    <div class="webcard">
+      <div class="browser"><div class="chrome"><i></i><i></i><i></i><span class="url">tero.com.ar/login</span></div>
+        <div class="viewport"><div class="desk app"><div class="wlogin">
+          <div class="left"><div id="wLoginT"></div><div class="wm" id="wLoginLogo"></div><p>Tus cuentas, ordenadas. Escribile por WhatsApp o usá la app.</p></div>
+          <div class="right"><h3>Entrá a tero</h3><p>Usá tu cuenta de Google. Si es la primera vez, te creamos la cuenta en un paso.</p>
+            <div class="gbtn"><span class="gdot"></span>Continuar con Google</div>
+            <p class="alt">¿Tenés un comercio? <b>Probá tero para negocios</b></p></div>
+        </div></div></div></div>
+    </div>
+    <div class="webcard">
+      <div class="browser"><div class="chrome"><i></i><i></i><i></i><span class="url">tero.com.ar/inicio</span></div>
+        <div class="viewport"><div class="desk app"><div class="wdash">
+          <aside class="side"><div class="brand"><div id="wSideLogo"></div><small>¡Hola de nuevo, Martín!</small></div>
+            <nav><span class="on">▦ &nbsp;Inicio</span><span>↗ &nbsp;Ingresos</span><span>↘ &nbsp;Egresos</span><span>⇄ &nbsp;Divisas</span><span>👥 &nbsp;Gastos compartidos</span><span>▭ &nbsp;Tarjetas</span><span>🗓 &nbsp;Calendario de pagos</span><span>🏠 &nbsp;Créditos</span><span>⚙ &nbsp;Configuración</span></nav>
+            <div class="me"><span id="wMeT"></span>martin@demo.local</div></aside>
+          <main class="main">
+            <div class="row"><div class="month">‹ &nbsp;Octubre 2026&nbsp; ›</div></div>
+            <div class="hero"><div><div class="k">Cierre de octubre 2026 · estado actual</div><div class="v" id="wPesos">$ 1.694.109</div><div class="d">↘ −29,4% vs mes anterior</div></div>
+              <div class="u"><div class="v">U$D 2.900</div><div class="d">↗ +U$D 400 este mes</div></div></div>
+            <div class="tiles"><div class="tile"><i style="background:#e7f8ee">↗</i><div>Ingresos<b>$ 4.069.000</b></div></div><div class="tile"><i style="background:#fdecef">↘</i><div>Egresos<b id="wEgresos">$ 1.752.890</b></div></div><div class="tile"><i style="background:#ecebfd">◔</i><div>Inflación<b>1,70%</b></div></div></div>
+            <div class="cards"><div class="card"><h4>🏠 Hipoteca<span class="chip">Próximo vencimiento: 10 nov</span></h4><div style="font-size:12.5px;color:#6b6880">Cuota 21 de 240 · 8,3% completado</div><div class="bar" style="margin:8px 0"><span style="width:8.3%"></span></div><div style="font:700 22px var(--display)">$ 817.201</div></div>
+              <div class="card"><h4>Egresos por categoría</h4>
+                <div class="cat"><span>Hipoteca</span><b>$ 817.201</b><div class="bar"><span style="width:46%"></span></div></div>
+                <div class="cat"><span>Servicios</span><b>$ 233.100</b><div class="bar"><span style="width:13%;background:#3b82f6"></span></div></div>
+                <div class="cat"><span>Supermercado</span><b id="wSuper">$ 105.200</b><div class="bar"><span style="width:6%;background:#22b55a"></span></div></div></div></div>
+            <div class="card" style="margin-top:16px"><h4>Próximos vencimientos</h4>
+              <div class="cat"><span>Visa BBVA · jueves 6</span><b>$ 412.900</b></div>
+              <div class="cat"><span>Hipoteca · cuota 22 · viernes 7</span><b>$ 817.201</b></div>
+              <div class="cat"><span>Naranja X · lunes 10</span><b>$ 96.300</b></div></div>
+            <div class="fab">+</div>
+            <div class="wtoast" id="wToast"><span id="wToastT"></span><div><b id="wToastTitle"></b><span id="wToastText"></span></div></div>
+          </main>
+        </div></div></div></div>
+      <div class="wactions"><button class="wbtn" type="button" data-w="gasto">Cargar un gasto</button><button class="wbtn" type="button" data-w="alerta">Simular un vencimiento</button><button class="wbtn" type="button" data-w="meta">Cumplir una meta</button><button class="wbtn" type="button" data-w="duda">Mensaje que no entiende</button></div>
+    </div>
+  </section>
+</div>
+
+<script>
+/*BRAND*/
+const EYES = [[83, 86], [105, 86]], SPOTS = [[42, 50], [160, 66], [36, 138], [166, 132]];
+const DUR = { gasto: 2200, alerta: 2400, meta: 2800, pasado: 2000, duda: 2000, toque: 700, hola: 1300 };
+let uid = 0;
+
+function logoSVG(color, cls = "") {
+  const id = `lc${uid++}`;
+  return `<svg viewBox="${BRAND.LOGO_VIEWBOX}" class="${cls}" fill="${color}" role="img" aria-label="tero"><defs>${BRAND.LOGO_CLIP.replace("TERO_CLIP", id)}</defs><g transform="scale(1 -1)">${BRAND.LOGO_PATHS.replaceAll("TERO_CLIP", id)}</g></svg>`;
+}
+
+// La t como personaje: misma geometría que components/brand/TeroAvatar.tsx.
+function makeT(host, { size = 64, ink = "#5b4fe9", hole = "#f7f7fb", tile = null, ok = "#22b55a", bad = "#e5383b", beak = "#ffc83d", track = false } = {}) {
+  const id = `tv${uid++}`;
+  const letter = fill => `<g clip-path="url(#${id}c)"><path transform="${BRAND.T_TRANSFORM}" d="${BRAND.T_PATH}" fill="${fill}"/></g>
+    <g class="tv-crest" style="transform-origin:94.5px 72.5px"><path transform="translate(94.5 48.5)" d="${BRAND.CREST_PATH}" fill="${fill}"/></g>`;
+  const star = (x, y, c) => `<g><path d="M${x} ${y - 9} L${x + 3} ${y - 3} L${x + 9} ${y} L${x + 3} ${y + 3} L${x} ${y + 9} L${x - 3} ${y + 3} L${x - 9} ${y} L${x - 3} ${y - 3} Z" fill="${c}"/></g>`;
+  const vb = tile ? "-24 -36 248 248" : "14 -4 172 196";
+  host.innerHTML = `<svg class="tv" viewBox="${vb}" width="${size}" height="${size}" role="img" aria-label="tero">
+    <defs><clipPath id="${id}c"><path clip-rule="evenodd" d="M-60 -80 H280 V280 H-60 Z M77 -80 H112 V48.5 H77 Z"/></clipPath>
+      <clipPath id="${id}f"><rect x="-30" y="190" width="260" height="0"/></clipPath></defs>
+    ${tile ? `<rect x="-24" y="-36" width="248" height="248" rx="56" fill="${tile}"/>` : ""}
+    <g class="tv-lean"><g class="tv-anim">
+      <g class="tv-base">${letter(ink)}</g><g class="tv-fill" clip-path="url(#${id}f)">${letter(ok)}</g>
+      <g class="tv-face"><g class="tv-look">
+        <g class="tv-eyes">${EYES.map(([x, y]) => `<ellipse cx="${x}" cy="${y}" rx="4.4" ry="6.6" fill="${hole}"/>`).join("")}</g>
+        <g class="tv-happy">${EYES.map(([x, y]) => `<path d="M${x - 5.5} ${y + 2.5} Q${x} ${y - 5.5} ${x + 5.5} ${y + 2.5}" fill="none" stroke="${hole}" stroke-width="3.8" stroke-linecap="round"/>`).join("")}</g>
+        <g class="tv-squint">${EYES.map(([x, y]) => `<ellipse cx="${x}" cy="${y + 1.5}" rx="4.6" ry="2.4" fill="${hole}"/>`).join("")}</g>
+        <g class="tv-doubt"><ellipse cx="83" cy="86" rx="4.4" ry="6.6" fill="${hole}"/><path d="M100 86 H110" stroke="${hole}" stroke-width="3.8" stroke-linecap="round"/></g>
+        <path class="tv-shut" d="M88 104 Q94 101 100 104 L94 115 Z" fill="${beak}" stroke="${beak}" stroke-width="2" stroke-linejoin="round"/>
+        <ellipse class="tv-open" cx="94" cy="108" rx="5.5" ry="7.5" fill="${beak}"/>
+      </g></g>
+      <g class="tv-pop tv-p-gasto">${SPOTS.map(([x, y]) => `<g><path d="M${x - 7} ${y} L${x - 2} ${y + 5} L${x + 7} ${y - 6}" fill="none" stroke="${ok}" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/></g>`).join("")}</g>
+      <g class="tv-pop tv-p-alerta">${SPOTS.map(([x, y]) => `<g><rect x="${x - 2.4}" y="${y - 10}" width="4.8" height="12" rx="2.4" fill="${bad}"/><circle cx="${x}" cy="${y + 7}" r="2.7" fill="${bad}"/></g>`).join("")}</g>
+      <g class="tv-pop tv-p-meta">${star(40, 52, "#ffc83d")}${star(160, 70, ink)}${star(44, 146, "#ff8fb1")}${star(162, 136, "#22b55a")}</g>
+      <g class="tv-pop tv-p-duda">${SPOTS.map(([x, y]) => `<g><text x="${x}" y="${y + 9}" text-anchor="middle" font-family="Fredoka, sans-serif" font-weight="600" font-size="26" fill="${ink}">?</text></g>`).join("")}</g>
+    </g></g></svg>`;
+  const svg = host.firstElementChild, rect = svg.querySelector(`#${id}f rect`), fillG = svg.querySelectorAll(".tv-fill path");
+  const baseP = svg.querySelectorAll(".tv-base path");
+  let level = 0, raf = 0, timer = 0, loopOn = false, loopTimer = 0;
+  const fillTo = (to, ms) => {
+    cancelAnimationFrame(raf);
+    const from = level, t0 = performance.now();
+    const step = now => {
+      const k = Math.min(1, (now - t0) / ms), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      level = from + (to - from) * e;
+      const top = 182 - level * 205;
+      rect.setAttribute("y", top); rect.setAttribute("height", Math.max(0, 184 - top));
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+  };
+  const t = {
+    svg,
+    // keep: no toca el llenado (para saludar sin borrar lo que ya está pintado).
+    react(name, ms = DUR[name], keep = false) {
+      clearTimeout(timer);
+      svg.classList.remove(...[...svg.classList].filter(c => c.startsWith("tv--")));
+      void svg.getBoundingClientRect();
+      svg.classList.add(`tv--${name}`);
+      if (name === "gasto" || name === "alerta") { fillG.forEach(p => p.setAttribute("fill", name === "gasto" ? ok : bad)); fillTo(1, 750); } else if (!keep) fillTo(0, 300);
+      timer = setTimeout(() => { svg.classList.remove(`tv--${name}`); if (!keep) fillTo(0, 650); }, ms);
+    },
+    fillWith(color, to, ms) { fillG.forEach(p => p.setAttribute("fill", color)); fillTo(to, ms); },
+    // Carga: un color sube sobre el otro y después se invierten, así la t se llena sin cortes.
+    loopFill(a, b, ms = 1100) {
+      loopOn = true; clearTimeout(loopTimer);
+      let cur = a, nxt = b;
+      const cycle = () => {
+        if (!loopOn) return;
+        baseP.forEach(p => p.setAttribute("fill", cur)); fillG.forEach(p => p.setAttribute("fill", nxt));
+        cancelAnimationFrame(raf); level = 0; fillTo(1, ms);
+        loopTimer = setTimeout(() => { [cur, nxt] = [nxt, cur]; cycle(); }, ms + 140);
+      };
+      cycle();
+    },
+    stopLoop(base) { loopOn = false; clearTimeout(loopTimer); cancelAnimationFrame(raf); baseP.forEach(p => p.setAttribute("fill", base)); level = 0; rect.setAttribute("height", 0); rect.setAttribute("y", 190); },
+    enter() { svg.classList.remove("tv-enter"); void svg.getBoundingClientRect(); svg.classList.add("tv-enter"); },
+    reset() { clearTimeout(timer); svg.classList.remove(...[...svg.classList].filter(c => c.startsWith("tv--"))); level = 0; rect.setAttribute("height", 0); rect.setAttribute("y", 190); },
+    track, cur: { x: 0, y: 0 }, target: { x: 0, y: 0 },
+  };
+  if (track) TRACKED.push(t);
+  svg.addEventListener("click", () => t.react("toque"));
+  return t;
+}
+
+// Seguimiento del puntero para las t que lo piden.
+const TRACKED = [];
+addEventListener("pointermove", e => TRACKED.forEach(t => {
+  if (t.manual) return;
+  const r = t.svg.getBoundingClientRect();
+  t.target.x = Math.max(-1, Math.min(1, (e.clientX - (r.left + r.width / 2)) / (innerWidth * .4)));
+  t.target.y = Math.max(-1, Math.min(1, (e.clientY - (r.top + r.height * .35)) / (innerHeight * .4)));
+}), { passive: true });
+(function loop() {
+  TRACKED.forEach(t => {
+    t.cur.x += (t.target.x - t.cur.x) * .1; t.cur.y += (t.target.y - t.cur.y) * .1;
+    t.svg.querySelector(".tv-lean").setAttribute("transform", `rotate(${t.cur.x * 6} 100 168)`);
+    t.svg.querySelector(".tv-look").setAttribute("transform", `translate(${t.cur.x * 2} ${t.cur.y * 1.5})`);
+  });
+  requestAnimationFrame(loop);
+})();
+
+/* ---------- Armado de piezas ---------- */
+document.getElementById("headlogo").innerHTML = logoSVG("#5b4fe9");
+document.getElementById("loginLogo").innerHTML = logoSVG("#5b4fe9");
+document.getElementById("topLogo").innerHTML = logoSVG("#5b4fe9");
+document.getElementById("wLoginLogo").innerHTML = logoSVG("#ffffff");
+document.getElementById("wSideLogo").innerHTML = logoSVG("#5b4fe9");
+const $ = id => document.getElementById(id);
+const T = {
+  login: makeT($("loginT"), { size: 150, track: true }),
+  top: makeT($("topT"), { size: 40, hole: "#ffffff" }),
+  toast: makeT($("toastT"), { size: 50, hole: "#ffffff" }),
+  due: makeT($("dueT"), { size: 34, hole: "#ffffff" }),
+  goal: makeT($("goalT"), { size: 34, hole: "#ffffff" }),
+  notif: makeT($("notifIcon"), { size: 38, ink: "#ffffff", hole: "#5b4fe9", tile: "#5b4fe9" }),
+  wa: makeT($("waIcon"), { size: 40, ink: "#ffffff", hole: "#5b4fe9", tile: "#5b4fe9" }),
+  stk1: makeT($("stk1"), { size: 96, hole: "#efe7de" }),
+  stk2: makeT($("stk2"), { size: 96, hole: "#efe7de" }),
+  wLogin: makeT($("wLoginT"), { size: 230, ink: "#ffffff", hole: "#5b4fe9", track: true }),
+  wMe: makeT($("wMeT"), { size: 30, hole: "#ffffff" }),
+  wToast: makeT($("wToastT"), { size: 56, hole: "#ffffff" }),
+};
+
+// Escala las pantallas fijas (360×760 y 1280×760) al tamaño que tengan sus marcos.
+function fit() {
+  document.querySelectorAll(".phone .screen").forEach(s => s.style.transform = `scale(${s.parentElement.clientWidth / 360})`);
+  document.querySelectorAll(".desk").forEach(d => d.style.transform = `scale(${d.parentElement.clientWidth / 1280})`);
+}
+addEventListener("resize", fit); fit();
+
+/* ---------- Película ---------- */
+const scenes = [...document.querySelectorAll(".scene")], steps = [...document.querySelectorAll("#steps li")];
+const show = n => scenes.forEach(s => s.classList.toggle("on", +s.dataset.s === n));
+const step = n => steps.forEach((li, i) => li.classList.toggle("on", i === n));
+function tapOn(el) {
+  const screen = $("screen"), k = screen.getBoundingClientRect().width / 360;
+  const r = el.getBoundingClientRect(), sr = screen.getBoundingClientRect();
+  const tap = $("tap");
+  tap.style.left = `${(r.left + r.width / 2 - sr.left) / k}px`; tap.style.top = `${(r.top + r.height / 2 - sr.top) / k}px`;
+  tap.classList.remove("go"); void tap.offsetWidth; tap.classList.add("go");
+}
+function typeText(el, text, ms) { el.textContent = ""; [...text].forEach((ch, i) => timers.push(setTimeout(() => el.textContent += ch, ms / text.length * i))); }
+
+let timers = [], playing = true, t0 = 0, elapsed = 0;
+const SCRIPT = [];
+const at = (ms, fn) => SCRIPT.push([ms, fn]);
+function resetAll() {
+  Object.values(T).forEach(t => t.reset());
+  ["toast", "notif", "sheet", "scrim"].forEach(id => $(id).classList.remove("on", "open"));
+  $("due").hidden = true; $("goal").hidden = true; $("mort").hidden = false; $("goal").classList.remove("complete");
+  $("goalBar").style.transition = "none"; $("goalBar").style.width = "90%"; $("goalAmt").textContent = "U$D 1.080 de 1.200";
+  $("egresos").textContent = "$ 1.812.390"; $("typed").textContent = ""; $("catSuper").classList.remove("sel");
+  document.querySelectorAll(".msg").forEach(m => m.classList.remove("on"));
+}
+
+function buildScript() {
+  SCRIPT.length = 0;
+  // 1. Login
+  at(0, () => { resetAll(); show(0); step(0); T.login.enter(); });
+  at(1100, () => T.login.react("hola", 1300));
+  at(3000, () => T.login.react("toque"));
+  at(4300, () => tapOn($("gbtn")));
+  // 2. Inicio
+  at(4900, () => { show(1); step(1); });
+  // 3. Nuevo gasto
+  at(7000, () => tapOn($("fab")));
+  at(7300, () => { step(2); $("scrim").classList.add("on"); $("sheet").classList.add("open"); });
+  at(8100, () => typeText($("typed"), "$ 12.000", 900));
+  at(9300, () => { tapOn($("catSuper")); $("catSuper").classList.add("sel"); });
+  at(10200, () => tapOn($("saveBtn")));
+  at(10500, () => { $("sheet").classList.remove("open"); $("scrim").classList.remove("on"); });
+  // 4. Confirmación
+  at(11000, () => { step(3); $("toast").classList.add("on"); T.toast.react("gasto", 2600); T.top.react("gasto", 2600); $("egresos").textContent = "$ 1.824.390"; });
+  at(13900, () => $("toast").classList.remove("on"));
+  // 5. Vencimiento
+  at(14500, () => { step(4); $("notif").classList.add("on"); T.notif.react("alerta", 2400); });
+  at(16300, () => { $("notif").classList.remove("on"); $("mort").hidden = true; $("due").hidden = false; T.due.react("alerta", 2600); T.top.react("alerta", 2600); });
+  // 6. Meta
+  at(19500, () => { step(5); $("due").hidden = true; $("goal").hidden = false; $("goalBar").style.transition = "none"; $("goalBar").style.width = "90%"; });
+  at(20200, () => { $("goalBar").style.transition = ""; $("goalBar").style.width = "100%"; });
+  at(21700, () => { $("goal").classList.add("complete"); $("goalAmt").textContent = "U$D 1.200 de 1.200"; T.goal.react("meta", 2800); T.top.react("meta", 2800); });
+  // 7. WhatsApp
+  at(25000, () => { show(2); step(6); });
+  const msgs = () => [...document.querySelectorAll(".msg")];
+  at(25700, () => msgs()[0].classList.add("on"));
+  at(26600, () => msgs()[1].classList.add("on"));
+  at(27200, () => { msgs()[2].classList.add("on"); T.stk1.react("gasto", 6600); });
+  at(28800, () => msgs()[3].classList.add("on"));
+  at(29900, () => msgs()[4].classList.add("on"));
+  at(30500, () => { msgs()[5].classList.add("on"); T.stk2.react("alerta", 3400); });
+  at(34000, () => run(0));
+}
+const TOTAL = 34000;
+function run(from = 0) {
+  timers.forEach(clearTimeout); timers = [];
+  buildScript();
+  // Al reanudar se rehace el estado ejecutando lo anterior al instante, y se programa el resto.
+  SCRIPT.filter(([ms]) => ms < from).forEach(([, fn]) => { try { fn(); } catch {} });
+  SCRIPT.filter(([ms]) => ms >= from).forEach(([ms, fn]) => timers.push(setTimeout(fn, ms - from)));
+  t0 = performance.now() - from; playing = true; $("play").textContent = "Pausar";
+}
+$("play").addEventListener("click", () => {
+  if (playing) { elapsed = performance.now() - t0; timers.forEach(clearTimeout); timers = []; playing = false; $("play").textContent = "Seguir"; }
+  else run(elapsed % TOTAL);
+});
+$("again").addEventListener("click", () => run(0));
+document.fonts.ready.then(() => { fit(); run(0); });
+
+/* ---------- Web: reacciones a pedido ---------- */
+const W = {
+  gasto: ["Anotado: $12.000 en Súper", "Este mes llevás $184.300 en Súper."],
+  alerta: ["La Visa vence el jueves", "$412.900. Te conviene tenerla en la cuenta el miércoles."],
+  meta: ["¡Meta cumplida!", "Juntaste los U$D 1.200 de las vacaciones."],
+  duda: ["No entendí ese mensaje", "Probá con algo como “12 lucas súper”."],
+};
+let wTimer;
+document.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => {
+  const k = b.dataset.w;
+  $("wToastTitle").textContent = W[k][0]; $("wToastText").textContent = W[k][1];
+  $("wToast").classList.add("on"); T.wToast.react(k, 2600); T.wMe.react(k, 2600);
+  if (k === "gasto") { $("wEgresos").textContent = "$ 1.764.890"; $("wSuper").textContent = "$ 117.200"; }
+  clearTimeout(wTimer); wTimer = setTimeout(() => $("wToast").classList.remove("on"), 4500);
+}));
+setTimeout(() => T.wLogin.react("hola", 1300), 1500);
+
+/* ---------- La t andando por la app ---------- */
+document.getElementById("splashLogo").innerHTML = logoSVG("#ffffff");
+document.getElementById("fabLogo").innerHTML = logoSVG("#5b4fe9");
+document.getElementById("floatLogo").innerHTML = logoSVG("#5b4fe9");
+const A = {
+  splash: makeT($("splashT"), { size: 160, ink: "#5b4fe9", hole: "#5b4fe9", ok: "#ffffff" }),
+  fab: makeT($("fabT"), { size: 44, ink: "#ffffff", hole: "#5b4fe9", ok: "#c8f7d8", track: true }),
+  load: makeT($("loadT"), { size: 124, ink: "#dcd8fb", hole: "#f7f7fb" }),
+  float: makeT($("floatT"), { size: 124, hole: "#f7f7fb", track: true }),
+  ldFill: makeT($("ldFill"), { size: 100, ink: "#dcd8fb", hole: "#ffffff" }),
+  ldWalk: makeT($("ldWalk"), { size: 50, hole: "#ffffff" }),
+  ldThink: makeT($("ldThink"), { size: 96, hole: "#ffffff" }),
+};
+A.fab.manual = true; A.float.manual = true;
+A.ldWalk.svg.classList.add("tv-walk"); A.ldThink.svg.classList.add("tv-think");
+A.ldFill.loopFill("#dcd8fb", "#5b4fe9");
+const later = (ms, f) => setTimeout(f, ms);
+const loopDemo = (fn, every) => { fn(); setInterval(fn, every); };
+function tapLocal(el) {
+  const screen = el.closest(".screen"), k = screen.getBoundingClientRect().width / 360;
+  const r = el.getBoundingClientRect(), sr = screen.getBoundingClientRect(), tap = screen.querySelector(".tap");
+  tap.style.left = `${(r.left + r.width / 2 - sr.left) / k}px`; tap.style.top = `${(r.top + r.height / 2 - sr.top) / k}px`;
+  tap.classList.remove("go"); void tap.offsetWidth; tap.classList.add("go");
+}
+// Apertura: la t se dibuja con el llenado (la base es del color del fondo), saluda y aparece el nombre.
+loopDemo(() => {
+  A.splash.reset(); $("splashLogo").classList.remove("on");
+  later(500, () => A.splash.fillWith("#ffffff", 1, 1300));
+  later(2000, () => A.splash.react("hola", 1400, true));
+  later(2700, () => $("splashLogo").classList.add("on"));
+}, 7200);
+// El + que se convierte en la t.
+const speeds = [...document.querySelectorAll("#fabScreen .speed")];
+loopDemo(() => {
+  later(900, () => tapLocal($("fab2")));
+  later(1100, () => { $("fab2").classList.add("open"); $("scrim2").classList.add("on"); A.fab.react("hola", 1200, true); speeds.forEach((s, i) => later(70 * i, () => s.classList.add("on"))); });
+  later(2300, () => { A.fab.target = { x: -0.9, y: -0.4 }; });
+  later(3300, () => tapLocal(speeds[0]));
+  later(3500, () => { speeds[0].classList.add("pick"); A.fab.react("toque", 900); });
+  later(4800, () => { speeds.forEach(s => s.classList.remove("on", "pick")); $("fab2").classList.remove("open"); $("scrim2").classList.remove("on"); A.fab.target = { x: 0, y: 0 }; });
+}, 7600);
+// Variante: la t sale del + y hace sus gestos, sin opciones.
+loopDemo(() => {
+  later(900, () => tapLocal($("fab3")));
+  later(1100, () => { $("fab3").classList.add("hide"); $("floatT").classList.add("on"); $("floatShadow").classList.add("on"); });
+  later(1500, () => A.float.react("hola", 1400, true));
+  later(3000, () => { A.float.target = { x: -1, y: 0 }; });
+  later(3700, () => { A.float.target = { x: 1, y: -0.2 }; });
+  later(4400, () => { A.float.target = { x: 0, y: 0 }; A.float.react("toque", 900); });
+  later(5300, () => A.float.react("meta", 1500, true));
+  later(7000, () => { $("floatT").classList.remove("on"); $("floatShadow").classList.remove("on"); });
+  later(7350, () => $("fab3").classList.remove("hide"));
+}, 9000);
+
+// Pantalla de carga del resumen.
+const loadSteps = ["Buscando los consumos…", "Comparando con lo cargado…", "Revisando las cuotas…"];
+loopDemo(() => {
+  $("loadTitle").textContent = "Leyendo tu resumen"; $("loadSub").textContent = loadSteps[0]; $("lbar").style.width = "8%";
+  A.load.loopFill("#dcd8fb", "#5b4fe9");
+  later(1600, () => { $("loadSub").textContent = loadSteps[1]; $("lbar").style.width = "48%"; });
+  later(3200, () => { $("loadSub").textContent = loadSteps[2]; $("lbar").style.width = "82%"; });
+  later(4700, () => { $("lbar").style.width = "100%"; A.load.stopLoop("#5b4fe9"); A.load.react("gasto", 2600); $("loadTitle").textContent = "Todo cuadra"; $("loadSub").textContent = "47 consumos, igual que en la app."; });
+}, 8400);
+</script>

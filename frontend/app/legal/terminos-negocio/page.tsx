@@ -3,8 +3,8 @@ import { LegalPage, List, Section, sectionsOf } from "@/components/legal/LegalPa
 import { TermsHead, TermsTail, termsSections } from "@/components/legal/terms";
 
 export const metadata: Metadata = {
-  title: "Términos y condiciones de RegistrApp Negocio",
-  description: "Las reglas para usar RegistrApp en un comercio, con tu equipo.",
+  title: "Términos y condiciones de tero Negocio",
+  description: "Las reglas para usar tero en un comercio, con tu equipo.",
 };
 
 /**
@@ -13,7 +13,7 @@ export const metadata: Metadata = {
  * responsable; nosotros los tratamos por cuenta de él (art. 25 Ley 25.326).
  */
 const SECTIONS = termsSections([
-  { id: "que-es", title: "Qué es RegistrApp Negocio" },
+  { id: "que-es", title: "Qué es tero Negocio" },
   { id: "equipo", title: "Tu equipo y sus permisos" },
   { id: "terceros", title: "Datos de empleados, proveedores y clientes" },
   { id: "fiscal", title: "Obligaciones fiscales y contables" },
@@ -24,9 +24,9 @@ const sec = sectionsOf(SECTIONS);
 export default function TerminosNegocioPage() {
   return (
     <LegalPage
-      title="Términos y condiciones de RegistrApp Negocio"
+      title="Términos y condiciones de tero Negocio"
       sections={SECTIONS}
-      intro={<p>Estos términos son para las cuentas de tipo <strong>Negocio</strong>. Si usás RegistrApp para las cuentas de tu casa, leé los de RegistrApp Hogar.</p>}
+      intro={<p>Estos términos son para las cuentas de tipo <strong>Negocio</strong>. Si usás tero para las cuentas de tu casa, leé los de tero Hogar.</p>}
     >
       <TermsHead sec={sec} variant="negocio" />
 
@@ -69,7 +69,7 @@ export default function TerminosNegocioPage() {
 
       <Section {...sec("fiscal")}>
         <p>
-          RegistrApp <strong>no reemplaza tu facturación, tus libros contables ni tus obligaciones ante ARCA</strong>{" "}
+          tero <strong>no reemplaza tu facturación, tus libros contables ni tus obligaciones ante ARCA</strong>{" "}
           u otros organismos. Los resultados que muestra (ventas, egresos, resultado del mes) sirven para seguir
           tu negocio y no son una liquidación de impuestos. Consultá con tu contador.
         </p>

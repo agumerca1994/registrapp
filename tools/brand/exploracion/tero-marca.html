@@ -1,0 +1,470 @@
+<title>Tero: cara y logo</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600&family=Baloo+2:wght@800&family=Outfit:wght@700&family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Nunito+Sans:opsz,wght@6..12,400;6..12,700&display=swap">
+<style>
+/* Layout: dos secciones independientes, cada una con sus controles: la cara mínima en formas geométricas y el logo de la palabra con gesto. */
+:root {
+  --bg: #f3f3ee; --card: #ffffff; --fg: #1c1d22; --muted: #5f616a; --line: #e0e0d8; --ink: #1c1d22;
+  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body: "Nunito Sans", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #15161a; --card: #1e2026; --fg: #eeeef0; --muted: #a4a6af; --line: #30323a; --ink: #eeeef0; color-scheme: dark } }
+:root[data-theme="dark"] { --bg: #15161a; --card: #1e2026; --fg: #eeeef0; --muted: #a4a6af; --line: #30323a; --ink: #eeeef0; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1140px; margin: 0 auto; padding-block: 40px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 28px; }
+h1 { font-family: var(--display); font-weight: 800; font-size: clamp(30px, 5vw, 46px); line-height: 1.05; margin: 0; letter-spacing: -0.02em; }
+h2 { font-family: var(--display); font-size: 26px; margin: 0; }
+.lead { margin: 0; max-width: 72ch; color: var(--muted); }
+section.part { display: grid; gap: 14px; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
+.group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.group > span { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
+.controls button { font: 600 14px var(--body); color: var(--fg); background: var(--card); border: 2px solid var(--line); border-radius: 999px; padding: 6px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.controls button[aria-pressed="true"] { border-color: var(--ink); }
+.controls button:focus-visible { outline: 3px solid #f2a516; outline-offset: 2px; }
+.sw { width: 16px; height: 16px; border-radius: 5px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 14px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; }
+.card .art { display: grid; place-items: center; padding: 18px; }
+.card .art svg { width: 100%; max-width: 200px; height: auto; }
+.info { padding: 12px 16px 16px; display: grid; gap: 6px; align-content: start; }
+.info h3 { font-family: var(--display); font-size: 18px; margin: 0; }
+.info p { margin: 0; font-size: 14px; color: var(--muted); }
+.minis { display: flex; gap: 10px; align-items: flex-end; }
+.wgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 500px), 1fr)); gap: 14px; }
+.wcard { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; display: grid; }
+.wart { padding: 22px 18px 10px; }
+.wart svg { width: 100%; height: auto; display: block; border-radius: 14px; }
+.wrow { display: flex; gap: 12px; align-items: center; padding: 0 18px; flex-wrap: wrap; }
+.wrow svg { width: 72px; height: 72px; border-radius: 17px; }
+.wrow span { font-size: 13px; color: var(--muted); max-width: 30ch; }
+.blink { transform-box: fill-box; transform-origin: center; animation: blink 4.4s infinite; }
+.plume { transform-box: fill-box; transform-origin: 100% 100%; animation: plume 2.6s ease-in-out infinite; }
+.plumeT { transform-box: fill-box; transform-origin: 70% 100%; }
+@keyframes plumeT { 0%,100% { transform: rotate(0) } 50% { transform: rotate(-2.5deg) } }
+.up .plume { animation: none; transform: rotate(22deg); }
+@keyframes blink { 0%,92%,100% { transform: scaleY(1) } 95% { transform: scaleY(.12) } }
+@keyframes plume { 0%,100% { transform: rotate(0) } 50% { transform: rotate(6deg) } }
+@media (prefers-reduced-motion: reduce) { .blink, .plume, .plumeT { animation: none; } }
+
+.crests { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 130px), 1fr)); gap: 10px; }
+.crests button { background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 10px 8px 8px; cursor: pointer; display: grid; gap: 6px; justify-items: center; font: 700 13px var(--body); color: var(--fg); }
+.crests button[aria-pressed="true"] { border-color: var(--ink); }
+.crests button:focus-visible { outline: 3px solid #f2a516; outline-offset: 2px; }
+.crests svg { width: 100%; max-width: 110px; height: auto; border-radius: 22px; }
+
+.finals { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 12px; }
+.fin { border-radius: 18px; padding: 22px; display: grid; place-items: center; }
+.fin svg { width: 100%; height: auto; max-height: 90px; }
+.fin.icons { background: var(--card); border: 1px solid var(--line); display: flex; gap: 14px; align-items: flex-end; justify-content: center; }
+.fin.icons svg { max-height: none; }
+
+/* La capa de color se llena de abajo hacia arriba (la mueve el script); la letra y el copete son una sola capa. */
+#tfill text, #tfill path { fill: var(--fillc, #22b55a); }
+/* Tildes y signos que aparecen y desaparecen alrededor, como las estrellitas de la meta. */
+.av .pop > g { opacity: 0; animation: spark 1.1s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+.av .pop > g:nth-child(2) { animation-delay: .28s } .av .pop > g:nth-child(3) { animation-delay: .56s } .av .pop > g:nth-child(4) { animation-delay: .84s }
+
+/* Avatar 3D */
+.avbox { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 14px; }
+.stage { background: var(--bg); border: 1px solid var(--line); border-radius: 22px; display: grid; place-items: center; min-height: 380px; overflow: hidden; padding: 24px; }
+.stage svg { width: min(100%, 340px); height: auto; cursor: pointer; touch-action: manipulation; }
+.reacts { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 18px; display: grid; gap: 10px; align-content: start; }
+.reacts > span { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
+.reacts button { font: 600 15px var(--body); color: var(--fg); background: var(--bg); border: 2px solid var(--line); border-radius: 14px; padding: 10px 14px; cursor: pointer; text-align: left; }
+.reacts button:hover { border-color: var(--ink); }
+.reacts button:focus-visible { outline: 3px solid #f2a516; outline-offset: 2px; }
+.reacts p { margin: 4px 0 0; color: var(--muted); font-size: 14px; min-height: 2.6em; }
+@media (max-width: 760px) { .avbox { grid-template-columns: 1fr; } .stage { min-height: 300px; } }
+
+.av .anim { transform-box: view-box; transform-origin: 100px 172px; animation: breathe 3.4s ease-in-out infinite; }
+.av .crestA { transform-box: view-box; }
+.av .armL { transform-box: view-box; transform-origin: 122px 115px; }
+.av .armR { transform-box: view-box; transform-origin: 118px 115px; }
+.av .eyes { transform-box: fill-box; transform-origin: center; animation: blink 4.6s infinite; }
+.av .happy, .av .closed, .av .open, .av .lid, .av .qline, .av .badge { display: none; }
+.av.r-pasado .eyes, .av.r-duda .eyes { display: none; }
+.av .face { transform-box: view-box; transform-origin: 94px 96px; transform: scale(.2); opacity: 0; transition: transform .3s cubic-bezier(.3,1.7,.5,1), opacity .18s; }
+.av.r-gasto .face, .av.r-alerta .face, .av.r-meta .face, .av.r-pasado .face, .av.r-duda .face, .av.r-poke .face, .av.sleep .face { transform: scale(1); opacity: 1; }
+.av.r-meta .b-spark path, .av.r-meta .b-spark { fill-opacity: 1; }
+.av.r-duda .qline { display: inline; }
+.av.r-gasto .happy, .av.r-meta .happy, .av.r-poke .happy { display: inline; }
+.av.r-gasto .eyes, .av.r-meta .eyes, .av.r-poke .eyes, .av.sleep .eyes { display: none; }
+.av.r-alerta .open, .av.r-meta .open { display: inline; }
+.av.r-alerta .shut, .av.r-meta .shut { display: none; }
+.av.r-pasado .lid { display: inline; }
+.av.sleep .closed { display: inline; }
+.av.r-gasto .b-check, .av.r-alerta .b-alert, .av.r-meta .b-spark, .av.r-duda .b-q, .av.r-pasado .b-sweat, .av.sleep .b-z { display: inline; }
+.av.r-gasto .anim { animation: hop .32s cubic-bezier(.3,.7,.4,1) 4 alternate; }
+.av.r-alerta .anim { animation: shake .26s ease-in-out 6; }
+.av.r-alerta .crestA { animation: crestUp .25s ease-out forwards; }
+.av.r-alerta .armL { animation: armUpL .2s ease-out forwards; }
+.av.r-alerta .armR { animation: armUpR .2s ease-out forwards; }
+.av.r-meta .anim { animation: jump .36s cubic-bezier(.3,.7,.4,1) infinite alternate; }
+.av.r-meta .armL { animation: flapL .16s ease-in-out infinite alternate; }
+.av.r-meta .armR { animation: flapR .16s ease-in-out infinite alternate; }
+.av.r-pasado .anim { animation: droop .5s ease-out forwards; }
+.av.r-pasado .crestA { animation: crestDown .5s ease-out forwards; }
+.av.r-duda .anim { animation: tilt .4s ease-out forwards; }
+.av.r-poke .anim { animation: squash .45s ease-out; }
+.av.sleep .anim { animation: breathe 4.8s ease-in-out infinite; }
+.av .b-z text { animation: zz 2.4s ease-in-out infinite; }
+.av .b-spark path { animation: spark 1s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+.av .b-spark path:nth-child(2) { animation-delay: .3s } .av .b-spark path:nth-child(3) { animation-delay: .6s }
+@keyframes breathe { 0%,100% { transform: scale(1, 1) } 50% { transform: scale(1.012, .988) } }
+@keyframes sway { 0%,100% { transform: rotate(0) } 50% { transform: rotate(-3deg) } }
+@keyframes hop { from { transform: translateY(0) scale(1, 1) } to { transform: translateY(-16px) scale(.97, 1.03) } }
+@keyframes shake { 0%,100% { transform: rotate(0) } 25% { transform: rotate(-5deg) } 75% { transform: rotate(5deg) } }
+@keyframes crestUp { 0% { transform: scaleY(1) } 60% { transform: scaleY(1.24) } 100% { transform: scaleY(1.18) } }
+@keyframes crestDown { to { transform: scaleY(.8) } }
+@keyframes armUpL { to { transform: rotate(32deg) } }
+@keyframes armUpR { to { transform: rotate(-32deg) } }
+@keyframes jump { from { transform: translateY(0) } to { transform: translateY(-24px) } }
+@keyframes flapL { from { transform: rotate(10deg) } to { transform: rotate(48deg) } }
+@keyframes flapR { from { transform: rotate(-10deg) } to { transform: rotate(-48deg) } }
+@keyframes droop { to { transform: translateY(8px) rotate(-4deg) scale(1.02, .96) } }
+@keyframes tilt { to { transform: rotate(10deg) } }
+@keyframes squash { 0% { transform: scale(1, 1) } 30% { transform: scale(1.08, .9) } 60% { transform: scale(.96, 1.05) } 100% { transform: scale(1, 1) } }
+@keyframes zz { 0% { opacity: 0; transform: translate(0, 0) } 40% { opacity: 1 } 100% { opacity: 0; transform: translate(10px, -14px) } }
+@keyframes spark { 0% { opacity: 0; transform: scale(.2) } 30% { opacity: 1 } 100% { opacity: 0; transform: scale(1.3) } }
+@media (prefers-reduced-motion: reduce) { .av *, .av { animation: none !important; } }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:10px">
+    <h1>Tero: cara y logo</h1>
+    <p class="lead">Dos piezas separadas. Arriba, la cara mínima del tero metida en una forma geométrica, con lo justo para reconocerlo: copete, pico, babero negro y dos ojos. Abajo, la palabra "tero" con un gesto que la hace propia.</p>
+  </header>
+
+
+  <section class="part">
+    <h2>Versión final</h2>
+    <p class="lead">Las piezas ya preparadas para la app: las letras pasadas a trazos y el palito de la t recortado de verdad, así funcionan sobre cualquier fondo, también sobre una foto o un degradé.</p>
+    <div class="finals">
+      <div class="fin" style="background:#c6f24a"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-324 -888 2294 938"><defs><clipPath id="f1"><path clip-rule="evenodd" d="M-34 -60 H445 V1058 H-34 Z M97.2 597.5 H259.2 V667.5 H97.2 Z"/></clipPath></defs><g fill="#16210a" transform="scale(1 -1)"><g transform="translate(0.00 0)"><g clip-path="url(#f1)"><path d="M298.25 -9.5Q247.25 -9.5 210.375 1.5Q173.5 12.5 149.625 35.5Q125.75 58.5 114.375 94.125Q103 129.75 103 178.5V584.5Q103 604.75 106.625 621.0Q110.25 637.25 126.0 647.375Q141.75 657.5 178 657.5Q213.75 657.5 229.625 646.75Q245.5 636 249.25 618.75Q253 601.5 253 582.25V184.75Q253 168.75 255.5 158.5Q258 148.25 263.125 143.0Q268.25 137.75 277.0 135.625Q285.75 133.5 298.75 133.5Q321.25 133.5 338.25 129.875Q355.25 126.25 364.625 112.0Q374 97.75 374 65Q374 28.5 362.75 12.75Q351.5 -3 334.125 -6.25Q316.75 -9.5 298.25 -9.5ZM71.75 483 181.75 482.5 320 486.75Q339.25 486.75 356.25 483.125Q373.25 479.5 384.125 463.75Q395 448 395 411Q395 376.75 384.25 360.875Q373.5 345 356.625 340.625Q339.75 336.25 319.75 336.25L189.25 339L68.25 338.5Q38.75 340 27.5 356.625Q16.25 373.25 16.25 411.75Q16.25 447.75 30.0 465.375Q43.75 483 71.75 483Z"/></g><path transform="matrix(5.0000 0 0 -5.0000 178.25 597.50)" d="M-15 24 L-15 0 L15 0 L15 24 Z M-15.00 6.00 C-15.00 -15.60 -39.96 -25.68 -54.00 -30.00 C-34.20 -36.00 6.00 -18.00 6.00 0.00 Z M-4.00 2.00 C-4.00 -26.80 -25.76 -40.24 -38.00 -46.00 C-20.51 -52.00 15.00 -25.20 15.00 6.00 Z"/></g><path transform="translate(411.00 0)" d="M289 -18.25Q219 -18.25 168.625 4.625Q118.25 27.5 86.125 65.375Q54 103.25 38.25 149.0Q22.5 194.75 22.5 240.75Q22.5 316.25 56.5 374.25Q90.5 432.25 150.75 465.375Q211 498.5 288.75 498.5Q346.75 498.5 389.25 480.0Q431.75 461.5 459.375 432.25Q487 403 500.625 369.0Q514.25 335 514.25 304.25Q514.25 249.25 487.625 222.375Q461 195.5 420 195.5H181.5Q184 170.25 200.5 152.125Q217 134 242.125 124.0Q267.25 114 294.75 114Q318.5 114 336.625 116.625Q354.75 119.25 368.0 123.625Q381.25 128 391.875 132.375Q402.5 136.75 411.125 140.0Q419.75 143.25 427.75 144Q442.5 144.5 455.375 135.375Q468.25 126.25 478 107Q484.5 95.5 487.25 85.5Q490 75.5 490 66.25Q490 41.5 465.625 22.625Q441.25 3.75 396.5 -7.25Q351.75 -18.25 289 -18.25ZM181.5 278H340Q355.5 278 363.125 283.625Q370.75 289.25 370.75 304.5Q370.75 322.5 360.0 336.125Q349.25 349.75 330.75 357.375Q312.25 365 287.5 365Q257 365 232.875 352.875Q208.75 340.75 195.375 321.0Q182 301.25 181.5 278Z"/><path transform="translate(948.00 0)" d="M115.5 -9.5Q79.25 -9.5 63.5 1.375Q47.75 12.25 44.5 30.125Q41.25 48 41.25 67.25V416Q41.25 436.25 44.875 453.25Q48.5 470.25 64.25 480.5Q80 490.75 116.5 490.75Q152 490.75 167.5 481.25Q183 471.75 186.75 459.25Q190.5 446.75 190.5 437.75L178.5 431.75Q181 436 189.5 446.25Q198 456.5 213.125 468.125Q228.25 479.75 249.5 488.0Q270.75 496.25 298.75 496.25Q309.5 496.25 323.0 494.375Q336.5 492.5 351.0 488.25Q365.5 484 377.625 476.5Q389.75 469 397.125 457.75Q404.5 446.5 404.5 430.75Q404.5 390 385.625 361.5Q366.75 333 338.25 333Q321.25 333 313.875 335.75Q306.5 338.5 302.375 341.625Q298.25 344.75 291.875 347.5Q285.5 350.25 270.25 350.25Q255.25 350.25 241.375 346.0Q227.5 341.75 216.25 333.25Q205 324.75 198.5 312.375Q192 300 192 284.5V65.25Q192 46 188.375 28.625Q184.75 11.25 168.875 0.875Q153 -9.5 115.5 -9.5Z"/><path transform="translate(1371.00 0)" d="M280.75 -17.25Q233.75 -17.25 187.5 1.375Q141.25 20 103.25 54.125Q65.25 88.25 42.875 135.625Q20.5 183 20.5 240.5Q20.5 294.5 40.875 341.375Q61.25 388.25 97.0 424.0Q132.75 459.75 179.25 480.125Q225.75 500.5 278.75 500.5Q351 500.5 409.5 466.0Q468 431.5 503.0 372.875Q538 314.25 538 241.5Q538 181.25 515.375 133.5Q492.75 85.75 455.375 52.0Q418 18.25 372.375 0.5Q326.75 -17.25 280.75 -17.25ZM278.75 133.5Q302.75 133.5 327.75 145.5Q352.75 157.5 369.75 181.875Q386.75 206.25 386.75 242.75Q386.75 275 372.875 299.0Q359 323 334.375 336.375Q309.75 349.75 277.75 349.75Q248.25 349.75 224.375 335.75Q200.5 321.75 186.125 297.375Q171.75 273 171.75 241.75Q171.75 205.75 188.375 181.5Q205 157.25 229.75 145.375Q254.5 133.5 278.75 133.5Z"/></g></svg></div>
+      <div class="fin" style="background:#5b4fe9"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-324 -888 2294 938"><defs><clipPath id="f2"><path clip-rule="evenodd" d="M-34 -60 H445 V1058 H-34 Z M97.2 597.5 H259.2 V667.5 H97.2 Z"/></clipPath></defs><g fill="#ffffff" transform="scale(1 -1)"><g transform="translate(0.00 0)"><g clip-path="url(#f2)"><path d="M298.25 -9.5Q247.25 -9.5 210.375 1.5Q173.5 12.5 149.625 35.5Q125.75 58.5 114.375 94.125Q103 129.75 103 178.5V584.5Q103 604.75 106.625 621.0Q110.25 637.25 126.0 647.375Q141.75 657.5 178 657.5Q213.75 657.5 229.625 646.75Q245.5 636 249.25 618.75Q253 601.5 253 582.25V184.75Q253 168.75 255.5 158.5Q258 148.25 263.125 143.0Q268.25 137.75 277.0 135.625Q285.75 133.5 298.75 133.5Q321.25 133.5 338.25 129.875Q355.25 126.25 364.625 112.0Q374 97.75 374 65Q374 28.5 362.75 12.75Q351.5 -3 334.125 -6.25Q316.75 -9.5 298.25 -9.5ZM71.75 483 181.75 482.5 320 486.75Q339.25 486.75 356.25 483.125Q373.25 479.5 384.125 463.75Q395 448 395 411Q395 376.75 384.25 360.875Q373.5 345 356.625 340.625Q339.75 336.25 319.75 336.25L189.25 339L68.25 338.5Q38.75 340 27.5 356.625Q16.25 373.25 16.25 411.75Q16.25 447.75 30.0 465.375Q43.75 483 71.75 483Z"/></g><path transform="matrix(5.0000 0 0 -5.0000 178.25 597.50)" d="M-15 24 L-15 0 L15 0 L15 24 Z M-15.00 6.00 C-15.00 -15.60 -39.96 -25.68 -54.00 -30.00 C-34.20 -36.00 6.00 -18.00 6.00 0.00 Z M-4.00 2.00 C-4.00 -26.80 -25.76 -40.24 -38.00 -46.00 C-20.51 -52.00 15.00 -25.20 15.00 6.00 Z"/></g><path transform="translate(411.00 0)" d="M289 -18.25Q219 -18.25 168.625 4.625Q118.25 27.5 86.125 65.375Q54 103.25 38.25 149.0Q22.5 194.75 22.5 240.75Q22.5 316.25 56.5 374.25Q90.5 432.25 150.75 465.375Q211 498.5 288.75 498.5Q346.75 498.5 389.25 480.0Q431.75 461.5 459.375 432.25Q487 403 500.625 369.0Q514.25 335 514.25 304.25Q514.25 249.25 487.625 222.375Q461 195.5 420 195.5H181.5Q184 170.25 200.5 152.125Q217 134 242.125 124.0Q267.25 114 294.75 114Q318.5 114 336.625 116.625Q354.75 119.25 368.0 123.625Q381.25 128 391.875 132.375Q402.5 136.75 411.125 140.0Q419.75 143.25 427.75 144Q442.5 144.5 455.375 135.375Q468.25 126.25 478 107Q484.5 95.5 487.25 85.5Q490 75.5 490 66.25Q490 41.5 465.625 22.625Q441.25 3.75 396.5 -7.25Q351.75 -18.25 289 -18.25ZM181.5 278H340Q355.5 278 363.125 283.625Q370.75 289.25 370.75 304.5Q370.75 322.5 360.0 336.125Q349.25 349.75 330.75 357.375Q312.25 365 287.5 365Q257 365 232.875 352.875Q208.75 340.75 195.375 321.0Q182 301.25 181.5 278Z"/><path transform="translate(948.00 0)" d="M115.5 -9.5Q79.25 -9.5 63.5 1.375Q47.75 12.25 44.5 30.125Q41.25 48 41.25 67.25V416Q41.25 436.25 44.875 453.25Q48.5 470.25 64.25 480.5Q80 490.75 116.5 490.75Q152 490.75 167.5 481.25Q183 471.75 186.75 459.25Q190.5 446.75 190.5 437.75L178.5 431.75Q181 436 189.5 446.25Q198 456.5 213.125 468.125Q228.25 479.75 249.5 488.0Q270.75 496.25 298.75 496.25Q309.5 496.25 323.0 494.375Q336.5 492.5 351.0 488.25Q365.5 484 377.625 476.5Q389.75 469 397.125 457.75Q404.5 446.5 404.5 430.75Q404.5 390 385.625 361.5Q366.75 333 338.25 333Q321.25 333 313.875 335.75Q306.5 338.5 302.375 341.625Q298.25 344.75 291.875 347.5Q285.5 350.25 270.25 350.25Q255.25 350.25 241.375 346.0Q227.5 341.75 216.25 333.25Q205 324.75 198.5 312.375Q192 300 192 284.5V65.25Q192 46 188.375 28.625Q184.75 11.25 168.875 0.875Q153 -9.5 115.5 -9.5Z"/><path transform="translate(1371.00 0)" d="M280.75 -17.25Q233.75 -17.25 187.5 1.375Q141.25 20 103.25 54.125Q65.25 88.25 42.875 135.625Q20.5 183 20.5 240.5Q20.5 294.5 40.875 341.375Q61.25 388.25 97.0 424.0Q132.75 459.75 179.25 480.125Q225.75 500.5 278.75 500.5Q351 500.5 409.5 466.0Q468 431.5 503.0 372.875Q538 314.25 538 241.5Q538 181.25 515.375 133.5Q492.75 85.75 455.375 52.0Q418 18.25 372.375 0.5Q326.75 -17.25 280.75 -17.25ZM278.75 133.5Q302.75 133.5 327.75 145.5Q352.75 157.5 369.75 181.875Q386.75 206.25 386.75 242.75Q386.75 275 372.875 299.0Q359 323 334.375 336.375Q309.75 349.75 277.75 349.75Q248.25 349.75 224.375 335.75Q200.5 321.75 186.125 297.375Q171.75 273 171.75 241.75Q171.75 205.75 188.375 181.5Q205 157.25 229.75 145.375Q254.5 133.5 278.75 133.5Z"/></g></svg></div>
+      <div class="fin" style="background:linear-gradient(45deg,#ff9a9e,#fad0c4,#a1c4fd)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-324 -888 2294 938"><defs><clipPath id="f6"><path clip-rule="evenodd" d="M-34 -60 H445 V1058 H-34 Z M97.2 597.5 H259.2 V667.5 H97.2 Z"/></clipPath></defs><g fill="#16210a" transform="scale(1 -1)"><g transform="translate(0.00 0)"><g clip-path="url(#f6)"><path d="M298.25 -9.5Q247.25 -9.5 210.375 1.5Q173.5 12.5 149.625 35.5Q125.75 58.5 114.375 94.125Q103 129.75 103 178.5V584.5Q103 604.75 106.625 621.0Q110.25 637.25 126.0 647.375Q141.75 657.5 178 657.5Q213.75 657.5 229.625 646.75Q245.5 636 249.25 618.75Q253 601.5 253 582.25V184.75Q253 168.75 255.5 158.5Q258 148.25 263.125 143.0Q268.25 137.75 277.0 135.625Q285.75 133.5 298.75 133.5Q321.25 133.5 338.25 129.875Q355.25 126.25 364.625 112.0Q374 97.75 374 65Q374 28.5 362.75 12.75Q351.5 -3 334.125 -6.25Q316.75 -9.5 298.25 -9.5ZM71.75 483 181.75 482.5 320 486.75Q339.25 486.75 356.25 483.125Q373.25 479.5 384.125 463.75Q395 448 395 411Q395 376.75 384.25 360.875Q373.5 345 356.625 340.625Q339.75 336.25 319.75 336.25L189.25 339L68.25 338.5Q38.75 340 27.5 356.625Q16.25 373.25 16.25 411.75Q16.25 447.75 30.0 465.375Q43.75 483 71.75 483Z"/></g><path transform="matrix(5.0000 0 0 -5.0000 178.25 597.50)" d="M-15 24 L-15 0 L15 0 L15 24 Z M-15.00 6.00 C-15.00 -15.60 -39.96 -25.68 -54.00 -30.00 C-34.20 -36.00 6.00 -18.00 6.00 0.00 Z M-4.00 2.00 C-4.00 -26.80 -25.76 -40.24 -38.00 -46.00 C-20.51 -52.00 15.00 -25.20 15.00 6.00 Z"/></g><path transform="translate(411.00 0)" d="M289 -18.25Q219 -18.25 168.625 4.625Q118.25 27.5 86.125 65.375Q54 103.25 38.25 149.0Q22.5 194.75 22.5 240.75Q22.5 316.25 56.5 374.25Q90.5 432.25 150.75 465.375Q211 498.5 288.75 498.5Q346.75 498.5 389.25 480.0Q431.75 461.5 459.375 432.25Q487 403 500.625 369.0Q514.25 335 514.25 304.25Q514.25 249.25 487.625 222.375Q461 195.5 420 195.5H181.5Q184 170.25 200.5 152.125Q217 134 242.125 124.0Q267.25 114 294.75 114Q318.5 114 336.625 116.625Q354.75 119.25 368.0 123.625Q381.25 128 391.875 132.375Q402.5 136.75 411.125 140.0Q419.75 143.25 427.75 144Q442.5 144.5 455.375 135.375Q468.25 126.25 478 107Q484.5 95.5 487.25 85.5Q490 75.5 490 66.25Q490 41.5 465.625 22.625Q441.25 3.75 396.5 -7.25Q351.75 -18.25 289 -18.25ZM181.5 278H340Q355.5 278 363.125 283.625Q370.75 289.25 370.75 304.5Q370.75 322.5 360.0 336.125Q349.25 349.75 330.75 357.375Q312.25 365 287.5 365Q257 365 232.875 352.875Q208.75 340.75 195.375 321.0Q182 301.25 181.5 278Z"/><path transform="translate(948.00 0)" d="M115.5 -9.5Q79.25 -9.5 63.5 1.375Q47.75 12.25 44.5 30.125Q41.25 48 41.25 67.25V416Q41.25 436.25 44.875 453.25Q48.5 470.25 64.25 480.5Q80 490.75 116.5 490.75Q152 490.75 167.5 481.25Q183 471.75 186.75 459.25Q190.5 446.75 190.5 437.75L178.5 431.75Q181 436 189.5 446.25Q198 456.5 213.125 468.125Q228.25 479.75 249.5 488.0Q270.75 496.25 298.75 496.25Q309.5 496.25 323.0 494.375Q336.5 492.5 351.0 488.25Q365.5 484 377.625 476.5Q389.75 469 397.125 457.75Q404.5 446.5 404.5 430.75Q404.5 390 385.625 361.5Q366.75 333 338.25 333Q321.25 333 313.875 335.75Q306.5 338.5 302.375 341.625Q298.25 344.75 291.875 347.5Q285.5 350.25 270.25 350.25Q255.25 350.25 241.375 346.0Q227.5 341.75 216.25 333.25Q205 324.75 198.5 312.375Q192 300 192 284.5V65.25Q192 46 188.375 28.625Q184.75 11.25 168.875 0.875Q153 -9.5 115.5 -9.5Z"/><path transform="translate(1371.00 0)" d="M280.75 -17.25Q233.75 -17.25 187.5 1.375Q141.25 20 103.25 54.125Q65.25 88.25 42.875 135.625Q20.5 183 20.5 240.5Q20.5 294.5 40.875 341.375Q61.25 388.25 97.0 424.0Q132.75 459.75 179.25 480.125Q225.75 500.5 278.75 500.5Q351 500.5 409.5 466.0Q468 431.5 503.0 372.875Q538 314.25 538 241.5Q538 181.25 515.375 133.5Q492.75 85.75 455.375 52.0Q418 18.25 372.375 0.5Q326.75 -17.25 280.75 -17.25ZM278.75 133.5Q302.75 133.5 327.75 145.5Q352.75 157.5 369.75 181.875Q386.75 206.25 386.75 242.75Q386.75 275 372.875 299.0Q359 323 334.375 336.375Q309.75 349.75 277.75 349.75Q248.25 349.75 224.375 335.75Q200.5 321.75 186.125 297.375Q171.75 273 171.75 241.75Q171.75 205.75 188.375 181.5Q205 157.25 229.75 145.375Q254.5 133.5 278.75 133.5Z"/></g></svg></div>
+      <div class="fin icons"><div style="width:120px"><svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="-553 -1113 1388 1388"><rect x="-553" y="-1113" width="1388" height="1388" rx="311" fill="#c6f24a"/><defs><clipPath id="f3"><path clip-rule="evenodd" d="M-34 -60 H445 V1058 H-34 Z M97.2 597.5 H259.2 V667.5 H97.2 Z"/></clipPath></defs><g fill="#16210a" transform="scale(1 -1)"><g transform="translate(0.00 0)"><g clip-path="url(#f3)"><path d="M298.25 -9.5Q247.25 -9.5 210.375 1.5Q173.5 12.5 149.625 35.5Q125.75 58.5 114.375 94.125Q103 129.75 103 178.5V584.5Q103 604.75 106.625 621.0Q110.25 637.25 126.0 647.375Q141.75 657.5 178 657.5Q213.75 657.5 229.625 646.75Q245.5 636 249.25 618.75Q253 601.5 253 582.25V184.75Q253 168.75 255.5 158.5Q258 148.25 263.125 143.0Q268.25 137.75 277.0 135.625Q285.75 133.5 298.75 133.5Q321.25 133.5 338.25 129.875Q355.25 126.25 364.625 112.0Q374 97.75 374 65Q374 28.5 362.75 12.75Q351.5 -3 334.125 -6.25Q316.75 -9.5 298.25 -9.5ZM71.75 483 181.75 482.5 320 486.75Q339.25 486.75 356.25 483.125Q373.25 479.5 384.125 463.75Q395 448 395 411Q395 376.75 384.25 360.875Q373.5 345 356.625 340.625Q339.75 336.25 319.75 336.25L189.25 339L68.25 338.5Q38.75 340 27.5 356.625Q16.25 373.25 16.25 411.75Q16.25 447.75 30.0 465.375Q43.75 483 71.75 483Z"/></g><path transform="matrix(5.0000 0 0 -5.0000 178.25 597.50)" d="M-15 24 L-15 0 L15 0 L15 24 Z M-15.00 6.00 C-15.00 -15.60 -39.96 -25.68 -54.00 -30.00 C-34.20 -36.00 6.00 -18.00 6.00 0.00 Z M-4.00 2.00 C-4.00 -26.80 -25.76 -40.24 -38.00 -46.00 C-20.51 -52.00 15.00 -25.20 15.00 6.00 Z"/></g></g></svg></div><div style="width:60px"><svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="-553 -1113 1388 1388"><rect x="-553" y="-1113" width="1388" height="1388" rx="311" fill="#c6f24a"/><defs><clipPath id="f4"><path clip-rule="evenodd" d="M-34 -60 H445 V1058 H-34 Z M97.2 597.5 H259.2 V667.5 H97.2 Z"/></clipPath></defs><g fill="#16210a" transform="scale(1 -1)"><g transform="translate(0.00 0)"><g clip-path="url(#f4)"><path d="M298.25 -9.5Q247.25 -9.5 210.375 1.5Q173.5 12.5 149.625 35.5Q125.75 58.5 114.375 94.125Q103 129.75 103 178.5V584.5Q103 604.75 106.625 621.0Q110.25 637.25 126.0 647.375Q141.75 657.5 178 657.5Q213.75 657.5 229.625 646.75Q245.5 636 249.25 618.75Q253 601.5 253 582.25V184.75Q253 168.75 255.5 158.5Q258 148.25 263.125 143.0Q268.25 137.75 277.0 135.625Q285.75 133.5 298.75 133.5Q321.25 133.5 338.25 129.875Q355.25 126.25 364.625 112.0Q374 97.75 374 65Q374 28.5 362.75 12.75Q351.5 -3 334.125 -6.25Q316.75 -9.5 298.25 -9.5ZM71.75 483 181.75 482.5 320 486.75Q339.25 486.75 356.25 483.125Q373.25 479.5 384.125 463.75Q395 448 395 411Q395 376.75 384.25 360.875Q373.5 345 356.625 340.625Q339.75 336.25 319.75 336.25L189.25 339L68.25 338.5Q38.75 340 27.5 356.625Q16.25 373.25 16.25 411.75Q16.25 447.75 30.0 465.375Q43.75 483 71.75 483Z"/></g><path transform="matrix(5.0000 0 0 -5.0000 178.25 597.50)" d="M-15 24 L-15 0 L15 0 L15 24 Z M-15.00 6.00 C-15.00 -15.60 -39.96 -25.68 -54.00 -30.00 C-34.20 -36.00 6.00 -18.00 6.00 0.00 Z M-4.00 2.00 C-4.00 -26.80 -25.76 -40.24 -38.00 -46.00 C-20.51 -52.00 15.00 -25.20 15.00 6.00 Z"/></g></g></svg></div><div style="width:29px"><svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="-553 -1113 1388 1388"><rect x="-553" y="-1113" width="1388" height="1388" rx="311" fill="#c6f24a"/><defs><clipPath id="f5"><path clip-rule="evenodd" d="M-34 -60 H445 V1058 H-34 Z M97.2 597.5 H259.2 V667.5 H97.2 Z"/></clipPath></defs><g fill="#16210a" transform="scale(1 -1)"><g transform="translate(0.00 0)"><g clip-path="url(#f5)"><path d="M298.25 -9.5Q247.25 -9.5 210.375 1.5Q173.5 12.5 149.625 35.5Q125.75 58.5 114.375 94.125Q103 129.75 103 178.5V584.5Q103 604.75 106.625 621.0Q110.25 637.25 126.0 647.375Q141.75 657.5 178 657.5Q213.75 657.5 229.625 646.75Q245.5 636 249.25 618.75Q253 601.5 253 582.25V184.75Q253 168.75 255.5 158.5Q258 148.25 263.125 143.0Q268.25 137.75 277.0 135.625Q285.75 133.5 298.75 133.5Q321.25 133.5 338.25 129.875Q355.25 126.25 364.625 112.0Q374 97.75 374 65Q374 28.5 362.75 12.75Q351.5 -3 334.125 -6.25Q316.75 -9.5 298.25 -9.5ZM71.75 483 181.75 482.5 320 486.75Q339.25 486.75 356.25 483.125Q373.25 479.5 384.125 463.75Q395 448 395 411Q395 376.75 384.25 360.875Q373.5 345 356.625 340.625Q339.75 336.25 319.75 336.25L189.25 339L68.25 338.5Q38.75 340 27.5 356.625Q16.25 373.25 16.25 411.75Q16.25 447.75 30.0 465.375Q43.75 483 71.75 483Z"/></g><path transform="matrix(5.0000 0 0 -5.0000 178.25 597.50)" d="M-15 24 L-15 0 L15 0 L15 24 Z M-15.00 6.00 C-15.00 -15.60 -39.96 -25.68 -54.00 -30.00 C-34.20 -36.00 6.00 -18.00 6.00 0.00 Z M-4.00 2.00 C-4.00 -26.80 -25.76 -40.24 -38.00 -46.00 C-20.51 -52.00 15.00 -25.20 15.00 6.00 Z"/></g></g></svg></div></div>
+    </div>
+  </section>
+  <section class="part">
+    <h2>1. Cara mínima</h2>
+    <div class="controls">
+      <div class="group" role="group" aria-label="Color de la cara" id="fcolor"><span>Color</span></div>
+      <div class="group" role="group" aria-label="Expresión" id="fexpr"><span>Expresión</span></div>
+    </div>
+    <div class="grid" id="faces"></div>
+  </section>
+
+  <section class="part">
+    <h2>2. Logo con gesto</h2>
+
+    <div class="controls">
+      <div class="group" role="group" aria-label="Tipografía" id="wfont"><span>Letra</span></div>
+      <div class="group" role="group" aria-label="Color del logo" id="wcolor"><span>Color</span></div>
+    </div>
+    <div class="wgrid" id="words"></div>
+  </section>
+
+  <section class="part">
+    <h2>3. Avatar: la t del logo que reacciona</h2>
+    <p class="lead">La t del logo en el violeta de la marca. En reposo es solo la letra con su copete, que se mueve y se inclina siguiendo el mouse (o el dedo). <strong>Cuando reacciona, le aparecen unos ojitos huecos y un piquito de frente</strong>, y después vuelven a desaparecer. Al cargar un gasto la letra se llena de verde de abajo hacia arriba, con tildes que aparecen alrededor; en la alerta se llena de rojo, con signos de exclamación. Probá los botones o tocala.</p>
+    <div class="controls">
+      <div class="group" role="group" aria-label="Piquito" id="abeak"><span>Piquito</span></div>
+    </div>
+    <div class="avbox">
+      <div class="stage" id="stage"></div>
+      <div class="reacts" role="group" aria-label="Reacciones">
+        <span>Reacciones a la app</span>
+        <button type="button" data-r="gasto">✅ Cargué un gasto</button>
+        <button type="button" data-r="alerta">⚠️ Vence la tarjeta</button>
+        <button type="button" data-r="meta">🎯 Meta de ahorro cumplida</button>
+        <button type="button" data-r="pasado">📉 Me pasé del presupuesto</button>
+        <button type="button" data-r="duda">❓ No entendí el mensaje</button>
+        <p id="react-msg" aria-live="polite">Tocá un botón o tocá al personaje.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ---------- 1. Cara mínima ---------- */
+const FCOLORS = {
+  natural: { label: "Natural", fill: "#bfb6a2", light: "#e4ddcc", dark: "#8c836d", bib: "#26262c", beak: "#f2909e" },
+  tomate: { label: "Tomate", fill: "#ff5a3c", light: "#ffa38e", dark: "#c43a20", bib: "#2a120c", beak: "#ffd166" },
+  mostaza: { label: "Mostaza", fill: "#ffc83d", light: "#ffe49c", dark: "#d39612", bib: "#1f1a10", beak: "#ff6b4a" },
+  azul: { label: "Azul", fill: "#2f5bff", light: "#8aa2ff", dark: "#1a36b8", bib: "#0d1a5c", beak: "#ffc83d" },
+  menta: { label: "Menta", fill: "#5fd3b0", light: "#b5efdc", dark: "#2b9677", bib: "#173d34", beak: "#ff8a5c" },
+  lima: { label: "Lima", fill: "#c6f24a", light: "#e8ffa6", dark: "#8cb21b", bib: "#16210a", beak: "#ff6b4a" },
+  marca: { label: "Marca actual", fill: "#5b4fe9", light: "#a59cf6", dark: "#3328b5", bib: "#1b1640", beak: "#ffc83d" },
+};
+const FEXPR = { normal: "Normal", contento: "Contento", avisa: "Te avisa", duda: "No entendí" };
+const SHAPES = [
+  { name: "Cuadrado blando", text: "Un cuadrado de esquinas muy redondeadas: la forma más estable y la que mejor llena un ícono.",
+    shape: `<rect x="30" y="34" width="140" height="138" rx="50"/>`, face: [100, 98], bib: 144, crest: [108, 36] },
+  { name: "Triángulo", text: "Con la punta arriba, el copete sale del vértice. Tiene dirección: parece que mira para arriba.",
+    shape: `<path d="M100 26 C110 26 116 32 121 41 L168 140 C176 158 166 172 146 172 H54 C34 172 24 158 32 140 L79 41 C84 32 90 26 100 26 Z"/>`, face: [100, 118], bib: 152, crest: [102, 28] },
+  { name: "Arco", text: "Redondo arriba y plano abajo, como una lápida o una ventana. Se apoya en la base con peso.",
+    shape: `<path d="M30 100 C30 58 62 30 100 30 C138 30 170 58 170 100 V160 Q170 172 158 172 H42 Q30 172 30 160 Z"/>`, face: [100, 98], bib: 144, crest: [108, 32] },
+  { name: "Rombo blando", text: "Un cuadrado girado: el copete sale de la punta de arriba y el babero ocupa la de abajo.",
+    shape: `<rect x="50" y="50" width="100" height="100" rx="28" transform="rotate(45 100 100)"/>`, face: [100, 96], bib: 134, crest: [102, 32] },
+];
+const fstate = { color: "natural", expr: "normal" };
+
+function teroFace(s, c, ex, id) {
+  const [fx, fy] = s.face, [cx, cy] = s.crest, dark = c.bib;
+  let eyes;
+  if (ex === "contento") eyes = [-17, 17].map(d => `<path d="M${fx + d - 7} ${fy + 3} Q${fx + d} ${fy - 7} ${fx + d + 7} ${fy + 3}" fill="none" stroke="${dark}" stroke-width="5.5" stroke-linecap="round"/>`).join("");
+  else if (ex === "avisa") eyes = [-17, 17].map(d => `<circle cx="${fx + d}" cy="${fy}" r="7.5" fill="${dark}"/><circle cx="${fx + d - 2}" cy="${fy - 3}" r="2.2" fill="#fff"/>`).join("");
+  else if (ex === "duda") eyes = `<ellipse cx="${fx - 17}" cy="${fy}" rx="5.5" ry="9" fill="${dark}"/><path d="M${fx + 10} ${fy} H${fx + 24}" stroke="${dark}" stroke-width="5.5" stroke-linecap="round"/>`;
+  else eyes = `<g class="blink">${[-17, 17].map(d => `<ellipse cx="${fx + d}" cy="${fy}" rx="5.5" ry="9" fill="${dark}"/><circle cx="${fx + d - 1.8}" cy="${fy - 4}" r="2" fill="#fff"/>`).join("")}</g>`;
+  const by = fy + 16;
+  const beak = ex === "avisa"
+    ? `<path d="M${fx - 8} ${by - 2} Q${fx} ${by - 6} ${fx + 8} ${by - 2} L${fx} ${by + 6} Z" fill="${c.beak}"/><path d="M${fx - 6} ${by + 9} Q${fx} ${by + 7} ${fx + 6} ${by + 9} L${fx} ${by + 17} Z" fill="${c.beak}"/>`
+    : `<path d="M${fx - 9} ${by - 2} Q${fx} ${by - 6} ${fx + 9} ${by - 2} L${fx} ${by + 12} Z" fill="${c.beak}"/>`;
+  const crest = `<g class="plume"><path d="M${cx} ${cy + 6} C${cx - 4} ${cy - 10} ${cx + 10} ${cy - 24} ${cx + 34} ${cy - 26} C${cx + 18} ${cy - 18} ${cx + 10} ${cy - 6} ${cx + 8} ${cy + 6} Z" fill="${dark}"/></g>`;
+  const q = ex === "duda" ? `<text x="170" y="40" font-family="Fredoka, sans-serif" font-weight="600" font-size="34" fill="${dark}" text-anchor="middle">?</text>` : "";
+  return `<svg viewBox="0 0 200 200" class="${ex === "avisa" ? "up" : ""}" role="img" aria-label="Cara de tero, ${s.name}, ${FEXPR[ex]}">
+    <defs><clipPath id="${id}">${s.shape}</clipPath></defs>
+    ${crest}<g fill="${c.fill}">${s.shape}</g>
+    <g clip-path="url(#${id})"><rect x="0" y="${s.bib}" width="200" height="80" fill="${dark}"/></g>
+    ${eyes}${beak}${q}</svg>`;
+}
+let fid = 0;
+function drawFaces() {
+  const c = FCOLORS[fstate.color];
+  document.getElementById("faces").innerHTML = SHAPES.map(s => `<article class="card"><div class="art">${teroFace(s, c, fstate.expr, `f${fid++}`)}</div>
+    <div class="info"><h3>${s.name}</h3><p>${s.text}</p>
+    <div class="minis">${[56, 36, 24].map(px => `<div style="width:${px}px">${teroFace(s, c, "normal", `f${fid++}`)}</div>`).join("")}</div></div></article>`).join("");
+}
+
+/* ---------- 2. Logo con gesto ---------- */
+const FONTS = {
+  fredoka: { label: "Redonda", css: "600 {s}px Fredoka", attr: 'font-family="Fredoka" font-weight="600"' },
+  baloo: { label: "Gordita", css: "800 {s}px 'Baloo 2'", attr: `font-family="'Baloo 2'" font-weight="800"` },
+  outfit: { label: "Geométrica", css: "700 {s}px Outfit", attr: 'font-family="Outfit" font-weight="700"' },
+};
+const WCOLORS = {
+  tinta: { label: "Tinta sobre crema", bg: "#fbf6ea", fg: "#1f1f25", accent: "#ff5a3c" },
+  tomate: { label: "Crema sobre tomate", bg: "#ff5a3c", fg: "#fff6ec", accent: "#ffd166" },
+  mostaza: { label: "Tinta sobre mostaza", bg: "#ffc83d", fg: "#1f1a10", accent: "#ff5a3c" },
+  azul: { label: "Blanco sobre azul", bg: "#2f5bff", fg: "#ffffff", accent: "#ffc83d" },
+  lima: { label: "Tinta sobre lima", bg: "#c6f24a", fg: "#16210a", accent: "#ff5a3c" },
+  marca: { label: "Blanco sobre la marca actual", bg: "#5b4fe9", fg: "#ffffff", accent: "#ffc83d" },
+};
+const wstate = { font: "fredoka", color: "tinta" };
+const ctx = document.createElement("canvas").getContext("2d");
+
+// Caja de tinta real de cada letra (no la del renglón), para ubicar los gestos.
+function layout(word, size, W, baseline) {
+  ctx.font = FONTS[wstate.font].css.replace("{s}", size);
+  const total = ctx.measureText(word).width, x0 = (W - total) / 2;
+  return { x0, boxes: [...word].map((ch, i) => {
+    const pre = ctx.measureText(word.slice(0, i)).width, m = ctx.measureText(ch);
+    return { l: x0 + pre - m.actualBoundingBoxLeft, r: x0 + pre + m.actualBoundingBoxRight, t: baseline - m.actualBoundingBoxAscent, b: baseline + m.actualBoundingBoxDescent };
+  }) };
+}
+// Copete dibujado para el palito de la t a 200 px (30 de ancho): el origen es el centro de la punta del palito,
+// la base de las dos plumas queda dentro del trazo y las puntas se tiran hacia atrás (a la izquierda).
+const PLUME_D = ["M2 6 C-2 -10 -18 -24 -44 -26 C-26 -18 -14 -6 -10 8 Z", "M6 4 C6 -8 -2 -20 -20 -30 C-10 -18 -6 -8 -4 6 Z"];
+// La base de esas plumas está centrada en x=-2 del dibujo: se corre 2 para que quede sobre el centro del palito, y 4 hacia abajo para que nazca dentro del trazo.
+const plume = (x, y, s, fill) => `<g class="plume">${PLUME_D.map(d => `<path transform="translate(${x + 2 * s} ${y + 4 * s}) scale(${s})" d="${d}" fill="${fill}"/>`).join("")}</g>`;
+// Copete de la t como continuación del palito: origen en el centro de la punta del palito, unidades de la t a 200 px.
+// Medido píxel a píxel en Fredoka 600: el palito va de x 79,5 a 109,5 (centro al 42,74% del ancho de la letra) y arranca en y 36,5.
+// Los dos bordes (x = ±15) suben desde dentro del trazo, así no asoma la punta redondeada de la letra.
+const E = 15;
+// Pluma: base de L a R y punta T. El borde de abajo sale vertical de L y el de arriba vuelve vertical a R;
+// "cur" fija cuánto se curvan, igual en las dos plumas para que tengan la misma forma.
+function feather([lx, ly], [rx, ry], [tx, ty], cur = .6) {
+  const c1 = [lx, ly + (ty - ly) * cur], c2 = [tx + (lx - tx) * cur * .6, ty + (ly - ty) * .12];
+  const c3 = [tx + (rx - tx) * cur * .55, ty - 6], c4 = [rx, ry + (ty - ry) * cur];
+  return `M${lx} ${ly} C${c1} ${c2} ${tx} ${ty} C${c3} ${c4} ${rx} ${ry} Z`;
+}
+// Dos plumas paralelas en punta, la de adelante más larga; abajo, el palito sigue derecho (x = ±15, medido en Fredoka 600 a 200 px).
+const CREST_STYLES = {
+  plumas: { label: "Dos plumas", d: `M-${E} 24 L-${E} 0 L${E} 0 L${E} 24 Z ` + feather([-E, 6], [6, 0], [-54, -30]) + " " + feather([-4, 2], [E, 6], [-38, -46]) },
+};
+const cstate = { style: "plumas" };
+// Copete de la t: (x, y) es el centro de la punta del palito; s, la escala respecto de la t de 200 px.
+// El palito sobre la barra quedaba largo: el copete nace DROP unidades más abajo (en la t de 200 px)
+// y la punta del palito que queda por encima se tapa con el color del fondo. Sin bg, no tapa ni baja (lo hace el avatar).
+const DROP = 12;
+const crestT = (x, y, s, fill, bg, style = cstate.style) => { const st = CREST_STYLES[style];
+  const cover = bg ? `<rect x="${x - 17 * s}" y="${y - 4 * s}" width="${34 * s}" height="${(DROP + 4) * s}" fill="${bg}"/>` : "";
+  if (bg) y += DROP * s;
+  return cover + `<g class="plumeT" transform="translate(${x} ${y}) scale(${s})">${st.d ? `<path d="${st.d}" fill="${fill}"${st.round ? ` stroke="${fill}" stroke-width="5" stroke-linejoin="round"` : ""}/>` : ""}${st.dot ? `<circle cx="${st.dot[0]}" cy="${st.dot[1]}" r="${st.dot[2]}" fill="${fill}"/>` : ""}</g>`; };
+// En la t, el palito no está en el centro de la letra: la barra se extiende más a la derecha.
+const stemX = b => b.l + (b.r - b.l) * .4274;
+const tail = (o, k, fill) => { const x = o.l + (o.r - o.l) * .2, y = o.b - (o.b - o.t) * .14;
+  return `<path transform="translate(${x} ${y}) rotate(38) scale(${k})" d="M10 -10 L-16 18 L20 4 Z" fill="${fill}" stroke="${fill}" stroke-width="6" stroke-linejoin="round"/>`; };
+const head = (o, k, c) => { const w = o.r - o.l, h = o.b - o.t, bx = o.r - 3 * k, by = o.t + h * .46;
+  return `<path d="M${bx} ${by - 9 * k} L${bx + 24 * k} ${by + 1 * k} L${bx} ${by + 11 * k} Z" fill="${c.accent}"/>
+    <circle cx="${o.l + w * .7}" cy="${o.t + h * .27}" r="${6 * k}" fill="${c.bg}"/><circle cx="${o.l + w * .72}" cy="${o.t + h * .27}" r="${3.2 * k}" fill="${c.fg}"/>`; };
+
+const WVARIANTS = [
+  { name: "Copete en la t", text: "El palito de la t termina en el copete del tero. Es el gesto más sutil: se lee \"tero\" y recién después aparece el pájaro.", icon: "t",
+    marks: (bx, k, c) => crestT(stemX(bx[0]), bx[0].t, k * .75, c.fg, c.bg) },
+  { name: "La o habla", text: "La o es un globo de chat: el nombre termina hablándote. Cuenta el bot de WhatsApp sin decirlo.", icon: "o",
+    marks: (bx, k, c) => tail(bx[3], k, c.fg) },
+  { name: "La o es un tero", text: "La o se convierte en la cabeza del pájaro, con ojo, pico y copete. El que más se juega por el personaje.", icon: "o2",
+    marks: (bx, k, c) => head(bx[3], k, c) + plume(bx[3].l + (bx[3].r - bx[3].l) * .5, bx[3].t, k * .9, c.fg) },
+  { name: "Copete y globo", text: "Las dos ideas juntas: arranca con el copete y termina hablando. Más rico, pero más cargado.", icon: "t",
+    marks: (bx, k, c) => crestT(stemX(bx[0]), bx[0].t, k * .75, c.fg, c.bg) + tail(bx[3], k, c.fg) },
+];
+
+function wordmark(v, c) {
+  const W = 520, H = 220, size = 150, base = 158, k = size / 150;
+  const { x0, boxes } = layout("tero", size, W, base);
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Logo tero, ${v.name}"><rect width="${W}" height="${H}" fill="${c.bg}"/>
+    <text x="${x0}" y="${base}" font-size="${size}" ${FONTS[wstate.font].attr} fill="${c.fg}">tero</text>${v.marks(boxes, k, c)}
+    ${v.name === "La o es un tero" ? head(boxes[3], k, c) : ""}</svg>`;
+}
+function iconFor(v, c) {
+  const ch = v.icon === "t" ? "t" : "o";
+  const W = 200, size = 150, base = ch === "t" ? 166 : 140, k = size / 150;
+  const { x0, boxes } = layout(ch, size, W, base), b = boxes[0];
+  let marks = "";
+  if (v.icon === "t") marks = crestT(stemX(b), b.t, k * .75, c.fg, c.bg);
+  if (v.icon === "o") marks = tail(b, k, c.fg);
+  if (v.icon === "o2") marks = plume(b.l + (b.r - b.l) * .5, b.t, k * .9, c.fg);
+  return `<svg viewBox="0 0 200 200" role="img" aria-label="Ícono"><rect width="200" height="200" rx="46" fill="${c.bg}"/>
+    <text x="${x0}" y="${base}" font-size="${size}" ${FONTS[wstate.font].attr} fill="${c.fg}">${ch}</text>${marks}${v.icon === "o2" ? head(b, k, c) : ""}</svg>`;
+}
+function drawWords() {
+  const c = WCOLORS[wstate.color];
+  document.getElementById("words").innerHTML = WVARIANTS.map(v => `<article class="wcard"><div class="wart">${wordmark(v, c)}</div>
+    <div class="wrow">${iconFor(v, c)}<span>Así quedaría el ícono de la app con este gesto.</span></div>
+    <div class="info"><h3>${v.name}</h3><p>${v.text}</p></div></article>`).join("");
+}
+
+function buttons(el, entries, st, key, redraw, deco) {
+  el.insertAdjacentHTML("beforeend", entries.map(([v, label]) => `<button type="button" data-v="${v}">${deco ? deco(v) : ""}${label}</button>`).join(""));
+  const sync = () => el.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(st[key] === b.dataset.v)));
+  el.addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; st[key] = b.dataset.v; sync(); redraw(); });
+  sync();
+}
+buttons(document.getElementById("fcolor"), Object.entries(FCOLORS).map(([k, v]) => [k, v.label]), fstate, "color", drawFaces, k => `<span class="sw" style="background:${FCOLORS[k].fill}"></span>`);
+buttons(document.getElementById("fexpr"), Object.entries(FEXPR), fstate, "expr", drawFaces);
+buttons(document.getElementById("wfont"), Object.entries(FONTS).map(([k, v]) => [k, v.label]), wstate, "font", drawWords);
+buttons(document.getElementById("wcolor"), Object.entries(WCOLORS).map(([k, v]) => [k, v.label]), wstate, "color", drawWords, k => `<span class="sw" style="background:${WCOLORS[k].bg};box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)"></span>`);
+/* ---------- 3. Avatar con volumen ---------- */
+const MARCA = { bg: "#f7f7fb", fg: "#5b4fe9", accent: "#ffc83d" };
+const astate = { color: "marca" };
+// La t del logo (Fredoka 600, 200 px, base en y=168): palito x 79–109 desde y 37, barra x 62–138 entre y 71 y 101.
+// Los ojos y el pico son "huecos": se pintan con el color del fondo, como recortados en la letra.
+const T = { stemX: 94, crest: [94.5, 36.5], eyes: [[83, 86], [105, 86]], faceO: [94, 94] };
+const astate2 = { beak: "color" };
+function avatarSVG() {
+  const c = MARCA, hole = c.bg, b = astate2.beak === "hueco" ? c.bg : c.accent;
+  const eye = ([x, y]) => `<g class="pupil"><ellipse cx="${x}" cy="${y}" rx="4.4" ry="6.6" fill="${hole}"/></g>`;
+  const happy = ([x, y]) => `<path d="M${x - 5.5} ${y + 2.5} Q${x} ${y - 5.5} ${x + 5.5} ${y + 2.5}" fill="none" stroke="${hole}" stroke-width="3.8" stroke-linecap="round"/>`;
+  const closed = ([x, y]) => `<path d="M${x - 5.5} ${y} Q${x} ${y + 5} ${x + 5.5} ${y}" fill="none" stroke="${hole}" stroke-width="3.6" stroke-linecap="round"/>`;
+  const squint = ([x, y]) => `<ellipse cx="${x}" cy="${y + 1.5}" rx="4.6" ry="2.4" fill="${hole}"/>`;
+  const line = ([x, y]) => `<path d="M${x - 5} ${y} H${x + 5}" stroke="${hole}" stroke-width="3.8" stroke-linecap="round"/>`;
+  const shut = `<path d="M88 104 Q94 101 100 104 L94 115 Z" fill="${b}" stroke="${b}" stroke-width="2" stroke-linejoin="round"/>`;
+  const open = `<ellipse cx="94" cy="108" rx="5.5" ry="7.5" fill="${b}"/>`;
+  const k = 200 / 150, [cx, cy] = T.crest;
+  const plumeT = crestT(cx, cy + DROP, 1, c.fg);
+  const letter = () => `<text x="100" y="168" text-anchor="middle" font-size="200" font-family="Fredoka, Nunito Sans, sans-serif" font-weight="600" fill="${c.fg}">t</text>
+    <rect class="cover" x="${cx - 17}" y="${cy - 4}" width="34" height="${DROP + 4}" fill="${c.bg}"/>
+    <g class="crestA" style="transform-origin:${cx}px ${cy + DROP + 24}px">${plumeT}</g>`;
+  const check = (x, y) => `<g><path d="M${x - 7} ${y} L${x - 2} ${y + 5} L${x + 7} ${y - 6}" fill="none" stroke="#22b55a" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/></g>`;
+  const bang = (x, y) => `<g><rect x="${x - 2.4}" y="${y - 10}" width="4.8" height="12" rx="2.4" fill="#e5383b"/><circle cx="${x}" cy="${y + 7}" r="2.7" fill="#e5383b"/></g>`;
+  const SPOTS = [[42, 50], [160, 66], [36, 138], [166, 132]];
+  return `<svg viewBox="-24 -36 248 248" class="av" id="av" role="img" aria-label="Avatar: la t del logo">
+  <defs><clipPath id="avfill"><rect id="fillrect" x="-30" y="190" width="260" height="0"/></clipPath></defs>
+  <rect x="-24" y="-36" width="248" height="248" rx="54" fill="${c.bg}"/>
+  <g id="avlean"><g class="anim">
+    <g id="tbase">${letter()}</g>
+    <g id="tfill" clip-path="url(#avfill)">${letter()}</g>
+    <g class="face"><g id="avface">
+      <g class="eyes">${T.eyes.map(eye).join("")}</g>
+      <g class="happy">${T.eyes.map(happy).join("")}</g>
+      <g class="closed">${T.eyes.map(closed).join("")}</g>
+      <g class="lid">${T.eyes.map(squint).join("")}</g>
+      <g class="qline">${T.eyes.map(line).join("")}</g>
+      <g class="shut">${shut}</g><g class="open">${open}</g>
+    </g></g>
+    <g class="badge pop b-check">${SPOTS.map(([x, y]) => check(x, y)).join("")}</g>
+    <g class="badge pop b-alert">${SPOTS.map(([x, y]) => bang(x, y)).join("")}</g>
+    <g class="badge pop b-q">${SPOTS.map(([x, y]) => `<g><text x="${x}" y="${y + 9}" text-anchor="middle" font-family="Fredoka, sans-serif" font-weight="600" font-size="26" fill="${c.fg}">?</text></g>`).join("")}</g>
+    <g class="badge b-sweat"><path d="M128 48 C133 56 134 61 131 64 C128 67 123 65 124 60 C125 56 126 53 128 48 Z" fill="${c.fg}" opacity=".55"/></g>
+    <g class="badge b-z"><text x="130" y="40" font-family="Fredoka, sans-serif" font-weight="600" font-size="18" fill="${c.fg}">z</text><text x="143" y="26" font-family="Fredoka, sans-serif" font-weight="600" font-size="13" fill="${c.fg}">z</text></g>
+    <g class="badge b-spark">${[[40, 52], [160, 76], [44, 150]].map(([x, y]) => `<path d="M${x} ${y - 9} L${x + 3} ${y - 3} L${x + 9} ${y} L${x + 3} ${y + 3} L${x} ${y + 9} L${x - 3} ${y + 3} L${x - 9} ${y} L${x - 3} ${y - 3} Z" fill="${c.fg}"/>`).join("")}</g>
+  </g></g>
+</svg>`;
+}
+
+const MSGS = {
+  gasto: "Cargaste un gasto: le aparece la cara, salta contento y se llena de verde de abajo hacia arriba, con tildes alrededor.",
+  alerta: "Se acerca un vencimiento: levanta el copete, abre el pico, tiembla y se llena de rojo. Es el tero avisando.",
+  meta: "Cumpliste una meta: festeja saltando entre estrellitas.",
+  pasado: "Te pasaste del presupuesto: se achica, baja el copete y entrecierra los ojos.",
+  duda: "No entendió el mensaje: inclina la cabeza y le aparecen signos de pregunta alrededor.",
+  poke: "Le hiciste cosquillas.",
+};
+let resetTimer, lastMove = Date.now(), fillAnim;
+// Sube o baja el nivel de la capa de color (0 = vacía, 1 = llena), con aceleración suave.
+function setFill(to, ms) {
+  const r = document.getElementById("fillrect"); if (!r) return;
+  cancelAnimationFrame(fillAnim);
+  const from = +(r.dataset.p || 0), t0 = performance.now();
+  const step = now => {
+    const k = Math.min(1, (now - t0) / ms), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    const p = from + (to - from) * e, top = 182 - p * 205;
+    r.dataset.p = p; r.setAttribute("y", top); r.setAttribute("height", Math.max(0, 184 - top));
+    if (k < 1) fillAnim = requestAnimationFrame(step);
+  };
+  fillAnim = requestAnimationFrame(step);
+}
+const FILL = { gasto: "#22b55a", alerta: "#e5383b" };
+function react(name, ms = 1900) {
+  const av = document.getElementById("av"); if (!av) return;
+  av.classList.remove("sleep", ...Object.keys(MSGS).map(k => `r-${k}`));
+  void av.getBoundingClientRect();
+  av.classList.add(`r-${name}`);
+  document.getElementById("react-msg").textContent = MSGS[name];
+  lastMove = Date.now();
+  clearTimeout(resetTimer);
+  if (FILL[name]) { av.style.setProperty("--fillc", FILL[name]); setFill(1, 750); } else setFill(0, 300);
+  resetTimer = setTimeout(() => { av.classList.remove(`r-${name}`); if (FILL[name]) setFill(0, 650); }, ms);
+}
+function drawAvatar() {
+  document.getElementById("stage").innerHTML = avatarSVG();
+  document.getElementById("av").addEventListener("click", () => react("poke", 700));
+}
+document.querySelector(".reacts").addEventListener("click", e => { const b = e.target.closest("button[data-r]"); if (b) react(b.dataset.r, b.dataset.r === "meta" ? 2600 : 1900); });
+
+// Seguimiento: los ojos miran al puntero, el cuerpo se inclina y la cara se mueve más que el cuerpo (eso da la profundidad).
+const target = { x: 0, y: 0 }, cur = { x: 0, y: 0 };
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+addEventListener("pointermove", e => {
+  const av = document.getElementById("av"); if (!av) return;
+  const r = av.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height * .35;
+  target.x = Math.max(-1, Math.min(1, (e.clientX - cx) / (innerWidth * .45)));
+  target.y = Math.max(-1, Math.min(1, (e.clientY - cy) / (innerHeight * .45)));
+  lastMove = Date.now(); av.classList.remove("sleep");
+}, { passive: true });
+function tick() {
+  const av = document.getElementById("av");
+  if (av && !reduce) {
+    cur.x += (target.x - cur.x) * .1; cur.y += (target.y - cur.y) * .1;
+    av.querySelectorAll(".pupil").forEach(p => p.setAttribute("transform", `translate(${cur.x * 2.4} ${cur.y * 2.6})`));
+    av.querySelector("#avface")?.setAttribute("transform", `translate(${cur.x * 1.6} ${cur.y * 1.2})`);
+    av.querySelector("#avlean")?.setAttribute("transform", `rotate(${cur.x * 5} 100 168)`);
+        const busy = [...av.classList].some(k => k.startsWith("r-"));
+    if (!busy && Date.now() - lastMove > 9000 && !av.classList.contains("sleep")) { av.classList.add("sleep"); document.getElementById("react-msg").textContent = "Se durmió. Mové el mouse para despertarlo."; }
+  }
+  requestAnimationFrame(tick);
+}
+buttons(document.getElementById("abeak"), [["color", "De color"], ["hueco", "Hueco"]], astate2, "beak", drawAvatar);
+drawAvatar();
+requestAnimationFrame(tick);
+
+drawFaces();
+// Las medidas del logo dependen de la tipografía cargada: se dibuja cuando están listas.
+Promise.all(["600 40px Fredoka", "800 40px 'Baloo 2'", "700 40px Outfit"].map(f => document.fonts.load(f, "tero"))).finally(drawWords);
+drawWords();
+</script>

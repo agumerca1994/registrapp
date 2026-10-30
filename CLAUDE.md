@@ -425,6 +425,45 @@ The root `mcp/server.py` (a FastMCP stdio server registered in `.mcp.json` as `r
 ### Banners de novedades (`components/WhatsNewCarousel.tsx` + agente `banner-creator`)
 Los anuncios de features nuevas son carruseles a pantalla completa construidos **en la app**, no en Stitch (se intentó: lienzo de escritorio, copy inventado, generaciones que dejaron de completarse). El subagente `.claude/agents/banner-creator.md` tiene el procedimiento completo — reglas de gating (nunca dos overlays: cede ante `useTourRunning()` y el diálogo de compartidos), clave de "visto" versionada en localStorage + reset en "Reiniciar guía", copy sin jerga interna ni promesas que el código no cumple, y **revisión visual obligatoria** en 390×844 con una ruta de preview temporal que no se commitea. Cuando aparezca el segundo banner, el shell se extrae a `components/announcements/` en vez de copiarse.
 
+### Marca tero (desde 2026-10-30; RegistrApp pasa a llamarse tero)
+**El cambio es por etapas: hoy sólo las páginas públicas** (`/`, `/hogar`, `/negocio`, `/conectar`, `/legal` y el pie) dicen tero y llevan el logo. La app (login, `(app)`, onboarding, el manifest, los íconos, el bot) sigue diciendo RegistrApp, y en el código, la infraestructura y los nombres de servicios **registrapp se queda**: el cambio es de marca, no de código.
+- **Las piezas se generan, no se dibujan a mano.** `tools/brand/build.py` pasa Fredoka 600 a trazos y produce el logo y el ícono (`public/brand/tero/`) y los trazos para los componentes (`lib/brand/tero-marca.ts`). Cómo regenerarlas, la exploración y los mocks (con el video) están en `tools/brand/README.md`.
+- `components/brand/TeroLogo.tsx`: el logo en `currentColor`, sin hooks (sirve en componentes de servidor). Se pinta con una clase de color: `<TeroLogo className="h-8 w-auto text-primary" />`.
+- `components/brand/TeroAvatar.tsx`: la t como personaje.
+  - En reposo es sólo la letra con el copete.
+  - En una reacción le aparecen ojitos huecos (del color del fondo) y un piquito de frente: `gasto`, `alerta`, `meta`, `pasado`, `duda`, `toque`.
+  - En `gasto` y `alerta` la letra se **llena de verde o de rojo de abajo hacia arriba**: es una copia recortada por un rectángulo que sube, no un fundido de color (el fundido pasaba por grises y el copete cambiaba a destiempo).
+  - Alrededor aparecen tildes, signos de exclamación, de pregunta o estrellitas que se prenden y se apagan. Nunca un ícono fijo.
+  - Los mocks (`tools/brand/mocks/`) además tienen el llenado en loop como carga, la t caminando sobre una barra, "pensando" y la t que sale del botón + y hace gestos. Eso todavía no está en el componente.
+- **Reglas que vinieron de correcciones del usuario:**
+  - Plano, sin volumen 3D y sin personaje con cuerpo.
+  - Sólo el violeta de la marca (`#5B4FE9`).
+  - El copete es **una sola forma que continúa el palito de la t**: los bordes suben rectos desde x ±15 (Fredoka 600 a 200 px; el palito va de 79,5 a 109,5, al 42,74% del ancho de la letra). Dos plumas paralelas en punta, tiradas hacia atrás, y nace 12 unidades más abajo que la punta de la letra, que se recorta de verdad.
+  - Rotar el copete lo despega del palito: en las reacciones se estira o se achica desde el pie.
+  - Cuando pide mejorar una pieza que ya aprobó, se conserva la forma: no se proponen alternativas nuevas.
+
+**Árbol de dominios** (`lib/site.ts` + `middleware.ts`). Se arma cuando exista el dominio:
+- `<dominio>`: el sitio público. Es el mismo contenedor del frontend, con un segundo `Host()` en la regla de Traefik de `registrapp-web`.
+- `app.<dominio>`: la app, que es lo que hoy es `APP_DOMAIN`.
+- `api.<dominio>`: el backend, con `/mcp`, `/oauth` y el webhook de WhatsApp; hoy es `API_DOMAIN`. El MCP queda ahí, porque el issuer y el recurso OAuth tienen que tener una sola dirección.
+
+Cómo se activa:
+- `NEXT_PUBLIC_SITE_URL` y `NEXT_PUBLIC_APP_URL` se hornean en el build, con sus tres piezas, igual que los flags. **Vacías, no cambia nada.**
+- Con las dos cargadas:
+  - el middleware manda las rutas públicas al sitio y el resto a la app (la raíz de la app va a `/dashboard`);
+  - `appHref()` arma los links "Entrar" del sitio;
+  - `HomeRedirect` salta de host con navegación completa.
+- Al activarlo hay que actualizar:
+  - `FRONTEND_URL` y `ALLOWED_ORIGINS` del backend, que apuntan a la app;
+  - los dominios autorizados de Firebase Auth;
+  - la redirección de `www`.
+- El conector sale solo de `NEXT_PUBLIC_API_URL` (`CONNECTOR_URL`). Los que ya están conectados tienen que volver a conectarse, porque cambia el recurso.
+
+**Pendiente de la marca:**
+- Recapturar las imágenes de las landings, los instructivos (`public/*/instructivo.html`) y las capturas de Claude en `/conectar`: muestran RegistrApp.
+- `lib/legal.ts` tiene titular y mail provisorios.
+- Cambiar la app, el manifest y el bot.
+
 ### Landings públicas e instructivos (`/negocio`, `/hogar`)
 **La raíz `/` es la home pública** (`app/page.tsx`): presenta las dos versiones, que es multiplataforma y el asistente de IA, explicado por lo que hace y sin nombrar el protocolo. A quien ya inició sesión, `HomeRedirect` lo manda a `/dashboard` (o a `/onboarding`), igual que hacía la raíz antes. La app instalada arranca en `/dashboard` (`manifest.json`), así que no pasa por la home. Las capturas con marco de navegador y de celular son `components/marketing/Frames.tsx` (`Screen`, `Phone`), compartidas por las tres páginas. Tres reglas que salieron de correcciones del usuario:
 - **`Phone` es una silueta plana de teléfono, sin la sombra desplazada (`shadow-chip`) de la app**: cuerpo oscuro, isla, barra de estado, indicador de inicio y botones laterales. Con la sombra se leía como un botón más de la interfaz.

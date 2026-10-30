@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { TeroLogo } from "@/components/brand/TeroLogo";
 import { ArrowRight } from "lucide-react";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import { LEGAL, LEGAL_DOCS } from "@/lib/legal";
 
 export const metadata: Metadata = {
-  title: "Legales · RegistrApp",
-  description: "Política de privacidad y términos y condiciones de RegistrApp Hogar y RegistrApp Negocio.",
+  title: "Legales · tero",
+  description: "Política de privacidad y términos y condiciones de tero Hogar y tero Negocio.",
 };
 
 /** Índice de los documentos legales. Pública, fuera de `(app)`, como /hogar y /negocio. */
@@ -16,7 +17,7 @@ export default function LegalIndexPage() {
       <header className="sticky top-0 z-20 bg-background/90 backdrop-blur border-b border-border"
         style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="max-w-6xl mx-auto px-4 md:px-8 h-16 flex items-center gap-3">
-          <Link href="/" className="font-display font-bold text-xl text-primary">RegistrApp</Link>
+          <Link href="/" aria-label="tero, ir a la home"><TeroLogo className="h-8 w-auto text-primary" /></Link>
           <span className="rounded-full border-2 border-ink px-2.5 py-0.5 text-xs font-semibold">Legales</span>
         </div>
       </header>

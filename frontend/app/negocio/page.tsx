@@ -1,18 +1,20 @@
 import type { Metadata } from "next";
 import { Phone, Screen } from "@/components/marketing/Frames";
 import Link from "next/link";
+import { appHref } from "@/lib/site";
+import { TeroLogo } from "@/components/brand/TeroLogo";
 import {
   BarChart3, Boxes, Download, MessageCircle, Play, ReceiptText, ShoppingBag, Users,
 } from "lucide-react";
 import SiteFooter from "@/components/marketing/SiteFooter";
 
 export const metadata: Metadata = {
-  title: "RegistrApp Negocio",
+  title: "tero Negocio",
   description: "Ventas, cierre de caja, stock y gastos de tu comercio, en una sola app.",
 };
 
 /**
- * La landing pública de RegistrApp Negocio. Vive fuera del grupo `(app)`:
+ * La landing pública de tero Negocio. Vive fuera del grupo `(app)`:
  * ese layout manda a /login a quien no inició sesión, y esta página es
  * justamente para quien todavía no tiene cuenta.
  *
@@ -48,13 +50,13 @@ export default function NegocioPage() {
       <header className="sticky top-0 z-20 bg-background/90 backdrop-blur border-b border-border"
         style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="max-w-6xl mx-auto px-4 md:px-8 h-16 flex items-center gap-3">
-          <Link href="/" className="font-display font-bold text-xl text-primary">RegistrApp</Link>
+          <Link href="/" aria-label="tero, ir a la home"><TeroLogo className="h-8 w-auto text-primary" /></Link>
           <span className="rounded-full border-2 border-ink px-2.5 py-0.5 text-xs font-semibold">Negocio</span>
           <nav className="ml-auto flex items-center gap-2">
             <a href="#instructivo" className="hidden sm:inline px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
               Cómo funciona
             </a>
-            <Link href="/login"
+            <Link href={appHref("/login")}
               className="inline-flex items-center rounded-full border-2 border-ink bg-white px-4 py-2 text-sm font-semibold shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none">
               Entrar
             </Link>
@@ -74,7 +76,7 @@ export default function NegocioPage() {
               y a fin de mes sabés cuánto ganaste.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link href="/login"
+              <Link href={appHref("/login")}
                 className="inline-flex items-center rounded-full border-2 border-ink bg-primary text-primary-foreground px-5 py-3 font-semibold shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none">
                 Crear mi negocio
               </Link>
@@ -86,8 +88,8 @@ export default function NegocioPage() {
             <p className="mt-4 text-sm text-muted-foreground">Entrás con tu cuenta de Google y elegís «Mi negocio».</p>
           </div>
           <div className="min-w-0">
-            <div className="hidden sm:block"><Screen src="/negocio/inicio.jpg" alt="Inicio de RegistrApp Negocio: el resultado del mes y las ventas por medio de pago" hero /></div>
-            <Phone src="/home/celular-negocio.jpg" alt="RegistrApp Negocio en el celular" className="sm:hidden mx-auto w-[68%] max-w-[260px]" />
+            <div className="hidden sm:block"><Screen src="/negocio/inicio.jpg" alt="Inicio de tero Negocio: el resultado del mes y las ventas por medio de pago" hero /></div>
+            <Phone src="/home/celular-negocio.jpg" alt="tero Negocio en el celular" className="sm:hidden mx-auto w-[68%] max-w-[260px]" />
           </div>
         </section>
 
@@ -146,14 +148,14 @@ export default function NegocioPage() {
                 className="inline-flex items-center gap-2 rounded-full border-2 border-ink bg-primary text-primary-foreground px-4 py-2 font-semibold shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none">
                 <Play className="w-4 h-4" /> Ver a pantalla completa
               </Link>
-              <a href="/negocio/instructivo.html" download="RegistrApp-Negocio-Instructivo.html"
+              <a href="/negocio/instructivo.html" download="tero-Negocio-Instructivo.html"
                 className="inline-flex items-center gap-2 rounded-full border-2 border-ink bg-white px-4 py-2 font-semibold shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none">
                 <Download className="w-4 h-4" /> Descargar
               </a>
             </div>
           </div>
           <div className="mt-6 rounded-2xl border-2 border-ink overflow-hidden shadow-hero bg-card">
-            <iframe src="/negocio/instructivo.html" title="Instructivo de RegistrApp Negocio"
+            <iframe src="/negocio/instructivo.html" title="Instructivo de tero Negocio"
               className="block w-full h-[78vh] min-h-[520px] border-0" loading="lazy" />
           </div>
           <p className="mt-3 text-sm text-muted-foreground">
@@ -167,7 +169,7 @@ export default function NegocioPage() {
               <h2 className="font-display font-bold text-3xl tracking-tight">Probalo con tu negocio</h2>
               <p className="mt-2 text-primary-foreground/85 text-lg">Entrás con Google, le ponés nombre a tu negocio y cargás tus productos.</p>
             </div>
-            <Link href="/login"
+            <Link href={appHref("/login")}
               className="inline-flex items-center rounded-full border-2 border-ink bg-white text-foreground px-5 py-3 font-semibold shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none">
               Crear mi negocio
             </Link>

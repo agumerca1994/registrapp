@@ -44,3 +44,6 @@ firebase-debug.log
 
 # Duplicado del registro global en ~/.claude.json, y ahí es donde vive la clave.
 .mcp.json
+
+# Salida del armado de los mocks de marca (se regenera con tools/brand/mocks/build.py)
+tools/brand/mocks/tero-mocks.html

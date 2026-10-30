@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { appHref } from "@/lib/site";
+import { TeroLogo } from "@/components/brand/TeroLogo";
 import { ArrowDown, Brain, MessageSquareText, Plus, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { AssistantTabs } from "@/components/marketing/connect/AssistantTabs";
 import { ASSISTANTS } from "@/components/marketing/connect/assistants";
@@ -10,13 +12,13 @@ import { Step, StepTimeline } from "@/components/marketing/connect/StepTimeline"
 import SiteFooter from "@/components/marketing/SiteFooter";
 
 export const metadata: Metadata = {
-  title: "Conectá RegistrApp a Claude",
+  title: "Conectá tero a Claude",
   description:
     "Preguntale a Claude por tus gastos, tus cuotas o tus ventas y que te conteste con tus números. Qué es, qué podés hacer y el paso a paso para conectarlo.",
 };
 
 /**
- * Cómo conectar RegistrApp a un asistente de IA. Pública y fuera de `(app)`:
+ * Cómo conectar tero a un asistente de IA. Pública y fuera de `(app)`:
  * ese layout manda a /login, y esto lo lee también quien todavía no tiene
  * cuenta. No redirige a quien ya inició sesión: es justo quien la necesita.
  *
@@ -30,11 +32,11 @@ const PILL = "inline-flex items-center gap-2 rounded-full border-2 border-ink px
 
 const BENEFITS = [
   { icon: Brain, title: "Con tus números",
-    text: "Contesta con los ingresos, gastos, tarjetas y cuotas que cargaste en RegistrApp." },
+    text: "Contesta con los ingresos, gastos, tarjetas y cuotas que cargaste en tero." },
   { icon: MessageSquareText, title: "Como hablás",
     text: "«¿Me alcanza para la tele?», «anotá 12 lucas de verdulería». Le escribís como a una persona." },
   { icon: ShieldCheck, title: "Tu contraseña queda afuera",
-    text: "Iniciás sesión con Google en la página de RegistrApp. La IA recibe un permiso, nunca tu contraseña." },
+    text: "Iniciás sesión con Google en la página de tero. La IA recibe un permiso, nunca tu contraseña." },
   { icon: SlidersHorizontal, title: "Vos decidís",
     text: "Antes de guardar algo te muestra una vista previa. Y lo desconectás cuando quieras." },
 ];
@@ -52,13 +54,13 @@ const FAQ = [
   </> },
   { q: "¿Mis credenciales pasan por la IA?", a: <>
     <p>
-      No. Iniciás sesión con Google en la página de RegistrApp, no en Claude. Claude recibe un permiso de acceso a tu cuenta que
+      No. Iniciás sesión con Google en la página de tero, no en Claude. Claude recibe un permiso de acceso a tu cuenta que
       podés cortar cuando quieras. Con Claude Code es un token que creás vos y borrás cuando quieras.
     </p>
   </> },
   { q: "¿Cómo lo desconecto?", a: <>
     <p>
-      Desde Claude: Configuración → Conectores → RegistrApp → Desconectar. Desde RegistrApp: Configuración → Conectar con una IA →
+      Desde Claude: Configuración → Conectores → tero → Desconectar. Desde tero: Configuración → Conectar con una IA →
       Apps conectadas, el tacho al lado de la app y Confirmar. Corta el acceso en el acto. Un token de Claude Code se borra igual,
       desde la lista de tokens de esa misma sección.
     </p>
@@ -71,7 +73,7 @@ const FAQ = [
   </> },
   { q: "Claude dice que no encuentra la herramienta", a: <>
     <p>
-      Fijate que RegistrApp esté prendido en el chat (el <strong>+</strong> del cuadro de mensaje → Conectores). Si lo está,
+      Fijate que tero esté prendido en el chat (el <strong>+</strong> del cuadro de mensaje → Conectores). Si lo está,
       desconectalo y volvé a conectarlo: Claude vuelve a leer la lista de herramientas.
     </p>
   </> },
@@ -83,11 +85,11 @@ export default function ConectarPage() {
       <header className="sticky top-0 z-20 bg-background/90 backdrop-blur border-b border-border"
         style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="max-w-6xl mx-auto px-4 md:px-8 h-16 flex items-center gap-3">
-          <Link href="/" className="font-display font-bold text-xl text-primary">RegistrApp</Link>
+          <Link href="/" aria-label="tero, ir a la home"><TeroLogo className="h-8 w-auto text-primary" /></Link>
           <nav className="ml-auto flex items-center gap-1 sm:gap-2">
             <a href="#preguntas" className="hidden md:inline px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Qué podés hacer</a>
             <a href="#tutorial" className="hidden sm:inline px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Paso a paso</a>
-            <Link href="/login"
+            <Link href={appHref("/login")}
               className="inline-flex items-center rounded-full border-2 border-ink bg-white px-4 py-2 text-sm font-semibold shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none">
               Entrar
             </Link>
@@ -104,9 +106,9 @@ export default function ConectarPage() {
               <div className="absolute top-16 right-[-12rem] w-[28rem] h-[28rem] rounded-full bg-[radial-gradient(closest-side,rgba(16,185,129,0.10),transparent)]" />
             </div>
             <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-14 md:pt-24 pb-16 md:pb-24 text-center">
-              <p className="text-sm font-semibold uppercase tracking-wider text-primary">RegistrApp con inteligencia artificial</p>
+              <p className="text-sm font-semibold uppercase tracking-wider text-primary">tero con inteligencia artificial</p>
               <h1 className="mt-3 font-display font-bold text-[2.1rem] sm:text-5xl md:text-6xl leading-[1.08] tracking-tight text-balance max-w-4xl mx-auto">
-                Conectá RegistrApp a <span className="text-primary">Claude</span> y preguntale por tu plata
+                Conectá tero a <span className="text-primary">Claude</span> y preguntale por tu plata
               </h1>
               <p className="mt-5 text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto text-pretty">
                 Te contesta con tus gastos, tus cuotas o tus ventas, y carga lo que le pidas después de mostrártelo.
@@ -124,8 +126,8 @@ export default function ConectarPage() {
             <Reveal>
               <h2 className="font-display font-bold text-3xl md:text-4xl tracking-tight">¿Qué es y para qué sirve?</h2>
               <p className="mt-4 text-lg text-muted-foreground max-w-3xl">
-                Es un puente entre tu cuenta de RegistrApp y el asistente de IA que ya usás. Una vez conectado, cuando le preguntás
-                algo de tu plata, Claude mira tus números en RegistrApp para contestarte, y si le pedís que cargue algo, te muestra
+                Es un puente entre tu cuenta de tero y el asistente de IA que ya usás. Una vez conectado, cuando le preguntás
+                algo de tu plata, Claude mira tus números en tero para contestarte, y si le pedís que cargue algo, te muestra
                 qué va a guardar antes de hacerlo.
               </p>
             </Reveal>
@@ -206,11 +208,11 @@ export default function ConectarPage() {
           <section className="max-w-6xl mx-auto px-4 md:px-8 pt-4 pb-16">
             <div className="rounded-2xl border-2 border-ink bg-primary text-primary-foreground p-6 md:p-10 flex flex-wrap items-center gap-6 justify-between shadow-chip">
               <div className="min-w-0">
-                <h2 className="font-display font-bold text-3xl tracking-tight">¿Todavía no usás RegistrApp?</h2>
+                <h2 className="font-display font-bold text-3xl tracking-tight">¿Todavía no usás tero?</h2>
                 <p className="mt-2 text-primary-foreground/85 text-lg">Entrás con Google, elegís hogar o negocio, y después lo conectás.</p>
               </div>
               <div className="flex flex-wrap gap-3">
-                <Link href="/login" className={`${PILL} bg-white text-foreground`}>Crear mi cuenta</Link>
+                <Link href={appHref("/login")} className={`${PILL} bg-white text-foreground`}>Crear mi cuenta</Link>
                 <a href="#tutorial" className={`${PILL} bg-primary text-primary-foreground border-white/80`}>Ver el paso a paso</a>
               </div>
             </div>

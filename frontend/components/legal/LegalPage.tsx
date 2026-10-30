@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { appHref } from "@/lib/site";
+import { TeroLogo } from "@/components/brand/TeroLogo";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import { LEGAL } from "@/lib/legal";
 
@@ -19,10 +21,10 @@ export function LegalPage({ title, intro, sections, children }: {
       <header className="sticky top-0 z-20 bg-background/90 backdrop-blur border-b border-border"
         style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="max-w-6xl mx-auto px-4 md:px-8 h-16 flex items-center gap-3">
-          <Link href="/" className="font-display font-bold text-xl text-primary">RegistrApp</Link>
+          <Link href="/" aria-label="tero, ir a la home"><TeroLogo className="h-8 w-auto text-primary" /></Link>
           <Link href="/legal" className="rounded-full border-2 border-ink px-2.5 py-0.5 text-xs font-semibold">Legales</Link>
           <nav className="ml-auto">
-            <Link href="/login"
+            <Link href={appHref("/login")}
               className="inline-flex items-center rounded-full border-2 border-ink bg-white px-4 py-2 text-sm font-semibold shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none">
               Entrar
             </Link>

@@ -39,7 +39,7 @@ export function termsSections(own: { id: string; title: string }[]) {
   return [...HEAD, ...own, ...TAIL];
 }
 
-const NAME: Record<Variant, string> = { hogar: "RegistrApp Hogar", negocio: "RegistrApp Negocio" };
+const NAME: Record<Variant, string> = { hogar: "tero Hogar", negocio: "tero Negocio" };
 
 export function TermsHead({ sec, variant }: { sec: Sec; variant: Variant }) {
   const group = variant === "hogar" ? "hogar" : "negocio";
@@ -52,7 +52,7 @@ export function TermsHead({ sec, variant }: { sec: Sec; variant: Variant }) {
           <Link href="/legal/privacidad" className="font-semibold text-primary hover:underline">política de privacidad</Link>,
           que forma parte de ellos. Si no estás de acuerdo, no uses la app.
         </p>
-        <p>Para usar RegistrApp tenés que ser mayor de 18 años.</p>
+        <p>Para usar tero tenés que ser mayor de 18 años.</p>
       </Section>
 
       <Section {...sec("cuenta")}>
@@ -65,7 +65,7 @@ export function TermsHead({ sec, variant }: { sec: Sec; variant: Variant }) {
       </Section>
 
       <Section {...sec("uso")}>
-        <p>Al usar RegistrApp te comprometés a no:</p>
+        <p>Al usar tero te comprometés a no:</p>
         <List items={[
           "Cargar datos de otras personas sin derecho a hacerlo, o usarlos para un fin distinto del que tienen en la app.",
           "Intentar acceder a cuentas, hogares o negocios ajenos, o a partes de la app que no te corresponden.",
@@ -98,7 +98,7 @@ export function TermsTail({ sec, variant }: { sec: Sec; variant: Variant }) {
 
       <Section {...sec("precio")}>
         <p>
-          Hoy RegistrApp es gratuita. Si en el futuro sumamos un plan pago, vas a ver el precio y las condiciones
+          Hoy tero es gratuita. Si en el futuro sumamos un plan pago, vas a ver el precio y las condiciones
           antes de contratarlo, y nada de lo que hoy es gratis pasa a cobrarse sin que lo aceptes. Si contratás un
           plan pago, vas a poder revocar la contratación dentro de los 10 días corridos (art. 34 de la Ley 24.240)
           y darte de baja por el mismo medio por el que te diste de alta.
@@ -125,7 +125,7 @@ export function TermsTail({ sec, variant }: { sec: Sec; variant: Variant }) {
 
       <Section {...sec("responsabilidad")}>
         <List items={[
-          <>RegistrApp es una herramienta para ordenar tus cuentas. <strong>No es asesoramiento financiero,
+          <>tero es una herramienta para ordenar tus cuentas. <strong>No es asesoramiento financiero,
             contable, impositivo ni legal</strong>, y las decisiones que tomes con esa información son tuyas.</>,
           "Los cálculos dependen de los datos que se cargan. Si un dato está mal cargado, el resultado también va a estar mal.",
           "Las cotizaciones, el índice de inflación y el valor de la UVA salen de fuentes públicas y pueden demorarse o tener errores. Son de referencia.",
