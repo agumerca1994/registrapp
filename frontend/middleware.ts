@@ -11,6 +11,9 @@ export function middleware(req: NextRequest) {
   const host = req.headers.get("host") ?? "";
   const { pathname, search } = req.nextUrl;
 
+  // www es el mismo sitio: una sola dirección, sin contenido duplicado.
+  if (host === `www.${siteHost}`) return NextResponse.redirect(`${SITE_URL}${pathname}${search}`, 308);
+
   if (host === appHost) {
     // La raíz de la app es el inicio: el login ya redirige a quien no entró.
     if (pathname === "/") return NextResponse.redirect(`${APP_URL}/dashboard${search}`, 308);
