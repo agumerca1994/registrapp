@@ -1,0 +1,690 @@
+<title>Lienzo de tood</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Figtree:wght@400;500;600&display=swap">
+<style>
+/* Layout: una columna de láminas. Arriba el logo; después cada animación en su propia tarjeta con sus controles; al final el avatar con el selector de boca. Todo en el violeta de la app. */
+:root {
+  --violeta: #5B4FE9;
+  --violeta-hondo: #3f34c4;
+  --lavanda: #eeecfd;
+  --blanco: #ffffff;
+  --bg: #f8f7ff;
+  --fg: #1b1840;
+  --muted: #5f5c80;
+  --line: #e1def7;
+  --panel: #ffffff;
+  --stage: #ffffff;
+  --chip-on: #1b1840;
+  --chip-on-fg: #ffffff;
+  --font-display: "Fredoka", "Nunito", system-ui, sans-serif;
+  --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12111f; --fg: #ecebff; --muted: #a9a6cf; --line: #2a2846; --panel: #1a1930; --chip-on: #ecebff; --chip-on-fg: #12111f; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12111f; --fg: #ecebff; --muted: #a9a6cf; --line: #2a2846; --panel: #1a1930; --chip-on: #ecebff; --chip-on-fg: #12111f; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--fg); font: 16px/1.55 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 72px }
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 56px }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; text-wrap: balance; margin: 0; line-height: 1.1 }
+h1 { font-size: clamp(2rem, 5vw, 3rem) }
+h2 { font-size: clamp(1.5rem, 4vw, 2rem) }
+h3 { font-size: 1.1rem }
+p { margin: 0; max-width: 66ch }
+.lead { color: var(--muted); font-size: 1.05rem }
+section, header { display: grid; gap: 18px }
+.eyebrow { font-size: .78rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--violeta) }
+
+.plate { background: var(--violeta); color: var(--blanco); border-radius: 20px; padding: clamp(28px, 6vw, 56px) 16px; display: grid; place-items: center }
+.plate svg { width: min(520px, 100%); height: auto }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px }
+.grid.two { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)) }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 12px; align-content: start; min-width: 0 }
+.tile p { font-size: .92rem; color: var(--muted) }
+.tile .head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap }
+.tag { font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted) }
+.stage { border-radius: 10px; display: grid; place-items: center; padding: 22px 14px; position: relative; overflow: hidden }
+.stage svg.logo { width: 100%; max-width: 340px; height: auto }
+.on-blanco { background: var(--blanco); color: var(--violeta); border: 1px solid var(--line) }
+.on-violeta { background: var(--violeta); color: var(--blanco) }
+.on-lavanda { background: var(--lavanda); color: var(--violeta) }
+.on-hondo { background: var(--violeta-hondo); color: var(--blanco) }
+.on-blanco { --hole: var(--blanco) } .on-violeta, .plate { --hole: var(--violeta) } .on-lavanda { --hole: var(--lavanda) } .on-hondo { --hole: var(--violeta-hondo) }
+.caption { font-family: var(--font-display); font-weight: 500; font-size: 1.02rem; color: #5f5c80; min-height: 1.6em; margin-top: 6px; transition: opacity .4s }
+.on-violeta .caption, .plate .caption { color: #e6e3ff }
+.plate .caption { font-size: 1.25rem; text-align: center }
+
+.controls { display: flex; gap: 8px; flex-wrap: wrap }
+button { font: 600 .85rem var(--font-body); color: var(--fg); background: transparent; border: 1.5px solid var(--line); border-radius: 999px; padding: 6px 14px; cursor: pointer }
+button:hover { border-color: var(--muted) }
+button:focus-visible { outline: 2px solid var(--violeta); outline-offset: 2px }
+button[aria-pressed="true"] { background: var(--chip-on); color: var(--chip-on-fg); border-color: var(--chip-on) }
+
+.sizes { display: flex; align-items: end; gap: 22px; flex-wrap: wrap; justify-content: center }
+.sizes figure { margin: 0; display: grid; gap: 6px; justify-items: center; font-size: .78rem; color: var(--muted) }
+.app-icon { display: block }
+
+.avatars { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px }
+.avatar-cell { display: grid; gap: 6px; justify-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 6px 12px }
+.avatar-cell .stage { padding: 6px; width: 100% }
+.mouths { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px }
+.mouth-opt { display: grid; gap: 4px; justify-items: center; padding: 10px; border-radius: 12px; text-align: center }
+.mouth-opt[aria-pressed="true"] { background: var(--lavanda); color: #1b1840; border-color: var(--violeta) }
+.mouth-opt small { font-weight: 400; color: inherit; opacity: .8 }
+.mouth-opt svg { width: 78px; height: 78px }
+.note { font-size: .9rem; color: var(--muted) }
+.tuner { display: grid; grid-template-columns: minmax(0, 240px) minmax(0, 1fr); gap: 20px; align-items: center }
+@media (max-width: 560px) { .tuner { grid-template-columns: 1fr } }
+.sliders { display: grid; gap: 6px; min-width: 0 }
+.sliders label { font-size: .88rem; font-weight: 600; display: flex; justify-content: space-between; margin-top: 6px }
+.sliders output { font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums }
+.sliders input[type=range] { width: 100%; accent-color: var(--violeta) }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">tood · marca</p>
+    <h1>Logo, animaciones y avatar</h1>
+    <p class="lead">La referencia de la marca: cada animación por separado, el avatar y sus controles. Arranca con lo que está en la web (ojos de óvalo alto, boca de arco, sin boca en reposo); los selectores sirven para probar cambios antes de tocar la app.</p>
+  </header>
+
+  <div class="plate" id="hero"></div>
+
+  <section aria-labelledby="s-logo">
+    <h2 id="s-logo">El logo</h2>
+    <div class="grid">
+      <div class="tile"><div class="stage on-blanco" data-logo></div><h3>Violeta sobre blanco</h3><p>El de las páginas públicas y los documentos.</p></div>
+      <div class="tile"><div class="stage on-lavanda" data-logo></div><h3>Violeta sobre lavanda</h3><p>Para fondos suaves, tarjetas y redes.</p></div>
+      <div class="tile"><div class="stage on-hondo" data-logo></div><h3>Blanco sobre violeta hondo</h3><p>Para piezas oscuras y la pantalla de carga.</p></div>
+    </div>
+    <div class="tile">
+      <div class="stage on-blanco"><div class="sizes" id="icons"></div></div>
+      <h3>Ícono</h3>
+      <p>La t sola, blanca sobre el violeta. Abajo de 32 px el copete se sigue leyendo; en 16 px es una t con un trazo.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="s-todo">
+    <p class="eyebrow">Animación 1</p>
+    <h2 id="s-todo">“od” se da vuelta: todo en una sola app</h2>
+    <p class="lead">La de la home, sola, y otras dos maneras de pasar de “od” a “do”.</p>
+    <div class="grid two" id="g-todo"></div>
+  </section>
+
+  <section aria-labelledby="s-ojos">
+    <p class="eyebrow">Animación 2</p>
+    <h2 id="s-ojos">Las oo son ojos: para que no pierdas nada de vista</h2>
+    <p class="lead">En vez de volar hasta la t, las oo se quedan en la palabra y se vuelven ojos: les aparece una pupila en el hueco y miran. La última es la de ahora, para comparar.</p>
+    <div class="grid two" id="g-ojos"></div>
+  </section>
+
+  <section aria-labelledby="s-avatar">
+    <p class="eyebrow">Avatar</p>
+    <h2 id="s-avatar">La t como personaje</h2>
+    <p class="lead">En reposo no tiene cara, y despierto (cuando te sigue) tiene sólo los ojos. La boca aparece con cada reacción. Tocá cada uno para repetir su reacción.</p>
+    <h3>Los ojos</h3>
+    <div class="mouths" id="eyesel" role="group" aria-label="Forma de los ojos"></div>
+    <div class="tile">
+      <div class="tuner">
+        <div class="stage on-blanco" id="eye-preview"></div>
+        <div class="sliders">
+          <h3>Dónde van los ojos</h3>
+          <p>Ahora están centrados en el travesaño de la t y más juntos. Movelos y se actualizan todos los avatares y las animaciones.</p>
+          <label for="eye-cx">Horizontal <output id="o-cx"></output></label>
+          <input type="range" id="eye-cx" min="88" max="108" step=".5">
+          <label for="eye-cy">Vertical <output id="o-cy"></output></label>
+          <input type="range" id="eye-cy" min="80" max="94" step=".5">
+          <label for="eye-sep">Separación <output id="o-sep"></output></label>
+          <input type="range" id="eye-sep" min="10" max="26" step=".5">
+          <label for="eye-k">Tamaño <output id="o-k"></output></label>
+          <input type="range" id="eye-k" min=".7" max="1.4" step=".05">
+          <div class="controls"><button type="button" id="eye-reset">Volver a la propuesta</button><button type="button" id="eye-old">Ver como estaban</button></div>
+          <p class="note" id="eye-ref"></p>
+        </div>
+      </div>
+    </div>
+    <h3>La boca</h3>
+    <div class="mouths" id="mouths" role="group" aria-label="Forma de la boca"></div>
+    <p class="note" id="mouth-note"></p>
+    <div class="avatars" id="avatars"></div>
+    <div class="grid two">
+      <div class="tile"><div class="stage on-blanco" id="av-track" style="min-height:220px"></div><h3>Te sigue con la mirada</h3><p>Despierto: tiene la cara siempre. Mové el puntero (o el dedo) por la página y lo sigue con los ojos. Tocalo y reacciona.</p></div>
+      <div class="tile"><div class="stage on-violeta" id="av-violeta" style="min-height:220px"></div><h3>Sobre el violeta</h3><p>Blanco con los ojos y la boca huecos, del violeta del fondo. Se repite: gasto, meta, duda.</p></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const D = /*DATA*/;
+const AVATAR_CSS = /*AVCSS*/;
+const NS = "http://www.w3.org/2000/svg";
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const [O1, O2, DL] = D.LOGO_LETTERS;
+// Hueco de la o (Fredoka 600): radio ~108 alrededor del centro de la letra.
+const COUNTER_R = 108, PUPIL_R = 58, PUPIL_OFF = 42;
+const EYE_STYLES = {
+  redondo: { name: "Redondos", note: "círculos parejos, más tiernos", rx: 5.2, ry: 5.2, spread: 0, dy: .5 },
+  suave: { name: "Óvalo suave", note: "un poco más anchos y separados", rx: 4.8, ry: 5.8, spread: 0, dy: .5 },
+  puntitos: { name: "Puntitos", note: "chicos y separados, lo mínimo", rx: 3.4, ry: 3.6, spread: 0, dy: 1 },
+  pupila: { name: "Con pupila", note: "ojo blanco y pupila, como las oo del logo", rx: 6, ry: 6.4, spread: 0, dy: .5, pupil: 3.1 },
+  ovalo: { name: "Óvalo alto", note: "los de ahora: altos y angostos", rx: 4.4, ry: 6.6, spread: 0, dy: 0 },
+};
+let EYE = "ovalo";
+// La configuración elegida (2026-10-31): óvalo alto, centrados en el travesaño. Es la de lib/brand/tood-cara.ts.
+const EYE_DEFAULT = { cx: 100, cy: 86, sep: 16, k: 1 };
+const EYE_POS = { ...EYE_DEFAULT };
+const EYES = [[0, 0], [0, 0]];
+function updateEyes() {
+  EYES[0] = [EYE_POS.cx - EYE_POS.sep / 2, EYE_POS.cy];
+  EYES[1] = [EYE_POS.cx + EYE_POS.sep / 2, EYE_POS.cy];
+}
+updateEyes();
+// Del sistema del avatar al del logo (unidades de la fuente, y hacia arriba).
+const toLogo = (ax, ay) => [(ax - 62.1) * 5 + 16.3, (168 - ay) * 5];
+
+const clamp = v => Math.max(0, Math.min(1, v));
+const ease = k => (k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+const seg = (t, a, b) => ease(clamp((t - a) / (b - a)));
+const lerp = (a, b, k) => a + (b - a) * k;
+const pulse = (t, a, len) => (t > a && t < a + len ? Math.sin(((t - a) / len) * Math.PI) : 0);
+let uid = 0;
+
+function el(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+/* ---------- Logo con letras sueltas ---------- */
+function makeLogo(host, { static: still = false } = {}) {
+  const id = "clip" + (++uid);
+  const svg = el("svg", { viewBox: D.LOGO_VIEWBOX, class: "logo", role: "img", "aria-label": "tood", fill: "currentColor" });
+  svg.innerHTML = `<defs>${D.LOGO_CLIP.replace("TOOD_CLIP", id)}</defs>`;
+  const g = el("g", { transform: "scale(1 -1)" }, svg);
+  const gT = el("g", {}, g); gT.innerHTML = D.LOGO_T.replaceAll("TOOD_CLIP", id);
+  const L = {};
+  for (const [k, l] of [["o1", O1], ["o2", O2], ["d", DL]]) {
+    const wrap = el("g", {}, g);
+    el("path", { d: l.d }, wrap);
+    L[k] = { wrap, l };
+  }
+  // Pupilas de las oo, en tinta, dentro del hueco.
+  const pups = [el("circle", { r: PUPIL_R, opacity: 0 }, g), el("circle", { r: PUPIL_R, opacity: 0 }, g)];
+  // Cara de la t: ojos y boca huecos (color del fondo del escenario).
+  const face = el("g", { opacity: 0 }, g);
+  const eyes = D.LOGO_EYES.map(e => el("ellipse", { cx: e.x, cy: e.y, rx: D.LOGO_EYE_R.rx, ry: D.LOGO_EYE_R.ry }, face));
+  const epups = D.LOGO_EYES.map(() => el("ellipse", { fill: "currentColor", rx: 0, ry: 0 }, face));
+  const mouth = el("path", {}, face);
+  // Copias huecas de las oo para la versión que vuela.
+  const ghost = el("g", { opacity: 0 }, g);
+  const ghosts = [O1, O2].map(l => { const w = el("g", {}, ghost); el("path", { d: l.d }, w); return w; });
+  const holes = [O1, O2].map(() => { const c = el("circle", { r: 0, opacity: 0 }, g); c.style.fill = "var(--hole)"; return c; });
+  host.appendChild(svg);
+  face.style.fill = "var(--hole)"; ghost.style.fill = "var(--hole)";
+  const M = D.LOGO_MOUTH;
+  // Boca de la t en el logo: la D acostada, recta arriba.
+  mouth.setAttribute("d", `M${M.x - 30} ${M.y + 8} Q${M.x} ${M.y - 26} ${M.x + 30} ${M.y + 8}`);
+  mouth.setAttribute("fill", "none"); mouth.style.stroke = "var(--hole)";
+  mouth.setAttribute("stroke-width", 18); mouth.setAttribute("stroke-linecap", "round");
+
+  const tf = (l, f) => {
+    const lc = l.cx - l.x;
+    return `translate(${f.tx.toFixed(1)} ${f.ty.toFixed(1)}) rotate(${(f.r || 0).toFixed(1)}) scale(${(f.s * (f.sx ?? 1)).toFixed(4)} ${(f.s * (f.sy ?? 1)).toFixed(4)}) translate(${(-lc).toFixed(1)} ${-l.cy})`;
+  };
+  const rest = l => ({ tx: l.cx, ty: l.cy, s: 1, sy: 1, r: 0 });
+  function render(st = {}) {
+    const f = { o1: rest(O1), o2: rest(O2), d: rest(DL), ...st };
+    L.o1.wrap.setAttribute("transform", tf(O1, f.o1));
+    L.o2.wrap.setAttribute("transform", tf(O2, f.o2));
+    L.d.wrap.setAttribute("transform", tf(DL, f.d));
+    L.d.wrap.setAttribute("opacity", f.dop ?? 1);
+    gT.setAttribute("transform", `translate(${(f.tshift || 0).toFixed(1)} 0)`);
+    L.o1.wrap.setAttribute("opacity", f.ink ?? 1); L.o2.wrap.setAttribute("opacity", f.ink ?? 1);
+    // Pupilas
+    const p = f.pupil || { op: 0, x: 0, y: 0 };
+    [[O1, f.o1], [O2, f.o2]].forEach(([l, fr], i) => {
+      pups[i].setAttribute("cx", (fr.tx + p.x * PUPIL_OFF).toFixed(1));
+      pups[i].setAttribute("cy", (fr.ty + p.y * PUPIL_OFF * (fr.sy ?? 1)).toFixed(1));
+      pups[i].setAttribute("r", (PUPIL_R * (p.s ?? 1)).toFixed(1));
+      pups[i].setAttribute("transform", `translate(0 ${fr.ty}) scale(1 ${fr.sy ?? 1}) translate(0 ${-fr.ty})`);
+      pups[i].setAttribute("opacity", p.op);
+    });
+    // Cara de la t
+    const fc = f.face || { op: 0 };
+    const PX = D.LOGO_PX;
+    face.setAttribute("opacity", fc.op);
+    face.setAttribute("transform", `translate(${(fc.dx || 0).toFixed(1)} 0)`);
+    const es = EYE_STYLES[EYE], bl = fc.blink ?? 1;
+    eyes.forEach((e, i) => {
+      const [lx, ly] = toLogo(EYES[i][0], EYES[i][1] + es.dy);
+      const cx = lx + (fc.look || 0), cy = ly + (fc.lookY || 0);
+      e.setAttribute("cx", cx); e.setAttribute("cy", cy);
+      e.setAttribute("rx", es.rx * PX * EYE_POS.k); e.setAttribute("ry", es.ry * PX * bl * EYE_POS.k);
+      const pr = (es.pupil || 0) * PX * EYE_POS.k;
+      epups[i].setAttribute("cx", cx + (fc.look || 0) * .6);
+      epups[i].setAttribute("cy", cy - 2.5 + (fc.lookY || 0) * .6);
+      epups[i].setAttribute("rx", pr); epups[i].setAttribute("ry", pr * bl);
+    });
+    mouth.setAttribute("transform", `translate(${((EYE_POS.cx - 94) * PX + (fc.look || 0) * .5).toFixed(1)} ${((fc.lookY || 0) * .5).toFixed(1)})`);
+    mouth.setAttribute("opacity", fc.mouth ?? 1);
+    // Copias huecas
+    ghost.setAttribute("opacity", f.ghost || 0);
+    ghosts[0].setAttribute("transform", tf(O1, f.o1));
+    ghosts[1].setAttribute("transform", tf(O2, f.o2));
+    [f.o1, f.o2].forEach((fr, i) => {
+      holes[i].setAttribute("opacity", f.hole || 0);
+      holes[i].setAttribute("cx", fr.tx.toFixed(1)); holes[i].setAttribute("cy", fr.ty.toFixed(1));
+      holes[i].setAttribute("r", (COUNTER_R * fr.s).toFixed(1));
+    });
+  }
+  render();
+  return { render, svg };
+}
+
+/* ---------- Animaciones: cada una es una duración y un cuadro por tiempo ---------- */
+const ANIMS = {
+  arco: {
+    group: "g-todo", name: "Arco", tag: "en la portada", caption: "todo en una sola app.", dur: 4400,
+    text: "La o pasa por abajo y la d por arriba, en un arco suave. Se queda en “todo” un par de segundos y vuelve.",
+    frame(t) {
+      const k = seg(t, 500, 1200) - seg(t, 2900, 3600), arc = Math.sin(Math.PI * k) * 260;
+      return { cap: t > 900 && t < 3200,
+        o2: { tx: O2.cx + DL.adv * k, ty: O2.cy - arc, s: 1 }, d: { tx: DL.cx - O2.adv * k, ty: DL.cy + arc, s: 1 } };
+    },
+  },
+  pivote: {
+    group: "g-todo", name: "Pivote", tag: "en la portada", caption: "todo en una sola app.", dur: 11400,
+    text: "La “od” está sobre un cartel que gira sobre un eje vertical en el medio. Arranca girando rápido, da varias vueltas, va frenando y se detiene mostrando “do”. Para volver hace lo mismo al revés: gira para el otro lado, frena y queda en “od”.",
+    frame(t) {
+      // Seis vueltas y media con salida suave (rápido al principio, frena al final); la vuelta es igual, en sentido contrario.
+      const spin = (a, len) => 1 - Math.pow(1 - clamp((t - a) / len), 4);
+      const deg = 2340 * spin(0, 3400) - 2340 * spin(5800, 3400);
+      const c = Math.cos((deg * Math.PI) / 180), k = Math.abs(c), back = c < 0;
+      const axis = (O2.x + O2.x + O2.adv + DL.adv) / 2;
+      // Del frente: o y d en su lugar. De atrás: la d donde estaba la o, y la o después.
+      const oCx = back ? O2.x + DL.adv + (O2.cx - O2.x) : O2.cx;
+      const dCx = back ? O2.x + (DL.cx - DL.x) : DL.cx;
+      const at = cx => axis + (cx - axis) * k;
+      return { cap: t > 2600 && t < 5800,
+        o2: { tx: at(oCx), ty: O2.cy, s: 1, sx: Math.max(k, .02) },
+        d: { tx: at(dCx), ty: DL.cy, s: 1, sx: Math.max(k, .02) } };
+    },
+  },
+  voltereta: {
+    group: "g-todo", name: "Voltereta", tag: "en la portada", caption: "todo en una sola app.", dur: 4400,
+    text: "La d salta por encima de la o dando una vuelta en el aire; la o se corre por abajo. Más juguetona.",
+    frame(t) {
+      const k = seg(t, 500, 1250) - seg(t, 2900, 3650), hop = Math.sin(Math.PI * k) * 560;
+      const going = t < 2000;
+      const land = pulse(t, 1250, 220) + pulse(t, 3650, 220);
+      return { cap: t > 900 && t < 3200,
+        o2: { tx: O2.cx + DL.adv * k, ty: O2.cy, s: 1, sy: 1 - pulse(t, 650, 300) * .12 },
+        d: { tx: DL.cx - O2.adv * k, ty: DL.cy + hop - land * 20, s: 1, sy: 1 - land * .14, r: (going ? 1 : -1) * 360 * (going ? seg(t, 500, 1250) : seg(t, 2900, 3650)) } };
+    },
+  },
+  miran: {
+    group: "g-ojos", name: "Las oo miran", tag: "nueva", caption: "para que no pierdas nada de vista.", dur: 6400,
+    text: "Las oo se quedan en su lugar y les aparece una pupila: miran a un lado, al otro, parpadean y vuelven a ser letras. La t no cambia.",
+    frame(t) {
+      const op = seg(t, 300, 650) - seg(t, 5000, 5400);
+      const lx = -seg(t, 900, 1250) + 2 * seg(t, 1900, 2300) - seg(t, 3700, 4100) + .4 * pulse(t, 4200, 700);
+      const ly = .5 * seg(t, 2900, 3200) - .5 * seg(t, 3700, 4100);
+      const b = 1 - .9 * pulse(t, 3300, 260);
+      return { cap: t > 600 && t < 5000, pupil: { op, x: lx, y: ly },
+        o1: { tx: O1.cx, ty: O1.cy, s: 1, sy: b }, o2: { tx: O2.cx, ty: O2.cy, s: 1, sy: b } };
+    },
+  },
+  semiran: {
+    group: "g-ojos", name: "Se miran con la t", tag: "nueva", caption: "para que no pierdas nada de vista.", dur: 7200,
+    text: "Las oo miran hacia la t; a la t le aparece la cara y les devuelve la mirada con la boquita. Parpadean juntos y vuelve todo a su lugar.",
+    frame(t) {
+      const op = seg(t, 300, 650) - seg(t, 5900, 6300);
+      const toT = seg(t, 900, 1300) - seg(t, 5200, 5600);
+      const face = seg(t, 1500, 1800) - seg(t, 4900, 5200);
+      const b = 1 - .9 * pulse(t, 3600, 260);
+      return { cap: t > 600 && t < 5900, pupil: { op, x: -toT, y: .45 * toT },
+        o1: { tx: O1.cx, ty: O1.cy, s: 1, sy: b }, o2: { tx: O2.cx, ty: O2.cy, s: 1, sy: b },
+        face: { op: face, look: 14 * face, blink: b, mouth: seg(t, 2100, 2400) } };
+    },
+  },
+  siguen: {
+    group: "g-ojos", name: "Te siguen", tag: "interactiva", caption: "para que no pierdas nada de vista.", dur: 4800, interactive: true,
+    text: "Las oo tienen pupilas siempre y siguen al puntero o al dedo por toda la página. Parpadean cada tanto. Sirve para la portada de la home.",
+    frame(t, look) {
+      const b = 1 - .9 * pulse(t, 3800, 260);
+      return { cap: true, pupil: { op: 1, x: look.x, y: look.y },
+        o1: { tx: O1.cx, ty: O1.cy, s: 1, sy: b }, o2: { tx: O2.cx, ty: O2.cy, s: 1, sy: b } };
+    },
+  },
+  vuelan: {
+    group: "g-ojos", name: "Vuelan a la t", tag: "en el header", caption: "para que no pierdas nada de vista.", dur: 9800, follows: true, anchor: .5,
+    text: "Las oo vuelan a la cara de la t y se achican hasta que su hueco mide lo que un ojo: al apoyarse, el anillo se pierde en la t y el hueco queda como ojo. La d se desvanece, la t se corre al centro y te sigue con la mirada. Para volver hace el mismo camino al revés.",
+    frame(t, look) {
+      const fly = seg(t, 400, 1500) - seg(t, 7800, 8900);
+      const gone = seg(t, 300, 1100) - seg(t, 8200, 9000);
+      const slide = seg(t, 1600, 2300) - seg(t, 7000, 7700), shift = 730 * slide;
+      const rise = Math.sin(Math.PI * fly) * 200;
+      // Escala a la que el hueco de la o mide lo mismo que un ojo.
+      const es = EYE_STYLES[EYE], er = es.rx * D.LOGO_PX * EYE_POS.k;
+      const s = lerp(1, er / COUNTER_R, fly);
+      const mk = (l, i) => {
+        const [ex, ey] = toLogo(EYES[i][0], EYES[i][1] + es.dy);
+        return { tx: lerp(l.cx, ex + shift, fly), ty: lerp(l.cy, ey, fly) + rise, s };
+      };
+      // Mientras vuela es la o con su hueco; apoyada, pasa a ser la cara de la t (idéntica en ese momento).
+      const landed = fly > .999;
+      const w = seg(t, 2400, 2900) - seg(t, 6500, 7000);
+      const b = 1 - .88 * (pulse(t, 4300, 200) + pulse(t, 6000, 200));
+      // Al llegar, el anillo se apaga antes de tocar la t (si no, asoma por el borde del travesaño); el hueco sigue.
+      const ink = 1 - clamp((fly - .55) / .3);
+      return { cap: t > 900 && t < 7400, ink, hole: landed ? 0 : 1, tshift: shift, dop: 1 - gone,
+        o1: mk(O1, 0), o2: mk(O2, 1),
+        d: { tx: DL.cx, ty: DL.cy, s: 1 - .6 * gone },
+        face: { op: landed ? 1 : 0, dx: shift, blink: b, look: 16 * w * look.x, lookY: 12 * w * look.y, mouth: 0 } };
+    },
+  },
+};
+
+const running = [];
+const pointer = { x: innerWidth / 2, y: innerHeight / 3, moved: 0 };
+addEventListener("pointermove", e => { pointer.x = e.clientX; pointer.y = e.clientY; pointer.moved = performance.now(); }, { passive: true });
+
+function mountAnim(key, host, opts = {}) {
+  const a = ANIMS[key];
+  const logo = makeLogo(host);
+  const cap = document.createElement("div");
+  cap.className = "caption"; cap.textContent = a.caption; cap.style.opacity = 0;
+  if (!opts.noCaption) host.appendChild(cap);
+  const item = { a, logo, cap, t0: performance.now(), paused: reduce && !a.interactive, look: { x: 0, y: 0 }, at: 0 };
+  running.push(item);
+  return item;
+}
+
+function tile(key) {
+  const a = ANIMS[key];
+  const t = document.createElement("div"); t.className = "tile";
+  const st = document.createElement("div"); st.className = "stage on-blanco"; st.style.display = "grid"; st.style.justifyItems = "center";
+  t.appendChild(st);
+  const item = mountAnim(key, st);
+  t.insertAdjacentHTML("beforeend", `<div class="head"><h3>${a.name}</h3><span class="tag">${a.tag}</span></div><p>${a.text}</p>`);
+  if (!a.interactive) {
+    const c = document.createElement("div"); c.className = "controls";
+    const again = document.createElement("button"); again.type = "button"; again.textContent = "Repetir";
+    const pause = document.createElement("button"); pause.type = "button";
+    const sync = () => { pause.textContent = item.paused ? "Seguir" : "Pausar"; pause.setAttribute("aria-pressed", item.paused); };
+    again.onclick = () => { item.t0 = performance.now(); item.at = 0; item.paused = false; sync(); };
+    pause.onclick = () => { item.paused = !item.paused; if (!item.paused) item.t0 = performance.now() - item.at; sync(); };
+    sync(); c.append(again, pause); t.appendChild(c);
+  }
+  document.getElementById(a.group).appendChild(t);
+}
+Object.keys(ANIMS).forEach(tile);
+
+function loop(now) {
+  for (const it of running) {
+    if (!it.paused) it.at = (now - it.t0) % it.a.dur;
+    let look = { x: 0, y: 0 };
+    if (it.a.interactive || it.a.follows) {
+      const r = it.logo.svg.getBoundingClientRect(), ax = it.a.anchor ?? .6;
+      let tx, ty;
+      if (now - pointer.moved > 2500) { tx = Math.sin(now / 1300) * .8; ty = Math.sin(now / 1900) * .4; }
+      else { tx = (pointer.x - (r.left + r.width * ax)) / (innerWidth * .35); ty = -(pointer.y - (r.top + r.height * .6)) / (innerHeight * .35); }
+      const m = Math.hypot(tx, ty); if (m > 1) { tx /= m; ty /= m; }
+      it.look.x += (tx - it.look.x) * .15; it.look.y += (ty - it.look.y) * .15; look = it.look;
+    }
+    const f = it.a.frame(it.at, look);
+    it.logo.render(f);
+    it.cap.style.opacity = f.cap ? 1 : 0;
+  }
+  for (const av of avatars) av.tick?.(now);
+  requestAnimationFrame(loop);
+}
+
+/* ---------- Lámina de arriba y logo estático ---------- */
+mountAnim("arco", document.getElementById("hero"));
+document.querySelectorAll("[data-logo]").forEach(h => makeLogo(h));
+
+/* ---------- Íconos ---------- */
+function iconSVG(size) {
+  const id = "ic" + (++uid);
+  // La t con copete, centrada, en el sistema del avatar (t a 200 px, centro x=100, base y=168).
+  return `<svg class="app-icon" width="${size}" height="${size}" viewBox="-24 -36 248 248" role="img" aria-label="Ícono de tood, ${size} px">
+    <defs><clipPath id="${id}"><path clip-rule="evenodd" d="M-60 -80 H280 V280 H-60 Z M77 -80 H112 V${D.CUT_Y} H77 Z"/></clipPath></defs>
+    <rect x="-24" y="-36" width="248" height="248" rx="${size >= 48 ? 54 : 40}" fill="#5B4FE9"/>
+    <g fill="#fff" transform="translate(8 6)"><g clip-path="url(#${id})"><path transform="${D.T_TRANSFORM}" d="${D.T_PATH}"/></g>
+    <path transform="translate(${D.CREST_ORIGIN.x} ${D.CREST_ORIGIN.y})" d="${D.CREST_PATH}"/></g></svg>`;
+}
+document.getElementById("icons").innerHTML = [120, 64, 32, 16].map(s => `<figure>${iconSVG(s)}<figcaption>${s} px</figcaption></figure>`).join("");
+
+/* ---------- Avatar ---------- */
+// Bocas en el sistema del avatar (boca centrada en x=94, y≈106). Cada variante define sonrisa, sorpresa, tristeza y duda.
+const MOUTHS = {
+  d: { name: "D acostada", note: "un semicírculo con el lado recto arriba",
+    smile: `<path d="M86.5 102.5 H101.5 A7.5 7.5 0 0 1 86.5 102.5 Z"/>`,
+    open: `<ellipse cx="94" cy="107" rx="5" ry="6"/>`,
+    sad: `<path d="M86.5 110.5 H101.5 A7.5 7.5 0 0 0 86.5 110.5 Z"/>`,
+    flat: `<rect x="89" y="104.4" width="10" height="3.6" rx="1.8"/>` },
+  dsoft: { name: "D redondeada", note: "la D con las puntas suaves, más simpática",
+    smile: `<path d="M88.5 102 H99.5 Q102.2 102 101.6 104.6 Q100 111 94 111 Q88 111 86.4 104.6 Q85.8 102 88.5 102 Z"/>`,
+    open: `<ellipse cx="94" cy="107" rx="5" ry="6"/>`,
+    sad: `<path d="M88.5 111 H99.5 Q102.2 111 101.6 108.4 Q100 102 94 102 Q88 102 86.4 108.4 Q85.8 111 88.5 111 Z"/>`,
+    flat: `<rect x="89" y="104.4" width="10" height="3.6" rx="1.8"/>` },
+  dancha: { name: "D ancha", note: "más ancha y menos honda, una sonrisa grande",
+    smile: `<path d="M84 103 H104 A10 6.5 0 0 1 84 103 Z"/>`,
+    open: `<ellipse cx="94" cy="107" rx="6" ry="5.5"/>`,
+    sad: `<path d="M84 110 H104 A10 6.5 0 0 0 84 110 Z"/>`,
+    flat: `<rect x="88" y="104.4" width="12" height="3.6" rx="1.8"/>` },
+  dchica: { name: "D chica", note: "la misma D, más discreta",
+    smile: `<path d="M89 103.5 H99 A5 5 0 0 1 89 103.5 Z"/>`,
+    open: `<ellipse cx="94" cy="107" rx="3.8" ry="4.6"/>`,
+    sad: `<path d="M89 109 H99 A5 5 0 0 0 89 109 Z"/>`,
+    flat: `<rect x="90" y="104.6" width="8" height="3.2" rx="1.6"/>` },
+  sin: { name: "Sin boca", note: "sólo los ojos: todo lo dicen la mirada y los gestos",
+    smile: "", open: "", sad: "", flat: "" },
+  arco: { name: "Arco", note: "la de ahora: una línea curva, como un )",
+    smile: `<path d="M88 103 Q94 110 100 103" fill="none" stroke-width="3.6" stroke-linecap="round" data-stroke/>`,
+    open: `<ellipse cx="94" cy="107" rx="4.2" ry="5.4"/>`,
+    sad: `<path d="M88.5 108 Q94 102.5 99.5 108" fill="none" stroke-width="3.6" stroke-linecap="round" data-stroke/>`,
+    flat: `<path d="M89.5 106 H98.5" fill="none" stroke-width="3.6" stroke-linecap="round" data-stroke/>` },
+};
+let mouthKey = "arco";
+const DURATION = { gasto: 1900, alerta: 1900, meta: 2600, pasado: 1900, duda: 1900, toque: 700 };
+const SPOTS = [[42, 50], [160, 66], [36, 138], [166, 132]];
+const avatars = [];
+
+function makeAvatar(host, { size = 130, ink = "#5b4fe9", hole = "#ffffff", ok = "#22b55a", alert = "#e5383b", track = false, mouth, eyes: eyesKey } = {}) {
+  // El que sigue al puntero está despierto: la cara se ve siempre, no sólo en una reacción.
+  const base = track ? "tav tav--awake" : "tav";
+  // En reposo, sin boca: aparece sólo con una reacción.
+  const restCls = base + " tav--rest";
+  const id = "av" + (++uid);
+  const star = (x, y) => `<path d="M${x} ${y - 9} L${x + 3} ${y - 3} L${x + 9} ${y} L${x + 3} ${y + 3} L${x} ${y + 9} L${x - 3} ${y + 3} L${x - 9} ${y} L${x - 3} ${y - 3} Z" fill="${ink}"/>`;
+  const letter = fill => `<g clip-path="url(#${id}-cut)"><path transform="${D.T_TRANSFORM}" d="${D.T_PATH}" fill="${fill}"/></g>
+    <g class="tav-crest" style="transform-origin:${D.CREST_ORIGIN.x}px ${D.CREST_ORIGIN.y + 24}px"><path transform="translate(${D.CREST_ORIGIN.x} ${D.CREST_ORIGIN.y})" d="${D.CREST_PATH}" fill="${fill}"/></g>`;
+  const wrap = document.createElement("div");
+  wrap.innerHTML = `<svg viewBox="20 -6 160 200" width="${size}" height="${size}" class="tav" role="img" aria-label="Avatar de tood">
+    <defs><clipPath id="${id}-cut"><path clip-rule="evenodd" d="M-60 -80 H280 V280 H-60 Z M77 -80 H112 V${D.CUT_Y} H77 Z"/></clipPath>
+    <clipPath id="${id}-fill"><rect class="fillrect" x="-30" y="190" width="260" height="0"/></clipPath></defs>
+    <g class="lean"><g class="tav-anim">${letter(ink)}<g clip-path="url(#${id}-fill)" class="fillcopy">${letter(ok)}</g>
+      <g class="tav-face"><g class="facepos"><g class="eyepos">
+        <g class="tav-eyes"></g>
+        <g class="tav-happy"></g><g class="tav-squint"></g><g class="tav-doubt"></g></g>
+        <g class="mouth" fill="${hole}"></g>
+      </g></g>
+      <g class="tav-badge tav-pop tav-b-gasto">${SPOTS.map(([x, y]) => `<g><path d="M${x - 7} ${y} L${x - 2} ${y + 5} L${x + 7} ${y - 6}" fill="none" stroke="${ok}" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/></g>`).join("")}</g>
+      <g class="tav-badge tav-pop tav-b-alerta">${SPOTS.map(([x, y]) => `<g><rect x="${x - 2.4}" y="${y - 10}" width="4.8" height="12" rx="2.4" fill="${alert}"/><circle cx="${x}" cy="${y + 7}" r="2.7" fill="${alert}"/></g>`).join("")}</g>
+      <g class="tav-badge tav-pop tav-b-duda">${SPOTS.map(([x, y]) => `<g><text x="${x}" y="${y + 9}" text-anchor="middle" font-family="Fredoka, sans-serif" font-weight="600" font-size="26" fill="${ink}">?</text></g>`).join("")}</g>
+      <g class="tav-badge tav-b-pasado"><path d="M128 48 C133 56 134 61 131 64 C128 67 123 65 124 60 C125 56 126 53 128 48 Z" fill="${ink}" opacity=".55"/></g>
+      <g class="tav-badge tav-b-meta">${star(40, 52)}${star(160, 76)}${star(44, 150)}</g>
+    </g></g></svg>`;
+  const svg = wrap.firstElementChild; host.appendChild(svg); svg.setAttribute("class", restCls);
+  const q = s => svg.querySelector(s);
+  const fillRect = q(".fillrect"), fillCopy = q(".fillcopy"), mouthG = q(".mouth");
+  let level = 0, timer, active = null, fillAnim = 0;
+  const setMouth = () => {
+    const m = MOUTHS[mouth || mouthKey];
+    mouthG.innerHTML = `<g class="tav-m-smile">${m.smile}</g><g class="tav-m-open">${m.open}</g><g class="tav-m-sad">${m.sad}</g><g class="tav-m-flat">${m.flat}</g>`;
+    mouthG.querySelectorAll("[data-stroke]").forEach(p => p.setAttribute("stroke", hole));
+  };
+  setMouth();
+  const eyesEl = q(".tav-eyes");
+  const setEyes = () => {
+    const es = EYE_STYLES[eyesKey || EYE], k = EYE_POS.k;
+    eyesEl.innerHTML = EYES.map(([x, y]) => {
+      const cy = y + es.dy;
+      return `<ellipse cx="${x}" cy="${cy}" rx="${es.rx * k}" ry="${es.ry * k}" fill="${hole}"/>` +
+        (es.pupil ? `<circle class="pup" cx="${x}" cy="${cy + .5}" r="${es.pupil * k}" fill="${ink}"/>` : "");
+    }).join("");
+    const w = 5.5 * k;
+    q(".tav-happy").innerHTML = EYES.map(([x, y]) => `<path d="M${x - w} ${y + 2.5} Q${x} ${y - 5.5 * k} ${x + w} ${y + 2.5}" fill="none" stroke="${hole}" stroke-width="3.8" stroke-linecap="round"/>`).join("");
+    q(".tav-squint").innerHTML = EYES.map(([x, y]) => `<ellipse cx="${x}" cy="${y + 1.5}" rx="${4.6 * k}" ry="2.4" fill="${hole}"/>`).join("");
+    const [[lx, ly], [rx, ry]] = EYES;
+    q(".tav-doubt").innerHTML = `<ellipse cx="${lx}" cy="${ly + es.dy}" rx="${es.rx * k}" ry="${es.ry * k}" fill="${hole}"/><path d="M${rx - w} ${ry} H${rx + w}" stroke="${hole}" stroke-width="3.8" stroke-linecap="round"/>`;
+    // La boca queda centrada debajo de los ojos (las formas están dibujadas para x = 94).
+    mouthG.setAttribute("transform", `translate(${EYE_POS.cx - 94} 0)`);
+  };
+  setEyes();
+  function fillTo(to, color) {
+    if (color) fillCopy.querySelectorAll("path").forEach(p => p.setAttribute("fill", color));
+    const from = level, t0 = performance.now(), ms = reduce ? 1 : to ? 750 : 650;
+    cancelAnimationFrame(fillAnim);
+    const step = now => {
+      const k = Math.min(1, (now - t0) / ms), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      level = from + (to - from) * e;
+      const top = 182 - level * 205;
+      fillRect.setAttribute("y", top); fillRect.setAttribute("height", Math.max(0, 184 - top));
+      if (k < 1) fillAnim = requestAnimationFrame(step);
+    };
+    fillAnim = requestAnimationFrame(step);
+  }
+  function play(r) {
+    clearTimeout(timer);
+    svg.setAttribute("class", restCls);
+    void svg.getBoundingClientRect();
+    if (!r) { fillTo(0); return; }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      svg.setAttribute("class", `${base} tav--${r}`); active = r;
+      if (r === "gasto" || r === "alerta") fillTo(1, r === "gasto" ? ok : alert); else if (level > 0) fillTo(0);
+    }));
+    timer = setTimeout(() => { svg.setAttribute("class", restCls); active = null; if (level > 0) fillTo(0); }, DURATION[r] + 32);
+  }
+  const av = { play, setMouth, setEyes, svg };
+  if (track && !reduce) {
+    const lean = q(".lean"), face = q(".facepos"), eyesG = q(".eyepos"), cur = { x: 0, y: 0 };
+    av.tick = () => {
+      const r = svg.getBoundingClientRect();
+      const tx = Math.max(-1, Math.min(1, (pointer.x - (r.left + r.width / 2)) / (innerWidth * .45)));
+      const ty = Math.max(-1, Math.min(1, (pointer.y - (r.top + r.height * .35)) / (innerHeight * .45)));
+      cur.x += (tx - cur.x) * .1; cur.y += (ty - cur.y) * .1;
+      lean.setAttribute("transform", `rotate(${cur.x * 5} 100 168)`);
+      face.setAttribute("transform", `translate(${cur.x * 2.4} ${cur.y * 1.8})`);
+      eyesG.setAttribute("transform", `translate(${cur.x * 2.6} ${cur.y * 2.4})`);
+      svg.querySelectorAll(".pup").forEach(pp => pp.setAttribute("transform", `translate(${cur.x * 1.8} ${cur.y * 1.8})`));
+    };
+  }
+  avatars.push(av);
+  return av;
+}
+
+const style = document.createElement("style");
+style.textContent = AVATAR_CSS + `
+.tav .tav-m-open, .tav .tav-m-sad, .tav .tav-m-flat { display: none; }
+.tav--alerta .tav-m-open, .tav--meta .tav-m-open, .tav--pasado .tav-m-sad, .tav--duda .tav-m-flat { display: inline; }
+.tav--alerta .tav-m-smile, .tav--meta .tav-m-smile, .tav--pasado .tav-m-smile, .tav--duda .tav-m-smile { display: none; }
+.tav { cursor: pointer; overflow: visible }
+.tav--awake .tav-face { transform: scale(1); opacity: 1; }
+.tav--rest .mouth { display: none; }`;
+document.head.appendChild(style);
+
+// Selector de boca: cada opción muestra la sonrisa en grande.
+const mouthsEl = document.getElementById("mouths"), note = document.getElementById("mouth-note");
+function renderMouthPicker() {
+  mouthsEl.innerHTML = "";
+  for (const [k, m] of Object.entries(MOUTHS)) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "mouth-opt"; b.setAttribute("aria-pressed", k === mouthKey);
+    const host = document.createElement("div"); b.appendChild(host);
+    b.insertAdjacentHTML("beforeend", `<span>${m.name}</span><small>${m.note}</small>`);
+    b.onclick = () => { mouthKey = k; renderMouthPicker(); renderEyePicker(); avatars.forEach(a => a.setMouth()); grid.forEach(([a, r]) => a.play(r)); };
+    mouthsEl.appendChild(b);
+    // La muestra queda fija en la cara contenta (la de "toque"), con la boca de esta opción.
+    const a = makeAvatar(host, { size: 78, mouth: k });
+    avatars.pop();
+    a.svg.setAttribute("class", "tav tav--toque");
+  }
+  note.textContent = `Elegida: ${MOUTHS[mouthKey].name}. En reposo no hay boca. La sonrisa va en gasto y toque; abierta en alerta y meta; al revés en “pasado”; una raya en duda.`;
+}
+
+const REACTIONS = [["gasto", "Gasto cargado"], ["alerta", "Alerta"], ["meta", "Meta cumplida"], ["pasado", "Te pasaste"], ["duda", "Duda"], ["toque", "Lo tocás"]];
+const grid = [];
+const avEl = document.getElementById("avatars");
+const restCell = document.createElement("div"); restCell.className = "avatar-cell";
+restCell.innerHTML = `<div class="stage on-blanco"></div><span class="tag">En reposo</span>`;
+avEl.appendChild(restCell); makeAvatar(restCell.firstElementChild);
+for (const [r, label] of REACTIONS) {
+  const cell = document.createElement("button"); cell.type = "button"; cell.className = "avatar-cell";
+  cell.setAttribute("aria-label", `Repetir: ${label}`);
+  cell.innerHTML = `<div class="stage on-blanco"></div><span class="tag">${label}</span>`;
+  avEl.appendChild(cell);
+  const a = makeAvatar(cell.firstElementChild);
+  grid.push([a, r]);
+  cell.onclick = () => a.play(r);
+}
+renderMouthPicker();
+const eyeSel = document.getElementById("eyesel");
+function renderEyePicker() {
+  eyeSel.innerHTML = "";
+  for (const [k, e] of Object.entries(EYE_STYLES)) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "mouth-opt"; b.setAttribute("aria-pressed", k === EYE);
+    const host = document.createElement("div"); b.appendChild(host);
+    b.insertAdjacentHTML("beforeend", `<span>${e.name}</span><small>${e.note}</small>`);
+    b.onclick = () => { EYE = k; renderEyePicker(); avatars.forEach(a => a.setEyes()); grid.forEach(([a, r]) => a.play(r)); };
+    eyeSel.appendChild(b);
+    // La muestra queda despierta: ojos abiertos y la boca elegida.
+    const a = makeAvatar(host, { size: 78, eyes: k });
+    avatars.pop();
+    a.svg.setAttribute("class", "tav tav--awake tav--rest");
+  }
+}
+renderEyePicker();
+
+const preview = makeAvatar(document.getElementById("eye-preview"), { size: 210, track: true });
+const inputs = { cx: "eye-cx", cy: "eye-cy", sep: "eye-sep", k: "eye-k" };
+const fmt = { cx: v => `x ${v} (centro del travesaño: 100)`, cy: v => `y ${v}`, sep: v => `${v} px`, k: v => `${Math.round(v * 100)} %` };
+function syncInputs() {
+  for (const [key, id] of Object.entries(inputs)) {
+    document.getElementById(id).value = EYE_POS[key];
+    document.getElementById("o-" + key).textContent = fmt[key](EYE_POS[key]);
+  }
+  document.getElementById("eye-ref").textContent = `Valores: centro ${EYE_POS.cx}, altura ${EYE_POS.cy}, separación ${EYE_POS.sep}, tamaño ${Math.round(EYE_POS.k * 100)} %.`;
+}
+function applyEyes(full) {
+  updateEyes(); syncInputs();
+  avatars.forEach(a => a.setEyes());
+  if (full) renderEyePicker();
+}
+for (const [key, id] of Object.entries(inputs)) {
+  const inp = document.getElementById(id);
+  inp.addEventListener("input", () => { EYE_POS[key] = +inp.value; applyEyes(false); });
+  inp.addEventListener("change", () => applyEyes(true));
+}
+document.getElementById("eye-reset").onclick = () => { Object.assign(EYE_POS, EYE_DEFAULT); applyEyes(true); };
+document.getElementById("eye-old").onclick = () => { Object.assign(EYE_POS, { cx: 94, cy: 86, sep: 22, k: 1 }); applyEyes(true); };
+syncInputs();
+
+// Los de la grilla se repiten solos, escalonados, para verlos sin tocar.
+if (!reduce) {
+  grid.forEach(([a, r], i) => setTimeout(() => { a.play(r); setInterval(() => a.play(r), 4200); }, 300 + i * 450));
+}
+
+const tr = makeAvatar(document.getElementById("av-track"), { size: 180, track: true });
+tr.svg.addEventListener("click", () => tr.play("toque"));
+const vio = makeAvatar(document.getElementById("av-violeta"), { size: 180, ink: "#ffffff", hole: "#5B4FE9", ok: "#7CF29A", alert: "#FFB4B4" });
+if (!reduce) { const seq = ["gasto", "meta", "duda"]; let i = 0; vio.play(seq[0]); setInterval(() => vio.play(seq[++i % 3]), 3000); }
+
+requestAnimationFrame(loop);
+</script>

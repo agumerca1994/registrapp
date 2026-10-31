@@ -24,3 +24,5 @@ export const LOGO_EYES = [{"x": 120.8, "y": 410.0}, {"x": 230.8, "y": 410.0}] as
 export const LOGO_EYE_R = {"rx": 22.0, "ry": 33.0} as const;
 export const LOGO_MOUTH = {"x": 175.8, "y": 310.0} as const;
 export const LOGO_PX = 5.0;
+/** Radio del hueco de la o, en unidades de la fuente. */
+export const LOGO_O_COUNTER = 107.5;

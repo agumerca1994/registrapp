@@ -47,3 +47,6 @@ firebase-debug.log
 
 # Salida del armado de los mocks de marca (se regenera con tools/brand/mocks/build.py)
 tools/brand/mocks/tero-mocks.html
+
+# Salida del lienzo de la marca (se regenera con tools/brand/lienzo/build.py)
+tools/brand/lienzo/tood-lienzo.html

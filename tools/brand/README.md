@@ -9,6 +9,7 @@ Fuentes de la identidad de tood (hasta el 2026-10-30 se llamó tero; la explorac
 | Componentes | `frontend/components/brand/ToodLogo.tsx`, `ToodLogoAnimado.tsx`, `ToodAvatar.tsx` |
 | Script que genera todo lo anterior | `build.py` |
 | Exploración (cara mínima, gestos del logo, avatar) | `exploracion/tero-marca.html` |
+| Lienzo: logo, cada animación y el avatar con selectores de ojos y boca | `lienzo/` (`python3 tools/brand/lienzo/build.py`) |
 | Mocks del celular y la web, y el video de 34 s | `mocks/` |
 
 ## Regenerar las piezas

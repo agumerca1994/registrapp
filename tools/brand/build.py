@@ -7,6 +7,7 @@ from fontTools.ttLib import TTFont
 from fontTools.varLib.instancer import instantiateVariableFont
 from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.boundsPen import BoundsPen
+from fontTools.pens.recordingPen import RecordingPen
 
 FONT, OUT = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
 OUT.mkdir(parents=True, exist_ok=True)
@@ -99,6 +100,15 @@ def icon(bg, fg, size=1024, radius=True):
 # El avatar trabaja en el sistema de la página de exploración: la t a 200 px, centrada en x=100, base en y=168.
 glyph_tf = f"translate({AV_X0 - xmin / PX:.3f} 168) scale({1 / PX:.5f} {-1 / PX:.5f})"
 logo_inner = "".join(parts)
+# Radio del hueco de la o (su contorno interior): en la animación, el hueco se achica hasta ser un ojo.
+rec = RecordingPen(); gs[cmap[ord("o")]].draw(rec)
+contours, cur = [], []
+for op, pts in rec.value:
+    if op == "moveTo": cur = list(pts)
+    elif op in ("closePath", "endPath"): contours.append(cur)
+    else: cur += list(pts)
+inner = min(contours, key=lambda c: max(p[0] for p in c) - min(p[0] for p in c))
+o_counter = round((max(p[0] for p in inner) - min(p[0] for p in inner)) / 2, 1)
 # Ojos y boca del avatar llevados al logo (unidades de fuente, y hacia arriba), para la animación de las oo.
 eyes = [dict(zip(("x", "y"), map(lambda v: round(v, 1), from_avatar(ax, 86)))) for ax in (83, 105)]
 eye_r = {"rx": round(4.4 * PX, 1), "ry": round(6.6 * PX, 1)}
@@ -129,6 +139,8 @@ export const LOGO_EYES = {json.dumps(eyes)} as const;
 export const LOGO_EYE_R = {json.dumps(eye_r)} as const;
 export const LOGO_MOUTH = {json.dumps(mouth)} as const;
 export const LOGO_PX = {PX};
+/** Radio del hueco de la o, en unidades de la fuente. */
+export const LOGO_O_COUNTER = {o_counter};
 '''
 (OUT / "tood-marca.ts").write_text(ts)
 print("ok", upm, round(stem_l), round(stem_r), round(stem_top), OUT)
