@@ -5,16 +5,19 @@ import { ThinkingOrb, type OrbState } from "thinking-orbs";
 import { ToodAvatar, type ToodReaction } from "@/components/brand/ToodAvatar";
 
 // La portada de /conectar: la t de tood y un orbe de puntos que hace de "una IA", sin la marca de ningún
-// asistente (el orbe es thinking-orbs, MIT). Se repite cada 11 s:
+// asistente (el orbe es thinking-orbs, MIT). Se repite cada 16,5 s:
 //   la t sola → aparece el orbe conectándose (la t duda) → el orbe le habla (puntos que viajan hacia la t) →
 //   la t contesta (puntos que salen de la t; el orbe escucha) → el orbe piensa → le devuelve la respuesta (la t
 //   festeja) → el orbe se apaga.
 // El orbe es monocromático (puntos oscuros) y va fijo en tema claro: con `auto`, a quien tiene el sistema en
 // oscuro le pintaría puntos claros sobre el fondo claro de la página. Sólo viene en 64 px: se escala con CSS para
 // que ocupe 2·ORB.r de la escena, sea cual sea su ancho.
+// Cada estado del orbe dura unos 2,6 s y pasa al siguiente con un fundido: hay dos orbes encimados y, al cambiar,
+// uno se apaga mientras el otro aparece (la librería cambia de estado de golpe).
 // Se pausa fuera de pantalla; con movimiento reducido queda quieta, con el orbe a la vista.
 
-const CYCLE = 11000;
+const CYCLE = 16500;
+const FADE_MS = 800;
 const W = 440, H = 200;
 // El avatar va en un cuadrado de 132 en (35, 34); su cara cae en (101, 95). El orbe, a la derecha.
 const AVATAR = { x: 35, y: 34, size: 132 };
@@ -28,12 +31,12 @@ const seg = (t: number, a: number, b: number) => ease(clamp((t - a) / (b - a)));
 
 // Qué hace el orbe en cada tramo del ciclo.
 const ORB_STATES: [number, OrbState][] = [
-  [0, "connecting"], [2600, "composing"], [4300, "listening"], [6100, "solving"], [7700, "composing"], [9300, "breathing"],
+  [0, "connecting"], [3800, "composing"], [6600, "listening"], [9400, "solving"], [12000, "composing"], [14600, "breathing"],
 ];
 // Y qué hace la t. La duda (1,9 s) no termina seco: como en el login, sale con el gesto contento y la boca en D.
-const BEATS: [number, ToodReaction, ("arco" | "d")?][] = [[1500, "duda"], [3400, "toque", "d"], [4500, "toque"], [8000, "meta"]];
+const BEATS: [number, ToodReaction, ("arco" | "d")?][] = [[1500, "duda"], [3400, "toque", "d"], [7000, "toque"], [12800, "meta"]];
 // Los viajes de puntos: el orbe le habla, la t contesta, el orbe responde.
-const TRIPS: [number, boolean][] = [[2700, true], [4600, false], [7700, true]];
+const TRIPS: [number, boolean][] = [[4200, true], [7000, false], [12300, true]];
 
 // Un punto del viaje entre el orbe y la cara de la t, en arco por arriba.
 function streamPoint(p: number, fromOrb: boolean) {
@@ -53,8 +56,11 @@ const stateAt = (list: readonly (readonly [number, ...unknown[]])[], t: number) 
 export default function AvatarConIA({ className }: { className?: string }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const orbRef = useRef<HTMLDivElement>(null);
+  const activeRef = useRef(0);
   const streamRefs = useRef<(SVGCircleElement | null)[]>([]);
-  const [orbState, setOrbState] = useState<OrbState>("breathing");
+  // Dos orbes encimados para el fundido: el activo se ve, el otro se apaga.
+  const [slots, setSlots] = useState<[OrbState, OrbState]>(["connecting", "connecting"]);
+  const [active, setActive] = useState(0);
   const [mood, setMood] = useState<{ reaction: ToodReaction | null; key: number; smile?: "arco" | "d" }>({ reaction: null, key: 0 });
   const [look, setLook] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
@@ -74,10 +80,16 @@ export default function AvatarConIA({ className }: { className?: string }) {
     let raf = 0, t0 = performance.now(), running = false, lastBeat = -1, lastOrb = -1, lastLook = "";
     const tick = (now: number) => {
       const t = (now - t0) % CYCLE;
-      // El orbe aparece (1000–2200) y se apaga (9600–10600).
-      showOrb(seg(t, 1000, 2200) * (1 - seg(t, 9600, 10600)));
+      // El orbe aparece (1000–2200) y se apaga (14800–15800).
+      showOrb(seg(t, 1000, 2200) * (1 - seg(t, 14800, 15800)));
       const o = stateAt(ORB_STATES, t);
-      if (o !== lastOrb) { lastOrb = o; setOrbState(ORB_STATES[o][1]); }
+      if (o !== lastOrb) {
+        lastOrb = o;
+        const next = 1 - activeRef.current, state = ORB_STATES[o][1];
+        activeRef.current = next;
+        setSlots((sl) => (next === 0 ? [state, sl[1]] : [sl[0], state]));
+        setActive(next);
+      }
       streamRefs.current.forEach((el, i) => {
         if (!el) return;
         const trip = TRIPS.find(([start]) => { const p = (t - start - i * 70) / 800; return p > 0 && p < 1; });
@@ -88,7 +100,7 @@ export default function AvatarConIA({ className }: { className?: string }) {
         el.setAttribute("opacity", Math.sin(p * Math.PI).toFixed(2));
       });
       // La t mira al orbe mientras está; antes y después, mira alrededor.
-      const next = t > 1100 && t < 9800 ? { x: 1, y: 0.05 } : { x: Math.sin(now / 900) * 0.5, y: 0.1 };
+      const next = t > 1100 && t < 15000 ? { x: 1, y: 0.05 } : { x: Math.sin(now / 900) * 0.5, y: 0.1 };
       const key = `${next.x.toFixed(2)},${next.y.toFixed(2)}`;
       if (key !== lastLook) { lastLook = key; setLook(next); }
       const beat = stateAt(BEATS, t);
@@ -121,7 +133,13 @@ export default function AvatarConIA({ className }: { className?: string }) {
       </svg>
       <div ref={orbRef} className="absolute" aria-hidden="true"
         style={{ left: `${(ORB.x / W) * 100}%`, top: `${(ORB.y / H) * 100}%`, transform: "translate(-50%, -50%)", opacity: 0 }}>
-        <ThinkingOrb state={orbState} size={64} theme="light" aria-hidden="true" />
+        <div className="relative w-16 h-16">
+          {slots.map((st, i) => (
+            <div key={i} className="absolute inset-0 transition-opacity ease-in-out" style={{ opacity: active === i ? 1 : 0, transitionDuration: `${FADE_MS}ms` }}>
+              <ThinkingOrb state={st} size={64} theme="light" aria-hidden="true" paused={active !== i} />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
