@@ -10,7 +10,7 @@ import SiteHeader from "@/components/marketing/SiteHeader";
 
 export const metadata: Metadata = {
   title: "tood Hogar",
-  description: "Ingresos, gastos, tarjetas, dólares e hipoteca de tu casa, en una sola app.",
+  description: "Cuánto le queda a tu casa este mes, en pesos y en dólares, con las cuotas que vienen y la familia cargando en la misma cuenta.",
 };
 
 /**
@@ -52,13 +52,13 @@ export default function HogarPage() {
       <main>
         <section className="max-w-6xl mx-auto px-4 md:px-8 pt-10 md:pt-16 pb-12 grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] gap-10 items-center">
           <div className="min-w-0">
-            <p className="text-sm font-semibold uppercase tracking-wider text-primary">Para las cuentas de tu casa</p>
+            <p className="text-sm font-semibold uppercase tracking-wider text-primary">tood Hogar</p>
             <h1 className="mt-3 font-display font-bold text-4xl md:text-5xl leading-[1.05] tracking-tight text-balance">
-              Sabé cuánta plata te queda a fin de mes.
+              Cuánto le queda a tu casa este mes, en pesos y en dólares
             </h1>
             <p className="mt-4 text-lg text-muted-foreground max-w-xl">
-              Ingresos, gastos, tarjetas, dólares e hipoteca en una sola app. Cargás desde el celular, la compu
-              o WhatsApp, y el cierre del mes se arma solo, en pesos y en dólares.
+              El mes cierra con lo que cobraron y lo que gastaron, separado por moneda. Las cuotas de la tarjeta
+              ya aparecen en los meses que vienen, así sabés hoy qué vas a pagar después.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link href={appHref("/login")}
@@ -70,7 +70,7 @@ export default function HogarPage() {
                 <Play className="w-4 h-4" /> Ver cómo funciona
               </a>
             </div>
-            <p className="mt-4 text-sm text-muted-foreground">Entrás con tu cuenta de Google y creás tu hogar.</p>
+            <p className="mt-4 text-sm text-muted-foreground">Es gratis. Con el código del hogar, tu familia carga en la misma cuenta.</p>
           </div>
           <div className="min-w-0">
             <div className="hidden sm:block"><Screen src="/hogar/inicio.jpg" alt="Inicio de tood Hogar: los pesos y los dólares que quedan en el mes" hero /></div>

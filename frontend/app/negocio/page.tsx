@@ -10,7 +10,7 @@ import SiteHeader from "@/components/marketing/SiteHeader";
 
 export const metadata: Metadata = {
   title: "tood Negocio",
-  description: "Ventas, cierre de caja, stock y gastos de tu comercio, en una sola app.",
+  description: "Cerrá la caja cada día y sabé cuánto ganó tu comercio en el mes: ventas menos gastos, por medio de pago, con el stock al día.",
 };
 
 /**
@@ -52,13 +52,13 @@ export default function NegocioPage() {
       <main>
         <section className="max-w-6xl mx-auto px-4 md:px-8 pt-10 md:pt-16 pb-12 grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] gap-10 items-center">
           <div className="min-w-0">
-            <p className="text-sm font-semibold uppercase tracking-wider text-primary">Para comercios chicos</p>
+            <p className="text-sm font-semibold uppercase tracking-wider text-primary">tood Negocio</p>
             <h1 className="mt-3 font-display font-bold text-4xl md:text-5xl leading-[1.05] tracking-tight text-balance">
-              Las cuentas de tu comercio, claras todos los días.
+              Cerrá la caja y sabé cuánto ganaste en el mes
             </h1>
             <p className="mt-4 text-lg text-muted-foreground max-w-xl">
-              Ventas, cierre de caja, stock y gastos en una sola app. Cargás desde el celular, la compu o WhatsApp,
-              y a fin de mes sabés cuánto ganaste.
+              Para un kiosco, una rotisería o un local chico. Anotás cada venta o sólo el total del día, el stock
+              baja con lo que vendés y a fin de mes ves lo vendido menos lo gastado, por medio de pago.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link href={appHref("/login")}
@@ -70,7 +70,7 @@ export default function NegocioPage() {
                 <Play className="w-4 h-4" /> Ver cómo funciona
               </a>
             </div>
-            <p className="mt-4 text-sm text-muted-foreground">Entrás con tu cuenta de Google y elegís «Mi negocio».</p>
+            <p className="mt-4 text-sm text-muted-foreground">Es gratis. Tus empleados cargan ventas sin ver los números del negocio.</p>
           </div>
           <div className="min-w-0">
             <div className="hidden sm:block"><Screen src="/negocio/inicio.jpg" alt="Inicio de tood Negocio: el resultado del mes y las ventas por medio de pago" hero /></div>
