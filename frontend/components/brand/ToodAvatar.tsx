@@ -38,6 +38,8 @@ type Props = {
   awake?: boolean;
   /** Dormido: ojos cerrados, cabecea y le salen "z". Deja de seguir al puntero. */
   asleep?: boolean;
+  /** Hacia dónde mira, de −1 a 1 en cada eje (x a la derecha, y hacia abajo). Con `track`, reemplaza al puntero. */
+  lookAt?: { x: number; y: number } | null;
   /** Forma de la sonrisa: el arco de siempre o una D redondeada (más abierta, para un "¡ah, sí!"). */
   smile?: "arco" | "d";
   /** Reacciona al tocarlo. */
@@ -50,7 +52,7 @@ type Props = {
 export function ToodAvatar({
   reaction = null, reactionKey, duration, size = 160, ink = "#5b4fe9", background = null,
   holeColor = "#ffffff", okColor = "#22b55a", alertColor = "#e5383b",
-  track = false, awake = false, asleep = false, smile = "arco", pokeable = false, className, title = "tood", onReactionEnd,
+  track = false, awake = false, asleep = false, smile = "arco", lookAt = null, pokeable = false, className, title = "tood", onReactionEnd,
 }: Props) {
   const uid = useId().replace(/:/g, "");
   const [active, setActive] = useState<ToodReaction | null>(null);
@@ -59,6 +61,8 @@ export function ToodAvatar({
   const eyesRef = useRef<SVGGElement>(null);
   const asleepRef = useRef(asleep);
   asleepRef.current = asleep;
+  const lookRef = useRef(lookAt);
+  lookRef.current = lookAt;
   const timer = useRef<number | undefined>(undefined);
   const fillRef = useRef<SVGRectElement>(null);
   const level = useRef(0);
@@ -117,7 +121,8 @@ export function ToodAvatar({
     };
     const tick = () => {
       // Dormido no mira a nadie: vuelve al centro.
-      const tx = asleepRef.current ? 0 : target.x, ty = asleepRef.current ? 0 : target.y;
+      const goal = lookRef.current ?? target;
+      const tx = asleepRef.current ? 0 : goal.x, ty = asleepRef.current ? 0 : goal.y;
       cur.x += (tx - cur.x) * 0.1;
       cur.y += (ty - cur.y) * 0.1;
       leanRef.current?.setAttribute("transform", `rotate(${cur.x * 5} 100 168)`);

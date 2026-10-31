@@ -7,14 +7,15 @@ import { ASSISTANTS } from "@/components/marketing/connect/assistants";
 import { KindProvider, KindToggle } from "@/components/marketing/connect/kind";
 import { QuestionBlocks } from "@/components/marketing/connect/KindBlocks";
 import { Reveal } from "@/components/marketing/connect/Reveal";
+import AvatarConIA from "@/components/marketing/connect/AvatarConIA";
 import { Step, StepTimeline } from "@/components/marketing/connect/StepTimeline";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import SiteHeader from "@/components/marketing/SiteHeader";
 
 export const metadata: Metadata = {
-  title: "Conectá tood a Claude",
+  title: "Conectá tood a tu asistente de IA",
   description:
-    "Preguntale a Claude por tus gastos, tus cuotas o tus ventas y que te conteste con tus números. Qué es, qué podés hacer y el paso a paso para conectarlo.",
+    "Preguntale a tu asistente de IA por tus gastos, tus cuotas o tus ventas y que te conteste con tus números. Qué es, qué podés hacer y el paso a paso para conectarlo.",
 };
 
 /**
@@ -48,21 +49,21 @@ const FAQ = [
       ventas, el cierre del día, stock, productos, gastos y tarjetas. Lo demás es sólo lectura.
     </p>
     <p>
-      Cada cambio arranca como una vista previa que no guarda nada: Claude te la muestra y sólo la guarda si confirmás. Además,
-      en el detalle del conector en Claude elegís, herramienta por herramienta, si la usa sola, si te pregunta antes o si queda bloqueada.
+      Cada cambio arranca como una vista previa que no guarda nada: el asistente te la muestra y sólo la guarda si confirmás.
+      En Claude, además, elegís herramienta por herramienta si la usa sola, si te pregunta antes o si queda bloqueada.
     </p>
   </> },
   { q: "¿Mis credenciales pasan por la IA?", a: <>
     <p>
-      No. Iniciás sesión con Google en la página de tood, no en Claude. Claude recibe un permiso de acceso a tu cuenta que
-      podés cortar cuando quieras. Con Claude Code es un token que creás vos y borrás cuando quieras.
+      No. Iniciás sesión con Google en la página de tood, no en el asistente. El asistente recibe un permiso de acceso a tu
+      cuenta que podés cortar cuando quieras. Si tu asistente pide un token, lo creás vos en tood y lo borrás cuando quieras.
     </p>
   </> },
   { q: "¿Cómo lo desconecto?", a: <>
     <p>
-      Desde Claude: Configuración → Conectores → tood → Desconectar. Desde tood: Configuración → Conectar con una IA →
-      Apps conectadas, el tacho al lado de la app y Confirmar. Corta el acceso en el acto. Un token de Claude Code se borra igual,
-      desde la lista de tokens de esa misma sección.
+      Desde tood: Configuración → Conectar con una IA → Apps conectadas, el tacho al lado de la app y Confirmar. Corta el acceso
+      en el acto. Un token se borra igual, desde la lista de tokens de esa misma sección. También lo podés quitar desde el
+      asistente; en Claude: Configuración → Conectores → tood → Desconectar.
     </p>
   </> },
   { q: "¿Funciona en un negocio? ¿Y para un empleado?", a: <>
@@ -71,10 +72,10 @@ const FAQ = [
       la sección no le aparece, y si alguien pasa a ser empleado, sus conexiones dejan de funcionar.
     </p>
   </> },
-  { q: "Claude dice que no encuentra la herramienta", a: <>
+  { q: "El asistente dice que no encuentra la herramienta", a: <>
     <p>
-      Fijate que tood esté prendido en el chat (el <strong>+</strong> del cuadro de mensaje → Conectores). Si lo está,
-      desconectalo y volvé a conectarlo: Claude vuelve a leer la lista de herramientas.
+      Fijate que tood esté prendido en esa conversación (en Claude, el <strong>+</strong> del cuadro de mensaje → Conectores).
+      Si lo está, desconectalo y volvé a conectarlo: el asistente vuelve a leer la lista de herramientas.
     </p>
   </> },
 ];
@@ -95,12 +96,13 @@ export default function ConectarPage() {
             <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-14 md:pt-24 pb-16 md:pb-24 text-center">
               <p className="text-sm font-semibold uppercase tracking-wider text-primary">tood con inteligencia artificial</p>
               <h1 className="mt-3 font-display font-bold text-[2.1rem] sm:text-5xl md:text-6xl leading-[1.08] tracking-tight text-balance max-w-4xl mx-auto">
-                Conectá tood a <span className="text-primary">Claude</span> y preguntale por tu plata
+                Conectá tood a tu <span className="text-primary">asistente de IA</span> y preguntale por tu plata
               </h1>
               <p className="mt-5 text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto text-pretty">
                 Te contesta con tus gastos, tus cuotas o tus ventas, y carga lo que le pidas después de mostrártelo.
               </p>
-              <div className="mt-8 flex justify-center">
+              <AvatarConIA className="mt-8 w-full max-w-xl mx-auto h-auto" />
+              <div className="mt-6 flex justify-center">
                 <a href="#tutorial" className={`${PILL} bg-primary text-primary-foreground`}>
                   Ver el paso a paso <ArrowDown className="w-4 h-4" aria-hidden="true" />
                 </a>
@@ -114,7 +116,7 @@ export default function ConectarPage() {
               <h2 className="font-display font-bold text-3xl md:text-4xl tracking-tight">¿Qué es y para qué sirve?</h2>
               <p className="mt-4 text-lg text-muted-foreground max-w-3xl">
                 Es un puente entre tu cuenta de tood y el asistente de IA que ya usás. Una vez conectado, cuando le preguntás
-                algo de tu plata, Claude mira tus números en tood para contestarte, y si le pedís que cargue algo, te muestra
+                algo de tu plata, el asistente mira tus números en tood para contestarte, y si le pedís que cargue algo, te muestra
                 qué va a guardar antes de hacerlo.
               </p>
             </Reveal>
@@ -152,7 +154,8 @@ export default function ConectarPage() {
             <Reveal>
               <h2 className="font-display font-bold text-3xl md:text-4xl tracking-tight">Conectalo paso a paso</h2>
               <p className="mt-3 text-lg text-muted-foreground max-w-2xl">
-                Son unos minutos y se hace una sola vez. Elegí dónde usás Claude:
+                Son unos minutos y se hace una sola vez. Hoy tenemos el paso a paso de Claude; otros asistentes que aceptan
+                conectores personalizados usan la misma dirección. Elegí cuál usás:
               </p>
             </Reveal>
             <div className="mt-6">

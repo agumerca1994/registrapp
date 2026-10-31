@@ -10,7 +10,7 @@ export default function SiteFooter() {
         <Link href="/" aria-label="tood, ir a la home"><ToodLogo className="h-5 w-auto text-foreground" /></Link>
         <Link href="/hogar" className="hover:text-foreground">Hogar</Link>
         <Link href="/negocio" className="hover:text-foreground">Negocio</Link>
-        <Link href="/conectar" className="hover:text-foreground">Conectar con Claude</Link>
+        <Link href="/conectar" className="hover:text-foreground">Conectar con IA</Link>
         <Link href={appHref("/login")} className="sm:ml-auto hover:text-foreground">Entrar a la app</Link>
       </div>
       <div className="max-w-6xl mx-auto px-4 md:px-8 pb-6 text-sm text-muted-foreground flex flex-wrap gap-x-6 gap-y-2">

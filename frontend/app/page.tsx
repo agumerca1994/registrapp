@@ -56,8 +56,8 @@ const PLATFORMS = [
     text: "Se instala desde el navegador, en iPhone y en Android, sin pasar por la tienda. Sirve para anotar el gasto o la venta en el momento." },
   { icon: MessageCircle, title: "Por WhatsApp",
     text: "Escribís «12 lucas verdulería» y queda cargado. Si mandás el PDF del resumen de la tarjeta, lo compara con lo que ya cargaste." },
-  { icon: Bot, title: "Con Claude",
-    text: "Si usás Claude, lo conectás a tu cuenta y le preguntás por tu plata. Más abajo te contamos cómo." },
+  { icon: Bot, title: "Con tu asistente de IA",
+    text: "Lo conectás a tu cuenta y le preguntás por tu plata. Más abajo te contamos cómo." },
 ];
 
 const AI_POINTS = [
@@ -181,10 +181,10 @@ export default function Home() {
             <div className="min-w-0">
               <p className="text-sm font-semibold uppercase tracking-wider text-primary">Con IA</p>
               <h2 className="mt-2 font-display font-bold text-3xl md:text-4xl tracking-tight text-balance">
-                Preguntale a Claude por tu plata
+                Preguntale a tu asistente de IA por tu plata
               </h2>
               <p className="mt-3 text-lg text-muted-foreground">
-                Si usás Claude, lo podés conectar a tu cuenta de tood. Te contesta con tus números y también puede
+                Si usás un asistente de IA, lo podés conectar a tu cuenta de tood. Te contesta con tus números y también puede
                 cargar cosas por vos.
               </p>
               <ul className="mt-6 space-y-3">
@@ -196,7 +196,7 @@ export default function Home() {
                 ))}
               </ul>
               <p className="mt-6 text-sm text-muted-foreground">
-                Funciona con Claude en la web, en la app de escritorio y en Claude Code.
+                Hoy tenemos el paso a paso para Claude, en la web, la app de escritorio y Claude Code.
               </p>
               <Link href="/conectar" className="mt-4 inline-flex items-center gap-1.5 font-semibold text-primary hover:underline">
                 Cómo conectarlo <ArrowRight className="w-4 h-4" aria-hidden="true" />
