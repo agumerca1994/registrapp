@@ -9,3 +9,6 @@ export const EYE_SEP = 16;
 export const EYE_RX = 4.4;
 export const EYE_RY = 6.6;
 export const EYES: [number, number][] = [[FACE_CX - EYE_SEP / 2, EYE_Y], [FACE_CX + EYE_SEP / 2, EYE_Y]];
+
+/** El violeta de las pantallas sin cromo (el login, la pantalla de carga): la marca es el color. */
+export const BRAND_FIELD = "#4A3FC4";

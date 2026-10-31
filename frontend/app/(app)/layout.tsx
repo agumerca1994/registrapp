@@ -18,6 +18,7 @@ import { syncPushToken } from "@/lib/push";
 import { ensureServiceWorker } from "@/lib/sw";
 import { stashPendingRoute, takePendingRoute } from "@/lib/pending-route";
 import { homeFor, isBusiness, isEmployee, routeAllowed } from "@/lib/account";
+import { SplashTood } from "@/components/brand/SplashTood";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { firebaseUser, appUser, loading } = useAuth();
@@ -107,9 +108,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     ensureServiceWorker().catch(() => {});
   }, [appUser]);
 
-  if (loading || !appUser || appUser.whatsapp_gate_pending) return null;
-  // Redirigiendo a Inicio (ver arriba): no pintar la pantalla que no va.
-  if (pathname && !routeAllowed(pathname, appUser)) return null;
+  // Mientras no sabemos quién es (o lo estamos mandando a otro lado), la pantalla de carga. Va siempre en el mismo
+  // lugar del árbol para que, al estar lista la app, se desvanezca en vez de cortarse.
+  const ready = !loading && !!appUser && !appUser.whatsapp_gate_pending && !(pathname && !routeAllowed(pathname, appUser));
+  if (!ready) return <>{null}<SplashTood visible /></>;
 
   const shell = (
     <div className="flex min-h-screen bg-background">
@@ -122,9 +124,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 
-  return (
-    // Wraps every protected screen: hiding amounts on one and not the others
-    // would be worse than not hiding them at all.
+  return (<>
+    {/* Wraps every protected screen: hiding amounts on one and not the others
+        would be worse than not hiding them at all. */}
     <PrivacyProvider>
       {isEmployee(appUser) ? (
         // Un empleado no ve tarjetas ni resúmenes: sin el provider, el puntito
@@ -151,5 +153,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </PendingSharedProvider>
       )}
     </PrivacyProvider>
-  );
+    <SplashTood visible={false} />
+  </>);
 }

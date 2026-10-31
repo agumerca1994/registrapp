@@ -7,12 +7,13 @@ import { Button } from "@/components/ui/button";
 import { isInAppBrowser, isIOS } from "@/lib/browser";
 import { ToodAvatar, type ToodReaction } from "@/components/brand/ToodAvatar";
 import { ToodLogo } from "@/components/brand/ToodLogo";
+import { BRAND_FIELD } from "@/lib/brand/tood-cara";
 
 // Pre-login is the one screen with no chrome around it, so it carries the
 // brand itself: a full-bleed violet field instead of the app's off-white
 // background. Flat on purpose: the layered radial gradients it had read as
 // the generic "AI landing" glow, and the brand is the color, not the blur.
-const BRAND_FIELD = "#4A3FC4";
+// The color (BRAND_FIELD) is shared with the app's loading screen.
 
 function GoogleIcon() {
   return (
