@@ -109,6 +109,13 @@
       - "traefik.http.routers.registrapp-web.tls=true"
       - "traefik.http.routers.registrapp-web.tls.certresolver=letsencrypt"
       - "traefik.http.services.registrapp-web.loadbalancer.server.port=3000"
+      # El sitio público (tood.com.ar y www) va al mismo contenedor, con un router propio: si su certificado
+      # fallara, el de la app (APP_DOMAIN) no se entera. Qué ruta va a qué dominio lo decide middleware.ts
+      # cuando NEXT_PUBLIC_SITE_URL y NEXT_PUBLIC_APP_URL están cargadas.
+      - "traefik.http.routers.registrapp-site.rule=Host(`${SITE_DOMAIN:-tood.com.ar}`) || Host(`www.${SITE_DOMAIN:-tood.com.ar}`)"
+      - "traefik.http.routers.registrapp-site.tls=true"
+      - "traefik.http.routers.registrapp-site.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.registrapp-site.service=registrapp-web"
 
 volumes:
   registrapp-db-data:
