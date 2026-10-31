@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { isInAppBrowser, isIOS } from "@/lib/browser";
 import { ToodAvatar, type ToodReaction } from "@/components/brand/ToodAvatar";
+import { ToodLogo } from "@/components/brand/ToodLogo";
 
 // Pre-login is the one screen with no chrome around it, so it carries the
 // brand itself: a full-bleed violet field instead of the app's off-white
@@ -103,15 +104,16 @@ export default function LoginPage() {
         paddingBottom: "env(safe-area-inset-bottom)",
       }}
     >
-      {/* Two elements only, as one centred column: the avatar and the button. No text: the avatar is the brand.
+      {/* One centred column: the logo, the avatar, the line under it and the button.
           The screen's whole job is the button — anything else on it competes
           with the only action there is. */}
       <main className="flex-1 w-full max-w-sm mx-auto px-6 py-10 flex flex-col items-center justify-center text-center">
         {/* La t de la marca, despierta: te sigue con la mirada, duda si tardás y al rato se duerme. */}
-        <h1 className="sr-only">Entrar a tood</h1>
-        <ToodAvatar size={180} ink="#ffffff" holeColor={BRAND_FIELD} okColor="#7CF29A" alertColor="#FFB4B4"
+        <h1><ToodLogo className="h-10 w-auto text-white" title="tood" /></h1>
+        <ToodAvatar size={170} className="mt-6" ink="#ffffff" holeColor={BRAND_FIELD} okColor="#7CF29A" alertColor="#FFB4B4"
           awake track pokeable asleep={mood.asleep} reaction={mood.reaction} reactionKey={mood.key}
           duration={mood.reaction === "duda" ? DOUBT_LONG_MS : undefined} smile={mood.smile} />
+        <p className="mt-4 text-[15px] text-white/85">todo en una sola app.</p>
 
 
         {inAppBrowser && (
