@@ -30,8 +30,8 @@ const seg = (t: number, a: number, b: number) => ease(clamp((t - a) / (b - a)));
 const ORB_STATES: [number, OrbState][] = [
   [0, "connecting"], [2600, "composing"], [4300, "listening"], [6100, "solving"], [7700, "composing"], [9300, "breathing"],
 ];
-// Y qué hace la t.
-const BEATS: [number, ToodReaction][] = [[1500, "duda"], [4500, "toque"], [8000, "meta"]];
+// Y qué hace la t. La duda (1,9 s) no termina seco: como en el login, sale con el gesto contento y la boca en D.
+const BEATS: [number, ToodReaction, ("arco" | "d")?][] = [[1500, "duda"], [3400, "toque", "d"], [4500, "toque"], [8000, "meta"]];
 // Los viajes de puntos: el orbe le habla, la t contesta, el orbe responde.
 const TRIPS: [number, boolean][] = [[2700, true], [4600, false], [7700, true]];
 
@@ -44,7 +44,7 @@ function streamPoint(p: number, fromOrb: boolean) {
   return { x: q * q * a.x + 2 * q * p * c.x + p * p * b.x, y: q * q * a.y + 2 * q * p * c.y + p * p * b.y };
 }
 
-const stateAt = <T,>(list: [number, T][], t: number) => {
+const stateAt = (list: readonly (readonly [number, ...unknown[]])[], t: number) => {
   let i = -1;
   list.forEach(([at], j) => { if (t >= at) i = j; });
   return i;
@@ -55,7 +55,7 @@ export default function AvatarConIA({ className }: { className?: string }) {
   const orbRef = useRef<HTMLDivElement>(null);
   const streamRefs = useRef<(SVGCircleElement | null)[]>([]);
   const [orbState, setOrbState] = useState<OrbState>("breathing");
-  const [mood, setMood] = useState<{ reaction: ToodReaction | null; key: number }>({ reaction: null, key: 0 });
+  const [mood, setMood] = useState<{ reaction: ToodReaction | null; key: number; smile?: "arco" | "d" }>({ reaction: null, key: 0 });
   const [look, setLook] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   useEffect(() => {
@@ -94,7 +94,7 @@ export default function AvatarConIA({ className }: { className?: string }) {
       const beat = stateAt(BEATS, t);
       if (beat !== lastBeat) {
         lastBeat = beat;
-        if (beat >= 0) setMood((m) => ({ reaction: BEATS[beat][1], key: m.key + 1 }));
+        if (beat >= 0) setMood((m) => ({ reaction: BEATS[beat][1], key: m.key + 1, smile: BEATS[beat][2] }));
       }
       if (running) raf = requestAnimationFrame(tick);
     };
@@ -113,7 +113,7 @@ export default function AvatarConIA({ className }: { className?: string }) {
       aria-label="La t de tood conversa con un orbe de puntos que representa a un asistente de IA">
       <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 w-full h-full" aria-hidden="true">
         <g transform={`translate(${AVATAR.x} ${AVATAR.y})`}>
-          <ToodAvatar size={AVATAR.size} awake track lookAt={look} reaction={mood.reaction} reactionKey={mood.key} />
+          <ToodAvatar size={AVATAR.size} awake track lookAt={look} reaction={mood.reaction} reactionKey={mood.key} smile={mood.smile} />
         </g>
         {Array.from({ length: N_STREAM }, (_, i) => (
           <circle key={i} ref={(el) => { streamRefs.current[i] = el; }} r={[2.6, 2.2, 1.8][i % 3]} opacity={0} fill="#5B4FE9" />
