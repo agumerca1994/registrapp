@@ -8,8 +8,9 @@ import { EYES, EYE_RX, EYE_RY } from "@/lib/brand/tood-cara";
 //   variant="todo"  la portada: "od" pasa a "do" y queda "todo" (todo en una sola app), y vuelve. Rota entre
 //                   tres maneras (arco, pivote, voltereta): una por vez, con pausa, y cada carga arranca en la
 //                   siguiente.
-//   variant="ojos"  el header: las oo vuelan a la cara de la t y su hueco se vuelve el ojo; la d se desvanece y la
-//                   t queda como el avatar despierto, sin boca, siguiendo al puntero. Después vuelve a "tood".
+//   variant="ojos"  el header: al bajar, las oo vuelan a la cara de la t y su hueco se vuelve el ojo; la d se
+//                   desvanece y la t queda como el avatar despierto, sin boca, siguiendo al puntero. Se queda así
+//                   mientras la página está bajada; al volver arriba de todo hace el camino inverso y es "tood".
 // Va por requestAnimationFrame sobre el atributo transform: el logo está dentro de un scale(1 -1) y el origen de
 // una transformación CSS ahí no es confiable. Todo en unidades de la fuente, con y hacia arriba. Los ojos y los
 // huecos se pintan del color del fondo (`hole`). Con movimiento reducido queda quieto en "tood".
@@ -84,13 +85,15 @@ const TODO_GAP = 6000;
 
 /* ---------- "ojos": la t se vuelve el avatar que te sigue ---------- */
 
-const OJOS_HOLD = 9000;      // hasta cuándo sigue al puntero
-const OJOS_CYCLE = 24000;    // cada cuánto se repite (el resto del tiempo es "tood")
+// La entrada dura OJOS_IN; la salida es la misma entrada recorrida hacia atrás. `t` va de 0 ("tood") a OJOS_IN
+// (la t es el avatar), y avanza o retrocede según el scroll.
+const OJOS_IN = 2500;
+/** Cuánto hay que bajar para que la t se vuelva el avatar. */
+const SCROLL_FROM = 24;
 
-const ojos = (t: number, look: { x: number; y: number }): Pose => {
-  const back = OJOS_HOLD;
-  const fly = seg(t, 400, 1500) - seg(t, back + 800, back + 1900);
-  const gone = seg(t, 300, 1100) - seg(t, back + 1200, back + 2000);
+const ojos = (t: number, look: { x: number; y: number }, blink: number): Pose => {
+  const fly = seg(t, 400, 1500);
+  const gone = seg(t, 300, 1100);
   const rise = Math.sin(Math.PI * fly) * 200;
   // La o se achica hasta que su hueco mide lo que un ojo; el hueco pasa de círculo a óvalo.
   const s = lerp(1, (EYE_RY * LOGO_PX) / LOGO_O_COUNTER, fly);
@@ -99,9 +102,7 @@ const ojos = (t: number, look: { x: number; y: number }): Pose => {
     return { tx: lerp(l.cx, ex, fly), ty: lerp(l.cy, ey, fly) + rise, s };
   };
   const landed = fly > 0.999;
-  const w = seg(t, 2000, 2500) - seg(t, back - 500, back);
-  let blink = 0;
-  for (let b = 3600; b < back - 400; b += 2700) blink += pulse(t, b, 200);
+  const w = seg(t, 2000, 2500);
   return {
     // El anillo se apaga antes de tocar la t (si no, asoma por el borde del travesaño); el hueco sigue y es el ojo.
     ink: 1 - clamp((fly - 0.55) / 0.3), hole: landed ? 0 : 1, holeK: fly, dop: 1 - gone,
@@ -148,6 +149,7 @@ export function ToodLogoAnimado({
     const t0 = performance.now();
     const pointer = { x: 0, y: 0, moved: -1e9 };
     const look = { x: 0, y: 0 };
+    let last = t0, ojosT = 0;
     const onMove = (e: PointerEvent) => { pointer.x = e.clientX; pointer.y = e.clientY; pointer.moved = performance.now(); };
     window.addEventListener("pointermove", onMove, { passive: true });
     // Cuánto ocupa cada animación de la rotación, con su pausa.
@@ -180,10 +182,14 @@ export function ToodLogoAnimado({
         const m = Math.hypot(tx, ty);
         if (m > 1) { tx /= m; ty /= m; }
         look.x += (tx - look.x) * 0.15; look.y += (ty - look.y) * 0.15;
-        // Arranca un segundo después de cargar.
-        const t = el - 1000;
-        setPose(t > 0 && t % OJOS_CYCLE < OJOS_HOLD + 2200 ? ojos(t % OJOS_CYCLE, look) : {});
+        // Bajando, la t se vuelve el avatar y se queda así; arriba de todo vuelve a ser "tood".
+        const dt = Math.min(now - last, 100);
+        ojosT = clamp((ojosT + (window.scrollY > SCROLL_FROM ? dt : -dt)) / OJOS_IN) * OJOS_IN;
+        // Ya convertida, parpadea cada 2,7 s.
+        const blink = ojosT >= OJOS_IN ? pulse(el % 2700, 2400, 200) : 0;
+        setPose(ojosT > 0 ? ojos(ojosT, look, blink) : {});
       }
+      last = now;
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
