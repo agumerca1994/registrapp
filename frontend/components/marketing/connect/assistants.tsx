@@ -14,11 +14,11 @@ import { Shot, type ShotData } from "./Lightbox";
  *
  * Probados: Claude en la web y en la app de escritorio (OAuth) y Claude Code
  * (token personal). Las capturas de Claude son de la sesión del usuario,
- * recortadas y sin datos personales; las de tero, de una cuenta de demo.
+ * recortadas y sin datos personales; las de tood, de una cuenta de demo.
  */
 
 /** settings.MCP_RESOURCE_URL de producción, la misma que muestra Configuración. */
-// Sale del backend configurado, así cambia sola el día que el backend pase a su subdominio de tero.
+// Sale del backend configurado, así cambia sola el día que el backend pase a su subdominio de tood.
 export const CONNECTOR_URL = `${process.env.NEXT_PUBLIC_API_URL ?? "https://registrapp-api.imanzanastore.com.ar"}/mcp`;
 
 const SCOPE_HOUSEHOLD = connectorScopeLabel({ tenant_kind: "household", role: "admin" } as Parameters<typeof connectorScopeLabel>[0]);
@@ -51,19 +51,19 @@ const S = {
   formFull: shot("/conectar/claude/3-formulario-completo.webp", 1070, 869,
     "Claude: la ventana Agregar conector personalizado con el nombre Registrapp y la dirección del conector pegada"),
   authorize: shot("/conectar/autorizar.webp", 960, 962,
-    "tero: la página para autorizar a Claude, con lo que va a poder leer y cargar, y los botones Autorizar y Cancelar"),
+    "tood: la página para autorizar a Claude, con lo que va a poder leer y cargar, y los botones Autorizar y Cancelar"),
   list: shot("/conectar/claude/4-conectores-lista.webp", 1400, 434,
     "Claude: Configuración, Conectores, pestaña Tuyos, con Registrapp marcado como Personalizado y conectado"),
   detail: shot("/conectar/claude/5-conector-detalle.webp", 1400, 876,
     "Claude: el detalle del conector Registrapp, con Desconectar y los permisos de cada herramienta"),
   token: shot("/conectar/token.webp", 1520, 660,
-    "tero: Configuración, Conectar con una IA, un token recién creado con los botones Copiar token y Ya lo guardé"),
+    "tood: Configuración, Conectar con una IA, un token recién creado con los botones Copiar token y Ya lo guardé"),
 };
 
 export interface StepData { title: string; body: React.ReactNode }
 export interface Assistant { id: string; label: string; intro: React.ReactNode; steps: StepData[] }
 
-const COMMAND = `claude mcp add --transport http tero ${CONNECTOR_URL} --header "Authorization: Bearer rap_pat_…"`;
+const COMMAND = `claude mcp add --transport http tood ${CONNECTOR_URL} --header "Authorization: Bearer rap_pat_…"`;
 
 export const ASSISTANTS: Assistant[] = [
   {
@@ -87,25 +87,25 @@ export const ASSISTANTS: Assistant[] = [
         <Shot shot={S.formEmpty} maxWidth={535} />
       </> },
       { title: "Pegá la dirección y tocá Continuar", body: <>
-        <p>En el nombre poné <Ui>tero</Ui> y, en la dirección, pegá esta:</p>
+        <p>En el nombre poné <Ui>tood</Ui> y, en la dirección, pegá esta:</p>
         <CopyUrl value={CONNECTOR_URL} label="Dirección del conector" />
         <p>Después tocá <Ui>Continuar</Ui>.</p>
         <Shot shot={S.formFull} maxWidth={535} />
       </> },
       { title: "Iniciá sesión y autorizá", body: <>
         <p>
-          Claude abre la página de tero. Entrá con tu cuenta de Google, revisá lo que va a poder hacer y tocá <Ui>Autorizar</Ui>.
+          Claude abre la página de tood. Entrá con tu cuenta de Google, revisá lo que va a poder hacer y tocá <Ui>Autorizar</Ui>.
           En un hogar dice <strong className="text-foreground">«{SCOPE_HOUSEHOLD}»</strong>; en un negocio, <strong className="text-foreground">«{SCOPE_BUSINESS}»</strong>.
         </p>
         <Shot shot={S.authorize} maxWidth={420} />
         <Callout>
-          Iniciás sesión en la página de tero, no en Claude. Claude recibe un permiso para usar tu cuenta,
+          Iniciás sesión en la página de tood, no en Claude. Claude recibe un permiso para usar tu cuenta,
           que podés cortar cuando quieras; tu contraseña nunca pasa por la IA.
         </Callout>
       </> },
       { title: "Listo: ya está conectado", body: <>
         <p>
-          Volvés a Claude. En <Ui>Configuración</Ui> → <Ui>Conectores</Ui>, pestaña <Ui>Tuyos</Ui>, tero aparece como <Ui>Personalizado</Ui>, con la tilde de conectado.
+          Volvés a Claude. En <Ui>Configuración</Ui> → <Ui>Conectores</Ui>, pestaña <Ui>Tuyos</Ui>, tood aparece como <Ui>Personalizado</Ui>, con la tilde de conectado.
         </p>
         <Shot shot={S.list} />
       </> },
@@ -122,9 +122,9 @@ export const ASSISTANTS: Assistant[] = [
   {
     id: "claude-code",
     label: "Claude Code",
-    intro: <>Claude Code se conecta con un <strong className="text-foreground">token personal</strong> que creás en tero, en vez de iniciar sesión.</>,
+    intro: <>Claude Code se conecta con un <strong className="text-foreground">token personal</strong> que creás en tood, en vez de iniciar sesión.</>,
     steps: [
-      { title: "Creá un token en tero", body: <>
+      { title: "Creá un token en tood", body: <>
         <p>
           Entrá a <Link href={appHref("/settings")} className="font-semibold text-primary hover:underline">Configuración</Link> → <Ui>Conectar con una IA</Ui>.
           En <Ui>Token</Ui>, tocá <Ui>Crear token</Ui>, ponele un nombre (por ejemplo «Claude Code»), elegí cuándo vence y tocá <Ui>Crear</Ui>.
@@ -141,10 +141,10 @@ export const ASSISTANTS: Assistant[] = [
       { title: "Agregá el conector en la terminal", body: <>
         <p>Pegá este comando y reemplazá <Ui>rap_pat_…</Ui> por el token que copiaste:</p>
         <CopyUrl value={COMMAND} label="Comando para agregar el conector"
-          display={<>claude mcp add --transport http tero {CONNECTOR_URL} --header &quot;Authorization: Bearer <mark className="bg-amber-200 rounded px-0.5">rap_pat_…</mark>&quot;</>} />
+          display={<>claude mcp add --transport http tood {CONNECTOR_URL} --header &quot;Authorization: Bearer <mark className="bg-amber-200 rounded px-0.5">rap_pat_…</mark>&quot;</>} />
       </> },
       { title: "Comprobá que esté conectado", body: <>
-        <p>Abrí Claude Code y escribí <Ui>/mcp</Ui>: <Ui>tero</Ui> tiene que aparecer en la lista, conectado.</p>
+        <p>Abrí Claude Code y escribí <Ui>/mcp</Ui>: <Ui>tood</Ui> tiene que aparecer en la lista, conectado.</p>
       </> },
       { title: "Preguntale", body: <FirstQuestion /> },
     ],

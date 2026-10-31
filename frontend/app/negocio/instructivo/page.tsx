@@ -3,8 +3,8 @@ import Link from "next/link";
 import { ArrowLeft, Download } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Instructivo · tero Negocio",
-  description: "Cómo usar tero Negocio, paso a paso.",
+  title: "Instructivo · tood Negocio",
+  description: "Cómo usar tood Negocio, paso a paso.",
 };
 
 /**
@@ -19,15 +19,15 @@ export default function InstructivoPage() {
       <header className="shrink-0 border-b border-border">
         <div className="px-4 md:px-6 h-14 flex items-center gap-3">
           <Link href="/negocio" className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="w-4 h-4" /> tero Negocio
+            <ArrowLeft className="w-4 h-4" /> tood Negocio
           </Link>
-          <a href="/negocio/instructivo.html" download="tero-Negocio-Instructivo.html"
+          <a href="/negocio/instructivo.html" download="tood-Negocio-Instructivo.html"
             className="ml-auto inline-flex items-center gap-2 rounded-full border-2 border-ink bg-white px-4 py-1.5 text-sm font-semibold shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none">
             <Download className="w-4 h-4" /> Descargar
           </a>
         </div>
       </header>
-      <iframe src="/negocio/instructivo.html" title="Instructivo de tero Negocio"
+      <iframe src="/negocio/instructivo.html" title="Instructivo de tood Negocio"
         className="flex-1 w-full border-0" />
     </div>
   );

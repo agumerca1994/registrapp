@@ -20,8 +20,8 @@ export const LEGAL = {
 export const LEGAL_DOCS = [
   { href: "/legal/privacidad", title: "Política de privacidad",
     lead: "Qué datos guardamos, para qué, con quién los compartimos y cómo ejercés tus derechos." },
-  { href: "/legal/terminos-hogar", title: "Términos y condiciones de tero Hogar",
+  { href: "/legal/terminos-hogar", title: "Términos y condiciones de tood Hogar",
     lead: "Las reglas para usar la app con las cuentas de tu casa." },
-  { href: "/legal/terminos-negocio", title: "Términos y condiciones de tero Negocio",
+  { href: "/legal/terminos-negocio", title: "Términos y condiciones de tood Negocio",
     lead: "Las reglas para usar la app en un comercio, con tu equipo." },
 ];

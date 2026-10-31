@@ -2,19 +2,19 @@ import type { Metadata } from "next";
 import { Phone, Screen } from "@/components/marketing/Frames";
 import Link from "next/link";
 import { appHref } from "@/lib/site";
-import { TeroLogo } from "@/components/brand/TeroLogo";
+import { ToodLogo } from "@/components/brand/ToodLogo";
 import {
   CreditCard, DollarSign, Download, Home, Play, ReceiptText, TrendingUp, Users,
 } from "lucide-react";
 import SiteFooter from "@/components/marketing/SiteFooter";
 
 export const metadata: Metadata = {
-  title: "tero Hogar",
+  title: "tood Hogar",
   description: "Ingresos, gastos, tarjetas, dólares e hipoteca de tu casa, en una sola app.",
 };
 
 /**
- * La landing pública de tero Hogar. Vive fuera del grupo `(app)`: ese
+ * La landing pública de tood Hogar. Vive fuera del grupo `(app)`: ese
  * layout manda a /login a quien no inició sesión, y esta página es justamente
  * para quien todavía no tiene cuenta. Mismo sistema que /negocio.
  *
@@ -50,7 +50,7 @@ export default function HogarPage() {
       <header className="sticky top-0 z-20 bg-background/90 backdrop-blur border-b border-border"
         style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="max-w-6xl mx-auto px-4 md:px-8 h-16 flex items-center gap-3">
-          <Link href="/" aria-label="tero, ir a la home"><TeroLogo className="h-8 w-auto text-primary" /></Link>
+          <Link href="/" aria-label="tood, ir a la home"><ToodLogo className="h-8 w-auto text-primary" /></Link>
           <span className="rounded-full border-2 border-ink px-2.5 py-0.5 text-xs font-semibold">Hogar</span>
           <nav className="ml-auto flex items-center gap-2">
             <a href="#instructivo" className="hidden sm:inline px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
@@ -88,8 +88,8 @@ export default function HogarPage() {
             <p className="mt-4 text-sm text-muted-foreground">Entrás con tu cuenta de Google y creás tu hogar.</p>
           </div>
           <div className="min-w-0">
-            <div className="hidden sm:block"><Screen src="/hogar/inicio.jpg" alt="Inicio de tero Hogar: los pesos y los dólares que quedan en el mes" hero /></div>
-            <Phone src="/home/celular-hogar.jpg" alt="tero Hogar en el celular" className="sm:hidden mx-auto w-[68%] max-w-[260px]" />
+            <div className="hidden sm:block"><Screen src="/hogar/inicio.jpg" alt="Inicio de tood Hogar: los pesos y los dólares que quedan en el mes" hero /></div>
+            <Phone src="/home/celular-hogar.jpg" alt="tood Hogar en el celular" className="sm:hidden mx-auto w-[68%] max-w-[260px]" />
           </div>
         </section>
 
@@ -174,14 +174,14 @@ export default function HogarPage() {
                 className="inline-flex items-center gap-2 rounded-full border-2 border-ink bg-primary text-primary-foreground px-4 py-2 font-semibold shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none">
                 <Play className="w-4 h-4" /> Ver a pantalla completa
               </Link>
-              <a href="/hogar/instructivo.html" download="tero-Hogar-Instructivo.html"
+              <a href="/hogar/instructivo.html" download="tood-Hogar-Instructivo.html"
                 className="inline-flex items-center gap-2 rounded-full border-2 border-ink bg-white px-4 py-2 font-semibold shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none">
                 <Download className="w-4 h-4" /> Descargar
               </a>
             </div>
           </div>
           <div className="mt-6 rounded-2xl border-2 border-ink overflow-hidden shadow-hero bg-card">
-            <iframe src="/hogar/instructivo.html" title="Instructivo de tero Hogar"
+            <iframe src="/hogar/instructivo.html" title="Instructivo de tood Hogar"
               className="block w-full h-[78vh] min-h-[520px] border-0" loading="lazy" />
           </div>
           <p className="mt-3 text-sm text-muted-foreground">

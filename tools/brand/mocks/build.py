@@ -1,7 +1,7 @@
 # Arma la página de mocks inyectando los trazos finales (logo y t) desde el proyecto.
 import pathlib, re, json, sys
 root = pathlib.Path(sys.argv[1])
-ts = (root / "frontend/lib/brand/tero-marca.ts").read_text()
+ts = (root / "frontend/lib/brand/tood-marca.ts").read_text()
 def const(name):
     m = re.search(rf"export const {name} = (.*?);\n", ts, re.S)
     v = m.group(1).strip()

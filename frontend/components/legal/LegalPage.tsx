@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { appHref } from "@/lib/site";
-import { TeroLogo } from "@/components/brand/TeroLogo";
+import { ToodLogo } from "@/components/brand/ToodLogo";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import { LEGAL } from "@/lib/legal";
 
@@ -21,7 +21,7 @@ export function LegalPage({ title, intro, sections, children }: {
       <header className="sticky top-0 z-20 bg-background/90 backdrop-blur border-b border-border"
         style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="max-w-6xl mx-auto px-4 md:px-8 h-16 flex items-center gap-3">
-          <Link href="/" aria-label="tero, ir a la home"><TeroLogo className="h-8 w-auto text-primary" /></Link>
+          <Link href="/" aria-label="tood, ir a la home"><ToodLogo className="h-8 w-auto text-primary" /></Link>
           <Link href="/legal" className="rounded-full border-2 border-ink px-2.5 py-0.5 text-xs font-semibold">Legales</Link>
           <nav className="ml-auto">
             <Link href={appHref("/login")}

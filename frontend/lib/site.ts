@@ -1,4 +1,4 @@
-// Árbol de dominios de la marca (ver CLAUDE.md, "Marca tero"):
+// Árbol de dominios de la marca (ver CLAUDE.md, "Marca tood"):
 //   SITE_URL  → el sitio público: la home, /hogar, /negocio, /conectar, /legal
 //   APP_URL   → la app: login, onboarding, invitaciones, el consentimiento OAuth y todo (app)
 // El backend vive aparte, en NEXT_PUBLIC_API_URL. Mientras estas dos no estén configuradas, todo sigue

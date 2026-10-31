@@ -4,8 +4,8 @@ import { LegalPage, List, Mail, Section, sectionsOf } from "@/components/legal/L
 import { LEGAL } from "@/lib/legal";
 
 export const metadata: Metadata = {
-  title: "Política de privacidad · tero",
-  description: "Qué datos guarda tero, para qué, con quién los comparte y cómo ejercés tus derechos.",
+  title: "Política de privacidad · tood",
+  description: "Qué datos guarda tood, para qué, con quién los comparte y cómo ejercés tus derechos.",
 };
 
 /**
@@ -42,7 +42,7 @@ export default function PrivacidadPage() {
       sections={SECTIONS}
       intro={<>
         <p>
-          tero es una aplicación para llevar las cuentas de un hogar o de un comercio chico. Para funcionar
+          tood es una aplicación para llevar las cuentas de un hogar o de un comercio chico. Para funcionar
           necesita guardar información sobre tu plata: ingresos, gastos, tarjetas, dólares, ventas. Sabemos que es
           información sensible, y esta política explica qué hacemos con ella.
         </p>
@@ -226,7 +226,7 @@ export default function PrivacidadPage() {
 
       <Section {...sec("menores")}>
         <p>
-          tero es para mayores de 18 años. Si sabés de un menor que nos dio sus datos, escribinos y los
+          tood es para mayores de 18 años. Si sabés de un menor que nos dio sus datos, escribinos y los
           borramos.
         </p>
       </Section>
@@ -249,8 +249,8 @@ export default function PrivacidadPage() {
           incumplimiento de las normas vigentes en materia de protección de datos personales.
         </p>
         <p className="text-sm text-muted-foreground">
-          Ver también los términos de <Link href="/legal/terminos-hogar" className="underline">tero Hogar</Link>{" "}
-          y de <Link href="/legal/terminos-negocio" className="underline">tero Negocio</Link>.
+          Ver también los términos de <Link href="/legal/terminos-hogar" className="underline">tood Hogar</Link>{" "}
+          y de <Link href="/legal/terminos-negocio" className="underline">tood Negocio</Link>.
         </p>
       </Section>
     </LegalPage>

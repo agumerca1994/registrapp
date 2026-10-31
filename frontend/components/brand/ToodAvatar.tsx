@@ -1,23 +1,23 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { CREST_ORIGIN, CREST_PATH, CUT_Y, T_PATH, T_TRANSFORM } from "@/lib/brand/tero-marca";
+import { CREST_ORIGIN, CREST_PATH, CUT_Y, T_PATH, T_TRANSFORM } from "@/lib/brand/tood-marca";
 
 // La t del logo como avatar. En reposo es sólo la letra con su copete; durante una reacción le
-// aparecen ojitos huecos (del color del fondo, como recortados) y un piquito de frente. Va en el violeta de
+// aparecen ojitos huecos (del color del fondo, como recortados) y una boquita, también hueca. Va en el violeta de
 // la marca; al cargar un gasto la letra se llena de verde de abajo hacia arriba, y en una alerta, de rojo.
 // Todo se dibuja en el sistema de la exploración: la t a 200 px, centrada en x=100, base en y=168.
 
-export type TeroReaction = "gasto" | "alerta" | "meta" | "pasado" | "duda" | "toque";
+export type ToodReaction = "gasto" | "alerta" | "meta" | "pasado" | "duda" | "toque";
 
-const DURATION: Record<TeroReaction, number> = { gasto: 1900, alerta: 1900, meta: 2600, pasado: 1900, duda: 1900, toque: 700 };
+const DURATION: Record<ToodReaction, number> = { gasto: 1900, alerta: 1900, meta: 2600, pasado: 1900, duda: 1900, toque: 700 };
 const EYES: [number, number][] = [[83, 86], [105, 86]];
 // Dónde aparecen los tildes, los signos de exclamación y los de pregunta, como las estrellitas de la meta.
 const SPOTS: [number, number][] = [[42, 50], [160, 66], [36, 138], [166, 132]];
 
 type Props = {
   /** Reacción a mostrar. Cambiar `reactionKey` la vuelve a disparar aunque sea la misma. */
-  reaction?: TeroReaction | null;
+  reaction?: ToodReaction | null;
   reactionKey?: number | string;
   /** Milisegundos que dura; 0 la deja fija (útil para un mock estático). */
   duration?: number;
@@ -27,27 +27,25 @@ type Props = {
   background?: string | null;
   /** Color de los ojos huecos cuando no hay fondo: el de la superficie donde está apoyado. */
   holeColor?: string;
-  accent?: string;
   /** Colores a los que pasa la letra al cargar un gasto y en una alerta. */
   okColor?: string;
   alertColor?: string;
-  hollowBeak?: boolean;
   /** Sigue al puntero con la mirada y se inclina. */
   track?: boolean;
   /** Reacciona al tocarlo. */
   pokeable?: boolean;
   className?: string;
   title?: string;
-  onReactionEnd?: (r: TeroReaction) => void;
+  onReactionEnd?: (r: ToodReaction) => void;
 };
 
-export function TeroAvatar({
+export function ToodAvatar({
   reaction = null, reactionKey, duration, size = 160, ink = "#5b4fe9", background = null,
-  holeColor = "#ffffff", accent = "#ffc83d", okColor = "#22b55a", alertColor = "#e5383b",
-  hollowBeak = false, track = false, pokeable = false, className, title = "tero", onReactionEnd,
+  holeColor = "#ffffff", okColor = "#22b55a", alertColor = "#e5383b",
+  track = false, pokeable = false, className, title = "tood", onReactionEnd,
 }: Props) {
   const uid = useId().replace(/:/g, "");
-  const [active, setActive] = useState<TeroReaction | null>(null);
+  const [active, setActive] = useState<ToodReaction | null>(null);
   const leanRef = useRef<SVGGElement>(null);
   const faceRef = useRef<SVGGElement>(null);
   const timer = useRef<number | undefined>(undefined);
@@ -55,11 +53,10 @@ export function TeroAvatar({
   const level = useRef(0);
   const [fillColor, setFillColor] = useState(okColor);
   const hole = background ?? holeColor;
-  const beak = hollowBeak ? hole : accent;
 
   // Para repetir una reacción se saca la clase y se vuelve a poner dos cuadros después: así las animaciones
   // arrancan de nuevo sin desmontar el SVG (desmontarlo cortaría el llenado de color).
-  const play = (r: TeroReaction | null, ms?: number) => {
+  const play = (r: ToodReaction | null, ms?: number) => {
     window.clearTimeout(timer.current);
     setActive(null);
     if (!r) return;
@@ -171,8 +168,11 @@ export function TeroAvatar({
             <g className="tav-happy">{EYES.map((p) => arc(p, true))}</g>
             <g className="tav-squint">{EYES.map(([x, y]) => <ellipse key={x} cx={x} cy={y + 1.5} rx={4.6} ry={2.4} fill={hole} />)}</g>
             <g className="tav-doubt"><ellipse cx={83} cy={86} rx={4.4} ry={6.6} fill={hole} /><path d="M100 86 H110" stroke={hole} strokeWidth={3.8} strokeLinecap="round" /></g>
-            <path className="tav-shut" d="M88 104 Q94 101 100 104 L94 115 Z" fill={beak} stroke={beak} strokeWidth={2} strokeLinejoin="round" />
-            <ellipse className="tav-open" cx={94} cy={108} rx={5.5} ry={7.5} fill={beak} />
+            {/* La boca: sonrisa, sorpresa (abierta), tristeza o duda (una raya). */}
+            <path className="tav-smile" d="M88 103 Q94 110 100 103" fill="none" stroke={hole} strokeWidth={3.6} strokeLinecap="round" />
+            <ellipse className="tav-open" cx={94} cy={107} rx={4.2} ry={5.4} fill={hole} />
+            <path className="tav-frown" d="M88.5 108 Q94 102.5 99.5 108" fill="none" stroke={hole} strokeWidth={3.6} strokeLinecap="round" />
+            <path className="tav-flat" d="M89.5 106 H98.5" fill="none" stroke={hole} strokeWidth={3.6} strokeLinecap="round" />
           </g></g>
           <g className="tav-badge tav-pop tav-b-gasto">{SPOTS.map(check)}</g>
           <g className="tav-badge tav-pop tav-b-alerta">{SPOTS.map(bang)}</g>
@@ -195,12 +195,12 @@ const CSS = `
 .tav .tav-crest { transform-box: view-box; }
 .tav .tav-face { transform-box: view-box; transform-origin: 94px 96px; transform: scale(.2); opacity: 0; transition: transform .3s cubic-bezier(.3,1.7,.5,1), opacity .18s; }
 .tav--gasto .tav-face, .tav--alerta .tav-face, .tav--meta .tav-face, .tav--pasado .tav-face, .tav--duda .tav-face, .tav--toque .tav-face { transform: scale(1); opacity: 1; }
-.tav .tav-happy, .tav .tav-squint, .tav .tav-doubt, .tav .tav-open, .tav .tav-badge { display: none; }
+.tav .tav-happy, .tav .tav-squint, .tav .tav-doubt, .tav .tav-open, .tav .tav-frown, .tav .tav-flat, .tav .tav-badge { display: none; }
 .tav--gasto .tav-happy, .tav--meta .tav-happy, .tav--toque .tav-happy { display: inline; }
 .tav--gasto .tav-eyes, .tav--meta .tav-eyes, .tav--toque .tav-eyes, .tav--pasado .tav-eyes, .tav--duda .tav-eyes { display: none; }
 .tav--pasado .tav-squint, .tav--duda .tav-doubt { display: inline; }
-.tav--alerta .tav-open, .tav--meta .tav-open { display: inline; }
-.tav--alerta .tav-shut, .tav--meta .tav-shut { display: none; }
+.tav--alerta .tav-open, .tav--meta .tav-open, .tav--pasado .tav-frown, .tav--duda .tav-flat { display: inline; }
+.tav--alerta .tav-smile, .tav--meta .tav-smile, .tav--pasado .tav-smile, .tav--duda .tav-smile { display: none; }
 .tav--gasto .tav-b-gasto, .tav--alerta .tav-b-alerta, .tav--meta .tav-b-meta, .tav--duda .tav-b-duda, .tav--pasado .tav-b-pasado { display: inline; }
 .tav .tav-eyes { transform-box: fill-box; transform-origin: center; animation: tav-blink 4.6s infinite; }
 .tav--gasto .tav-anim { animation: tav-hop .32s cubic-bezier(.3,.7,.4,1) 4 alternate; }

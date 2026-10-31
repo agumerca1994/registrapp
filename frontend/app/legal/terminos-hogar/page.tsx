@@ -3,12 +3,12 @@ import { LegalPage, List, Section, sectionsOf } from "@/components/legal/LegalPa
 import { TermsHead, TermsTail, termsSections } from "@/components/legal/terms";
 
 export const metadata: Metadata = {
-  title: "Términos y condiciones de tero Hogar",
-  description: "Las reglas para usar tero con las cuentas de tu casa.",
+  title: "Términos y condiciones de tood Hogar",
+  description: "Las reglas para usar tood con las cuentas de tu casa.",
 };
 
 const SECTIONS = termsSections([
-  { id: "que-es", title: "Qué es tero Hogar" },
+  { id: "que-es", title: "Qué es tood Hogar" },
   { id: "hogar", title: "Un hogar compartido" },
   { id: "compartidos", title: "Gastos compartidos" },
   { id: "referencia", title: "Dólares, hipoteca y cuotas" },
@@ -18,9 +18,9 @@ const sec = sectionsOf(SECTIONS);
 export default function TerminosHogarPage() {
   return (
     <LegalPage
-      title="Términos y condiciones de tero Hogar"
+      title="Términos y condiciones de tood Hogar"
       sections={SECTIONS}
-      intro={<p>Estos términos son para las cuentas de tipo <strong>Hogar</strong>. Si usás tero en un comercio, leé los de tero Negocio.</p>}
+      intro={<p>Estos términos son para las cuentas de tipo <strong>Hogar</strong>. Si usás tood en un comercio, leé los de tood Negocio.</p>}
     >
       <TermsHead sec={sec} variant="hogar" />
 

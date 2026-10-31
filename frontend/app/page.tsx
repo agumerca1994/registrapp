@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { appHref } from "@/lib/site";
-import { TeroLogo } from "@/components/brand/TeroLogo";
+import { ToodLogo } from "@/components/brand/ToodLogo";
+import { ToodConLema } from "@/components/brand/ToodLogoAnimado";
 import {
   ArrowRight, Bot, Check, Home as HomeIcon, Laptop, MessageCircle, ShieldCheck, Smartphone, Store,
 } from "lucide-react";
@@ -10,7 +11,7 @@ import { Phone, Screen } from "@/components/marketing/Frames";
 import SiteFooter from "@/components/marketing/SiteFooter";
 
 export const metadata: Metadata = {
-  title: "tero · Las cuentas claras, en casa y en tu negocio",
+  title: "tood · Las cuentas claras, en casa y en tu negocio",
   description:
     "Ingresos, gastos, tarjetas, dólares y ventas en una sola app. Desde la compu, el celular, WhatsApp o tu asistente de IA.",
 };
@@ -28,12 +29,12 @@ const PILL = "inline-flex items-center gap-2 rounded-full border-2 border-ink px
 
 const VARIANTS = [
   {
-    href: "/hogar", icon: HomeIcon, name: "tero Hogar", image: "/hogar/inicio.jpg", phone: "/home/celular-hogar.jpg",
+    href: "/hogar", icon: HomeIcon, name: "tood Hogar", image: "/hogar/inicio.jpg", phone: "/home/celular-hogar.jpg",
     lead: "Para las cuentas de tu casa: cuánta plata te queda a fin de mes, en pesos y en dólares.",
     items: ["Sueldos con su detalle", "Tarjetas y cuotas", "Dólares y tenencia", "Hipoteca UVA", "Gastos compartidos"],
   },
   {
-    href: "/negocio", icon: Store, name: "tero Negocio", image: "/negocio/inicio.jpg", phone: "/home/celular-negocio.jpg",
+    href: "/negocio", icon: Store, name: "tood Negocio", image: "/negocio/inicio.jpg", phone: "/home/celular-negocio.jpg",
     lead: "Para comercios chicos: ventas, cierre de caja, stock y el resultado del mes.",
     items: ["Ventas y cierre de caja", "Stock que se mueve solo", "Proveedores y empleados", "Equipo con permisos", "Resultado del mes"],
   },
@@ -51,7 +52,7 @@ const PLATFORMS = [
 ];
 
 const AI_POINTS = [
-  "Te contesta con los números que cargaste en tero.",
+  "Te contesta con los números que cargaste en tood.",
   "Puede cargar o corregir por vos: un recibo de sueldo, un gasto, una compra en cuotas.",
   "Antes de guardar cualquier cosa te muestra qué va a hacer, y sólo sigue si confirmás.",
   "Se conecta desde Configuración y lo desconectás cuando quieras.",
@@ -65,7 +66,7 @@ export default function Home() {
       <header className="sticky top-0 z-20 bg-background/90 backdrop-blur border-b border-border"
         style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="max-w-6xl mx-auto px-4 md:px-8 h-16 flex items-center gap-2">
-          <TeroLogo className="h-8 w-auto text-primary" />
+          <ToodLogo className="h-8 w-auto text-primary" />
           <nav className="ml-auto flex items-center gap-1 sm:gap-2">
             <Link href="/hogar" className="hidden sm:inline px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Hogar</Link>
             <Link href="/negocio" className="hidden sm:inline px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Negocio</Link>
@@ -81,12 +82,13 @@ export default function Home() {
         {/* Portada */}
         <section className="max-w-6xl mx-auto px-4 md:px-8 pt-10 md:pt-16 pb-14 grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] gap-10 items-center">
           <div className="min-w-0">
+            <ToodConLema className="mb-8" />
             <p className="text-sm font-semibold uppercase tracking-wider text-primary">Finanzas claras, sin planillas</p>
             <h1 className="mt-3 font-display font-bold text-4xl md:text-6xl leading-[1.02] tracking-tight text-balance">
               Las cuentas claras, en casa y en tu negocio.
             </h1>
             <p className="mt-5 text-lg text-muted-foreground max-w-xl">
-              tero ordena tus ingresos, gastos, tarjetas, dólares y ventas. Lo usás desde la compu, el celular,
+              tood ordena tus ingresos, gastos, tarjetas, dólares y ventas. Lo usás desde la compu, el celular,
               WhatsApp o tu asistente de IA, y a fin de mes ves cómo te fue.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
@@ -96,11 +98,11 @@ export default function Home() {
             <p className="mt-4 text-sm text-muted-foreground">Entrás con tu cuenta de Google y elegís si es para tu hogar o tu negocio.</p>
           </div>
           {/* En un celular, la captura de escritorio queda en letra ilegible: ahí va la del celular. */}
-          <Phone src="/home/celular-hogar.jpg" alt="tero en el celular: el cierre del mes en pesos y en dólares"
+          <Phone src="/home/celular-hogar.jpg" alt="tood en el celular: el cierre del mes en pesos y en dólares"
             className="sm:hidden mx-auto w-[68%] max-w-[260px]" />
           <div className="relative min-w-0 pb-6 lg:pb-0 hidden sm:block">
-            <Screen src="/hogar/inicio.jpg" alt="tero en la compu: el cierre del mes en pesos y en dólares" hero />
-            <Phone src="/home/celular-hogar.jpg" alt="tero en el celular"
+            <Screen src="/hogar/inicio.jpg" alt="tood en la compu: el cierre del mes en pesos y en dólares" hero />
+            <Phone src="/home/celular-hogar.jpg" alt="tood en el celular"
               className="absolute -bottom-4 -right-2 w-[24%] max-w-[150px]" />
           </div>
         </section>
@@ -155,8 +157,8 @@ export default function Home() {
           </div>
           {/* En un celular esos dos ya se vieron en las versiones, justo arriba. */}
           <div className="min-w-0 hidden sm:flex justify-center items-start gap-4">
-            <Phone src="/home/celular-hogar.jpg" alt="tero Hogar en el celular" className="w-1/2 max-w-[230px]" />
-            <Phone src="/home/celular-negocio.jpg" alt="tero Negocio en el celular" className="w-1/2 max-w-[230px] mt-10" />
+            <Phone src="/home/celular-hogar.jpg" alt="tood Hogar en el celular" className="w-1/2 max-w-[230px]" />
+            <Phone src="/home/celular-negocio.jpg" alt="tood Negocio en el celular" className="w-1/2 max-w-[230px] mt-10" />
           </div>
         </section>
 
@@ -169,7 +171,7 @@ export default function Home() {
                 Hablá de tu plata con tu asistente de IA
               </h2>
               <p className="mt-3 text-lg text-muted-foreground">
-                Conectá tero a Claude y preguntale como le preguntarías a alguien que tiene todos tus números a mano.
+                Conectá tood a Claude y preguntale como le preguntarías a alguien que tiene todos tus números a mano.
               </p>
               <ul className="mt-6 space-y-3">
                 {AI_POINTS.map(p => (
