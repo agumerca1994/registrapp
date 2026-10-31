@@ -12,12 +12,20 @@ import { ToodAvatar, type ToodReaction } from "@/components/brand/ToodAvatar";
 // El orbe es monocromático (puntos oscuros) y va fijo en tema claro: con `auto`, a quien tiene el sistema en
 // oscuro le pintaría puntos claros sobre el fondo claro de la página. Sólo viene en 64 px: se escala con CSS para
 // que ocupe 2·ORB.r de la escena, sea cual sea su ancho.
+// El color: el orbe sólo viene en gris. Encima va un degradé suave con mix-blend-mode: lighten, que en cada pixel
+// se queda con lo más claro de los dos. Los puntos oscuros toman el color del degradé y el fondo de la página, más
+// claro que cualquier color del degradé, no cambia. El degradé se desplaza despacio. Como el contenedor del orbe
+// tiene escala y opacidad, la mezcla queda aislada adentro: por eso detrás de los puntos va un disco del color del
+// fondo, y el degradé se recorta a ese mismo círculo (si no, se mezcla con transparente y se ve un cuadrado lleno),
+// 2 px más chico: así su borde suavizado cae sobre el disco y no dibuja un aro.
 // Cada estado del orbe dura unos 2,6 s y pasa al siguiente con un fundido: hay dos orbes encimados y, al cambiar,
 // uno se apaga mientras el otro aparece (la librería cambia de estado de golpe).
 // Se pausa fuera de pantalla; con movimiento reducido queda quieta, con el orbe a la vista.
 
 const CYCLE = 16500;
 const FADE_MS = 800;
+// Tonos apagados, más oscuros que el fondo en los tres canales (si no, lighten teñiría el fondo).
+const TINT = "linear-gradient(135deg, #7b6cf0 0%, #d98bbd 35%, #6fb7c8 70%, #7b6cf0 100%)";
 const W = 440, H = 200;
 // El avatar va en un cuadrado de 132 en (35, 34); su cara cae en (101, 95). El orbe, a la derecha.
 const AVATAR = { x: 35, y: 34, size: 132 };
@@ -134,11 +142,16 @@ export default function AvatarConIA({ className }: { className?: string }) {
       <div ref={orbRef} className="absolute" aria-hidden="true"
         style={{ left: `${(ORB.x / W) * 100}%`, top: `${(ORB.y / H) * 100}%`, transform: "translate(-50%, -50%)", opacity: 0 }}>
         <div className="relative w-16 h-16">
+          <div className="absolute inset-0 rounded-full bg-background" />
           {slots.map((st, i) => (
             <div key={i} className="absolute inset-0 transition-opacity ease-in-out" style={{ opacity: active === i ? 1 : 0, transitionDuration: `${FADE_MS}ms` }}>
               <ThinkingOrb state={st} size={64} theme="light" aria-hidden="true" paused={active !== i} />
             </div>
           ))}
+          <div className="absolute inset-[2px] rounded-full pointer-events-none orb-tint" style={{ background: TINT, backgroundSize: "300% 300%", mixBlendMode: "lighten" }} />
+          <style>{`.orb-tint { animation: orb-tint 9s ease-in-out infinite alternate }
+@keyframes orb-tint { from { background-position: 0% 0% } to { background-position: 100% 100% } }
+@media (prefers-reduced-motion: reduce) { .orb-tint { animation: none } }`}</style>
         </div>
       </div>
     </div>
