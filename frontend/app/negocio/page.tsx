@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import { Phone, Screen } from "@/components/marketing/Frames";
 import Link from "next/link";
 import { appHref } from "@/lib/site";
-import { ToodLogo } from "@/components/brand/ToodLogo";
 import {
   BarChart3, Boxes, Download, MessageCircle, Play, ReceiptText, ShoppingBag, Users,
 } from "lucide-react";
 import SiteFooter from "@/components/marketing/SiteFooter";
+import SiteHeader from "@/components/marketing/SiteHeader";
 
 export const metadata: Metadata = {
   title: "tood Negocio",
@@ -47,22 +47,7 @@ const STEPS = [
 export default function NegocioPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur border-b border-border"
-        style={{ paddingTop: "env(safe-area-inset-top)" }}>
-        <div className="max-w-6xl mx-auto px-4 md:px-8 h-16 flex items-center gap-3">
-          <Link href="/" aria-label="tood, ir a la home"><ToodLogo className="h-8 w-auto text-primary" /></Link>
-          <span className="rounded-full border-2 border-ink px-2.5 py-0.5 text-xs font-semibold">Negocio</span>
-          <nav className="ml-auto flex items-center gap-2">
-            <a href="#instructivo" className="hidden sm:inline px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-              Cómo funciona
-            </a>
-            <Link href={appHref("/login")}
-              className="inline-flex items-center rounded-full border-2 border-ink bg-white px-4 py-2 text-sm font-semibold shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none">
-              Entrar
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <SiteHeader current="negocio" />
 
       <main>
         <section className="max-w-6xl mx-auto px-4 md:px-8 pt-10 md:pt-16 pb-12 grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] gap-10 items-center">

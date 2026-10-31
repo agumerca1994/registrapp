@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { appHref } from "@/lib/site";
-import { ToodLogo } from "@/components/brand/ToodLogo";
 import { ArrowDown, Brain, MessageSquareText, Plus, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { AssistantTabs } from "@/components/marketing/connect/AssistantTabs";
 import { ASSISTANTS } from "@/components/marketing/connect/assistants";
@@ -10,6 +9,7 @@ import { QuestionBlocks } from "@/components/marketing/connect/KindBlocks";
 import { Reveal } from "@/components/marketing/connect/Reveal";
 import { Step, StepTimeline } from "@/components/marketing/connect/StepTimeline";
 import SiteFooter from "@/components/marketing/SiteFooter";
+import SiteHeader from "@/components/marketing/SiteHeader";
 
 export const metadata: Metadata = {
   title: "Conectá tood a Claude",
@@ -82,20 +82,7 @@ const FAQ = [
 export default function ConectarPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur border-b border-border"
-        style={{ paddingTop: "env(safe-area-inset-top)" }}>
-        <div className="max-w-6xl mx-auto px-4 md:px-8 h-16 flex items-center gap-3">
-          <Link href="/" aria-label="tood, ir a la home"><ToodLogo className="h-8 w-auto text-primary" /></Link>
-          <nav className="ml-auto flex items-center gap-1 sm:gap-2">
-            <a href="#preguntas" className="hidden md:inline px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Qué podés hacer</a>
-            <a href="#tutorial" className="hidden sm:inline px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Paso a paso</a>
-            <Link href={appHref("/login")}
-              className="inline-flex items-center rounded-full border-2 border-ink bg-white px-4 py-2 text-sm font-semibold shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none">
-              Entrar
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <SiteHeader current="conectar" />
 
       <KindProvider>
         <main>

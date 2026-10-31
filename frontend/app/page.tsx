@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { appHref } from "@/lib/site";
-import { ToodConLema, ToodLogoAnimado } from "@/components/brand/ToodLogoAnimado";
+import { ToodConLema } from "@/components/brand/ToodLogoAnimado";
 import {
   ArrowRight, Bot, Check, Home as HomeIcon, Laptop, MessageCircle, ShieldCheck, Smartphone, Store,
 } from "lucide-react";
 import HomeRedirect from "@/components/marketing/HomeRedirect";
 import { Phone, Screen } from "@/components/marketing/Frames";
 import SiteFooter from "@/components/marketing/SiteFooter";
+import SiteHeader from "@/components/marketing/SiteHeader";
 
 export const metadata: Metadata = {
   title: "tood · Las cuentas claras, en casa y en tu negocio",
@@ -62,21 +63,7 @@ export default function Home() {
     <div className="min-h-screen bg-background text-foreground">
       <HomeRedirect />
 
-      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur border-b border-border"
-        style={{ paddingTop: "env(safe-area-inset-top)" }}>
-        <div className="max-w-6xl mx-auto px-4 md:px-8 h-16 flex items-center gap-2">
-          {/* Al bajar, la t se vuelve el avatar y te sigue con la mirada; arriba de todo vuelve a ser el logo. */}
-          <ToodLogoAnimado variant="ojos" className="h-8 w-auto text-primary" />
-          <nav className="ml-auto flex items-center gap-1 sm:gap-2">
-            <Link href="/hogar" className="hidden sm:inline px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Hogar</Link>
-            <Link href="/negocio" className="hidden sm:inline px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Negocio</Link>
-            <a href="#ia" className="hidden md:inline px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Con IA</a>
-            <Link href={appHref("/login")} className="inline-flex items-center rounded-full border-2 border-ink bg-white px-4 py-2 text-sm font-semibold shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none">
-              Entrar
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <SiteHeader current="home" />
 
       <main>
         {/* Portada */}

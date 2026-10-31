@@ -99,18 +99,15 @@ export default function LoginPage() {
         paddingBottom: "env(safe-area-inset-bottom)",
       }}
     >
-      {/* Three elements only, as one centred column: the avatar, slogan, button.
+      {/* Two elements only, as one centred column: the avatar and the button. No text: the avatar is the brand.
           The screen's whole job is the button — anything else on it competes
           with the only action there is. */}
       <main className="flex-1 w-full max-w-sm mx-auto px-6 py-10 flex flex-col items-center justify-center text-center">
         {/* La t de la marca, despierta: te sigue con la mirada, duda si tardás y al rato se duerme. */}
-        <ToodAvatar size={132} ink="#ffffff" holeColor={BRAND_FIELD} okColor="#7CF29A" alertColor="#FFB4B4"
+        <h1 className="sr-only">Entrar a tood</h1>
+        <ToodAvatar size={180} ink="#ffffff" holeColor={BRAND_FIELD} okColor="#7CF29A" alertColor="#FFB4B4"
           awake track pokeable asleep={mood.asleep} reaction={mood.reaction} reactionKey={mood.key} />
 
-        <h1 className="mt-4 font-display font-bold text-4xl tracking-tight">RegistrApp</h1>
-        <p className="mt-3 text-[15px] text-white/80 leading-snug max-w-[17rem]">
-          Las cuentas de tu casa o de tu negocio, al día
-        </p>
 
         {inAppBrowser && (
           /* El navegador interno de WhatsApp/Instagram rompe el login de
