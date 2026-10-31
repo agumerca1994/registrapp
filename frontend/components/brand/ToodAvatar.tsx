@@ -38,6 +38,8 @@ type Props = {
   awake?: boolean;
   /** Dormido: ojos cerrados, cabecea y le salen "z". Deja de seguir al puntero. */
   asleep?: boolean;
+  /** Forma de la sonrisa: el arco de siempre o una D redondeada (más abierta, para un "¡ah, sí!"). */
+  smile?: "arco" | "d";
   /** Reacciona al tocarlo. */
   pokeable?: boolean;
   className?: string;
@@ -48,7 +50,7 @@ type Props = {
 export function ToodAvatar({
   reaction = null, reactionKey, duration, size = 160, ink = "#5b4fe9", background = null,
   holeColor = "#ffffff", okColor = "#22b55a", alertColor = "#e5383b",
-  track = false, awake = false, asleep = false, pokeable = false, className, title = "tood", onReactionEnd,
+  track = false, awake = false, asleep = false, smile = "arco", pokeable = false, className, title = "tood", onReactionEnd,
 }: Props) {
   const uid = useId().replace(/:/g, "");
   const [active, setActive] = useState<ToodReaction | null>(null);
@@ -187,7 +189,9 @@ export function ToodAvatar({
             </g>
             {/* La boca, centrada bajo los ojos: sonrisa, sorpresa (abierta), tristeza o duda (una raya). */}
             <g className="tav-mouth" transform={`translate(${FACE_CX - 94} 0)`}>
-            <path className="tav-smile" d="M88 103 Q94 110 100 103" fill="none" stroke={hole} strokeWidth={3.6} strokeLinecap="round" />
+            {smile === "d"
+              ? <path className="tav-smile" d="M88.5 102 H99.5 Q102.2 102 101.6 104.6 Q100 111 94 111 Q88 111 86.4 104.6 Q85.8 102 88.5 102 Z" fill={hole} />
+              : <path className="tav-smile" d="M88 103 Q94 110 100 103" fill="none" stroke={hole} strokeWidth={3.6} strokeLinecap="round" />}
             <ellipse className="tav-open" cx={94} cy={107} rx={4.2} ry={5.4} fill={hole} />
             <path className="tav-frown" d="M88.5 108 Q94 102.5 99.5 108" fill="none" stroke={hole} strokeWidth={3.6} strokeLinecap="round" />
             <path className="tav-flat" d="M89.5 106 H98.5" fill="none" stroke={hole} strokeWidth={3.6} strokeLinecap="round" />

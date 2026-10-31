@@ -24,8 +24,8 @@ function GoogleIcon() {
   );
 }
 
-// Si nadie hace nada: a los 8 s duda (una sola vez, larga: dos dudas seguidas se veían cortadas), vuelve al
-// reposo y a los 17 s se duerme.
+// Si nadie hace nada: a los 8 s duda (una sola vez, larga: dos dudas seguidas se veían cortadas), sale de la
+// duda con un gesto contento (como al despertarse, con la boca en D) y a los 17 s se duerme.
 const IDLE_DOUBT_MS = 8000;
 const DOUBT_LONG_MS = 4000;
 const IDLE_SLEEP_MS = 17000;
@@ -33,18 +33,20 @@ const IDLE_SLEEP_MS = 17000;
 // El avatar te mira mientras decidís. Si no pasa nada, duda y después se duerme; cualquier
 // movimiento, toque o tecla lo despierta contento y vuelve a contar.
 function useIdleMood() {
-  const [mood, setMood] = useState<{ reaction: ToodReaction | null; key: number }>({ reaction: null, key: 0 });
+  const [mood, setMood] = useState<{ reaction: ToodReaction | null; key: number; smile?: "arco" | "d" }>({ reaction: null, key: 0 });
   const [asleep, setAsleep] = useState(false);
   const asleepRef = useRef(false);
 
   useEffect(() => {
     let timers: number[] = [];
     let lastReset = 0;
-    const react = (reaction: ToodReaction) => setMood((m) => ({ reaction, key: m.key + 1 }));
+    const react = (reaction: ToodReaction, smile?: "arco" | "d") => setMood((m) => ({ reaction, key: m.key + 1, smile }));
     const schedule = () => {
       timers.forEach(clearTimeout);
       timers = [
         window.setTimeout(() => react("duda"), IDLE_DOUBT_MS),
+        // Al terminar la duda no vuelve seco al reposo: hace el gesto contento con la boca en D.
+        window.setTimeout(() => react("toque", "d"), IDLE_DOUBT_MS + DOUBT_LONG_MS),
         window.setTimeout(() => { asleepRef.current = true; setAsleep(true); }, IDLE_SLEEP_MS),
       ];
     };
@@ -109,7 +111,7 @@ export default function LoginPage() {
         <h1 className="sr-only">Entrar a tood</h1>
         <ToodAvatar size={180} ink="#ffffff" holeColor={BRAND_FIELD} okColor="#7CF29A" alertColor="#FFB4B4"
           awake track pokeable asleep={mood.asleep} reaction={mood.reaction} reactionKey={mood.key}
-          duration={mood.reaction === "duda" ? DOUBT_LONG_MS : undefined} />
+          duration={mood.reaction === "duda" ? DOUBT_LONG_MS : undefined} smile={mood.smile} />
 
 
         {inAppBrowser && (
