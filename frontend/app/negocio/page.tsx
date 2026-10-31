@@ -70,7 +70,6 @@ export default function NegocioPage() {
                 <Play className="w-4 h-4" /> Ver cómo funciona
               </a>
             </div>
-            <p className="mt-4 text-sm text-muted-foreground">Es gratis. Tus empleados cargan ventas sin ver los números del negocio.</p>
           </div>
           <div className="min-w-0">
             <div className="hidden sm:block"><Screen src="/negocio/inicio.jpg" alt="Inicio de tood Negocio: el resultado del mes y las ventas por medio de pago" hero /></div>

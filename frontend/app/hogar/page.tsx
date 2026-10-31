@@ -57,8 +57,8 @@ export default function HogarPage() {
               Sabé en qué se va la plata de tu casa
             </h1>
             <p className="mt-4 text-lg text-muted-foreground max-w-xl">
-              Anotás lo que entra y lo que sale, y cada mes ves cómo cerró: en qué se gastó, cuánto quedó y qué
-              pagos se vienen. Si ahorrás en dólares, también los podés llevar aparte.
+              Anotás lo que entra y lo que sale, y cada mes ves cómo cerró, en qué se gastó, cuánto quedó y qué
+              pagos se vienen. Sumá a los miembros de tu hogar para que también puedan anotar.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link href={appHref("/login")}
@@ -70,7 +70,6 @@ export default function HogarPage() {
                 <Play className="w-4 h-4" /> Ver cómo funciona
               </a>
             </div>
-            <p className="mt-4 text-sm text-muted-foreground">Es gratis. Con el código del hogar, tu familia carga en la misma cuenta.</p>
           </div>
           <div className="min-w-0">
             <div className="hidden sm:block"><Screen src="/hogar/inicio.jpg" alt="Inicio de tood Hogar: los pesos y los dólares que quedan en el mes" hero /></div>
