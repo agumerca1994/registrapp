@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { appHref } from "@/lib/site";
-import { ToodConLema } from "@/components/brand/ToodLogoAnimado";
+import { ToodConLema, ToodLogoAnimado } from "@/components/brand/ToodLogoAnimado";
 import {
   ArrowRight, Bot, Check, Home as HomeIcon, Laptop, MessageCircle, ShieldCheck, Smartphone, Store,
 } from "lucide-react";
@@ -80,17 +80,19 @@ export default function Home() {
           <div className="min-w-0">
             <ToodConLema className="mb-8" />
             <h1 className="font-display font-bold text-4xl md:text-6xl leading-[1.02] tracking-tight text-balance">
-              Llevá las cuentas de tu casa o de tu negocio, sin planillas.
+              Que no se te escape nada
             </h1>
             <p className="mt-5 text-lg text-muted-foreground max-w-xl">
-              tood es una app para anotar lo que entra y lo que sale: sueldos, gastos, compras con tarjeta, dólares
-              o ventas. Con eso te muestra cuánto te queda a fin de mes y qué pagos se vienen.
+              Con tood podés llevar el registro de cuánta plata te entra por mes y cuánto estás gastando: recibos de
+              sueldo, reintegros, gastos, tarjetas de crédito, gastos compartidos, vencimientos, créditos,{" "}
+              {/* Gira y queda en "todo": el remate de la lista. */}
+              <ToodLogoAnimado variant="queda-todo" title="todo" className="inline-block h-[1.1em] w-auto align-[-0.18em] text-primary" />
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link href={appHref("/login")} className={`${PILL} bg-primary text-primary-foreground`}>Crear mi cuenta</Link>
               <a href="#como-funciona" className={`${PILL} bg-white`}>Cómo funciona</a>
             </div>
-            <p className="mt-4 text-sm text-muted-foreground">Es gratis. Entrás con tu cuenta de Google y elegís si es para tu casa o tu negocio.</p>
+            <p className="mt-4 text-sm text-muted-foreground">Es gratis. Entrás con tu cuenta de Google.</p>
           </div>
           {/* En un celular, la captura de escritorio queda en letra ilegible: ahí va la del celular. */}
           <Phone src="/home/celular-hogar.jpg" alt="tood en el celular: el cierre del mes en pesos y en dólares"

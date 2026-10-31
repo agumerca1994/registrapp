@@ -63,17 +63,18 @@ const voltereta = (t: number): Pose => {
 
 // "od" pintada en un cartel que gira sobre un eje vertical en el medio; atrás dice "do". Seis vueltas y media que
 // arrancan rápido y frenan, y la vuelta igual en sentido contrario.
-const pivote = (t: number): Pose => {
-  const spin = (a: number, len: number) => 1 - Math.pow(1 - clamp((t - a) / len), 4);
-  const deg = 2340 * spin(0, 3400) - 2340 * spin(5800, 3400);
+const spinOut = (t: number, a: number, len: number) => 1 - Math.pow(1 - clamp((t - a) / len), 4);
+const pivote = (t: number): Pose => ({ ...pivotAt(2340 * spinOut(t, 0, 3400) - 2340 * spinOut(t, 5800, 3400)), cap: t > 2600 && t < 5800 });
+// Sólo la ida: gira, frena y se queda en "todo" (la usa variant="queda-todo").
+const pivoteIda = (t: number): Pose => pivotAt(2340 * spinOut(t, 0, 3400));
+function pivotAt(deg: number): Pose {
   const c = Math.cos((deg * Math.PI) / 180), k = Math.abs(c), back = c < 0;
   const axis = (O2.x + O2.x + O2.adv + D.adv) / 2;
   const oCx = back ? O2.x + D.adv + (O2.cx - O2.x) : O2.cx;
   const dCx = back ? O2.x + (D.cx - D.x) : D.cx;
   const sx = Math.max(k, 0.02);
-  return { cap: t > 2600 && t < 5800,
-    o2: { tx: axis + (oCx - axis) * k, ty: O2.cy, sx }, d: { tx: axis + (dCx - axis) * k, ty: D.cy, sx } };
-};
+  return { o2: { tx: axis + (oCx - axis) * k, ty: O2.cy, sx }, d: { tx: axis + (dCx - axis) * k, ty: D.cy, sx } };
+}
 
 const TODO = [
   { frame: arco, dur: 4000 },
@@ -132,7 +133,7 @@ export function ToodLogoAnimado({
   className, variant = "todo", hole = "hsl(var(--background))", title = "tood", onCaption,
 }: {
   className?: string;
-  variant?: "todo" | "ojos";
+  variant?: "todo" | "ojos" | "queda-todo";
   /** Color de los ojos y los huecos: el del fondo donde está apoyado el logo. */
   hole?: string;
   title?: string;
@@ -144,7 +145,23 @@ export function ToodLogoAnimado({
   const [pose, setPose] = useState<Pose>({});
 
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // "queda-todo": cuando aparece en pantalla gira una vez y se queda en "todo". Sin movimiento, ya dice "todo".
+    if (variant === "queda-todo") {
+      if (reduce) { setPose(pivoteIda(1e9)); return; }
+      let raf = 0, started = 0;
+      const tick = (now: number) => {
+        const t = now - started;
+        setPose(pivoteIda(t));
+        if (t < 3500) raf = requestAnimationFrame(tick);
+      };
+      const io = new IntersectionObserver(([e]) => {
+        if (e.isIntersecting && !started) { started = performance.now(); raf = requestAnimationFrame(tick); io.disconnect(); }
+      }, { threshold: 1 });
+      if (svgRef.current) io.observe(svgRef.current);
+      return () => { io.disconnect(); cancelAnimationFrame(raf); };
+    }
+    if (reduce) return;
     let raf = 0;
     const t0 = performance.now();
     const pointer = { x: 0, y: 0, moved: -1e9 };
@@ -237,15 +254,16 @@ export function ToodLogoAnimado({
   );
 }
 
-/** El logo de la portada con su frase debajo, que aparece cuando queda "todo". */
-export function ToodConLema({ className, logoClassName = "h-16 md:h-20 w-auto text-primary" }: { className?: string; logoClassName?: string }) {
+/** El logo de la portada con su frase debajo, que aparece cuando queda "todo". La frase se centra con lo que se
+ *  ve del logo: su caja deja lugar a la izquierda para el copete, así que el logo se corre 3 % para compensar. */
+export function ToodConLema({ className, logoClassName = "h-24 md:h-32 w-auto text-primary" }: { className?: string; logoClassName?: string }) {
   const [show, setShow] = useState(false);
   return (
-    <div className={className}>
+    <div className={`inline-flex flex-col items-center ${className ?? ""}`}>
       <ToodLogoAnimado className={logoClassName} onCaption={setShow} />
-      <p className="mt-2 h-7 text-lg font-medium text-muted-foreground transition-opacity duration-500" style={{ opacity: show ? 1 : 0 }}
-        aria-hidden="true">
-        todo en una sola app.
+      <p className="mt-3 font-display font-semibold text-xl md:text-2xl text-primary transition-opacity duration-500"
+        style={{ opacity: show ? 1 : 0, transform: "translateX(3%)" }} aria-hidden="true">
+        todo en una sola app
       </p>
     </div>
   );
