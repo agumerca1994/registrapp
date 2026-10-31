@@ -24,11 +24,13 @@ function GoogleIcon() {
   );
 }
 
-// Cuánto espera el avatar antes de dudar y de dormirse si nadie hace nada.
-const IDLE_DOUBT_MS = [8000, 12500];
+// Si nadie hace nada: a los 8 s duda (una sola vez, larga: dos dudas seguidas se veían cortadas), vuelve al
+// reposo y a los 17 s se duerme.
+const IDLE_DOUBT_MS = 8000;
+const DOUBT_LONG_MS = 4000;
 const IDLE_SLEEP_MS = 17000;
 
-// El avatar te mira mientras decidís. Si no pasa nada, duda (dos veces) y después se duerme; cualquier
+// El avatar te mira mientras decidís. Si no pasa nada, duda y después se duerme; cualquier
 // movimiento, toque o tecla lo despierta contento y vuelve a contar.
 function useIdleMood() {
   const [mood, setMood] = useState<{ reaction: ToodReaction | null; key: number }>({ reaction: null, key: 0 });
@@ -42,7 +44,7 @@ function useIdleMood() {
     const schedule = () => {
       timers.forEach(clearTimeout);
       timers = [
-        ...IDLE_DOUBT_MS.map((ms) => window.setTimeout(() => react("duda"), ms)),
+        window.setTimeout(() => react("duda"), IDLE_DOUBT_MS),
         window.setTimeout(() => { asleepRef.current = true; setAsleep(true); }, IDLE_SLEEP_MS),
       ];
     };
@@ -106,7 +108,8 @@ export default function LoginPage() {
         {/* La t de la marca, despierta: te sigue con la mirada, duda si tardás y al rato se duerme. */}
         <h1 className="sr-only">Entrar a tood</h1>
         <ToodAvatar size={180} ink="#ffffff" holeColor={BRAND_FIELD} okColor="#7CF29A" alertColor="#FFB4B4"
-          awake track pokeable asleep={mood.asleep} reaction={mood.reaction} reactionKey={mood.key} />
+          awake track pokeable asleep={mood.asleep} reaction={mood.reaction} reactionKey={mood.key}
+          duration={mood.reaction === "duda" ? DOUBT_LONG_MS : undefined} />
 
 
         {inAppBrowser && (
