@@ -10,7 +10,7 @@ import SiteHeader from "@/components/marketing/SiteHeader";
 
 export const metadata: Metadata = {
   title: "tood Hogar",
-  description: "Cuánto le queda a tu casa este mes, en pesos y en dólares, con las cuotas que vienen y la familia cargando en la misma cuenta.",
+  description: "Anotás lo que entra y lo que sale de tu casa y ves cómo cierra cada mes: en qué se gastó, cuánto queda y qué pagos se vienen.",
 };
 
 /**
@@ -54,11 +54,11 @@ export default function HogarPage() {
           <div className="min-w-0">
             <p className="text-sm font-semibold uppercase tracking-wider text-primary">tood Hogar</p>
             <h1 className="mt-3 font-display font-bold text-4xl md:text-5xl leading-[1.05] tracking-tight text-balance">
-              Cuánto le queda a tu casa este mes, en pesos y en dólares
+              Sabé en qué se va la plata de tu casa
             </h1>
             <p className="mt-4 text-lg text-muted-foreground max-w-xl">
-              El mes cierra con lo que cobraron y lo que gastaron, separado por moneda. Las cuotas de la tarjeta
-              ya aparecen en los meses que vienen, así sabés hoy qué vas a pagar después.
+              Anotás lo que entra y lo que sale, y cada mes ves cómo cerró: en qué se gastó, cuánto quedó y qué
+              pagos se vienen. Si ahorrás en dólares, también los podés llevar aparte.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link href={appHref("/login")}

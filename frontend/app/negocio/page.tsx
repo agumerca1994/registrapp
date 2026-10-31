@@ -10,7 +10,7 @@ import SiteHeader from "@/components/marketing/SiteHeader";
 
 export const metadata: Metadata = {
   title: "tood Negocio",
-  description: "Cerrá la caja cada día y sabé cuánto ganó tu comercio en el mes: ventas menos gastos, por medio de pago, con el stock al día.",
+  description: "Registrás las ventas y los gastos de tu negocio y ves el resultado de cada mes: cuánto vendiste, cuánto gastaste y cuánto quedó.",
 };
 
 /**
@@ -54,11 +54,11 @@ export default function NegocioPage() {
           <div className="min-w-0">
             <p className="text-sm font-semibold uppercase tracking-wider text-primary">tood Negocio</p>
             <h1 className="mt-3 font-display font-bold text-4xl md:text-5xl leading-[1.05] tracking-tight text-balance">
-              Cerrá la caja y sabé cuánto ganaste en el mes
+              Sabé cuánto gana tu negocio
             </h1>
             <p className="mt-4 text-lg text-muted-foreground max-w-xl">
-              Para un kiosco, una rotisería o un local chico. Anotás cada venta o sólo el total del día, el stock
-              baja con lo que vendés y a fin de mes ves lo vendido menos lo gastado, por medio de pago.
+              Registrás las ventas y los gastos del día a día, y cada mes ves el resultado: cuánto vendiste,
+              cuánto gastaste y cuánto quedó. Si manejás stock, se actualiza con cada venta.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link href={appHref("/login")}
