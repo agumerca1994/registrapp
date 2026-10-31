@@ -17,13 +17,13 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "RegistrApp",
+  title: "tood",
   description: "Las cuentas de tu casa y de tu negocio: ingresos, gastos, tarjetas, dólares y ventas.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "RegistrApp",
+    title: "tood",
   },
 };
 

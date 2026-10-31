@@ -35,7 +35,7 @@ export default function SplitSection({ draft, set, onPick }: {
 
   const hint = (r: SplitRow) =>
     r.type === "self" ? "Vos"
-      : r.type === "member" ? "Tiene RegistrApp"
+      : r.type === "member" ? "Tiene tood"
       : r.contact ? `Se invita a ${r.contact}` : "Sin cuenta";
 
   const left = draft.splitType === "custom" ? remainder(base, amounts) : 0;

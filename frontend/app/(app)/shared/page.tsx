@@ -88,7 +88,7 @@ interface Category {
 
 /** Qué se muestra debajo del nombre de un participante ya elegido. */
 function participantHint(p: ParticipantRow): string {
-  if (p.user_id) return "Usuario de RegistrApp";
+  if (p.user_id) return "Usuario de tood";
   if (p.invite_email) return `Se le invita a ${p.invite_email}`;
   // El `+` se antepone acá y no se guarda en el campo: `buildPhone` compone
   // sobre dígitos, y meterle el símbolo lo rompería.

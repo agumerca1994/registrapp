@@ -59,7 +59,7 @@ _SCHEMA = {
     "additionalProperties": False,
 }
 
-_SYSTEM = """Leés comprobantes de pago para RegistrApp, una app de finanzas de un hogar \
+_SYSTEM = """Leés comprobantes de pago para tood, una app de finanzas de un hogar \
 o un comercio chico de la Argentina. Te llega UN archivo (foto, captura o PDF) que \
 alguien mandó por WhatsApp para registrar un gasto o un ingreso. Devolvé lo que dice el comprobante; \
 no inventes nada que no esté escrito.

@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 MEMORY_DAYS = 7
 
 MSG_NOT_LINKED = (
-    "Este número no está vinculado a RegistrApp.\n"
+    "Este número no está vinculado a tood.\n"
     "Vinculalo desde la app, en Configuración > WhatsApp."
 )
 MSG_ERROR = "No pude procesar ese mensaje. Probá de nuevo en un rato."
@@ -599,12 +599,12 @@ async def _handle_pdf(
     diff = _fmt_total(session.totals, "ARS", "difference")
     lines = [
         f"Resumen {session.parsed.get('bank') or ''} {session.period_month:02d}/{session.period_year}".replace("  ", " "),
-        f"Banco {parsed_total} · RegistrApp {app_total} · diferencia {diff}",
+        f"Banco {parsed_total} · tood {app_total} · diferencia {diff}",
     ]
     if (session.totals or {}).get("USD"):
         lines.append(
             f"En dólares: banco {_fmt_total(session.totals,'USD','bank_total')} · "
-            f"RegistrApp {_fmt_total(session.totals,'USD','app_total')}"
+            f"tood {_fmt_total(session.totals,'USD','app_total')}"
         )
     if session.status == "unexplained":
         lines.append("⚠️ La diferencia no se explica al centavo. Mejor revisalo en la app.")

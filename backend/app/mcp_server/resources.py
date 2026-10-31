@@ -11,7 +11,7 @@ from app.mcp_server.context import current_caller, tool_session
 from app.mcp_server.instance import mcp
 
 SCHEMA_DOC = """\
-# Modelo de datos de RegistrApp
+# Modelo de datos de tood
 
 Un **hogar** (tenant) agrupa a varias personas. Todo lo que devuelve este
 conector es del hogar completo, nunca de una sola persona.
@@ -69,7 +69,7 @@ Es global: no depende del hogar.
 
 @mcp.resource("registrapp://schema")
 def schema_resource() -> str:
-    """Modelo de datos de RegistrApp y las reglas para interpretarlo."""
+    """Modelo de datos de tood y las reglas para interpretarlo."""
     return SCHEMA_DOC
 
 
@@ -130,7 +130,7 @@ def evaluar_compra(descripcion: str, monto: float, cuotas: int = 1) -> str:
 def cargar_recibo() -> str:
     """Carga o corrige un ingreso a partir de un recibo de sueldo adjunto."""
     return (
-        "Te paso un recibo de sueldo. Cargalo en RegistrApp.\n\n"
+        "Te paso un recibo de sueldo. Cargalo en tood.\n\n"
         "1. Leé del recibo: empleador, período, fecha de pago, neto cobrado y cada "
         "concepto con su monto (remunerativos, no remunerativos, descuentos).\n"
         "2. Con get_taxonomy elegí la fuente que corresponde y mirá sus campos. Si "

@@ -18,7 +18,7 @@ export type CardsState =
  *
  * Dos cosas que la pantalla tiene que decir en vez de esconder:
  *
- * - **RegistrApp no calcula el cierre.** No sabe en qué día cierra cada
+ * - **tood no calcula el cierre.** No sabe en qué día cierra cada
  *   tarjeta, así que el mes lo propone por la fecha del gasto y la persona lo
  *   corrige. Presentarlo como un cálculo haría pasar un gasto al mes
  *   equivocado sin que nadie lo note.
@@ -79,7 +79,7 @@ export default function CardPaymentSection({ draft, set, cardsState, onRetry }: 
           onChange={period => set({ period, periodTouched: true })}
         />
         <p className="text-[11px] text-muted-foreground mt-1">
-          RegistrApp no calcula el cierre de tu tarjeta. Si compraste después del cierre, elegí el mes siguiente.
+          tood no calcula el cierre de tu tarjeta. Si compraste después del cierre, elegí el mes siguiente.
         </p>
       </div>
 

@@ -206,6 +206,6 @@ export async function onForegroundPush(cb: (title: string, body: string) => void
   const messaging = await messagingOrNull();
   if (!messaging) return () => {};
   return onMessage(messaging, (payload) => {
-    cb(payload.notification?.title ?? "RegistrApp", payload.notification?.body ?? "");
+    cb(payload.notification?.title ?? "tood", payload.notification?.body ?? "");
   });
 }

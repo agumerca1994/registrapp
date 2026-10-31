@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    /* RegistrApp brand v3: violet/indigo primary, warm off-white background.
+    /* tood (antes RegistrApp) brand v3: violet/indigo primary, warm off-white background.
        Emerald/amber accents (positive amounts, warnings) are applied directly
        via Tailwind's built-in emerald and amber color utilities per element,
        not through these semantic slots - keeps "brand accent color" separate

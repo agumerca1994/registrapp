@@ -38,7 +38,7 @@ function buildHouseholdInviteMessage(name: string, code: string, appUrl: string,
   // el alta de negocios abierta.
   const joinLabel = features.businessSignup ? "Unirme con un código" : "Unirme a un hogar";
   return [
-    "¡Hola! " + name + " te invita a sumarte a su " + (business ? "negocio" : "hogar") + " en RegistrApp.",
+    "¡Hola! " + name + " te invita a sumarte a su " + (business ? "negocio" : "hogar") + " en tood.",
     "",
     "Para unirte:",
     "1. Entrá a " + appUrl,
@@ -50,7 +50,7 @@ function buildHouseholdInviteMessage(name: string, code: string, appUrl: string,
 
 function buildFriendInviteMessage(name: string, appUrl: string): string {
   return [
-    "¡Hola! " + name + " te invita a probar RegistrApp, una app para llevar tus ingresos, gastos y gastos compartidos.",
+    "¡Hola! " + name + " te invita a probar tood, una app para llevar tus ingresos, gastos y gastos compartidos.",
     "",
     "Entrá a " + appUrl + " e iniciá sesión con Google para crear tu cuenta.",
   ].join(String.fromCharCode(10));
@@ -153,7 +153,7 @@ function InviteFriendSection() {
           <h3 className="font-semibold text-foreground">Invitar amigo</h3>
         </div>
         <p className="text-sm text-muted-foreground">
-          Invitá a un amigo a sumarse a RegistrApp.
+          Invitá a un amigo a sumarse a tood.
         </p>
       </div>
       <div className="flex gap-2">

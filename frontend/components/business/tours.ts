@@ -64,7 +64,7 @@ export const HOME_INTRO_STEPS: Step[] = [
 
 export const CARDS_INTRO_STEPS: Step[] = [
   step("cards-new", "Con este botón creás una tarjeta: banco, alias y los últimos 4 números."),
-  step("cards-upload", "Subí el PDF del resumen y RegistrApp carga los consumos y los compara con lo que ya tenías."),
+  step("cards-upload", "Subí el PDF del resumen y tood carga los consumos y los compara con lo que ya tenías."),
 ];
 
 export const CALENDAR_INTRO_STEPS: Step[] = [

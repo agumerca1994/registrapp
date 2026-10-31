@@ -10,11 +10,11 @@ from mcp.types import ToolAnnotations
 from app.core.config import settings
 
 INSTRUCTIONS = """\
-RegistrApp lleva las cuentas de un HOGAR o de un NEGOCIO chico. Llamá primero a
+tood (antes RegistrApp) lleva las cuentas de un HOGAR o de un NEGOCIO chico. Llamá primero a
 `get_taxonomy`: si `account_kind` es "business", seguí las `rules` que devuelve
 y no las reglas de hogar de abajo (divisas, hipoteca, compartidos, recibos).
 
-RegistrApp es una app de finanzas personales de un hogar argentino. Este conector
+tood es una app de finanzas personales de un hogar argentino. Este conector
 consulta todo el hogar y además puede CARGAR, EDITAR Y BORRAR:
 - INGRESOS, con su detalle por campo (bruto, cargas sociales, ganancias, bonos…),
   por ejemplo a partir de un recibo de sueldo;

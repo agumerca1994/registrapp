@@ -131,7 +131,7 @@ export default function LoginPage() {
               {isIOS()
                 ? "Tocá el botón de compartir y elegí «Abrir en Safari»"
                 : "Tocá el menú ⋮ de arriba y elegí «Abrir en el navegador»"}
-              , o entrá directo desde la app RegistrApp si la tenés instalada.
+              , o entrá directo desde la app si la tenés instalada.
             </p>
           </div>
         )}

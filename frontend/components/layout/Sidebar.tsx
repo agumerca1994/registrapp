@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ToodLogo } from "@/components/brand/ToodLogo";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePendingShared } from "@/contexts/PendingSharedContext";
@@ -171,7 +172,7 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <>
       <div className="p-6 border-b">
-        <h1 className="text-xl font-display font-bold text-primary">RegistrApp</h1>
+        <h1><ToodLogo className="h-7 w-auto text-primary" title="tood" /></h1>
         <p className="text-xs text-muted-foreground mt-1 truncate">
           {greeting(appUser?.display_name, appUser?.email)}
         </p>
@@ -311,7 +312,7 @@ export default function Sidebar() {
 
       {/* Mobile top bar */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-card border-b flex flex-col justify-center px-4 h-16">
-        <span className="text-base font-display font-bold text-primary leading-tight">RegistrApp</span>
+        <ToodLogo className="h-5 w-auto text-primary self-start" title="tood" />
         <span className="text-xs text-muted-foreground leading-tight truncate">
           {greeting(appUser?.display_name, appUser?.email)}
         </span>

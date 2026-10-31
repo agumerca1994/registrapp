@@ -100,7 +100,7 @@ function AuthorizeInner() {
         <h1 className="font-display font-bold text-lg text-foreground truncate">
           {info.client_name}
         </h1>
-        <p className="text-xs text-muted-foreground truncate">quiere conectarse a RegistrApp</p>
+        <p className="text-xs text-muted-foreground truncate">quiere conectarse a tood</p>
       </div>
     </div>
   );
@@ -124,7 +124,7 @@ function AuthorizeInner() {
       <Shell>
         {header}
         <p className="text-sm text-muted-foreground">
-          Antes de conectar una app necesitás crear tu cuenta en RegistrApp, o unirte a una con un código.
+          Antes de conectar una app necesitás crear tu cuenta en tood, o unirte a una con un código.
         </p>
         <Button asChild className="w-full">
           <a href="/onboarding">Crear mi cuenta</a>

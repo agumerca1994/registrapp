@@ -416,7 +416,7 @@ async def link_whatsapp(
             payload = {
                 "number": target,
                 "text": (
-                    f"Tu código de RegistrApp es *{code}*.\n"
+                    f"Tu código de tood es *{code}*.\n"
                     "_Vale por 10 minutos._"
                 ),
             }
@@ -494,7 +494,7 @@ async def verify_whatsapp(
 
     if settings.EVOLUTION_API_URL and settings.EVOLUTION_INSTANCE:
         welcome = (
-            "Bienvenido/a a RegistrApp!\n\n"
+            "Bienvenido/a a tood!\n\n"
             "Tu WhatsApp quedo vinculado exitosamente.\n\n"
             "Como registrar un gasto:\n"
             "Envia un mensaje con el formato:\n"

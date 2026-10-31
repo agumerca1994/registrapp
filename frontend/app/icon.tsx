@@ -1,25 +1,12 @@
-import { ImageResponse } from "next/og";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
+// El ícono de la app es la t de tood, blanca sobre el violeta: el PNG que genera tools/brand/build.py.
+// Se sirve el archivo tal cual (en vez de dibujarlo acá) para que no haya dos versiones del ícono.
 export const size = { width: 192, height: 192 };
 export const contentType = "image/png";
 
-export default function Icon() {
-  return new ImageResponse(
-    <div
-      style={{
-        background: "#3b82f6",
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        borderRadius: "38px",
-      }}
-    >
-      <span style={{ color: "white", fontSize: 108, fontWeight: 700, lineHeight: 1 }}>
-        R
-      </span>
-    </div>,
-    size
-  );
+export default async function Icon() {
+  const png = await readFile(join(process.cwd(), "public/brand/tood/tood-icono-192.png"));
+  return new Response(new Uint8Array(png), { headers: { "Content-Type": "image/png" } });
 }

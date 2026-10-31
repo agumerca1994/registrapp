@@ -347,14 +347,14 @@ export function ParticipantPicker({
 
           {(visibleFound.length > 0 || lookup) && (
             <>
-              <SectionLabel>En RegistrApp</SectionLabel>
+              <SectionLabel>En tood</SectionLabel>
               {lookup && (
                 <Row
                   key={`l${lookup.id}`}
                   icon={<AtSign className="w-4 h-4" />}
-                  title={lookup.display_name || "Usuario de RegistrApp"}
+                  title={lookup.display_name || "Usuario de tood"}
                   subtitle={lookup.alias ? `@${lookup.alias}` : undefined}
-                  badge={<Chip tone="emerald">Ya usa RegistrApp</Chip>}
+                  badge={<Chip tone="emerald">Ya usa tood</Chip>}
                   onClick={() => pick({ kind: "user", user_id: lookup.id, member_name: lookup.display_name || "Usuario", alias: lookup.alias })}
                 />
               )}
@@ -362,7 +362,7 @@ export function ParticipantPicker({
                 <Row
                   key={`f${u.id}`}
                   icon={<AtSign className="w-4 h-4" />}
-                  title={u.display_name || "Usuario de RegistrApp"}
+                  title={u.display_name || "Usuario de tood"}
                   subtitle={u.alias ? `@${u.alias}` : undefined}
                   badge={u.same_household ? <Chip tone="violet">Tu hogar</Chip> : undefined}
                   onClick={() => pick({ kind: "user", user_id: u.id, member_name: u.display_name || "Usuario", alias: u.alias })}
@@ -374,7 +374,7 @@ export function ParticipantPicker({
           {searching && <p className="text-xs text-muted-foreground px-3 py-2">Buscando…</p>}
           {dirDown && (
             <p className="text-xs text-muted-foreground px-3 py-2">
-              No se pudo buscar en RegistrApp ahora. Podés invitarlo igual.
+              No se pudo buscar en tood ahora. Podés invitarlo igual.
             </p>
           )}
 

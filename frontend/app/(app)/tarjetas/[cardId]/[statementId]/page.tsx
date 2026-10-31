@@ -297,7 +297,7 @@ function ShareItemModal({ item, onClose, onDone, currentUser }: { item: CardItem
                         {p.member_name || <span className="text-muted-foreground font-normal">Sin elegir</span>}
                       </span>
                       <span className="block text-xs text-muted-foreground truncate">
-                        {p.type === "self" ? "Vos" : p.user_id ? "Usuario de RegistrApp"
+                        {p.type === "self" ? "Vos" : p.user_id ? "Usuario de tood"
                           : p.contact ? `Se le invita a ${p.contact}`
                           : p.member_name ? "Sin cuenta, sólo para anotar tu parte" : ""}
                       </span>

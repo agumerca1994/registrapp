@@ -73,7 +73,7 @@ def _protected_resource_metadata() -> dict:
         "authorization_servers": [settings.OAUTH_ISSUER_URL],
         "scopes_supported": [READ_SCOPE],
         "bearer_methods_supported": ["header"],
-        "resource_name": "RegistrApp",
+        "resource_name": "tood",
         "resource_documentation": settings.FRONTEND_URL,
     }
 

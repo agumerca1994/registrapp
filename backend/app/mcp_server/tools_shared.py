@@ -279,7 +279,7 @@ async def create_shared_expense(
                     elif participants_svc.is_email(p.contact) or participants_svc.is_phone(p.contact):
                         invite = p.contact
                     else:
-                        raise ToolError(f"«{p.contact}» no es un alias de RegistrApp ni un mail o teléfono")
+                        raise ToolError(f"«{p.contact}» no es un alias de tood ni un mail o teléfono")
                 splits.append(SplitIn(
                     user_id=user_id,
                     member_name=(me.display_name or me.email) if p.me else p.name.strip(),

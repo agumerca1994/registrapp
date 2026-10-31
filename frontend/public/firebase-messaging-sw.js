@@ -32,7 +32,7 @@ if (config.projectId) {
   messaging.onBackgroundMessage((payload) => {
     const n = payload.notification || {};
     const data = payload.data || {};
-    self.registration.showNotification(n.title || "RegistrApp", {
+    self.registration.showNotification(n.title || "tood", {
       body: n.body || "",
       icon: "/icon",
       badge: "/icon",
@@ -67,7 +67,7 @@ self.addEventListener("notificationclick", (event) => {
 /* ──────────────────────────────────────────────────────────────────────────
  * Hoja de compartir de Android (Web Share Target)
  *
- * Cuando alguien comparte un comprobante con RegistrApp, el sistema hace un
+ * Cuando alguien comparte un comprobante con tood, el sistema hace un
  * POST multipart a /registrar/share y **el que lo recibe es este service
  * worker**, no la página. Acá no hay forma de llamar a la API: el ID token de
  * Firebase vive en el contexto de la página. Así que esto guarda lo compartido

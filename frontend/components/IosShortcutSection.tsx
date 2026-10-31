@@ -63,7 +63,7 @@ export function IosShortcutSection() {
       </div>
 
       <p className="text-sm text-muted-foreground">
-        En iPhone, RegistrApp no puede aparecer sola en el menú de compartir:
+        En iPhone, tood no puede aparecer sola en el menú de compartir:
         Safari no lo permite. Con un atajo que armás una vez, vas a poder sacarle
         una captura al comprobante, tocar <strong>Compartir</strong> y abrir
         directo la pantalla para registrar el gasto.
@@ -159,7 +159,7 @@ export function IosShortcutSection() {
         <p className="text-xs font-medium text-foreground">Cómo se usa</p>
         <p className="text-xs text-muted-foreground">
           Sacale una captura al comprobante → <strong>Compartir</strong> →
-          <strong> Registrar gasto</strong>. Se abre RegistrApp en la pantalla para
+          <strong> Registrar gasto</strong>. Se abre tood en la pantalla para
           cargar el gasto, y lo completás a mano.
         </p>
       </div>

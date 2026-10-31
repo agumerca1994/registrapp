@@ -174,13 +174,13 @@ export default function McpConnectorSection() {
       <p className="text-sm text-muted-foreground">
         {business ? (
           <>
-            Conectá RegistrApp a un asistente de IA para consultar cómo viene tu negocio y
+            Conectá tood a un asistente de IA para consultar cómo viene tu negocio y
             cargar movimientos conversando. Antes de guardar cualquier cambio, el asistente te
             muestra qué va a hacer para que lo confirmes.
           </>
         ) : (
           <>
-            Conectá RegistrApp a un asistente de IA para preguntarle sobre tus gastos, tus
+            Conectá tood a un asistente de IA para preguntarle sobre tus gastos, tus
             ingresos o el impacto de una compra. El asistente puede{" "}
             <strong className="text-foreground">leer</strong> los datos de tu hogar y{" "}
             <strong className="text-foreground">cargar o corregir gastos, ingresos, tarjetas y gastos

@@ -146,7 +146,7 @@ export function PushNotificationsSection() {
           </p>
           {isIOS() ? (
             <p className="text-xs text-muted-foreground">
-              <strong>Ajustes</strong> del iPhone → buscá <strong>RegistrApp</strong> en
+              <strong>Ajustes</strong> del iPhone → buscá <strong>tood</strong> (o <strong>RegistrApp</strong>, si la instalaste antes del cambio de nombre) en
               la lista de apps → <strong>Notificaciones</strong> → activá
               <strong> Permitir notificaciones</strong>.
             </p>

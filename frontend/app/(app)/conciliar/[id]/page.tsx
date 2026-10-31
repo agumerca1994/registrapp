@@ -408,7 +408,7 @@ export default function ConciliarDetailPage() {
                         <SummaryFigure value={fmtAmount(cur, totals.bank_total)} sub="Banco" />
                       </SummaryCell>
                       <SummaryCell figure className="border-t sm:border-t-0 sm:border-l border-border/60">
-                        <SummaryFigure value={fmtAmount(cur, totals.app_total)} sub="RegistrApp" />
+                        <SummaryFigure value={fmtAmount(cur, totals.app_total)} sub="tood" />
                       </SummaryCell>
                       {showDetail && (
                         <SummaryCell className="border-t border-border/60 sm:col-span-2">

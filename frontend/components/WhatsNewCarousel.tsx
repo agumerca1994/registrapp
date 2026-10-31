@@ -342,7 +342,7 @@ function SlideHero() {
         </p>
         <p className="text-[15px] text-muted-foreground leading-relaxed">
           Mandale tus comprobantes y resúmenes al bot de WhatsApp, o subí los resúmenes desde la
-          app. RegistrApp carga los gastos y vos revisás.
+          app. tood carga los gastos y vos revisás.
         </p>
         {/* Al pie, apilados, justo sobre el divisor del pie fijo. Crece en vez
             de mt-auto: el space-y de Body pisa el margen de los hijos. */}
@@ -377,7 +377,7 @@ function SlideResumen() {
                 <p className="text-[13px] font-black tabular-nums">$2.773.339</p>
               </div>
               <div className="rounded-lg border-2 border-ink bg-white px-2 py-1">
-                <p className="text-[9px] font-semibold uppercase tracking-wide text-ink/60">RegistrApp</p>
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-ink/60">tood</p>
                 <p className="text-[13px] font-black tabular-nums">$2.676.207</p>
               </div>
             </div>
@@ -402,7 +402,7 @@ function SlideResumen() {
 
       <Body>
         <StepChip>1 · Subí tu resumen</StepChip>
-        <Headline>Subí el PDF y RegistrApp carga los consumos</Headline>
+        <Headline>Subí el PDF y tood carga los consumos</Headline>
         <ul className="space-y-2 pt-1">
           <Bullet>Carga lo que falta, corrige montos y borra duplicados</Bullet>
           <Bullet>Crea la tarjeta y el resumen si no existen</Bullet>
@@ -445,7 +445,7 @@ function SlideBot() {
                 <span className="w-5 h-5 rounded-full bg-white/90 border border-ink flex items-center justify-center">
                   <MessageCircle className="w-3 h-3 text-[#1F6F5C]" />
                 </span>
-                <span className="text-[11px] font-bold">RegistrApp</span>
+                <span className="text-[11px] font-bold">tood</span>
               </div>
               <div className="flex-1 bg-[#EFE7DC] p-2 space-y-1.5">
                 <Bubble me>12 lucas verdu</Bubble>
