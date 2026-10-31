@@ -109,8 +109,10 @@ export default function LoginPage() {
           with the only action there is. */}
       <main className="flex-1 w-full max-w-sm mx-auto px-6 py-10 flex flex-col items-center justify-center text-center">
         {/* La t de la marca, despierta: te sigue con la mirada, duda si tardás y al rato se duerme. */}
-        <h1><ToodLogo className="h-10 w-auto text-white" title="tood" /></h1>
-        <ToodAvatar size={170} className="mt-6" ink="#ffffff" holeColor={BRAND_FIELD} okColor="#7CF29A" alertColor="#FFB4B4"
+        {/* Centrados por lo que se dibuja, no por su caja: el copete de la t tira el avatar 5,5 % a la izquierda
+            de su caja, y el logo deja lugar para el copete y queda 3 % a la derecha. Medido en un celular de 390 px. */}
+        <h1 style={{ transform: "translateX(-3%)" }}><ToodLogo className="h-10 w-auto text-white" title="tood" /></h1>
+        <ToodAvatar size={170} className="mt-6 translate-x-[5.5%]" ink="#ffffff" holeColor={BRAND_FIELD} okColor="#7CF29A" alertColor="#FFB4B4"
           awake track pokeable asleep={mood.asleep} reaction={mood.reaction} reactionKey={mood.key}
           duration={mood.reaction === "duda" ? DOUBT_LONG_MS : undefined} smile={mood.smile} />
         <p className="mt-4 text-[15px] text-white/85">todo en una sola app.</p>
