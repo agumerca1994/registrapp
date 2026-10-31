@@ -6,7 +6,8 @@ import { EYES, EYE_RX, EYE_RY, FACE_CX } from "@/lib/brand/tood-cara";
 
 // La t del logo como avatar. En reposo es sólo la letra con su copete; durante una reacción le
 // aparecen ojitos huecos (del color del fondo, como recortados) y una boquita de arco, también hueca. Despierto
-// (`awake`) tiene los ojos a la vista y no tiene boca: la boca aparece sólo con una reacción. Va en el violeta de
+// (`awake`) tiene los ojos a la vista y no tiene boca: la boca aparece sólo con una reacción. Dormido (`asleep`)
+// cierra los ojos, cabecea y le salen unas "z". Va en el violeta de
 // la marca; al cargar un gasto la letra se llena de verde de abajo hacia arriba, y en una alerta, de rojo.
 // Todo se dibuja en el sistema de la exploración: la t a 200 px, centrada en x=100, base en y=168.
 
@@ -35,6 +36,8 @@ type Props = {
   track?: boolean;
   /** Despierto: los ojos se ven siempre, sin boca. Va bien con `track`. */
   awake?: boolean;
+  /** Dormido: ojos cerrados, cabecea y le salen "z". Deja de seguir al puntero. */
+  asleep?: boolean;
   /** Reacciona al tocarlo. */
   pokeable?: boolean;
   className?: string;
@@ -45,13 +48,15 @@ type Props = {
 export function ToodAvatar({
   reaction = null, reactionKey, duration, size = 160, ink = "#5b4fe9", background = null,
   holeColor = "#ffffff", okColor = "#22b55a", alertColor = "#e5383b",
-  track = false, awake = false, pokeable = false, className, title = "tood", onReactionEnd,
+  track = false, awake = false, asleep = false, pokeable = false, className, title = "tood", onReactionEnd,
 }: Props) {
   const uid = useId().replace(/:/g, "");
   const [active, setActive] = useState<ToodReaction | null>(null);
   const leanRef = useRef<SVGGElement>(null);
   const faceRef = useRef<SVGGElement>(null);
   const eyesRef = useRef<SVGGElement>(null);
+  const asleepRef = useRef(asleep);
+  asleepRef.current = asleep;
   const timer = useRef<number | undefined>(undefined);
   const fillRef = useRef<SVGRectElement>(null);
   const level = useRef(0);
@@ -109,8 +114,10 @@ export function ToodAvatar({
       target.y = Math.max(-1, Math.min(1, (e.clientY - (r.top + r.height * 0.35)) / (window.innerHeight * 0.45)));
     };
     const tick = () => {
-      cur.x += (target.x - cur.x) * 0.1;
-      cur.y += (target.y - cur.y) * 0.1;
+      // Dormido no mira a nadie: vuelve al centro.
+      const tx = asleepRef.current ? 0 : target.x, ty = asleepRef.current ? 0 : target.y;
+      cur.x += (tx - cur.x) * 0.1;
+      cur.y += (ty - cur.y) * 0.1;
       leanRef.current?.setAttribute("transform", `rotate(${cur.x * 5} 100 168)`);
       faceRef.current?.setAttribute("transform", `translate(${cur.x * 2.4} ${cur.y * 1.8})`);
       // Los ojos se mueven un poco más que la boca: así se nota hacia dónde mira.
@@ -153,7 +160,7 @@ export function ToodAvatar({
       height={size}
       role="img"
       aria-label={title}
-      className={["tav", active ? `tav--${active}` : "tav--rest", awake ? "tav--awake" : "", pokeable ? "tav--pokeable" : "", className ?? ""].join(" ")}
+      className={["tav", active ? `tav--${active}` : "tav--rest", awake ? "tav--awake" : "", asleep && !active ? "tav--asleep" : "", pokeable ? "tav--pokeable" : "", className ?? ""].join(" ")}
       onClick={pokeable ? () => play("toque") : undefined}
     >
       <style>{CSS}</style>
@@ -173,6 +180,9 @@ export function ToodAvatar({
             <g className="tav-eyes">{EYES.map(eye)}</g>
             <g className="tav-happy">{EYES.map((p) => arc(p, true))}</g>
             <g className="tav-squint">{EYES.map(([x, y]) => <ellipse key={x} cx={x} cy={y + 1.5} rx={4.6} ry={2.4} fill={hole} />)}</g>
+            <g className="tav-sleep">{EYES.map(([x, y]) => (
+              <path key={x} d={`M${x - 5} ${y} Q${x} ${y + 4.5} ${x + 5} ${y}`} fill="none" stroke={hole} strokeWidth={3.4} strokeLinecap="round" />
+            ))}</g>
             <g className="tav-doubt"><ellipse cx={EYES[0][0]} cy={EYES[0][1]} rx={EYE_RX} ry={EYE_RY} fill={hole} /><path d={`M${EYES[1][0] - 5.5} ${EYES[1][1]} H${EYES[1][0] + 5.5}`} stroke={hole} strokeWidth={3.8} strokeLinecap="round" /></g>
             </g>
             {/* La boca, centrada bajo los ojos: sonrisa, sorpresa (abierta), tristeza o duda (una raya). */}
@@ -190,6 +200,9 @@ export function ToodAvatar({
           ))}</g>
           <g className="tav-badge tav-b-pasado"><path d="M128 48 C133 56 134 61 131 64 C128 67 123 65 124 60 C125 56 126 53 128 48 Z" fill={ink} opacity={0.55} /></g>
           <g className="tav-badge tav-b-meta">{star(40, 52)}{star(160, 76)}{star(44, 150)}</g>
+          <g className="tav-z" fill={ink} fontFamily="Fredoka, Nunito Sans, sans-serif" fontWeight={600}>
+            <text x={130} y={62} fontSize={14}>z</text><text x={142} y={46} fontSize={18}>z</text><text x={156} y={28} fontSize={23}>z</text>
+          </g>
         </g>
       </g>
     </svg>
@@ -205,6 +218,16 @@ const CSS = `
 .tav .tav-face { transform-box: view-box; transform-origin: 100px 96px; transform: scale(.2); opacity: 0; transition: transform .3s cubic-bezier(.3,1.7,.5,1), opacity .18s; }
 .tav--gasto .tav-face, .tav--alerta .tav-face, .tav--meta .tav-face, .tav--pasado .tav-face, .tav--duda .tav-face, .tav--toque .tav-face { transform: scale(1); opacity: 1; }
 .tav--awake .tav-face { transform: scale(1); opacity: 1; }
+.tav .tav-sleep, .tav .tav-z { display: none; }
+.tav--asleep .tav-face { transform: scale(1); opacity: 1; }
+.tav--asleep .tav-eyes, .tav--asleep .tav-mouth { display: none; }
+.tav--asleep .tav-sleep, .tav--asleep .tav-z { display: inline; }
+.tav--asleep .tav-anim { animation: tav-snooze 3.4s ease-in-out infinite; }
+.tav--asleep .tav-crest { animation: tav-crest-down .9s ease-out forwards; }
+.tav .tav-z text { opacity: 0; animation: tav-z 3.3s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+.tav .tav-z text:nth-child(2) { animation-delay: 1.1s } .tav .tav-z text:nth-child(3) { animation-delay: 2.2s }
+@keyframes tav-snooze { 0%,100% { transform: translateY(3px) rotate(-3deg) scale(1.01, .985) } 50% { transform: translateY(5px) rotate(-3deg) scale(1.03, .965) } }
+@keyframes tav-z { 0% { opacity: 0; transform: translate(0, 6px) scale(.6) } 25% { opacity: 1 } 100% { opacity: 0; transform: translate(10px, -14px) scale(1.15) } }
 .tav--rest .tav-mouth { display: none; }
 .tav .tav-happy, .tav .tav-squint, .tav .tav-doubt, .tav .tav-open, .tav .tav-frown, .tav .tav-flat, .tav .tav-badge { display: none; }
 .tav--gasto .tav-happy, .tav--meta .tav-happy, .tav--toque .tav-happy { display: inline; }

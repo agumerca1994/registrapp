@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { isInAppBrowser, isIOS } from "@/lib/browser";
+import { ToodAvatar, type ToodReaction } from "@/components/brand/ToodAvatar";
 
 // Pre-login is the one screen with no chrome around it, so it carries the
 // brand itself: a full-bleed violet field instead of the app's off-white
@@ -23,17 +24,48 @@ function GoogleIcon() {
   );
 }
 
-// Isotipo: three ascending bars (the app is a ledger that goes up over time).
-// Plain rects only — no strokes, filters or clipping that a mobile browser
-// could render differently from the desktop one.
-function BrandMark() {
-  return (
-    <svg viewBox="0 0 40 40" className="w-10 h-10" aria-hidden="true">
-      <rect x="5" y="24" width="8" height="12" rx="3" fill="#fff" fillOpacity="0.55" />
-      <rect x="16" y="16" width="8" height="20" rx="3" fill="#fff" fillOpacity="0.8" />
-      <rect x="27" y="6" width="8" height="30" rx="3" fill="#fff" />
-    </svg>
-  );
+// Cuánto espera el avatar antes de dudar y de dormirse si nadie hace nada.
+const IDLE_DOUBT_MS = [8000, 12500];
+const IDLE_SLEEP_MS = 17000;
+
+// El avatar te mira mientras decidís. Si no pasa nada, duda (dos veces) y después se duerme; cualquier
+// movimiento, toque o tecla lo despierta contento y vuelve a contar.
+function useIdleMood() {
+  const [mood, setMood] = useState<{ reaction: ToodReaction | null; key: number }>({ reaction: null, key: 0 });
+  const [asleep, setAsleep] = useState(false);
+  const asleepRef = useRef(false);
+
+  useEffect(() => {
+    let timers: number[] = [];
+    let lastReset = 0;
+    const react = (reaction: ToodReaction) => setMood((m) => ({ reaction, key: m.key + 1 }));
+    const schedule = () => {
+      timers.forEach(clearTimeout);
+      timers = [
+        ...IDLE_DOUBT_MS.map((ms) => window.setTimeout(() => react("duda"), ms)),
+        window.setTimeout(() => { asleepRef.current = true; setAsleep(true); }, IDLE_SLEEP_MS),
+      ];
+    };
+    const wake = () => {
+      if (asleepRef.current) {
+        asleepRef.current = false;
+        setAsleep(false);
+        react("toque");
+      }
+      // pointermove llega muchas veces por segundo: alcanza con reiniciar la cuenta cada tanto.
+      const now = Date.now();
+      if (now - lastReset > 400) { lastReset = now; schedule(); }
+    };
+    const events = ["pointermove", "pointerdown", "keydown", "scroll"] as const;
+    events.forEach((e) => window.addEventListener(e, wake, { passive: true }));
+    schedule();
+    return () => {
+      timers.forEach(clearTimeout);
+      events.forEach((e) => window.removeEventListener(e, wake));
+    };
+  }, []);
+
+  return { ...mood, asleep };
 }
 
 export default function LoginPage() {
@@ -41,6 +73,7 @@ export default function LoginPage() {
   const router = useRouter();
   // En useState con init en efecto y no en render: el UA no existe en SSR.
   const [inAppBrowser, setInAppBrowser] = useState(false);
+  const mood = useIdleMood();
 
   useEffect(() => {
     setInAppBrowser(isInAppBrowser());
@@ -66,15 +99,15 @@ export default function LoginPage() {
         paddingBottom: "env(safe-area-inset-bottom)",
       }}
     >
-      {/* Three elements only, as one centred column: mark, slogan, button.
+      {/* Three elements only, as one centred column: the avatar, slogan, button.
           The screen's whole job is the button — anything else on it competes
           with the only action there is. */}
       <main className="flex-1 w-full max-w-sm mx-auto px-6 py-10 flex flex-col items-center justify-center text-center">
-        <div className="w-20 h-20 rounded-2xl bg-white/15 border-2 border-white/30 shadow-[4px_4px_0_0_rgba(255,255,255,0.22)] flex items-center justify-center">
-          <BrandMark />
-        </div>
+        {/* La t de la marca, despierta: te sigue con la mirada, duda si tardás y al rato se duerme. */}
+        <ToodAvatar size={132} ink="#ffffff" holeColor={BRAND_FIELD} okColor="#7CF29A" alertColor="#FFB4B4"
+          awake track pokeable asleep={mood.asleep} reaction={mood.reaction} reactionKey={mood.key} />
 
-        <h1 className="mt-7 font-display font-bold text-4xl tracking-tight">RegistrApp</h1>
+        <h1 className="mt-4 font-display font-bold text-4xl tracking-tight">RegistrApp</h1>
         <p className="mt-3 text-[15px] text-white/80 leading-snug max-w-[17rem]">
           Las cuentas de tu casa o de tu negocio, al día
         </p>
