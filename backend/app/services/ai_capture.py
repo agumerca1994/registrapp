@@ -38,6 +38,9 @@ KIND_EXPENSE = "gasto"
 KIND_INCOMING = "transferencia_recibida"
 KIND_PAYSLIP = "recibo_sueldo"
 KIND_STATEMENT = "resumen_tarjeta"
+# Una factura de un servicio (luz, gas, teléfono…): algo que vence, no un pago.
+# El bot pregunta cómo se paga en vez de cargarla (ver services/bill_capture.py).
+KIND_BILL = "factura_servicio"
 KIND_OTHER = "no_es_comprobante"
 
 _FALLBACK_MODELS = {"claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"}
@@ -47,15 +50,18 @@ PAYMENT_METHODS = ("efectivo", "debito", "transferencia", "tarjeta_credito", "de
 _SCHEMA = {
     "type": "object",
     "properties": {
-        "kind": {"type": "string", "enum": [KIND_EXPENSE, KIND_INCOMING, KIND_PAYSLIP, KIND_STATEMENT, KIND_OTHER]},
+        "kind": {"type": "string", "enum": [KIND_EXPENSE, KIND_INCOMING, KIND_PAYSLIP, KIND_STATEMENT, KIND_BILL, KIND_OTHER]},
         "amount": {"type": "number"},
         "currency": {"type": "string", "enum": ["ARS", "USD"]},
         "date": {"type": "string"},
         "merchant": {"type": "string"},
         "payment_method": {"type": "string", "enum": list(PAYMENT_METHODS)},
         "category": {"type": "string"},
+        "due_date": {"type": "string"},
+        "auto_debit": {"type": "boolean"},
     },
-    "required": ["kind", "amount", "currency", "date", "merchant", "payment_method", "category"],
+    "required": ["kind", "amount", "currency", "date", "merchant", "payment_method", "category",
+                 "due_date", "auto_debit"],
     "additionalProperties": False,
 }
 
@@ -64,8 +70,11 @@ o un comercio chico de la Argentina. Te llega UN archivo (foto, captura o PDF) q
 alguien mandó por WhatsApp para registrar un gasto o un ingreso. Devolvé lo que dice el comprobante; \
 no inventes nada que no esté escrito.
 
-- kind: "gasto" si es algo que la persona PAGÓ (ticket, factura, comprobante de \
-transferencia o de pago enviado, recibo). "transferencia_recibida" si es plata que le \
+- kind: "gasto" si es algo que la persona PAGÓ (ticket, comprobante de \
+transferencia o de pago enviado, recibo de pago). "factura_servicio" si es la \
+factura o el resumen de un servicio (luz, gas, agua, teléfono, celular, internet, \
+cable, expensas) que trae un total a pagar y un vencimiento: todavía no es un pago, \
+aunque diga débito automático. "transferencia_recibida" si es plata que le \
 ENTRÓ (te transfirieron, transferencia recibida, depósito). "recibo_sueldo" si es un \
 recibo de sueldo o de haberes. "resumen_tarjeta" si es el resumen \
 mensual de una tarjeta de crédito con muchos consumos. "no_es_comprobante" si no es \
@@ -82,6 +91,9 @@ recibida, quién la mandó; en un recibo de sueldo, el empleador. "" si no figur
 tarjeta de CRÉDITO; "debito" con tarjeta de débito; "transferencia" si es una \
 transferencia o un pago con dinero en cuenta (Mercado Pago, billeteras, QR); \
 "efectivo" si lo dice; si no, "desconocido".
+- due_date: en una factura de servicio, el vencimiento en formato AAAA-MM-DD; si no, "".
+- auto_debit: true si la factura dice que se paga por débito automático (de una \
+tarjeta o de una cuenta); si no, false.
 - category: el nombre EXACTO de una de las categorías de la lista que te pasan, la que \
 mejor le corresponde. "" si ninguna encaja con claridad."""
 
@@ -95,6 +107,8 @@ class AiReading:
     merchant: str
     payment_method: str
     category: str
+    due_date: date | None = None
+    auto_debit: bool = False
     input_tokens: int | None = None
 
 
@@ -138,6 +152,13 @@ def parse_reading(raw: dict, today: date) -> AiReading:
         when = None
     if when is not None and not (today - timedelta(days=366) <= when <= today):
         when = None
+    try:
+        due = date.fromisoformat(raw.get("due_date") or "")
+    except ValueError:
+        due = None
+    # Un vencimiento sí puede ser futuro, pero no de acá a medio año.
+    if due is not None and not (today - timedelta(days=120) <= due <= today + timedelta(days=120)):
+        due = None
     method = raw.get("payment_method")
     return AiReading(
         kind=raw.get("kind") or KIND_OTHER,
@@ -147,6 +168,8 @@ def parse_reading(raw: dict, today: date) -> AiReading:
         merchant=(raw.get("merchant") or "").strip()[:120],
         payment_method=method if method in PAYMENT_METHODS else "desconocido",
         category=(raw.get("category") or "").strip(),
+        due_date=due,
+        auto_debit=bool(raw.get("auto_debit")),
     )
 
 

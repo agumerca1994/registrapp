@@ -19,7 +19,7 @@ import type { Step } from "react-joyride";
 import { Card } from "@/components/ui/card";
 import { Fab } from "@/components/ui/fab";
 import ExpenseFormModal, { type ExpenseSaved } from "@/components/expense/ExpenseFormModal";
-import { newDraft } from "@/components/expense/submit";
+import { draftFromParams, newDraft, type ExpenseDraft } from "@/components/expense/submit";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { isBusiness } from "@/lib/account";
@@ -150,7 +150,7 @@ export default function ExpensesPage() {
   // El formulario unificado (components/expense). `key` cambia en cada
   // apertura para que siempre arranque limpio: fecha de hoy, efectivo, sin
   // compartir.
-  const [formState, setFormState] = useState<null | { mode: "create" } | { mode: "edit"; entry: ExpenseEntry }>(null);
+  const [formState, setFormState] = useState<null | { mode: "create"; initial?: ExpenseDraft } | { mode: "edit"; entry: ExpenseEntry }>(null);
   const [formKey, setFormKey] = useState(0);
   const [notice, setNotice] = useState<ExpenseSaved | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -241,7 +241,9 @@ export default function ExpensesPage() {
       router.replace("/expenses");
     }
     if (params.get("nuevo") !== "1") return;
-    openCreate();
+    // Los links del bot traen el formulario lleno (una factura que se debita
+    // de una tarjeta): se abre con eso y la persona elige lo que falta.
+    openCreate(draftFromParams(params, format(new Date(), "yyyy-MM-dd")));
     router.replace("/expenses");
     // Sólo al montar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -254,7 +256,7 @@ export default function ExpensesPage() {
     setSort(null);
   };
 
-  const openCreate = () => { setFormKey(k => k + 1); setFormState({ mode: "create" }); };
+  const openCreate = (initial?: ExpenseDraft) => { setFormKey(k => k + 1); setFormState({ mode: "create", initial }); };
   const openEdit = (entry: ExpenseEntry) => { setFormKey(k => k + 1); setFormState({ mode: "edit", entry }); };
   const closeForm = () => setFormState(null);
 
@@ -380,7 +382,7 @@ export default function ExpensesPage() {
             notes: formState.entry.notes || "",
             currency: (formState.entry.currency as "ARS" | "USD") || "ARS",
             payee_id: formState.entry.payee_id ? String(formState.entry.payee_id) : "",
-          } : undefined}
+          } : formState.initial}
           categories={categories}
           onCategoriesChanged={load}
           onSaved={handleSaved}
@@ -560,7 +562,7 @@ export default function ExpensesPage() {
         })()}
       </Card>
 
-      <Fab label="Registrar egreso" data-tour="expenses-add" onClick={openCreate} />
+      <Fab label="Registrar egreso" data-tour="expenses-add" onClick={() => openCreate()} />
 
       {detailEntry && (
         <EntryDetailModal

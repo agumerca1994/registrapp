@@ -93,6 +93,31 @@ export function newDraft(today: string, self: SplitRow | null): ExpenseDraft {
   };
 }
 
+/**
+ * El borrador que traen los links del bot (`/expenses?nuevo=1&monto=…`): lo
+ * que el chat no pudo resolver —una factura que se debita de una tarjeta—
+ * llega con el formulario lleno y la persona sólo elige lo que falta.
+ * Sin `monto` no hay nada que precargar.
+ */
+export function draftFromParams(params: URLSearchParams, today: string): ExpenseDraft | undefined {
+  const amount = Number(params.get("monto"));
+  if (!Number.isFinite(amount) || amount <= 0) return undefined;
+  const isDate = (v: string | null): v is string => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const fecha = params.get("fecha");
+  const draft = newDraft(isDate(fecha) ? fecha : today, null);
+  const periodo = params.get("periodo");
+  return {
+    ...draft,
+    amount: amount.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    currency: params.get("moneda") === "USD" ? "USD" : "ARS",
+    description: params.get("desc") ?? "",
+    category_id: params.get("cat") ?? "",
+    pay: params.get("pago") === "tarjeta" ? "card" : "cash",
+    card_id: params.get("tarjeta") ?? "",
+    ...(periodo && /^\d{4}-\d{2}$/.test(periodo) ? { period: periodo, periodTouched: true } : {}),
+  };
+}
+
 export const isCard = (d: ExpenseDraft) => d.pay === "card";
 export const isInstallment = (d: ExpenseDraft) => isCard(d) && d.plan === "installment";
 

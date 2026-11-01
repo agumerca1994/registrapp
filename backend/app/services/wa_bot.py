@@ -773,6 +773,8 @@ async def _read_with_ai(
 
     if reading.kind == ai_capture.KIND_STATEMENT:
         return None if is_pdf else await reply_with(MSG_AI_STATEMENT_IMAGE)
+    if reading.kind == ai_capture.KIND_BILL and reading.amount and reading.amount <= quick_capture.MAX_AMOUNT:
+        return await _handle_bill(db, user, inbound, reading, cats)
     if reading.kind in (ai_capture.KIND_INCOMING, ai_capture.KIND_PAYSLIP) and reading.amount \
             and reading.amount <= quick_capture.MAX_AMOUNT and not await _is_business(db, user):
         if reading.kind == ai_capture.KIND_PAYSLIP:
@@ -823,6 +825,163 @@ async def _read_with_ai(
     )
     method = reading.payment_method if reading.payment_method in ("efectivo", "debito", "transferencia") else None
     return await _capture_draft(db, user, inbound, draft, payment_method=method, suggested=suggested)
+
+
+async def _handle_bill(
+    db: AsyncSession, user: User, inbound: InboundMessage, reading, cats
+) -> list[str]:
+    """Una factura de un servicio no se carga sola: con débito automático la
+    plata sale por la tarjeta, y el ítem que la persona carga ahí la
+    duplicaría. Si el comercio ya se cargó en una tarjeta, se ofrece ponerla
+    en el resumen que sigue; si no, se pregunta cómo se paga. Lo que no se
+    resuelve con un número va a la app con el formulario ya lleno."""
+    from app.models.credit_card import CreditCard, CreditCardStatement
+    from app.services import bill_capture
+    from app.services.currency import estimate_due_date_py
+    from app.services.search import fold_text
+
+    today = ar_today()
+    merchant = reading.merchant or ""
+    head = f"Es la factura de *{merchant or 'un servicio'}* por {_fmt_amount(reading)}"
+    if reading.due_date:
+        head += f", vence el {reading.due_date:%d/%m}"
+    if reading.auto_debit:
+        head += ", con débito automático"
+    head += "."
+    suggested = next(
+        (c for c in cats if reading.category and fold_text(c.name) == fold_text(reading.category)),
+        None,
+    )
+    target = await bill_capture.card_target(
+        db, user.tenant_id, merchant, reading.amount, reading.due_date or reading.receipt_date or today,
+    )
+
+    if target is not None and target.already_loaded:
+        reply = f"{head}\nYa está cargada en la tarjeta *{target.card_label}*, así que no la cargo de nuevo."
+        _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id)
+        _remember(db, user.id, "out", "text", text=reply)
+        await db.commit()
+        return [reply]
+
+    if target is not None:
+        stmt = await db.scalar(select(CreditCardStatement).where(
+            CreditCardStatement.card_id == target.card_id,
+            CreditCardStatement.year == target.year,
+            CreditCardStatement.month == target.month,
+        ))
+        card = await db.get(CreditCard, target.card_id)
+        due = (stmt.due_date if stmt and stmt.due_date
+               else estimate_due_date_py(target.year, target.month, card.due_day))
+        period = bill_capture.period_label(target.year, target.month, today)
+        reply = (
+            f"{head}\nVenís cargando *{target.description}* en la tarjeta *{target.card_label}*.\n"
+            f"1. Cargarla en el resumen de {period} (vence el {due:%d/%m})\n"
+            "2. Ya está en la tarjeta, no la cargo\n"
+            "3. Revisarla en la app"
+        )
+        pending = {
+            "type": "bill_card", "card_id": target.card_id, "year": target.year, "month": target.month,
+            "date": target.item_date.isoformat(), "desc": target.description,
+            "cat": target.category_id, "amount": str(reading.amount), "currency": reading.currency,
+            "label": target.card_label,
+        }
+    else:
+        draft = quick_capture.QuickDraft(
+            amount=reading.amount, currency=reading.currency,
+            expense_date=reading.receipt_date or today,
+            term=merchant or reading.category or "Factura", legacy=False,
+        )
+        reply = (
+            f"{head}\n¿Cómo la pagás?\n"
+            "1. Ya la pagué con débito o transferencia: cargarla como gasto\n"
+            "2. Se debita de una tarjeta: cargarla en la app\n"
+            "3. Todavía no la pagué: no la cargo"
+        )
+        pending = {"type": "bill_pick", "draft": _draft_dict(draft), "cat": suggested.id if suggested else None}
+
+    _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id)
+    _remember(db, user.id, "out", "text", text=reply, pending=pending)
+    await db.commit()
+    return [reply]
+
+
+async def _expense_form_link(db: AsyncSession, user, prefill: dict) -> str:
+    """Link a "Nuevo egreso" con el formulario ya lleno (`/expenses?nuevo=1&…`)
+    y auto-login: lo que el chat no resuelve se termina ahí."""
+    from urllib.parse import urlencode
+
+    from app.services import auth_links
+
+    token = await auth_links.mint_token(db, user.id)
+    query = urlencode({"nuevo": "1", **{k: v for k, v in prefill.items() if v not in (None, "")}, "wat": token})
+    return f"{settings.FRONTEND_URL}/expenses?{query}"
+
+
+async def _answer_bill(
+    db: AsyncSession, user: User, inbound: InboundMessage, row: WaMessage, number: int
+) -> list[str]:
+    from app.models.credit_card import CreditCard
+    from app.schemas.credit_card import CreditCardItemCreate
+    from app.services import auth_links, bill_capture
+    from app.services.credit_cards import create_item_in_statement, find_or_create_statement
+
+    pending = row.pending or {}
+    if not (1 <= number <= 3):
+        return ["Respondé *1*, *2* o *3*."]
+    row.pending = None
+
+    async def reply(text: str, **ref) -> list[str]:
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text, **ref)
+        await db.commit()
+        return [text]
+
+    if pending["type"] == "bill_pick":
+        draft = _draft_from_dict(pending["draft"])
+        if number == 1:
+            cat = await db.get(ExpenseCategory, pending["cat"]) if pending.get("cat") else None
+            if cat is not None and cat.tenant_id != user.tenant_id:
+                cat = None
+            return await _capture_draft(db, user, inbound, draft, suggested=cat)
+        if number == 3:
+            return await reply("Listo, no la cargo. Cuando la pagues, mandame el comprobante.")
+        link = await _expense_form_link(db, user, {
+            "monto": str(draft.amount), "moneda": draft.currency, "desc": draft.term,
+            "fecha": draft.expense_date.isoformat(), "cat": pending.get("cat"), "pago": "tarjeta",
+        })
+        return await reply(f"Elegí la tarjeta y el resumen acá, ya está todo lo demás: {link}\n{LINK_HINT}")
+
+    # bill_card
+    if number == 2:
+        return await reply("Listo, no la cargo.")
+    if number == 3:
+        link = await _expense_form_link(db, user, {
+            "monto": pending["amount"], "moneda": pending["currency"], "desc": pending["desc"],
+            "fecha": pending["date"], "cat": pending.get("cat"), "pago": "tarjeta",
+            "tarjeta": pending["card_id"], "periodo": f"{pending['year']}-{pending['month']:02d}",
+        })
+        return await reply(f"Revisala acá, ya está todo cargado: {link}\n{LINK_HINT}")
+
+    card = await db.get(CreditCard, pending["card_id"])
+    if card is None or card.tenant_id != user.tenant_id:
+        return await reply("Esa tarjeta ya no está. Cargala desde la app.")
+    from datetime import date as _date
+
+    stmt = await find_or_create_statement(card, pending["year"], pending["month"], user.tenant_id, db)
+    item = await create_item_in_statement(stmt, card, CreditCardItemCreate(
+        description=pending["desc"], category_id=pending.get("cat"),
+        item_date=_date.fromisoformat(pending["date"]), item_type="single",
+        amount=Decimal(pending["amount"]), currency=pending["currency"],
+    ), user, db)
+    item.capture_source = "whatsapp"
+    await db.flush()
+    token = await auth_links.mint_token(db, user.id)
+    link = f"{settings.FRONTEND_URL}/tarjetas/{card.id}/{stmt.id}?item={item.id}&wat={token}"
+    period = bill_capture.period_label(stmt.year, stmt.month, ar_today())
+    return await reply(
+        f"✅ {_money(item.amount, item.currency)} · {item.description} · resumen de {period} de *{pending['label']}*\n"
+        f"Si algo está mal: *deshacer*, o corregilo acá: {link}",
+        ref_type="card_item", ref_id=item.id,
+    )
 
 
 async def _handle_unsupported_media(
@@ -1501,13 +1660,15 @@ def _fmt_amount(draft) -> str:
 async def _do_undo(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
     from app.services.business import bot as business_bot
 
-    ref = await _last_ref(db, user.id, ("expense", "income", *business_bot.BUSINESS_REFS), inbound.quoted_wa_id)
+    ref = await _last_ref(db, user.id, ("expense", "income", "card_item", *business_bot.BUSINESS_REFS), inbound.quoted_wa_id)
     if ref is None:
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
         await db.commit()
         return ["No tengo nada para deshacer en los últimos 7 días."]
     if ref.ref_type == "income":
         return await _undo_income(db, user, inbound, ref)
+    if ref.ref_type == "card_item":
+        return await _undo_card_item(db, user, inbound, ref)
     if ref.ref_type != "expense":
         return await business_bot.undo(db, user, inbound, ref)
     entry = await db.get(ExpenseEntry, ref.ref_id)
@@ -1528,6 +1689,30 @@ async def _do_undo(db: AsyncSession, user: User, inbound: InboundMessage) -> lis
     return [f"🗑️ Deshecho: {_money(amount, currency)} · {desc}"]
 
 
+async def _undo_card_item(db: AsyncSession, user: User, inbound: InboundMessage, ref: WaMessage) -> list[str]:
+    """Una factura que el bot puso en un resumen. Sólo si sigue siendo la que
+    cargó: un ítem que después se compartió se borra desde la app."""
+    from app.models.credit_card import CreditCardItem, CreditCardStatement
+    from app.models.shared_expense import SharedExpense
+    from app.services.credit_cards import delete_item_tree
+
+    _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+    item = await db.get(CreditCardItem, ref.ref_id)
+    stmt = await db.get(CreditCardStatement, item.statement_id) if item else None
+    if item is None or stmt is None or stmt.tenant_id != user.tenant_id:
+        await db.commit()
+        return ["Ese gasto ya no está."]
+    if await db.scalar(select(SharedExpense.id).where(SharedExpense.credit_card_item_id == item.id)):
+        await db.commit()
+        return ["Ese gasto ya se compartió: borralo desde la app."]
+    desc, amount, currency = item.description, item.amount, item.currency
+    await delete_item_tree(item, db)
+    ref.ref_type = None
+    ref.ref_id = None
+    await db.commit()
+    return [f"🗑️ Deshecho: {_money(amount, currency)} · {desc}"]
+
+
 async def _do_edit(
     db: AsyncSession, user: User, inbound: InboundMessage, field_name: str, value: str
 ) -> list[str]:
@@ -1536,10 +1721,16 @@ async def _do_edit(
     # "categoría" de un ingreso es su fuente: quien acaba de cargar un sueldo
     # y escribe *categoría …* habla de ese ingreso, no del último gasto.
     types = {
-        "monto": ("expense", "income", "sale"),
+        "monto": ("expense", "income", "sale", "card_item"),
         "fuente": ("income",),
-    }.get(field_name, ("expense", "income"))
+    }.get(field_name, ("expense", "income", "card_item"))
     ref = await _last_ref(db, user.id, types, inbound.quoted_wa_id)
+    if ref is not None and ref.ref_type == "card_item":
+        # Una factura que quedó en un resumen: se corrige donde vive, no acá
+        # (y sin esto, *editar* caía en el gasto anterior).
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        await db.commit()
+        return ["Eso quedó en el resumen de la tarjeta: corregilo desde la app, o *deshacer* y cargalo de nuevo."]
     if ref is not None and ref.ref_type == "income":
         if field_name.startswith("categor"):
             field_name = "fuente"
@@ -1812,6 +2003,9 @@ async def _do_pending_answer(
 
     if ptype == "income_pick":
         return await _answer_income_pick(db, user, inbound, row, number)
+
+    if ptype in ("bill_card", "bill_pick"):
+        return await _answer_bill(db, user, inbound, row, number)
 
     if ptype == "category_pick":
         options = pending.get("options") or []

@@ -249,3 +249,128 @@ async def test_incoming_transfer_without_amount_asks_to_write_it(db, ai):
 
     assert "no pude leer bien el monto" in replies[0]
     assert "lo que pagaste" not in replies[0]
+
+
+# ── Facturas de servicios ──────────────────────────────────────────────────
+
+def _bill(**kw) -> AiReading:
+    return _reading(**{
+        "kind": "factura_servicio", "amount": Decimal("117504.99"), "merchant": "Personal",
+        "payment_method": "debito", "receipt_date": date(2026, 10, 28),
+        "due_date": date(2026, 11, 11), "auto_debit": True, **kw,
+    })
+
+
+def _txt(text, wa_id):
+    return InboundMessage(phone="549383", wa_id=wa_id, kind="text", text=text)
+
+
+async def _personal_history(db, months=((2026, 8), (2026, 9)), amount="25950.01"):
+    """Personal cargado a mano en la tarjeta, un ítem por resumen (el caso real)."""
+    from app.models.credit_card import CreditCard
+    from app.schemas.credit_card import CreditCardItemCreate
+    from app.services.credit_cards import create_item_in_statement, find_or_create_statement
+
+    cat = await _cat(db, "Servicios")
+    card = CreditCard(tenant_id=1, user_id=1, bank="Personal Pay", alias="Visa", due_day=10)
+    db.add(card)
+    await db.flush()
+    for y, m in months:
+        stmt = await find_or_create_statement(card, y, m, 1, db)
+        await create_item_in_statement(stmt, card, CreditCardItemCreate(
+            description="Personal", category_id=cat.id, item_date=date(y, m, 28),
+            item_type="single", amount=Decimal(amount),
+        ), USER, db)
+    await db.flush()
+    return cat, card
+
+
+async def test_bill_is_never_loaded_without_asking(db, ai):
+    """El caso real: la factura de Personal con débito automático entraba como
+    gasto suelto y duplicaba el ítem que se carga en la tarjeta."""
+    ai.reading = _bill()
+    replies = await wa_bot.handle(db, USER, _img())
+    assert "factura de *Personal*" in replies[0] and "vence el 11/11" in replies[0]
+    assert "débito automático" in replies[0]
+    assert await db.scalar(select(ExpenseEntry)) is None
+
+    # 3 = todavía no la pagué
+    replies = await wa_bot.handle(db, USER, _txt("3", "T1"))
+    assert "no la cargo" in replies[0]
+    assert await db.scalar(select(ExpenseEntry)) is None
+
+
+async def test_bill_already_paid_is_loaded_as_expense(db, ai):
+    await _cat(db, "Servicios")
+    ai.reading = _bill(merchant="Edenor", category="Servicios", auto_debit=False)
+    await wa_bot.handle(db, USER, _img())
+    replies = await wa_bot.handle(db, USER, _txt("1", "T1"))
+    assert "✅" in replies[0] and "Edenor" in replies[0]
+    entry = await db.scalar(select(ExpenseEntry))
+    assert entry.amount == Decimal("117504.99")
+
+
+async def test_bill_paid_by_card_without_history_goes_to_the_app(db, ai):
+    ai.reading = _bill()
+    await wa_bot.handle(db, USER, _img())
+    replies = await wa_bot.handle(db, USER, _txt("2", "T1"))
+    assert "/expenses?nuevo=1&monto=117504.99" in replies[0] and "pago=tarjeta" in replies[0]
+    assert "wat=" in replies[0]
+    assert await db.scalar(select(ExpenseEntry)) is None
+
+
+async def test_bill_goes_to_the_next_statement_of_the_card_it_lives_in(db, ai):
+    from app.models.credit_card import CreditCardItem, CreditCardStatement
+
+    cat, card = await _personal_history(db)
+    ai.reading = _bill()
+    replies = await wa_bot.handle(db, USER, _img())
+    assert "Venís cargando *Personal* en la tarjeta *Visa de Personal Pay*" in replies[0]
+    assert "resumen de octubre" in replies[0] and "(vence el 10/11)" in replies[0]
+
+    replies = await wa_bot.handle(db, USER, _txt("1", "T1"))
+    assert "✅ $117.504,99 · Personal · resumen de octubre" in replies[0]
+    item, stmt = (await db.execute(
+        select(CreditCardItem, CreditCardStatement)
+        .join(CreditCardStatement, CreditCardItem.statement_id == CreditCardStatement.id)
+        .where(CreditCardItem.amount == Decimal("117504.99"))
+    )).one()
+    assert (stmt.card_id, stmt.year, stmt.month) == (card.id, 2026, 10)
+    assert (item.item_date, item.category_id, item.capture_source) == (date(2026, 10, 28), cat.id, "whatsapp")
+    entry = await db.get(ExpenseEntry, item.expense_entry_id)
+    assert entry.payment_method == "tarjeta_credito"
+
+    # deshacer se lleva el ítem y su egreso
+    undo = await wa_bot.handle(db, USER, _txt("deshacer", "T2"))
+    assert "Deshecho" in undo[0]
+    assert await db.get(CreditCardItem, item.id) is None
+    assert await db.get(ExpenseEntry, item.expense_entry_id) is None
+
+
+async def test_bill_already_in_the_card_is_not_offered_again(db, ai):
+    await _personal_history(db, months=((2026, 9), (2026, 10)), amount="117504.99")
+    ai.reading = _bill()
+    replies = await wa_bot.handle(db, USER, _img())
+    assert "Ya está cargada en la tarjeta" in replies[0]
+
+
+async def test_bill_review_in_app_carries_card_and_period(db, ai):
+    cat, card = await _personal_history(db)
+    ai.reading = _bill()
+    await wa_bot.handle(db, USER, _img())
+    replies = await wa_bot.handle(db, USER, _txt("3", "T1"))
+    assert f"tarjeta={card.id}" in replies[0] and "periodo=2026-10" in replies[0] and f"cat={cat.id}" in replies[0]
+
+
+async def test_old_card_history_does_not_guess_the_statement(db, ai):
+    await _personal_history(db, months=((2026, 3),))
+    ai.reading = _bill()
+    replies = await wa_bot.handle(db, USER, _img())
+    assert "¿Cómo la pagás?" in replies[0]
+
+
+def test_parse_reading_keeps_a_future_due_date():
+    r = parse_reading({"kind": "factura_servicio", "amount": 100, "date": "2026-10-28",
+                       "due_date": "2026-11-11", "auto_debit": True}, date(2026, 11, 1))
+    assert (r.kind, r.due_date, r.auto_debit) == ("factura_servicio", date(2026, 11, 11), True)
+    assert parse_reading({"due_date": "2027-09-01"}, date(2026, 11, 1)).due_date is None
