@@ -6,6 +6,9 @@
 // Las dos se hornean en el build (literal process.env, ARG + ENV en Dockerfile.prod y args en el compose).
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
 export const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+/** Otros dominios donde también vive la app (separados por coma), por ejemplo el viejo durante el cambio de
+ *  marca: se comportan igual que APP_URL, pero los links nuevos ("Entrar") van a APP_URL. */
+export const APP_ALIASES = (process.env.NEXT_PUBLIC_APP_ALIASES ?? "").split(",").map((u) => u.trim().replace(/\/$/, "")).filter(Boolean);
 
 /** Link a una pantalla de la app desde el sitio público. */
 export const appHref = (path: string) => (APP_URL ? `${APP_URL}${path}` : path);
