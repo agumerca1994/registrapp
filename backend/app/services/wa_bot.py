@@ -870,8 +870,17 @@ async def _handle_bill(
             CreditCardStatement.month == target.month,
         ))
         card = await db.get(CreditCard, target.card_id)
-        due = (stmt.due_date if stmt and stmt.due_date
-               else estimate_due_date_py(target.year, target.month, card.due_day))
+        # El vencimiento que imprimió la factura le gana al estimado del
+        # resumen (el día de `due_day` es una aproximación; el mes no está en
+        # duda). Nunca pisa uno real, y sólo si cae en el mismo mes que el
+        # estimado: otro mes es otra cosa (una factura que no es de esa tarjeta).
+        estimate = estimate_due_date_py(target.year, target.month, card.due_day)
+        bill_due = (
+            reading.due_date
+            if reading.due_date and (reading.due_date.year, reading.due_date.month) == (estimate.year, estimate.month)
+            else None
+        )
+        due = stmt.due_date if stmt and stmt.due_date else bill_due or estimate
         period = bill_capture.period_label(target.year, target.month, today)
         reply = (
             f"{head}\nVenís cargando *{target.description}* en la tarjeta *{target.card_label}*.\n"
@@ -884,6 +893,7 @@ async def _handle_bill(
             "date": target.item_date.isoformat(), "desc": target.description,
             "cat": target.category_id, "amount": str(reading.amount), "currency": reading.currency,
             "label": target.card_label,
+            "due": bill_due.isoformat() if bill_due and not (stmt and stmt.due_date) else None,
         }
     else:
         draft = quick_capture.QuickDraft(
@@ -973,13 +983,17 @@ async def _answer_bill(
         amount=Decimal(pending["amount"]), currency=pending["currency"],
     ), user, db)
     item.capture_source = "whatsapp"
+    due_line = ""
+    if pending.get("due") and stmt.due_date is None:
+        stmt.due_date = _date.fromisoformat(pending["due"])
+        due_line = f"\nEl resumen vence el {stmt.due_date:%d/%m}, como dice la factura."
     await db.flush()
     token = await auth_links.mint_token(db, user.id)
     link = f"{settings.FRONTEND_URL}/tarjetas/{card.id}/{stmt.id}?item={item.id}&wat={token}"
     period = bill_capture.period_label(stmt.year, stmt.month, ar_today())
     return await reply(
-        f"✅ {_money(item.amount, item.currency)} · {item.description} · resumen de {period} de *{pending['label']}*\n"
-        f"Si algo está mal: *deshacer*, o corregilo acá: {link}",
+        f"✅ {_money(item.amount, item.currency)} · {item.description} · resumen de {period} de *{pending['label']}*"
+        f"{due_line}\nSi algo está mal: *deshacer*, o corregilo acá: {link}",
         ref_type="card_item", ref_id=item.id,
     )
 

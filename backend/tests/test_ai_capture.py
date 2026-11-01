@@ -326,7 +326,8 @@ async def test_bill_goes_to_the_next_statement_of_the_card_it_lives_in(db, ai):
     ai.reading = _bill()
     replies = await wa_bot.handle(db, USER, _img())
     assert "Venís cargando *Personal* en la tarjeta *Visa de Personal Pay*" in replies[0]
-    assert "resumen de octubre" in replies[0] and "(vence el 10/11)" in replies[0]
+    # El vencimiento de la factura le gana al estimado del resumen (10/11).
+    assert "resumen de octubre" in replies[0] and "(vence el 11/11)" in replies[0]
 
     replies = await wa_bot.handle(db, USER, _txt("1", "T1"))
     assert "✅ $117.504,99 · Personal · resumen de octubre" in replies[0]
@@ -336,6 +337,8 @@ async def test_bill_goes_to_the_next_statement_of_the_card_it_lives_in(db, ai):
         .where(CreditCardItem.amount == Decimal("117504.99"))
     )).one()
     assert (stmt.card_id, stmt.year, stmt.month) == (card.id, 2026, 10)
+    assert stmt.due_date == date(2026, 11, 11)
+    assert "El resumen vence el 11/11" in replies[0]
     assert (item.item_date, item.category_id, item.capture_source) == (date(2026, 10, 28), cat.id, "whatsapp")
     entry = await db.get(ExpenseEntry, item.expense_entry_id)
     assert entry.payment_method == "tarjeta_credito"
@@ -374,3 +377,30 @@ def test_parse_reading_keeps_a_future_due_date():
                        "due_date": "2026-11-11", "auto_debit": True}, date(2026, 11, 1))
     assert (r.kind, r.due_date, r.auto_debit) == ("factura_servicio", date(2026, 11, 11), True)
     assert parse_reading({"due_date": "2027-09-01"}, date(2026, 11, 1)).due_date is None
+
+
+async def test_bill_due_in_another_month_keeps_the_estimate(db, ai):
+    from app.models.credit_card import CreditCardStatement
+
+    await _personal_history(db)
+    ai.reading = _bill(due_date=date(2026, 10, 25))
+    replies = await wa_bot.handle(db, USER, _img())
+    assert "(vence el 10/11)" in replies[0]
+    await wa_bot.handle(db, USER, _txt("1", "T1"))
+    stmt = await db.scalar(select(CreditCardStatement).where(CreditCardStatement.month == 10))
+    assert stmt.due_date is None
+
+
+async def test_bill_never_overrides_a_real_due_date(db, ai):
+    from app.services.credit_cards import find_or_create_statement
+
+    cat, card = await _personal_history(db)
+    stmt = await find_or_create_statement(card, 2026, 10, 1, db)
+    stmt.due_date = date(2026, 11, 13)
+    await db.flush()
+    ai.reading = _bill()
+    replies = await wa_bot.handle(db, USER, _img())
+    assert "(vence el 13/11)" in replies[0]
+    replies = await wa_bot.handle(db, USER, _txt("1", "T1"))
+    assert "El resumen vence" not in replies[0]
+    assert stmt.due_date == date(2026, 11, 13)
