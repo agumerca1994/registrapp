@@ -258,12 +258,32 @@ async def settle_status(db: AsyncSession, session: ReconciliationSession) -> Non
     statuses = set((await db.scalars(
         select(ReconciliationAction.status).where(ReconciliationAction.session_id == session.id)
     )).all())
+    # Descartar también es decidir: una sesión sin explicar se cierra cuando la
+    # persona aplicó o descartó lo propuesto, no sólo cuando aplicó.
+    decided = ACTION_APPLIED in statuses or ACTION_DISCARDED in statuses
     if ACTION_PROPOSED not in statuses:
-        if session.status != SESSION_UNEXPLAINED or ACTION_APPLIED in statuses:
+        if session.status != SESSION_UNEXPLAINED or decided:
             session.status = SESSION_CLOSED
     elif ACTION_APPLIED in statuses:
         session.status = SESSION_APPLIED
     await db.flush()
+
+
+async def discard_group(db: AsyncSession, session: ReconciliationSession, klass: str) -> int:
+    """"Dejarlo así" para todo un grupo: lo propuesto y lo que iba a la app
+    pasan a descartados. Lo aplicado no se toca (eso se deshace)."""
+    actions = (await db.scalars(
+        select(ReconciliationAction).where(
+            ReconciliationAction.session_id == session.id,
+            ReconciliationAction.klass == klass,
+            ReconciliationAction.status.in_([ACTION_PROPOSED, ACTION_NEEDS_APP]),
+        )
+    )).all()
+    for a in actions:
+        a.status = ACTION_DISCARDED
+    await db.flush()
+    await settle_status(db, session)
+    return len(actions)
 
 
 def _action_key(a: ReconciliationAction) -> tuple:

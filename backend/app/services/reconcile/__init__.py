@@ -8,6 +8,7 @@ el bot de WhatsApp y el conector MCP sin poder divergir.
 """
 from app.services.reconcile.apply import apply_group, undo_last_group  # noqa: F401
 from app.services.reconcile.engine import (  # noqa: F401
+    discard_group,
     GROUP_ORDER,
     record_event,
     refresh_session,

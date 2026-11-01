@@ -372,6 +372,20 @@ async def apply_group(
     return {"dry_run": False, **result}
 
 
+@router.post("/{session_id}/groups/{klass}/discard")
+async def discard_group(
+    session_id: int,
+    klass: str,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await _get_db_user(firebase_user, db)
+    session = await _owned_session(session_id, user, db)
+    discarded = await reconcile_service.discard_group(db, session, klass)
+    await db.commit()
+    return {"discarded": discarded, "status": session.status}
+
+
 @router.post("/{session_id}/undo")
 async def undo(
     session_id: int,

@@ -413,3 +413,20 @@ async def test_suggest_categories_keeps_only_known_names(monkeypatch):
     monkeypatch.setattr(ai_capture, "_structured_call", _call)
     out = await ai_capture.suggest_categories(["FARMACITY", "XYZ"], ["Comida", "Salud", "Comida"])
     assert out == {0: "Salud"}
+
+
+async def test_discarding_a_whole_group_closes_the_session(db):
+    """Cada grupo se puede descartar entero ("no es así, dejalo"): sin eso, una
+    sugerencia equivocada sólo se sacaba aceptándola y la sesión quedaba en curso."""
+    from app.services.reconcile import discard_group
+
+    cat, card, stmt, session = await _setup(db)
+    await resolve_session(db, session, USER)
+    klasses = set((await db.scalars(
+        select(ReconciliationAction.klass).where(ReconciliationAction.status.in_(["proposed", "needs_app"]))
+    )).all())
+    assert klasses
+    for klass in klasses:
+        assert await discard_group(db, session, klass) > 0
+    assert session.status == "closed"
+    assert await discard_group(db, session, next(iter(klasses))) == 0

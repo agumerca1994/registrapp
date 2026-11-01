@@ -158,6 +158,21 @@ export default function ConciliarDetailPage() {
     }
   };
 
+  const discardGroup = async (klass: string) => {
+    setApplying(klass);
+    try {
+      await api.post(`/reconcile/${id}/groups/${klass}/discard`);
+      setApplyMsg(prev => ({ ...prev, [klass]: "" }));
+      setError(null);
+      await load();
+      refreshPending();
+    } catch (e) {
+      setError(getErrorMessage(e));
+    } finally {
+      setApplying(null);
+    }
+  };
+
   const undoLast = async () => {
     setUndoing(true);
     try {
@@ -462,10 +477,15 @@ export default function ConciliarDetailPage() {
                 </div>
                 <div className="px-4 md:px-5 py-3 border-t bg-muted/40 rounded-b-2xl flex items-center gap-3 flex-wrap">
                   {pending > 0 ? (
-                    <Button onClick={() => applyGroup(klass)} disabled={applying !== null}>
-                      {applying === klass && <Loader2 className="w-4 h-4 animate-spin" />}
-                      {groupActionLabel(klass, pending)}
-                    </Button>
+                    <>
+                      <Button onClick={() => applyGroup(klass)} disabled={applying !== null}>
+                        {applying === klass && <Loader2 className="w-4 h-4 animate-spin" />}
+                        {groupActionLabel(klass, pending)}
+                      </Button>
+                      <Button variant="outline" onClick={() => discardGroup(klass)} disabled={applying !== null}>
+                        Descartar
+                      </Button>
+                    </>
                   ) : (
                     <span className="inline-flex items-center gap-1 text-sm text-emerald-700 font-medium">
                       <Check className="w-4 h-4" /> Hecho
@@ -541,6 +561,14 @@ function ActionRow({ klass, action, categories, fixHref, descDraft, setDescDraft
     <span className="inline-flex items-center gap-1 text-xs text-emerald-700 font-medium shrink-0">
       <Check className="w-3.5 h-3.5" /> Aplicado
     </span>
+  ) : proposed ? (
+    // Toda sugerencia se puede rechazar sola: si no, la única salida para
+    // una equivocada era aceptarla con el resto del grupo.
+    <button onClick={() => patchAction(action.id, { discard: true })}
+      aria-label="Descartar" title="Descartar este cambio"
+      className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-rose-600 transition-colors shrink-0">
+      <X className="w-4 h-4" />
+    </button>
   ) : null;
 
   const needsAppNote = action.status === "needs_app" ? (
@@ -607,13 +635,6 @@ function ActionRow({ klass, action, categories, fixHref, descDraft, setDescDraft
           </div>
           <p className="text-sm font-bold tabular-nums shrink-0 pt-1.5">{fmtAmount(p.currency, p.amount ?? 0)}</p>
           {stateBadge}
-          {proposed && (
-            <button onClick={() => patchAction(action.id, { discard: true })}
-              aria-label="Descartar" title="Descartar este ítem"
-              className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-rose-600 transition-colors shrink-0">
-              <X className="w-4 h-4" />
-            </button>
-          )}
         </div>
         {proposed && isARS && (
           <div className="sm:max-w-xs space-y-1">
