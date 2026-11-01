@@ -180,8 +180,9 @@ class RegistrappTokenVerifier(TokenVerifier):
 
             # Audience check (RFC 8707). A token minted for some other resource
             # must not work here — this is the confused-deputy defence, and it's
-            # the third place it gets enforced.
-            if row.resource and row.resource != settings.MCP_RESOURCE_URL:
+            # the third place it gets enforced. The server's previous resource URLs still count as "here"
+            # (MCP_LEGACY_RESOURCE_URLS), so a domain move doesn't disconnect anyone.
+            if row.resource and row.resource not in settings.mcp_known_resources:
                 return None
 
             if not await token_holder_valid(db, row):

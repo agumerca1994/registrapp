@@ -55,8 +55,11 @@
       MCP_REFRESH_TOKEN_TTL_DAYS: ${MCP_REFRESH_TOKEN_TTL_DAYS:-30}
       # Escape hatches for a client rejected by the transport's Host/Origin
       # check (421/403 on /mcp). Comma-separated, normally empty.
-      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-}
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-api.tood.com.ar,api.tood.com.ar:*}
       MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
+      # Los tokens del conector que se crearon con la dirección vieja de la API siguen valiendo después de
+      # pasar el conector a api.tood.com.ar: nadie tiene que reconectar.
+      MCP_LEGACY_RESOURCE_URLS: ${MCP_LEGACY_RESOURCE_URLS:-https://${API_DOMAIN}/mcp}
       # Alta pública de negocios (POST /auth/register con kind="business").
       # Apagada: el piloto se convierte con PATCH /internal/tenants/{id}/kind.
       BUSINESS_SIGNUP_ENABLED: ${BUSINESS_SIGNUP_ENABLED:-false}
@@ -70,6 +73,11 @@
       - "traefik.http.routers.registrapp-api.tls=true"
       - "traefik.http.routers.registrapp-api.tls.certresolver=letsencrypt"
       - "traefik.http.services.registrapp-api.loadbalancer.server.port=8000"
+      # El backend también en api.tood.com.ar, con router y certificado propios (si fallara, no toca al dominio viejo).
+      - "traefik.http.routers.registrapp-api2.rule=Host(`api.${SITE_DOMAIN:-tood.com.ar}`)"
+      - "traefik.http.routers.registrapp-api2.tls=true"
+      - "traefik.http.routers.registrapp-api2.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.registrapp-api2.service=registrapp-api"
 
   registrapp-frontend:
     build:

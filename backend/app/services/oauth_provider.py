@@ -334,7 +334,7 @@ class RegistrappOAuthProvider(
         could be replayed against a different resource that trusts the same
         issuer. Enforced again at exchange time and once more in the verifier.
         """
-        if resource and resource.rstrip("/") != settings.MCP_RESOURCE_URL:
+        if resource and resource.rstrip("/") not in settings.mcp_known_resources:
             raise error("invalid_request", f"Recurso desconocido: {resource}")
 
     async def _issue_pair(

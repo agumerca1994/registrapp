@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     # be allowed without a code change.
     MCP_ALLOWED_HOSTS: str = ""
     MCP_ALLOWED_ORIGINS: str = ""
+    # Resource URLs (RFC 8707) that tokens were minted for before the connector moved to its current
+    # MCP_RESOURCE_URL, comma-separated. Their tokens keep working, so moving the API domain doesn't force
+    # every connected assistant to reconnect. New tokens are always bound to MCP_RESOURCE_URL.
+    MCP_LEGACY_RESOURCE_URLS: str = ""
 
     @model_validator(mode="after")
     def derive_urls(self) -> "Settings":
@@ -73,6 +77,12 @@ class Settings(BaseSettings):
         if self.ENVIRONMENT == "production":
             self.MCP_AUTH_DISABLED = False
         return self
+
+    @property
+    def mcp_known_resources(self) -> set[str]:
+        """The resource this server answers for, plus the ones it answered for before (see above)."""
+        legacy = {u.strip().rstrip("/") for u in self.MCP_LEGACY_RESOURCE_URLS.split(",") if u.strip()}
+        return {self.MCP_RESOURCE_URL} | legacy
 
     @property
     def mcp_allowed_hosts(self) -> list[str]:

@@ -114,3 +114,25 @@ async def test_an_employee_cannot_use_the_connector(shared_session):
     user.role = UserRole.employee
     await db.flush()
     assert await RegistrappTokenVerifier().verify_token(raw) is None
+
+
+async def test_a_token_from_the_previous_api_domain_keeps_working(shared_session, monkeypatch):
+    """Mover la API de dominio cambia MCP_RESOURCE_URL. Los tokens que se crearon con la dirección vieja
+    siguen valiendo si está en MCP_LEGACY_RESOURCE_URLS; uno de cualquier otro recurso, no."""
+    db = shared_session
+    old, _new, user = await _setup(db)
+    viejo = "https://api-vieja.example.com/mcp"
+    raw, row = await create_pat(db, user_id=user.id, tenant_id=old.id, name="test", expires_in_days=None)
+    row.resource = viejo
+    await db.flush()
+
+    s = mcp_tokens.settings
+    monkeypatch.setattr(s, "MCP_LEGACY_RESOURCE_URLS", "")
+    assert await RegistrappTokenVerifier().verify_token(raw) is None
+
+    monkeypatch.setattr(s, "MCP_LEGACY_RESOURCE_URLS", viejo + "/")
+    assert await RegistrappTokenVerifier().verify_token(raw) is not None
+
+    row.resource = "https://otro-servidor.example.com/mcp"
+    await db.flush()
+    assert await RegistrappTokenVerifier().verify_token(raw) is None
