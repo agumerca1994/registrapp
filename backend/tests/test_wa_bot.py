@@ -677,3 +677,25 @@ async def test_same_amount_and_date_warns_twin(db):
     await wa_bot.handle(db, USER, _in("5000 kiosco", wa_id="W1"))
     replies = await wa_bot.handle(db, USER, _in("5000 kiosco", wa_id="W2"))
     assert "Ya había uno igual" in replies[0]
+
+
+async def test_description_offer_survives_the_reply_links(db):
+    """El caso real: el router guarda una fila por cada respuesta enviada
+    (`link_replies`, para poder citarla). Esas filas quedaban después de la
+    pregunta y `_open_pending` las tomaba como el último mensaje: la
+    descripción que llegaba después se cargaba como un gasto nuevo o se perdía."""
+    from app.services import category_suggest
+
+    category_suggest.invalidate(1)
+    await _cat(db, "Varios")
+    await _cat(db, "Supermercado")
+    await wa_bot.handle(db, USER, _in("12 lucas cosas del chino", wa_id="W1"))
+    mark = await wa_bot.memory_mark(db, USER.id)
+    replies = await wa_bot.handle(db, USER, _in("varios", wa_id="W2"))
+    assert "descripción" in replies[0]
+    await wa_bot.link_replies(db, USER.id, mark, ["SENT-1"])
+
+    replies = await wa_bot.handle(db, USER, _in("compras para el asado", wa_id="W3"))
+    assert "compras para el asado" in replies[0]
+    entry = await db.scalar(select(ExpenseEntry))
+    assert entry.description == "compras para el asado"

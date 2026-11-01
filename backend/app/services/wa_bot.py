@@ -22,7 +22,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -380,11 +380,16 @@ async def _last_ref(
 
 
 async def _open_pending(db: AsyncSession, user_id: int) -> WaMessage | None:
+    # Las filas de `link_replies` (respuestas ya enviadas, para poder citarlas)
+    # no son un mensaje nuevo: si contaran, quedarían después de la pregunta y
+    # la cerrarían. Pasaba con "¿Le agregás una descripción?", que sale junto
+    # con un gasto recién cargado: la descripción no se tomaba nunca.
     return await db.scalar(
         select(WaMessage).where(
             WaMessage.user_id == user_id,
             WaMessage.pending.is_not(None),
             WaMessage.created_at >= _cutoff(),
+            or_(WaMessage.ref_type.is_(None), ~WaMessage.ref_type.startswith(_REPLY_PREFIX)),
         ).order_by(WaMessage.id.desc()).limit(1)
     )
 
