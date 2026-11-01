@@ -41,7 +41,9 @@
       # Already used by the Traefik labels below; the backend needs it too, to
       # derive the OAuth issuer and the canonical /mcp resource URL.
       API_DOMAIN: ${API_DOMAIN:-}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      # Base de los links que arma el backend (invitaciones, links del bot, la página para autorizar el conector).
+      # Easypanel no la define: sin este valor el backend la derivaba de APP_DOMAIN, el dominio viejo de la app.
+      FRONTEND_URL: ${FRONTEND_URL:-https://app.tood.com.ar}
       INTERNAL_LOG_KEY: ${INTERNAL_LOG_KEY:-}
       # MCP connector. It does NOT need ALLOWED_ORIGINS touched: /mcp, /oauth/*
       # and /.well-known/* get their own wildcard CORS in main.py, because the

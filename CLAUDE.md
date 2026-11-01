@@ -62,7 +62,7 @@ Current flags: `NEXT_PUBLIC_FEATURE_IOS_SHORTCUT` — the iOS Shortcut section i
 
 **CORS**: the backend reads `ALLOWED_ORIGINS` from env (default: `http://localhost:3000`). In production this must include the frontend domain, e.g. `https://registrapp.imanzanastore.com.ar`.
 
-**`FRONTEND_URL`**: used to build invite links in WhatsApp messages (`{FRONTEND_URL}/invite/{token}`). Defaults to `http://localhost:3000`; set to the production domain in Easypanel env vars.
+**`FRONTEND_URL`**: used to build invite links in WhatsApp messages (`{FRONTEND_URL}/invite/{token}`), the bot's auto-login links and the OAuth consent redirect. In production it defaults to `https://app.tood.com.ar` in `docker-compose.prod.yml` (Easypanel doesn't set it); without a value the backend derives it from `APP_DOMAIN`.
 
 ## Git workflow and commits
 
@@ -455,7 +455,8 @@ Los anuncios de features nuevas son carruseles a pantalla completa construidos *
 - **La app vive en dos dominios mientras dure el cambio de marca**: `app.tood.com.ar` (router `registrapp-app2`), que es `NEXT_PUBLIC_APP_URL` desde la fase 1, y el viejo (`APP_DOMAIN`, en `NEXT_PUBLIC_APP_ALIASES`), donde siguen los testers con la app instalada. `NEXT_PUBLIC_APP_URL` es el dominio al que llevan los links nuevos ("Entrar"); `NEXT_PUBLIC_APP_ALIASES` (lista separada por comas) son los otros dominios donde también vive la app, que el middleware trata igual. Las tres variables tienen valores por defecto en el compose (no hay que cargarlas en Easypanel) y `NEXT_PUBLIC_APP_ALIASES` tiene sus tres piezas como todo `NEXT_PUBLIC_*`.
 - **`ALLOWED_ORIGINS` suma solo `https://app.tood.com.ar` y `https://tood.com.ar`** en el compose, además de lo que tenga cargado Easypanel.
 - **Firebase Auth** tiene autorizados `app.tood.com.ar` y `tood.com.ar`.
-- El backend sigue en `API_DOMAIN` (el conector de IA y el webhook de WhatsApp también); `FRONTEND_URL` sigue en el dominio viejo. Pasarlos a `api.tood.com.ar` / `app.tood.com.ar` es la fase 3 del plan de migración (ver memoria `migracion-tood`).
+- **`FRONTEND_URL` es `https://app.tood.com.ar`** por defecto en el compose (Easypanel no la define; antes el backend la derivaba de `APP_DOMAIN`): los links de invitación, los del bot y la página para autorizar el conector llevan al dominio nuevo.
+- El backend sigue en `API_DOMAIN` (el conector de IA y el webhook de WhatsApp también). Pasarlo a `api.tood.com.ar` / `app.tood.com.ar` es la fase 3 del plan de migración (ver memoria `migracion-tood`).
 - DNS en Cloudflare, en "Solo DNS" (nube gris) para que Traefik saque los certificados. `api.tood.com.ar` tiene registro pero todavía ningún servicio: muestra el certificado de Easypanel.
 
 El plan completo:
