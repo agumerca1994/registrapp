@@ -91,6 +91,31 @@ async def test_legacy_format_creates_category(db):
     assert cat is not None
 
 
+async def test_free_text_in_a_household_without_categories_creates_it(db):
+    # El primer gasto de una cuenta nueva (el que guarda el alta por WhatsApp).
+    replies = await wa_bot.handle(db, USER, _in("12 lucas verdulería"))
+    assert "✅ $12.000" in replies[0]
+    cat = await db.scalar(select(ExpenseCategory))
+    assert cat.name == "verdulería"
+    assert (await db.scalar(select(ExpenseEntry))).category_id == cat.id
+
+
+async def test_category_name_question_creates_the_named_category(db):
+    # Con categorías, un término desconocido sin opciones parecidas pregunta el nombre;
+    # la respuesta crea la categoría en vez de perderse.
+    await _cat(db, "Kiosco")
+    await wa_bot.handle(db, USER, _in("12 lucas cosas del chino", wa_id="W1"))
+    row = await db.scalar(select(WaMessage).where(WaMessage.pending.is_not(None)).order_by(WaMessage.id.desc()))
+    row.pending = {"type": "category_name", "draft": row.pending["draft"]}
+    await db.flush()
+    replies = await wa_bot.handle(db, USER, _in("almacén", wa_id="W2"))
+    assert "✅" in replies[0]
+    cat = await db.scalar(select(ExpenseCategory).where(ExpenseCategory.name == "Almacén"))
+    assert (await db.scalar(select(ExpenseEntry))).category_id == cat.id
+    # Algo con números no es un nombre: sigue su camino (otro gasto).
+    assert await db.scalar(select(ExpenseCategory).where(ExpenseCategory.name.like("%lucas%"))) is None
+
+
 async def test_undo_deletes_last_expense(db):
     await _cat(db, "Kiosco")
     await wa_bot.handle(db, USER, _in("5000 kiosco", wa_id="W1"))

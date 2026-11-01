@@ -1529,7 +1529,9 @@ async def _do_pending_category_by_name(
 ) -> list[str] | None:
     """La pregunta de categoría también acepta el nombre escrito ("súper").
     Sólo consume el texto si coincide con una categoría existente — cualquier
-    otra cosa sigue su camino normal (puede ser un gasto nuevo)."""
+    otra cosa sigue su camino normal (puede ser un gasto nuevo). La excepción es
+    "Decime el nombre de la categoría": ahí un nombre sin números es la
+    respuesta, y la categoría se crea."""
     row = await _open_pending(db, user.id)
     if row is None:
         return None
@@ -1544,7 +1546,17 @@ async def _do_pending_category_by_name(
     )).all()
     cat = next((c for c in cats if fold_text(c.name) == fold_text(inbound.text)), None)
     if cat is None:
-        return None
+        name = (inbound.text or "").strip()
+        if pending.get("type") != "category_name" or not name or len(name) > 40 or any(ch.isdigit() for ch in name):
+            return None
+        import random
+
+        cat = ExpenseCategory(
+            tenant_id=user.tenant_id, name=name[0].upper() + name[1:],
+            color=random.choice(quick_capture.CATEGORY_COLORS), is_fixed=False,
+        )
+        db.add(cat)
+        await db.flush()
 
     return await _create_from_pending(db, user, inbound, row, cat)
 

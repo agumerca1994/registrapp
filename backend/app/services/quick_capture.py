@@ -138,7 +138,7 @@ async def resolve_category(
 ) -> CategoryPick:
     """De un término a una categoría del hogar, en el orden barato→caro:
     nombre exacto → regla comercio→categoría → sugerencia por historial →
-    (sólo formato histórico) crearla → preguntar."""
+    crearla (formato histórico, o un hogar sin categorías) → preguntar."""
     cats = (await db.scalars(
         select(ExpenseCategory).where(ExpenseCategory.tenant_id == tenant_id)
     )).all()
@@ -163,7 +163,10 @@ async def resolve_category(
             suggestion.category_id, suggestion.category_name, "suggest", None, []
         )
 
-    if allow_create:
+    # Un hogar recién creado no tiene categorías: no hay ninguna que elegir mal,
+    # y sin esto el primer gasto (el que esperaba el alta por WhatsApp) no se
+    # podía cargar. El término pasa a ser la categoría, como en el formato histórico.
+    if allow_create or not cats:
         return CategoryPick(None, term, "created", None, [])
 
     return CategoryPick(None, None, None, None, [c.name for c in cats][:9])
