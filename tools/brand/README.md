@@ -10,6 +10,7 @@ Fuentes de la identidad de tood (hasta el 2026-10-30 se llamó tero; la explorac
 | Script que genera todo lo anterior | `build.py` |
 | Exploración (cara mínima, gestos del logo, avatar) | `exploracion/tero-marca.html` |
 | Lienzo: logo, cada animación y el avatar con selectores de ojos y boca | `lienzo/` (`python3 tools/brand/lienzo/build.py`) |
+| Stickers animados del bot de WhatsApp (cargado, ingreso, error, duda) | `stickers/` (`node tools/brand/stickers/build.cjs`, después del build del lienzo) |
 | Mocks del celular y la web, y el video de 34 s | `mocks/` |
 
 ## Regenerar las piezas

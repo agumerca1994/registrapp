@@ -58,6 +58,35 @@ MSG_HELP = (
 )
 
 
+# Después de responder, la t reacciona con un sticker animado (frontend/public/brand/tood/stickers/). Uno por
+# mensaje, elegido por la respuesta y no por quién la escribió: así cualquier camino nuevo del bot que siga la
+# convención de los textos (✅ guardado, "No pude…", opciones 1./2.) recibe el suyo sin tocar nada acá.
+#   error   → algo no se pudo hacer (prioridad: es lo que más importa que se note)
+#   duda    → no entendió, o pregunta con opciones
+#   ingreso → se cargó un ingreso
+#   cargado → se cargó un gasto, una venta, un cierre, la producción o se aplicó un resumen
+# Deshacer, editar o consultar no llevan sticker: no son una carga nueva.
+STICKERS = ("error", "duda", "ingreso", "cargado")
+_UNDERSTOOD_NOT = ("No te entendí",)
+
+
+def sticker_for(replies: list[str]) -> str | None:
+    texts = [r for r in replies if r]
+    if any(r == MSG_ERROR or r.startswith("No pude") for r in texts):
+        return "error"
+    if any(r.startswith(_UNDERSTOOD_NOT) or "\n1. " in r or r.startswith("1. ") for r in texts):
+        return "duda"
+    if any(r.startswith("✅ Ingreso") for r in texts):
+        return "ingreso"
+    if any(r.startswith("✅") for r in texts):
+        return "cargado"
+    return None
+
+
+def sticker_url(kind: str) -> str:
+    return f"{settings.FRONTEND_URL.rstrip('/')}/brand/tood/stickers/sticker-{kind}.webp"
+
+
 def _help_text() -> str:
     """Con la IA prendida, el bot también lee fotos y capturas: la ayuda lo dice."""
     if not ai_capture.enabled():

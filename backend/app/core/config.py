@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     # el bot hace lo de antes; WA_AI_ENABLED es el apagador sin tocar la clave.
     ANTHROPIC_API_KEY: str = ""
     WA_AI_ENABLED: bool = True
+    # Stickers animados de la t después de cada respuesta del bot (cargado, ingreso, error, duda). Apagador.
+    WA_STICKERS_ENABLED: bool = True
     WA_AI_MODEL: str = "claude-opus-5-5"
     # Lecturas por hogar por día: el freno de costo si alguien manda 200 fotos.
     WA_AI_DAILY_LIMIT: int = 40

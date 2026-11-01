@@ -72,6 +72,32 @@ async def send_wa_msg(phone: str, msg: str) -> str | None:
         return None
 
 
+async def send_wa_sticker(phone: str, url: str) -> str | None:
+    """Manda un sticker (WebP animado, 512×512, menos de 500 KB) desde una URL pública. Igual que el texto:
+    nunca levanta excepción y deja en el log por qué no salió."""
+    if not settings.EVOLUTION_API_URL or not settings.EVOLUTION_INSTANCE:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resolved = await resolve_whatsapp_jid(client, phone)
+            target = resolved or phone.lstrip("+")
+            resp = await client.post(
+                f"{settings.EVOLUTION_API_URL}/message/sendSticker/{settings.EVOLUTION_INSTANCE}",
+                json={"number": target, "sticker": url},
+                headers={"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"},
+            )
+            if resp.status_code >= 400:
+                logger.warning(f"WhatsApp sticker failed {resp.status_code} to {phone}: {resp.text[:300]}")
+                return None
+            try:
+                return ((resp.json() or {}).get("key") or {}).get("id")
+            except ValueError:
+                return None
+    except Exception as e:
+        logger.warning(f"WhatsApp sticker error to {phone}: {e}")
+        return None
+
+
 async def download_media_base64(message_key: dict, raw_message: dict | None = None) -> bytes | None:
     """Baja el adjunto de un mensaje entrante vía Evolution
     (`/chat/getBase64FromMediaMessage/{instance}`) y devuelve los bytes.

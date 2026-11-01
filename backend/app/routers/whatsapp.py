@@ -27,7 +27,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.services import wa_bot
 from app.services.participants import find_user_by_phone
-from app.services.whatsapp import send_wa_msg
+from app.services.whatsapp import send_wa_msg, send_wa_sticker
 
 router = APIRouter(prefix="/webhook", tags=["webhook"])
 logger = logging.getLogger(__name__)
@@ -102,4 +102,8 @@ async def whatsapp_webhook(
     replies = await wa_bot.handle(db, user, inbound)
     sent_ids = [await send_wa_msg(inbound.phone, reply) for reply in replies]
     await wa_bot.link_replies(db, user.id, mark, sent_ids)
+    # La t reacciona a lo que pasó (ver wa_bot.STICKERS). Después del texto, y si falla, no importa.
+    kind = wa_bot.sticker_for(replies) if settings.WA_STICKERS_ENABLED else None
+    if kind:
+        await send_wa_sticker(inbound.phone, wa_bot.sticker_url(kind))
     return {"status": "ok", "replies": len(replies)}
