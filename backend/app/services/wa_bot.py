@@ -48,6 +48,26 @@ MSG_NOT_LINKED = (
     "Este número no está vinculado a tood.\n"
     "Vinculalo desde la app, en Configuración > WhatsApp."
 )
+# A quien todavía no tiene cuenta (services/wa_signup.py). El link crea la
+# cuenta y deja el número vinculado; lo que haya mandado se carga ahí.
+MSG_SIGNUP_SAVED = (
+    "Hola, soy tood. Llevo las cuentas de la casa: gastos, tarjetas e ingresos, cargados por acá.\n\n"
+    "Todavía no tenés cuenta. Creala en un minuto con este link y lo que me mandaste queda cargado:\n{link}"
+)
+MSG_SIGNUP = (
+    "Hola, soy tood. Llevo las cuentas de la casa: gastos, tarjetas e ingresos, cargados por acá.\n\n"
+    "Todavía no tenés cuenta. Creala en un minuto con este link:\n{link}\n\n"
+    "Después escribime un gasto así: *12 lucas verdulería*"
+)
+MSG_SIGNUP_MEDIA = (
+    "Hola, soy tood. Llevo las cuentas de la casa: gastos, tarjetas e ingresos, cargados por acá.\n\n"
+    "Todavía no tenés cuenta. Creala en un minuto con este link y después mandame eso de nuevo:\n{link}"
+)
+# Mensajes siguientes, con el link ya mandado (no se rota: ver wa_signup).
+MSG_SIGNUP_AGAIN_SAVED = "Lo guardé también. Cuando crees la cuenta con el link de arriba, queda cargado."
+MSG_SIGNUP_AGAIN = "Para seguir, creá tu cuenta con el link de arriba."
+MSG_SIGNUP_LINKED = "Listo, tu WhatsApp quedó vinculado a tood."
+MSG_SIGNUP_REPLAY = "Listo, tu WhatsApp quedó vinculado a tood. Cargo lo que me mandaste:"
 MSG_ERROR = "No pude procesar ese mensaje. Probá de nuevo en un rato."
 # Una cuenta en pausa no carga nada por chat (services/account_closure.py).
 MSG_PAUSED = (
@@ -86,6 +106,44 @@ def sticker_for(replies: list[str]) -> str | None:
     if any(r.startswith("✅") for r in texts):
         return "cargado"
     return None
+
+
+async def handle_and_send(db: AsyncSession, user: User, inbound: InboundMessage) -> int:
+    """Procesa un mensaje y manda las respuestas, después del commit que hace
+    `handle` (un mensaje nunca anuncia algo que no quedó guardado). Lo usan el
+    webhook y el alta desde el bot, que reprocesa lo que se mandó sin cuenta."""
+    from app.services.whatsapp import send_wa_msg, send_wa_sticker
+
+    mark = await memory_mark(db, user.id)
+    replies = await handle(db, user, inbound)
+    sent_ids = [await send_wa_msg(inbound.phone, reply) for reply in replies]
+    await link_replies(db, user.id, mark, sent_ids)
+    # La t reacciona a lo que pasó (ver STICKERS). Después del texto, y si falla, no importa.
+    kind = sticker_for(replies) if settings.WA_STICKERS_ENABLED else None
+    if kind:
+        await send_wa_sticker(inbound.phone, sticker_url(kind))
+    return len(replies)
+
+
+async def reply_unlinked(db: AsyncSession, inbound: InboundMessage) -> str | None:
+    """La respuesta a un número sin cuenta (o None: ya se le contestó mucho).
+    Commitea antes de devolver: el link sólo sale si el token quedó guardado."""
+    from app.services import rate_limit, wa_signup
+
+    # Un número que escribe sin parar no puede hacer que el bot le conteste
+    # sin parar: el número del bot es lo que Evolution arriesga.
+    if not rate_limit.check(f"wa_unlinked:{inbound.phone}", 6, 3600):
+        return None
+    raw, saved = await wa_signup.record(db, inbound.phone, inbound.text if inbound.kind == "text" else "")
+    await db.commit()
+    if raw is None:
+        return MSG_SIGNUP_AGAIN_SAVED if saved else MSG_SIGNUP_AGAIN
+    link = wa_signup.signup_link(raw)
+    if saved:
+        return MSG_SIGNUP_SAVED.format(link=link)
+    if inbound.kind in ("pdf", "image"):
+        return MSG_SIGNUP_MEDIA.format(link=link)
+    return MSG_SIGNUP.format(link=link)
 
 
 def sticker_url(kind: str) -> str:

@@ -168,6 +168,7 @@ export default function PrivacidadPage() {
         <List items={[
           "Lo que cargás en la app se guarda mientras tengas tu cuenta.",
           "Los mensajes del bot de WhatsApp se borran a los 7 días. Sólo se guardan para poder deshacer o corregir lo último que cargaste.",
+          "Si le escribís al bot sin tener cuenta, guardamos tu número y los gastos o ingresos que mandaste por 7 días, para cargarlos si creás la cuenta con el link que te manda. Después se borran.",
           "Los links de acceso que manda el bot vencen a los 15 minutos y se usan una sola vez.",
           "Las conexiones con asistentes de IA que se revocan o vencen se borran a los 30 días.",
           "Los registros técnicos de errores se guardan el tiempo necesario para resolverlos.",

@@ -5,7 +5,7 @@ import string
 from datetime import datetime, timedelta
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -731,3 +731,49 @@ async def redeem_wa_link(
 
     custom_token = firebase_auth.create_custom_token(user.firebase_uid)
     return {"custom_token": custom_token.decode() if isinstance(custom_token, bytes) else custom_token}
+
+
+# ── Alta desde el bot de WhatsApp ────────────────────────────────────────────
+# Quien le escribe al bot sin cuenta recibe un link con un token (ver
+# services/wa_signup.py). La app lo canjea apenas hay sesión y cuenta: el
+# número queda vinculado (el link llegó a ese número, así que lo prueba) y lo
+# que había mandado se procesa como si llegara ahora, con las respuestas en el
+# chat. Eso corre en segundo plano: el alta no espera a Evolution.
+
+async def _replay_signup(user_id: int, phone: str, texts: list[str]) -> None:
+    from app.core.database import AsyncSessionLocal
+    from app.services import wa_bot
+    from app.services.whatsapp import send_wa_msg
+
+    try:
+        await send_wa_msg(phone, wa_bot.MSG_SIGNUP_REPLAY if texts else wa_bot.MSG_SIGNUP_LINKED)
+        digits = phone.lstrip("+")
+        for text in texts:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                if user is None:
+                    return
+                await wa_bot.handle_and_send(
+                    db, user, wa_bot.InboundMessage(phone=digits, wa_id=None, kind="text", text=text),
+                )
+    except Exception:
+        logger.exception("Alta desde WhatsApp: no se pudo procesar lo guardado del usuario %s", user_id)
+
+
+@router.post("/wa-signup/claim")
+async def claim_wa_signup(
+    payload: dict,
+    background: BackgroundTasks,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import wa_signup
+
+    user = await db.scalar(select(User).where(User.firebase_uid == firebase_user["uid"]))
+    if user is None:
+        raise HTTPException(status_code=404, detail="Primero creá tu cuenta")
+    texts = await wa_signup.claim(db, user, str(payload.get("token") or ""))
+    phone = user.whatsapp_phone
+    await db.commit()
+    background.add_task(_replay_signup, user.id, phone, texts)
+    return {"linked": True, "pending": len(texts)}

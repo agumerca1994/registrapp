@@ -288,7 +288,7 @@ function WhatsAppSection() {
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
       ) : (
-        <WhatsAppVerifyForm onVerified={refreshUser} />
+        <WhatsAppVerifyForm onVerified={async () => { await refreshUser(); }} />
       )}
     </Card>
   );

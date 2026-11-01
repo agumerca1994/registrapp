@@ -63,8 +63,10 @@ export default function OnboardingPage() {
             tenant_code: tenantCode.trim().toUpperCase(), first_name: firstName,
             last_name: lastName, alias: alias.trim() || null,
           });
-      await refreshUser();
-      if (data.whatsapp_gate_pending) {
+      // El usuario fresco y no la respuesta del alta: si llegó por el link del
+      // bot, refreshUser ya vinculó el número y el paso de WhatsApp sobra.
+      const fresh = await refreshUser();
+      if ((fresh ?? data).whatsapp_gate_pending) {
         setStep("whatsapp");
       } else {
         router.replace("/dashboard");

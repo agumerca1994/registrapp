@@ -81,8 +81,12 @@ export default function LoginPage() {
   const [inAppBrowser, setInAppBrowser] = useState(false);
   const mood = useIdleMood();
 
+  // Llegó desde el link que el bot le manda a quien todavía no tiene cuenta.
+  const [fromBot, setFromBot] = useState(false);
+
   useEffect(() => {
     setInAppBrowser(isInAppBrowser());
+    setFromBot(new URLSearchParams(window.location.search).has("wa"));
   }, []);
 
   useEffect(() => {
@@ -117,6 +121,11 @@ export default function LoginPage() {
           awake track pokeable asleep={mood.asleep} reaction={mood.reaction} reactionKey={mood.key}
           duration={mood.reaction === "duda" ? DOUBT_LONG_MS : undefined} smile={mood.smile} />
         <p className="mt-4 text-[15px] text-white/85">todo en una sola app.</p>
+        {fromBot && (
+          <p className="mt-3 text-[15px] text-white">
+            Entrá y tu WhatsApp queda vinculado: lo que le mandaste a tood se carga solo.
+          </p>
+        )}
 
 
         {inAppBrowser && (

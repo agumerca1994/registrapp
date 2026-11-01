@@ -27,7 +27,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.services import wa_bot
 from app.services.participants import find_user_by_phone
-from app.services.whatsapp import send_wa_msg, send_wa_sticker
+from app.services.whatsapp import send_wa_msg
 
 router = APIRouter(prefix="/webhook", tags=["webhook"])
 logger = logging.getLogger(__name__)
@@ -88,7 +88,11 @@ async def whatsapp_webhook(
         # que sí estaba vinculado y recibía este mensaje era invisible en los
         # logs — que es justo lo que hizo tan difícil encontrar el bug del `==`.
         logger.warning("WhatsApp: mensaje de %s, sin usuario vinculado con ese número", inbound.phone)
-        await send_wa_msg(inbound.phone, MSG_NOT_LINKED)
+        # Le contesta con el link para crear la cuenta y le guarda lo que
+        # mandó (services/wa_signup.py): es la entrada que más convierte.
+        reply = await wa_bot.reply_unlinked(db, inbound)
+        if reply:
+            await send_wa_msg(inbound.phone, reply)
         return {"status": "not_linked"}
 
     # En pausa no se carga nada, ni se guarda el mensaje: la cuenta está congelada.
@@ -103,12 +107,5 @@ async def whatsapp_webhook(
 
     # El bot escribe y commitea; las respuestas salen recién después — un
     # mensaje nunca anuncia algo que no quedó guardado.
-    mark = await wa_bot.memory_mark(db, user.id)
-    replies = await wa_bot.handle(db, user, inbound)
-    sent_ids = [await send_wa_msg(inbound.phone, reply) for reply in replies]
-    await wa_bot.link_replies(db, user.id, mark, sent_ids)
-    # La t reacciona a lo que pasó (ver wa_bot.STICKERS). Después del texto, y si falla, no importa.
-    kind = wa_bot.sticker_for(replies) if settings.WA_STICKERS_ENABLED else None
-    if kind:
-        await send_wa_sticker(inbound.phone, wa_bot.sticker_url(kind))
-    return {"status": "ok", "replies": len(replies)}
+    replies = await wa_bot.handle_and_send(db, user, inbound)
+    return {"status": "ok", "replies": replies}

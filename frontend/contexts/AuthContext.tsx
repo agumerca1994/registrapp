@@ -12,7 +12,7 @@ interface AuthContextType {
   loading: boolean;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
-  refreshUser: () => Promise<void>;
+  refreshUser: () => Promise<AppUser | null>;
   clearUser: () => void;
 }
 
@@ -52,17 +52,54 @@ async function claimPendingInvite() {
   localStorage.removeItem("pendingInviteToken");
 }
 
+// El link que el bot de WhatsApp le manda a quien todavía no tiene cuenta
+// (`/login?wa=…`, ver backend services/wa_signup.py). Se guarda al llegar,
+// porque entre el link y la cuenta hay un login y quizás el alta, y se canjea
+// apenas existe la cuenta: vincula el número y el bot carga lo que se mandó.
+// No se saca de la URL a propósito: desde el navegador interno de WhatsApp el
+// login no funciona, y "Abrir en el navegador" tiene que llevarse el token.
+const WA_SIGNUP_KEY = "pendingWaSignup";
+
+function stashWaSignup() {
+  try {
+    const token = new URLSearchParams(window.location.search).get("wa");
+    if (token) localStorage.setItem(WA_SIGNUP_KEY, token);
+  } catch {
+    // Sin storage no hay cómo recordarlo: el número se vincula a mano.
+  }
+}
+
+/** true si vinculó el número (hay que volver a pedir el usuario). */
+async function claimPendingWaSignup(): Promise<boolean> {
+  let token: string | null = null;
+  try { token = localStorage.getItem(WA_SIGNUP_KEY); } catch { return false; }
+  if (!token) return false;
+  try {
+    await api.post("/auth/wa-signup/claim", { token });
+    localStorage.removeItem(WA_SIGNUP_KEY);
+    return true;
+  } catch (err: unknown) {
+    // Un link usado, vencido o de un número ajeno no se reintenta; un corte
+    // de red sí, en el próximo arranque.
+    if ((err as { response?: unknown })?.response) localStorage.removeItem(WA_SIGNUP_KEY);
+    return false;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    stashWaSignup();
     const unsub = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       if (user) {
         try {
-          const { data } = await api.get("/auth/me");
+          let { data } = await api.get("/auth/me");
+          // Una cuenta que ya existía y entró por el link del bot.
+          if (await claimPendingWaSignup()) ({ data } = await api.get("/auth/me"));
           setAppUser(data);
         } catch {
           setAppUser(null);
@@ -79,14 +116,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signInWithPopup(auth, googleProvider);
   };
 
-  const refreshUser = async () => {
+  const refreshUser = async (): Promise<AppUser | null> => {
     try {
-      const { data } = await api.get("/auth/me");
-      setAppUser(data);
+      let { data } = await api.get("/auth/me");
       // After registration/join, claim any pending invite link stored in localStorage
       await claimPendingInvite();
+      // Recién creada desde el link del bot: el número queda vinculado y el
+      // paso obligatorio de WhatsApp del alta ya no hace falta.
+      if (await claimPendingWaSignup()) ({ data } = await api.get("/auth/me"));
+      setAppUser(data);
+      return data;
     } catch {
       setAppUser(null);
+      return null;
     }
   };
 
