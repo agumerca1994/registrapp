@@ -53,6 +53,11 @@ const securityHeaders = [
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
 ];
 
+// El login con Google corre en el dominio de la app (authDomain = app.tood.com.ar) y no en
+// <proyecto>.firebaseapp.com: la ventana de Google muestra tood, y Safari no lo bloquea por ser de otro sitio.
+// Para eso /__/auth/* y /__/firebase/* se reenvían a Firebase tal cual (la opción "proxy" de su guía).
+const FIREBASE_HOSTING = `https://${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "demo-registrapp"}.firebaseapp.com`;
+
 const nextConfig: NextConfig = {
   output: "standalone",
   // Baked in at build time so the user-menu popover can show "last updated"
@@ -65,9 +70,23 @@ const nextConfig: NextConfig = {
   // with the sidebar's user-menu avatar (also bottom-left). Dev-only, no
   // effect on production builds.
   devIndicators: false,
+  async rewrites() {
+    return [
+      { source: "/__/auth/:path*", destination: `${FIREBASE_HOSTING}/__/auth/:path*` },
+      { source: "/__/firebase/:path*", destination: `${FIREBASE_HOSTING}/__/firebase/:path*` },
+    ];
+  },
   async headers() {
     return [
       { source: "/(.*)", headers: securityHeaders },
+      // El SDK de Firebase abre /__/auth/iframe dentro de la app: tiene que poder enmarcarse desde el mismo sitio.
+      {
+        source: "/__/auth/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy-Report-Only", value: CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'") },
+        ],
+      },
       // La presentación estática de RegistrApp Negocio se muestra en un iframe
       // de /negocio y /negocio/instructivo. Es un archivo autocontenido sin
       // código de la app ni sesión, así que se deja enmarcar sólo desde este
