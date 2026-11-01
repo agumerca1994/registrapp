@@ -149,7 +149,7 @@ export default function HogarPage() {
             <div className="min-w-0">
               <h2 className="font-display font-bold text-3xl tracking-tight">El instructivo</h2>
               <p className="mt-2 text-lg text-muted-foreground max-w-2xl">
-                Una presentación con capturas reales y los pasos de cada tarea: cargar un gasto o un sueldo,
+                Una presentación con los pasos de cada tarea: cargar un gasto o un sueldo,
                 compartir, comprar dólares y pagar en cuotas.
               </p>
             </div>
@@ -168,9 +168,6 @@ export default function HogarPage() {
             <iframe src="/hogar/instructivo.html" title="Instructivo de tood Hogar"
               className="block w-full h-[78vh] min-h-[520px] border-0" loading="lazy" />
           </div>
-          <p className="mt-3 text-sm text-muted-foreground">
-            El archivo descargado se abre en cualquier navegador, sin conexión. Los datos de las capturas son de ejemplo.
-          </p>
         </section>
 
         <section className="max-w-6xl mx-auto px-4 md:px-8 pt-4 pb-16">

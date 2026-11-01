@@ -36,8 +36,9 @@ export function PausedScreen() {
         <div style={{ transform: "translateX(-3%)" }}><ToodLogo className="h-9 w-auto text-white" title="tood" /></div>
         <ToodAvatar size={150} className="mt-6 translate-x-[5.5%]" ink="#ffffff" holeColor={BRAND_FIELD} asleep />
         <h1 className="mt-6 font-display text-2xl font-semibold">Tu cuenta está en pausa</h1>
-        <p className="mt-2 text-[15px] text-white/85 leading-relaxed">
-          Tus datos están como los dejaste. Reactivala para volver a cargar, recibir avisos y usar el bot.
+        {/* `text-balance` y el espacio fijo: que "bot" no quede solo en la última línea. */}
+        <p className="mt-2 text-[15px] text-white/85 leading-relaxed text-balance">
+          Tus datos están como los dejaste. Reactivala para volver a cargar, recibir avisos y usar el{"\u00a0"}bot.
         </p>
         {error && <p className="mt-4 text-sm text-white">{error}</p>}
         <Button variant="outline" onClick={reactivate} disabled={busy}

@@ -6,8 +6,9 @@ import { ToodAvatar, type ToodReaction } from "@/components/brand/ToodAvatar";
 // La t confirma lo que acabás de hacer: guardar, borrar o un error. Sin esto, cargar o eliminar algo no daba
 // ninguna señal de que se hizo.
 //   - En el celular aparece en el medio de la pantalla, con su animación y una línea de texto, y se va sola.
-//   - En la compu aparece abajo a la derecha, un poco más grande que el botón +, y el + se esconde mientras
-//     tanto (Fab lee `useReaccionActiva`). Si la pantalla no tiene +, aparece igual en ese lugar.
+//   - En la compu aparece abajo a la derecha, mucho más grande que el botón +, y el + se esconde mientras tanto
+//     (Fab lee `useReaccionActiva`). Si la pantalla no tiene +, aparece igual en ese lugar.
+//   - Nunca dentro de una caja ni de un círculo: flota sobre la pantalla, con un desenfoque suave detrás (`Halo`).
 // Se usa con `const reaccionar = useReaccion(); reaccionar("guardado", "Egreso guardado")`. El texto va
 // siempre: es lo que lee un lector de pantalla y lo que ve quien tiene el movimiento reducido.
 
@@ -66,23 +67,33 @@ function ReaccionVisible({ estado }: { estado: Estado }) {
 
   return (
     <div aria-hidden="true">
-      {/* Celular: en el medio de la pantalla. */}
+      {/* Celular: en el medio de la pantalla, flotando sobre lo que haya, sin caja. */}
       <div className="md:hidden fixed inset-0 z-[70] grid place-items-center pointer-events-none px-6">
-        <div className={`${anim} flex flex-col items-center gap-1 rounded-3xl border-2 border-ink bg-card px-7 pt-4 pb-5 shadow-chip`}>
-          {avatar(120)}
-          <p className="font-display font-semibold text-lg text-foreground text-center">{texto}</p>
+        <div className={`${anim} relative flex flex-col items-center gap-3`}>
+          <Halo />
+          <div className="relative translate-x-[5.5%]">{avatar(210)}</div>
+          <p className="relative font-display font-semibold text-xl text-foreground text-center">{texto}</p>
         </div>
       </div>
-      {/* Compu: abajo a la derecha, en el lugar del botón + y un poco más grande que él. */}
-      <div className="hidden md:flex fixed right-8 bottom-6 z-[45] items-center gap-3 pointer-events-none">
-        <p className={`${anim} origin-right rounded-full border-2 border-ink bg-card px-3.5 py-1.5 text-sm font-semibold text-foreground shadow-chip`}>
-          {texto}
-        </p>
-        <div className={`${anim} origin-bottom-right w-[72px] h-[72px] rounded-full border-2 border-ink bg-card shadow-chip grid place-items-center`}>
-          {avatar(62)}
+      {/* Compu: abajo a la derecha, donde está el botón +, flotando y bastante más grande que él. */}
+      <div className="hidden md:block fixed right-12 bottom-10 z-[45] pointer-events-none">
+        <div className={`${anim} relative origin-bottom-right flex items-end gap-2`}>
+          <Halo />
+          <p className="relative mb-12 font-display font-semibold text-xl text-foreground whitespace-nowrap">{texto}</p>
+          <div className="relative">{avatar(230)}</div>
         </div>
       </div>
     </div>
+  );
+}
+
+/** Un desenfoque suave detrás, que se desvanece hacia los bordes: separa la t de lo que tiene abajo sin encerrarla
+ *  en una caja. */
+function Halo() {
+  const mask = "radial-gradient(closest-side, #000 50%, transparent 100%)";
+  return (
+    <span className="absolute -inset-16 bg-background/60 backdrop-blur-xl"
+      style={{ maskImage: mask, WebkitMaskImage: mask }} />
   );
 }
 

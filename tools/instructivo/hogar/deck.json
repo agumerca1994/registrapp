@@ -5,7 +5,7 @@
   "output": "/Users/agustin/Proyectos/tood-Hogar-Instructivo.html",
   "slides": [
     {"type": "cover", "kicker": "Instructivo de uso", "title": "tood Hogar",
-     "intro": "Ingresos, gastos, tarjetas, dólares, hipoteca y gastos compartidos de tu casa, en una sola app. Los ejemplos son de un hogar de prueba: Casa Gómez.",
+     "intro": "Ingresos, gastos, tarjetas, dólares, hipoteca y gastos compartidos de tu casa, en una sola app.",
      "image": "inicio"},
     {"type": "index", "kicker": "Contenido", "title": "Qué vas a ver", "items": [
       "Inicio: cómo cierra el mes", "Ingresos y cómo cargar un sueldo", "Egresos y cómo cargar un gasto",

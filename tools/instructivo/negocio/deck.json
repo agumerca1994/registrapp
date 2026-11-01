@@ -5,7 +5,7 @@
   "output": "/Users/agustin/Proyectos/tood-Negocio-Instructivo.html",
   "slides": [
     {"type": "cover", "kicker": "Instructivo de uso", "title": "tood Negocio",
-     "intro": "Ventas, cierre de caja, stock, gastos y equipo de un comercio, en una sola app. Los ejemplos son de una rotisería de prueba.",
+     "intro": "Ventas, cierre de caja, stock, gastos y equipo de un comercio, en una sola app.",
      "image": "inicio"},
     {"type": "index", "kicker": "Contenido", "title": "Qué vas a ver", "items": [
       "Inicio: cómo viene el mes", "Ventas y cómo cargar una", "Cerrar el día", "Productos y stock",

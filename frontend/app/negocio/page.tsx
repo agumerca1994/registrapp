@@ -123,7 +123,7 @@ export default function NegocioPage() {
             <div className="min-w-0">
               <h2 className="font-display font-bold text-3xl tracking-tight">El instructivo</h2>
               <p className="mt-2 text-lg text-muted-foreground max-w-2xl">
-                Una presentación con capturas reales y los pasos de cada tarea: cargar una venta, cerrar el día,
+                Una presentación con los pasos de cada tarea: cargar una venta, cerrar el día,
                 productos, stock, egresos y equipo.
               </p>
             </div>
@@ -142,9 +142,6 @@ export default function NegocioPage() {
             <iframe src="/negocio/instructivo.html" title="Instructivo de tood Negocio"
               className="block w-full h-[78vh] min-h-[520px] border-0" loading="lazy" />
           </div>
-          <p className="mt-3 text-sm text-muted-foreground">
-            El archivo descargado se abre en cualquier navegador, sin conexión. Los datos de las capturas son de ejemplo.
-          </p>
         </section>
 
         <section className="max-w-6xl mx-auto px-4 md:px-8 pt-4 pb-16">

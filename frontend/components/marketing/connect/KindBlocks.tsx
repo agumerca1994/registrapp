@@ -65,7 +65,7 @@ export function FirstQuestion() {
           </li>
         ))}
       </ul>
-      <ExampleChat key={kind} label={kind === "business" ? "Ejemplo de conversación · negocio de demo" : "Ejemplo de conversación · hogar de demo"}
+      <ExampleChat key={kind} label="Ejemplo de conversación"
         messages={messages} />
     </>
   );
