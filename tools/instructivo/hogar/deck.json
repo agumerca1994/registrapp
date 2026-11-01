@@ -1,10 +1,10 @@
 {
-  "title": "RegistrApp Hogar · Instructivo",
+  "title": "tood Hogar · Instructivo",
   "lang": "es",
   "frames": "/private/tmp/registrapp-instructivo/hogar/frames.json",
-  "output": "/Users/agustin/Proyectos/RegistrApp-Hogar-Instructivo.html",
+  "output": "/Users/agustin/Proyectos/tood-Hogar-Instructivo.html",
   "slides": [
-    {"type": "cover", "kicker": "Instructivo de uso", "title": "RegistrApp Hogar",
+    {"type": "cover", "kicker": "Instructivo de uso", "title": "tood Hogar",
      "intro": "Ingresos, gastos, tarjetas, dólares, hipoteca y gastos compartidos de tu casa, en una sola app. Los ejemplos son de un hogar de prueba: Casa Gómez.",
      "image": "inicio"},
     {"type": "index", "kicker": "Contenido", "title": "Qué vas a ver", "items": [
@@ -103,7 +103,7 @@
        "Más abajo: notificaciones, vincular tu WhatsApp, conectar con una IA y el dólar con el que se valúan tus dólares."]},
 
     {"type": "text", "kicker": "WhatsApp", "title": "Cargar un gasto por chat",
-     "intro": "Con tu número vinculado en Configuración, le escribís a RegistrApp como si fuera una nota y te confirma qué cargó.",
+     "intro": "Con tu número vinculado en Configuración, le escribís a tood como si fuera una nota y te confirma qué cargó.",
      "bullets": ["Un gasto: **12 lucas verdulería**, **15000 supermercado** o **usd 20 regalo ayer**.",
        "El **PDF de un comprobante** de pago o transferencia.",
        "**deshacer** borra lo último que cargaste.",

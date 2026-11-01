@@ -45,8 +45,16 @@ SEEN_KEYS.push(fs.readFileSync(path.join(FRONT, "components/WhatsNewCarousel.tsx
   .match(/WHATS_NEW_KEY = "([^"]+)"/)[1]);
 
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
-// "Hoy" en la Argentina, igual que services/clock.ar_today().
-const TODAY = new Date().toLocaleString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" }).slice(0, 10);
+// "Hoy" en la Argentina, igual que services/clock.ar_today(). A principio de mes
+// todo el mes cae en uno o dos días: se usa el 15 del mes anterior (o INSTRUCTIVO_HOY).
+// Siempre en el pasado, porque el backend recorta la tenencia y la hipoteca a su hoy real.
+function referenceDay(real) {
+  if (process.env.INSTRUCTIVO_HOY) return process.env.INSTRUCTIVO_HOY;
+  const [y, m, d] = real.split("-").map(Number);
+  if (d >= 12) return real;
+  return m === 1 ? `${y - 1}-12-15` : `${y}-${String(m - 1).padStart(2, "0")}-15`;
+}
+const TODAY = referenceDay(new Date().toLocaleString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" }).slice(0, 10));
 const [Y, M, D] = TODAY.split("-").map(Number);
 const pad = (n) => String(n).padStart(2, "0");
 const day = (d, m = M, y = Y) => `${y}-${pad(m)}-${pad(d)}`;

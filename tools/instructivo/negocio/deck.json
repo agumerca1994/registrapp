@@ -1,10 +1,10 @@
 {
-  "title": "RegistrApp Negocio · Instructivo",
+  "title": "tood Negocio · Instructivo",
   "lang": "es",
   "frames": "/private/tmp/registrapp-instructivo/negocio/frames.json",
-  "output": "/Users/agustin/Proyectos/RegistrApp-Negocio-Instructivo.html",
+  "output": "/Users/agustin/Proyectos/tood-Negocio-Instructivo.html",
   "slides": [
-    {"type": "cover", "kicker": "Instructivo de uso", "title": "RegistrApp Negocio",
+    {"type": "cover", "kicker": "Instructivo de uso", "title": "tood Negocio",
      "intro": "Ventas, cierre de caja, stock, gastos y equipo de un comercio, en una sola app. Los ejemplos son de una rotisería de prueba.",
      "image": "inicio"},
     {"type": "index", "kicker": "Contenido", "title": "Qué vas a ver", "items": [
@@ -70,7 +70,7 @@
        "Quien se suma entra como **empleado**: carga ventas, cierre y stock, sin ver números.",
        "Con **Hacer socio** le das acceso completo.", "Vinculá tu WhatsApp para cargar por chat."]},
     {"type": "chat", "kicker": "WhatsApp", "title": "Cargar por chat",
-     "intro": "Con el número vinculado, escribile a RegistrApp como si fuera una nota. Si algo no le queda claro, te pregunta con opciones numeradas.",
+     "intro": "Con el número vinculado, escribile a tood como si fuera una nota. Si algo no le queda claro, te pregunta con opciones numeradas.",
      "bullets": ["**deshacer** borra lo último que cargaste.", "**editar monto 7000** corrige la última venta.",
        "Los empleados cargan ventas, cierre y stock; los gastos los carga el dueño o un socio."],
      "messages": [

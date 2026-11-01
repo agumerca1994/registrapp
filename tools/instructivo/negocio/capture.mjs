@@ -21,11 +21,34 @@ const TOURS = ["dashboard-intro", "income-intro", "expenses-intro", "sales-intro
   "calendar-intro", "expenses-business-intro"];
 
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
-// El día de negocio: Argentina, con corte a las 05:00 (igual que la app).
+// El día de negocio: Argentina, con corte a las 05:00 (igual que la app). A principio
+// de mes no hay días anteriores para cerrar: se usa el 15 del mes anterior (o
+// INSTRUCTIVO_HOY), siempre en el pasado para el backend.
 const arNow = new Date(Date.now() - 5 * 3600e3).toLocaleString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" });
-const TODAY = arNow.slice(0, 10);
+// Se decide por la fecha calendario: Inicio muestra el mes calendario, y a la 1 del
+// día 1 el día de negocio todavía es el mes anterior.
+function referenceDay(real) {
+  if (process.env.INSTRUCTIVO_HOY) return process.env.INSTRUCTIVO_HOY;
+  const cal = new Date().toLocaleString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" }).slice(0, 10);
+  const [y, m, d] = cal.split("-").map(Number);
+  if (d >= 12) return real;
+  return m === 1 ? `${y - 1}-12-15` : `${y}-${String(m - 1).padStart(2, "0")}-15`;
+}
+const TODAY = referenceDay(arNow.slice(0, 10));
 const [Y, M, D] = TODAY.split("-").map(Number);
 const day = (d) => `${Y}-${String(M).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+// El reloj del navegador va a ese día de negocio con la hora real: la lista de
+// ventas muestra la hora de created_at, que pone el backend con su reloj. De
+// madrugada (antes del corte) eso cruzaría al día calendario siguiente: se usan
+// las 15:00, y las ventas muestran la hora real. Para una corrida nocturna,
+// INSTRUCTIVO_TZ corre la zona del navegador (sólo cambia la hora que se ve;
+// el día de negocio la app lo calcula en hora argentina) e INSTRUCTIVO_HORA fija
+// la hora argentina del reloj, p. ej. TZ=Pacific/Kiritimati y HORA=06:30 a las 01 h.
+function browserNow() {
+  const real = new Date().toLocaleString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" }).slice(11, 16);
+  const hhmm = process.env.INSTRUCTIVO_HORA ?? (Number(real.slice(0, 2)) >= 5 ? real : "15:00");
+  return new Date(`${TODAY}T${hhmm}:00-03:00`);
+}
 
 const out = { view: VIEW, stills: {}, flows: {} };
 
@@ -55,7 +78,8 @@ async function step(page, flow, caption, target) {
 const browser = await chromium.launch();
 
 // ── Cuenta y datos ────────────────────────────────────────────────────────────
-const ctx = await browser.newContext({ viewport: VIEW, reducedMotion: "reduce" });
+const ctx = await browser.newContext({ viewport: VIEW, reducedMotion: "reduce",
+  ...(process.env.INSTRUCTIVO_TZ ? { timezoneId: process.env.INSTRUCTIVO_TZ } : {}) });
 await ctx.addInitScript((ids) => { for (const id of ids) localStorage.setItem(`tour_seen_${id}`, "1"); }, TOURS);
 const page = await ctx.newPage();
 await page.goto(APP + "/login");
@@ -149,6 +173,8 @@ await api("POST", `/credit-cards/${card.id}/items`, {
 await api("POST", "/reminders", { title: "Pagar monotributo", remind_date: day(Math.min(D + 9, 28)) });
 console.log("datos cargados para", EMAIL);
 await ctx.storageState({ path: `${WORK}/state.json` });
+
+await ctx.clock.setFixedTime(browserNow());
 
 // ── Pantallas ─────────────────────────────────────────────────────────────────
 await page.goto(APP + "/dashboard");
