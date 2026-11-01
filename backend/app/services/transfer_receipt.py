@@ -195,7 +195,10 @@ def diagnose(pages_text: list[str]) -> dict:
         "amounts_found": amounts,
         "lines": len([ln for ln in text.split("\n") if ln.strip()]),
         "chars": len(text),
-        # Muestra acotada del texto plegado: los metadatos solos no alcanzaron
-        # (el caso del "$" perdido se adivinó dos veces antes de verlo).
-        "sample": fold_text(text)[:300],
+        # La forma del texto, no el texto: los metadatos solos no alcanzaron (el
+        # caso del "$" perdido se adivinó dos veces antes de verlo), pero la
+        # muestra cruda guardaba en los logs nombre, CUIL y legajo de un recibo
+        # de sueldo. Letras → "a" y dígitos → "9" conservan signos, símbolos de
+        # moneda y separadores, que es lo que hace falta para depurar.
+        "shape": re.sub(r"\d", "9", re.sub(r"[a-z]", "a", fold_text(text)))[:300],
     }
