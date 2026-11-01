@@ -47,19 +47,45 @@ def _phone(jid_digits: str) -> str:
     return f"+{digits}"
 
 
-def looks_like_capture(text: str) -> bool:
+# Lo que sólo tiene sentido en un negocio. Una compra o un pago también los
+# carga un hogar (como gasto), así que no cuentan.
+_BUSINESS_OPS = {"sale", "close", "production", "count", "ambiguous"}
+
+HOME, BUSINESS, BUSINESS_HINT = "home", "biz", "biz_hint"
+
+
+def classify(text: str) -> str | None:
+    """Qué es el texto para el alta: HOME (gasto o ingreso, se guarda),
+    BUSINESS (venta, cierre, producción o conteo, se guarda para un negocio),
+    BUSINESS_HINT (parece del negocio pero no se puede cargar: sólo cambia la
+    respuesta) o None. El negocio va primero: "3 empanadas 4500" también
+    parsea como un gasto de $3."""
+    from app.services.business import capture as business_capture
+    from app.services.wa_bot import _BUSINESS_TEXT_RE
+
     text = (text or "").strip()
     if not text:
-        return False
-    return income_capture.parse_income_text(text) is not None or quick_capture.parse_quick_text(text) is not None
+        return None
+    intent = business_capture.parse_business_text(text)
+    if intent is not None and intent.op in _BUSINESS_OPS:
+        return BUSINESS
+    if income_capture.parse_income_text(text) is not None or quick_capture.parse_quick_text(text) is not None:
+        return HOME
+    if intent is not None or _BUSINESS_TEXT_RE.search(text):
+        return BUSINESS_HINT
+    return None
+
+
+def looks_like_capture(text: str) -> bool:
+    return classify(text) in (HOME, BUSINESS)
 
 
 def signup_link(raw: str) -> str:
     return f"{settings.FRONTEND_URL}/login?wa={raw}"
 
 
-async def record(db: AsyncSession, phone: str, text: str) -> tuple[str | None, bool]:
-    """Anota el mensaje. Devuelve (token nuevo o None, si se guardó el texto).
+async def record(db: AsyncSession, phone: str, text: str) -> tuple[str | None, str | None]:
+    """Anota el mensaje. Devuelve (token nuevo o None, `classify` del texto).
     Sólo flush."""
     now = datetime.now()
     row = await db.scalar(select(WaSignupIntent).where(WaSignupIntent.phone == _phone(phone)))
@@ -70,10 +96,11 @@ async def record(db: AsyncSession, phone: str, text: str) -> tuple[str | None, b
         # Ya se usó (la persona después desvinculó el número) o quedó viejo: de cero.
         row.messages, row.claimed_at, row.claimed_user_id, row.token_hash = [], None, None, None
 
-    saved = looks_like_capture(text)
-    if saved:
+    kind = classify(text)
+    if kind in (HOME, BUSINESS):
         msgs = list(row.messages or [])
-        msgs.append({"text": text.strip()[:500], "at": now.isoformat(timespec="seconds")})
+        msgs.append({"text": text.strip()[:500], "at": now.isoformat(timespec="seconds"),
+                     **({"biz": True} if kind == BUSINESS else {})})
         row.messages = msgs[-MAX_MESSAGES:]
     row.updated_at = now
 
@@ -83,13 +110,14 @@ async def record(db: AsyncSession, phone: str, text: str) -> tuple[str | None, b
         row.token_hash = _hash(raw)
         row.link_sent_at = now
     await db.flush()
-    return raw, saved
+    return raw, kind
 
 
-async def claim(db: AsyncSession, user, raw: str) -> list[str]:
-    """Vincula el número del link a `user` y devuelve los textos guardados,
-    para que el bot los procese. Inválido, usado y vencido son el mismo 404
-    (sin oráculo). Sólo flush."""
+async def claim(db: AsyncSession, user, raw: str) -> tuple[list[str], int]:
+    """Vincula el número del link a `user` y devuelve (los textos guardados
+    para que el bot los procese, cuántos se dejaron afuera). Una venta sólo se
+    carga en un negocio: en un hogar "vendí 3 empanadas 4500" sería un gasto de
+    $3. Inválido, usado y vencido son el mismo 404 (sin oráculo). Sólo flush."""
     row = None
     if raw and raw.startswith(TOKEN_PREFIX):
         row = await db.scalar(select(WaSignupIntent).where(WaSignupIntent.token_hash == _hash(raw)))
@@ -107,13 +135,17 @@ async def claim(db: AsyncSession, user, raw: str) -> list[str]:
     user.whatsapp_pending_phone = None
     user.whatsapp_verify_code = None
     user.whatsapp_gate_pending = False
-    texts = [m["text"] for m in (row.messages or []) if m.get("text")]
+    from app.models.tenant import TENANT_KIND_BUSINESS, Tenant
+
+    is_business = await db.scalar(select(Tenant.kind).where(Tenant.id == user.tenant_id)) == TENANT_KIND_BUSINESS
+    msgs = [m for m in (row.messages or []) if m.get("text")]
+    texts = [m["text"] for m in msgs if is_business or not m.get("biz")]
     row.claimed_at = now
     row.claimed_user_id = user.id
     row.token_hash = None
     row.messages = []
     await db.flush()
-    return texts
+    return texts, len(msgs) - len(texts)
 
 
 async def purge_old(db: AsyncSession) -> int:

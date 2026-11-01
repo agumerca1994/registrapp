@@ -53,8 +53,8 @@ async def test_an_expense_without_account_gets_a_link_and_waits(db):
     assert len((await db.scalar(select(WaSignupIntent))).messages) == 2
 
     user = await _user(db)
-    texts = await wa_signup.claim(db, user, _token(reply))
-    assert texts == ["12 lucas verdulería", "3000 café"]
+    texts, skipped = await wa_signup.claim(db, user, _token(reply))
+    assert (texts, skipped) == (["12 lucas verdulería", "3000 café"], 0)
     assert user.whatsapp_phone == "+" + PHONE
     assert user.whatsapp_gate_pending is False
 
@@ -108,8 +108,37 @@ async def test_saved_text_is_loaded_once_linked(db):
     user = await _user(db)
     db.add(ExpenseCategory(tenant_id=user.tenant_id, name="Verdulería", color="#22c55e", is_fixed=False))
     await db.flush()
-    texts = await wa_signup.claim(db, user, _token(reply))
+    texts, _ = await wa_signup.claim(db, user, _token(reply))
     out = await wa_bot.handle(db, user, InboundMessage(phone=PHONE, wa_id=None, kind="text", text=texts[0]))
     assert "✅" in out[0]
     entry = await db.scalar(select(ExpenseEntry))
     assert entry.tenant_id == user.tenant_id and float(entry.amount) == 12000
+
+
+async def test_a_sale_asks_for_a_business_account_and_waits_for_one(db):
+    reply = await wa_bot.reply_unlinked(db, _in("vendí 3 empanadas 4500 efectivo"))
+    assert "*Mi negocio*" in reply and "queda cargado" in reply
+    again = await wa_bot.reply_unlinked(db, _in("12 lucas verdulería"))
+    assert "Lo guardé también" in again
+    row = await db.scalar(select(WaSignupIntent))
+    assert [bool(m.get("biz")) for m in row.messages] == [True, False]
+
+    # Con una cuenta de negocio, la venta se procesa.
+    biz = await _user(db, uid="uid-biz")
+    (await db.get(Tenant, biz.tenant_id)).kind = "business"
+    await db.flush()
+    texts, skipped = await wa_signup.claim(db, biz, _token(reply))
+    assert (texts, skipped) == (["vendí 3 empanadas 4500 efectivo", "12 lucas verdulería"], 0)
+
+
+async def test_a_household_account_skips_the_sales(db):
+    reply = await wa_bot.reply_unlinked(db, _in("vendí 3 empanadas 4500 efectivo"))
+    await wa_bot.reply_unlinked(db, _in("12 lucas verdulería"))
+    texts, skipped = await wa_signup.claim(db, await _user(db), _token(reply))
+    assert (texts, skipped) == (["12 lucas verdulería"], 1)
+
+
+async def test_a_business_question_without_amount_only_changes_the_reply(db):
+    reply = await wa_bot.reply_unlinked(db, _in("cuántas empanadas quedan"))
+    assert "*Mi negocio*" in reply and "vendí 3 empanadas" in reply
+    assert (await db.scalar(select(WaSignupIntent))).messages == []

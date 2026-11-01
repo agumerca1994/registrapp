@@ -740,13 +740,15 @@ async def redeem_wa_link(
 # que había mandado se procesa como si llegara ahora, con las respuestas en el
 # chat. Eso corre en segundo plano: el alta no espera a Evolution.
 
-async def _replay_signup(user_id: int, phone: str, texts: list[str]) -> None:
+async def _replay_signup(user_id: int, phone: str, texts: list[str], skipped: int) -> None:
     from app.core.database import AsyncSessionLocal
     from app.services import wa_bot
     from app.services.whatsapp import send_wa_msg
 
     try:
         await send_wa_msg(phone, wa_bot.MSG_SIGNUP_REPLAY if texts else wa_bot.MSG_SIGNUP_LINKED)
+        if skipped:
+            await send_wa_msg(phone, wa_bot.MSG_SIGNUP_SKIPPED_BUSINESS)
         digits = phone.lstrip("+")
         for text in texts:
             async with AsyncSessionLocal() as db:
@@ -772,8 +774,8 @@ async def claim_wa_signup(
     user = await db.scalar(select(User).where(User.firebase_uid == firebase_user["uid"]))
     if user is None:
         raise HTTPException(status_code=404, detail="Primero creá tu cuenta")
-    texts = await wa_signup.claim(db, user, str(payload.get("token") or ""))
+    texts, skipped = await wa_signup.claim(db, user, str(payload.get("token") or ""))
     phone = user.whatsapp_phone
     await db.commit()
-    background.add_task(_replay_signup, user.id, phone, texts)
-    return {"linked": True, "pending": len(texts)}
+    background.add_task(_replay_signup, user.id, phone, texts, skipped)
+    return {"linked": True, "pending": len(texts), "skipped": skipped}

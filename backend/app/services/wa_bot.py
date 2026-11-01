@@ -63,11 +63,32 @@ MSG_SIGNUP_MEDIA = (
     "Hola, soy tood. Llevo las cuentas de la casa: gastos, tarjetas e ingresos, cargados por acá.\n\n"
     "Todavía no tenés cuenta. Creala en un minuto con este link y después mandame eso de nuevo:\n{link}"
 )
+# Los pasos con los nombres de la pantalla de alta (frontend/app/onboarding).
+_SIGNUP_BUSINESS_STEPS = (
+    "1. Entrá con este link: {link}\n"
+    "2. Iniciá sesión con tu cuenta de Google.\n"
+    "3. En *Para qué es la cuenta* elegí *Mi negocio*, poné el nombre y tocá *Crear negocio*."
+)
+MSG_SIGNUP_BUSINESS_SAVED = (
+    "Hola, soy tood. Llevo las cuentas de casas y negocios, cargadas por acá.\n\n"
+    "Para anotar ventas necesitás una cuenta de negocio, y lo que me mandaste queda cargado ahí:\n"
+    + _SIGNUP_BUSINESS_STEPS
+)
+MSG_SIGNUP_BUSINESS = (
+    "Hola, soy tood. Llevo las cuentas de casas y negocios, cargadas por acá.\n\n"
+    "Para anotar ventas necesitás una cuenta de negocio:\n"
+    + _SIGNUP_BUSINESS_STEPS
+    + "\n\nDespués anotá las ventas así: *vendí 3 empanadas 4500 efectivo*"
+)
 # Mensajes siguientes, con el link ya mandado (no se rota: ver wa_signup).
+MSG_SIGNUP_AGAIN_BUSINESS = "Lo guardé también. Creá la cuenta con el link de arriba y en *Para qué es la cuenta* elegí *Mi negocio*, así queda cargado."
 MSG_SIGNUP_AGAIN_SAVED = "Lo guardé también. Cuando crees la cuenta con el link de arriba, queda cargado."
 MSG_SIGNUP_AGAIN = "Para seguir, creá tu cuenta con el link de arriba."
 MSG_SIGNUP_LINKED = "Listo, tu WhatsApp quedó vinculado a tood."
 MSG_SIGNUP_REPLAY = "Listo, tu WhatsApp quedó vinculado a tood. Cargo lo que me mandaste:"
+MSG_SIGNUP_SKIPPED_BUSINESS = (
+    "Las ventas que me mandaste no las cargué: tu cuenta es de hogar, y las ventas se anotan en una cuenta de negocio."
+)
 MSG_ERROR = "No pude procesar ese mensaje. Probá de nuevo en un rato."
 # Una cuenta en pausa no carga nada por chat (services/account_closure.py).
 MSG_PAUSED = (
@@ -134,12 +155,18 @@ async def reply_unlinked(db: AsyncSession, inbound: InboundMessage) -> str | Non
     # sin parar: el número del bot es lo que Evolution arriesga.
     if not rate_limit.check(f"wa_unlinked:{inbound.phone}", 6, 3600):
         return None
-    raw, saved = await wa_signup.record(db, inbound.phone, inbound.text if inbound.kind == "text" else "")
+    raw, kind = await wa_signup.record(db, inbound.phone, inbound.text if inbound.kind == "text" else "")
     await db.commit()
     if raw is None:
-        return MSG_SIGNUP_AGAIN_SAVED if saved else MSG_SIGNUP_AGAIN
+        if kind == wa_signup.BUSINESS:
+            return MSG_SIGNUP_AGAIN_BUSINESS
+        return MSG_SIGNUP_AGAIN_SAVED if kind == wa_signup.HOME else MSG_SIGNUP_AGAIN
     link = wa_signup.signup_link(raw)
-    if saved:
+    if kind == wa_signup.BUSINESS:
+        return MSG_SIGNUP_BUSINESS_SAVED.format(link=link)
+    if kind == wa_signup.BUSINESS_HINT:
+        return MSG_SIGNUP_BUSINESS.format(link=link)
+    if kind == wa_signup.HOME:
         return MSG_SIGNUP_SAVED.format(link=link)
     if inbound.kind in ("pdf", "image"):
         return MSG_SIGNUP_MEDIA.format(link=link)
