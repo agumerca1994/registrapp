@@ -72,14 +72,14 @@ function ReaccionVisible({ estado }: { estado: Estado }) {
         <div className={`${anim} relative flex flex-col items-center gap-3`}>
           <Halo />
           <div className="relative translate-x-[5.5%]">{avatar(210)}</div>
-          <p className="relative font-display font-semibold text-xl text-foreground text-center">{texto}</p>
+          <p className="relative font-display font-semibold text-xl text-foreground text-center [text-shadow:0_0_6px_hsl(var(--background)),0_0_14px_hsl(var(--background)),0_0_24px_hsl(var(--background))]">{texto}</p>
         </div>
       </div>
       {/* Compu: abajo a la derecha, donde está el botón +, flotando y bastante más grande que él. */}
       <div className="hidden md:block fixed right-12 bottom-10 z-[45] pointer-events-none">
         <div className={`${anim} relative origin-bottom-right flex items-end gap-2`}>
           <Halo />
-          <p className="relative mb-12 font-display font-semibold text-xl text-foreground whitespace-nowrap">{texto}</p>
+          <p className="relative mb-12 font-display font-semibold text-xl text-foreground whitespace-nowrap [text-shadow:0_0_6px_hsl(var(--background)),0_0_14px_hsl(var(--background)),0_0_24px_hsl(var(--background))]">{texto}</p>
           <div className="relative">{avatar(230)}</div>
         </div>
       </div>
@@ -87,13 +87,15 @@ function ReaccionVisible({ estado }: { estado: Estado }) {
   );
 }
 
-/** Un desenfoque suave detrás, que se desvanece hacia los bordes: separa la t de lo que tiene abajo sin encerrarla
- *  en una caja. */
+/** Detrás de la t y su texto: un vidrio esmerilado casi transparente, que deforma lo de atrás sin taparlo. Es una
+ *  elipse que toma la forma del grupo (no un círculo justo alrededor de la t) y cubre también el texto, con los bordes
+ *  desvanecidos para que no se lea como una caja. */
 function Halo() {
-  const mask = "radial-gradient(closest-side, #000 50%, transparent 100%)";
+  const mask = "radial-gradient(farthest-side, #000 55%, transparent 100%)";
   return (
-    <span className="absolute -inset-16 bg-background/60 backdrop-blur-xl"
-      style={{ maskImage: mask, WebkitMaskImage: mask }} />
+    <span className="absolute -inset-x-28 -inset-y-24 bg-background/10"
+      style={{ maskImage: mask, WebkitMaskImage: mask, backdropFilter: "blur(7px) saturate(1.4)",
+        WebkitBackdropFilter: "blur(7px) saturate(1.4)" }} />
   );
 }
 
