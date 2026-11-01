@@ -160,6 +160,9 @@ async def start_session(
         },
         "saldo_actual_ars": data.get("saldo_actual_ars"),
         "saldo_actual_usd": data.get("saldo_actual_usd"),
+        # "Próximo cierre / vencimiento": son las fechas del resumen que sigue.
+        "next_closing_date": data.get("next_closing_date"),
+        "next_due_date": data.get("next_due_date"),
     }
 
     # Control de lectura: lo extraído tiene que sumar lo que el banco imprimió.
@@ -292,7 +295,8 @@ def _action_key(a: ReconciliationAction) -> tuple:
     p = a.payload or {}
     if a.item_id is not None:
         return (a.klass, a.item_id)
-    return (a.klass, p.get("date"), p.get("amount"), p.get("bank_description") or p.get("description"))
+    return (a.klass, p.get("date"), p.get("amount"), p.get("bank_description") or p.get("description"),
+            bool(p.get("next")))
 
 
 async def refresh_session(db: AsyncSession, session: ReconciliationSession, user) -> None:
@@ -538,6 +542,30 @@ async def _build_actions(
                 if session.due_date and not stmt.due_date else None,
             },
         ))
+
+    # Las del resumen que sigue, que el banco imprime como "próximo cierre /
+    # vencimiento". Sin esto, el mes siguiente quedaba con un vencimiento
+    # estimado aunque el PDF ya dijera cuál es. Como las de arriba: sólo
+    # completa, nunca pisa una fecha cargada.
+    parsed = session.parsed or {}
+    next_closing = parsed.get("next_closing_date")
+    next_due = parsed.get("next_due_date")
+    if next_closing or next_due:
+        ny, nm = (stmt.year + 1, 1) if stmt.month == 12 else (stmt.year, stmt.month + 1)
+        nxt = await db.scalar(select(CreditCardStatement).where(
+            CreditCardStatement.card_id == stmt.card_id,
+            CreditCardStatement.year == ny,
+            CreditCardStatement.month == nm,
+        ))
+        closing = next_closing if next_closing and not (nxt and nxt.closing_date) else None
+        due = next_due if next_due and not (nxt and nxt.due_date) else None
+        if closing or due:
+            db.add(ReconciliationAction(
+                session_id=session.id,
+                klass="dates",
+                op="update_statement",
+                payload={"next": True, "year": ny, "month": nm, "closing_date": closing, "due_date": due},
+            ))
 
     # Faltantes: crear, con categoría sugerida (regla del hogar primero).
     merchant_rules = await rules.get_rules(db, tenant_id, rules.KIND_MERCHANT_CATEGORY)

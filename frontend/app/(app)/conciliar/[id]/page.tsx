@@ -587,6 +587,11 @@ function ActionRow({ klass, action, categories, fixHref, descDraft, setDescDraft
       <div className={`px-4 md:px-5 py-3 text-sm space-y-1 ${muted ? "opacity-60" : ""}`}>
         <div className="flex items-center gap-2">
           <div className="flex-1 min-w-0 space-y-0.5">
+            {p.next && (
+              <p className="text-xs font-medium text-muted-foreground">
+                Próximo resumen ({periodLabel(p.year ?? null, p.month ?? null)})
+              </p>
+            )}
             {p.closing_date && (
               <p className="text-foreground">Fecha de cierre → <span className="font-medium">{formatDate(p.closing_date)}</span></p>
             )}

@@ -44,6 +44,10 @@ export interface ActionPayload {
   why_app?: "shared" | "child" | null;
   // dates
   closing_date?: string | null;
+  /** Las fechas del resumen que sigue ("próximo cierre / vencimiento"). */
+  next?: boolean;
+  year?: number;
+  month?: number;
   due_date?: string | null;
 }
 
@@ -150,7 +154,7 @@ export const GROUP_LABELS: Record<string, string> = {
 // Qué es cada grupo, en una línea: el título solo ("Sobrantes") no dice
 // respecto de qué sobran.
 export const GROUP_HINTS: Record<string, string> = {
-  dates: "El cierre y el vencimiento que figuran en el resumen del banco.",
+  dates: "El cierre y el vencimiento que figuran en el resumen del banco, y los del próximo resumen.",
   missing: "Están en el resumen del banco y no en la app.",
   double_count: "Cargados en la app con otro cargo sumado.",
   amount_diff: "Están en los dos lados, pero con otro monto en la app.",

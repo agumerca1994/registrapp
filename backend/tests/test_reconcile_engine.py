@@ -430,3 +430,45 @@ async def test_discarding_a_whole_group_closes_the_session(db):
         assert await discard_group(db, session, klass) > 0
     assert session.status == "closed"
     assert await discard_group(db, session, next(iter(klasses))) == 0
+
+
+async def test_next_statement_dates_from_the_pdf(db):
+    """El banco imprime el próximo cierre y vencimiento: van al resumen que
+    sigue, que si no los tenía quedaba con un vencimiento estimado (caso real:
+    BBVA, noviembre 2026). Completa, nunca pisa; deshacer los saca."""
+    cat, card, stmt, session = await _setup(db)
+    nov = await find_or_create_statement(card, 2026, 10, 1, db)
+    nov.due_date = date(2026, 11, 12)  # uno real cargado: no se toca
+    session.parsed = {**session.parsed, "next_closing_date": "2026-10-29", "next_due_date": "2026-11-11"}
+    await db.flush()
+    await resolve_session(db, session, USER)
+
+    nxt = next(
+        a for a in (await db.scalars(select(ReconciliationAction).where(ReconciliationAction.klass == "dates"))).all()
+        if a.payload.get("next")
+    )
+    assert (nxt.payload["year"], nxt.payload["month"]) == (2026, 10)
+    assert (nxt.payload["closing_date"], nxt.payload["due_date"]) == ("2026-10-29", None)
+
+    await apply_group(db, session, USER, "dates")
+    assert stmt.closing_date == date(2026, 10, 1)
+    assert (nov.closing_date, nov.due_date) == (date(2026, 10, 29), date(2026, 11, 12))
+
+    await undo_last_group(db, session, USER)
+    assert nov.closing_date is None and nov.due_date == date(2026, 11, 12)
+
+
+async def test_next_statement_dates_create_it_and_undo_removes_it(db):
+    from app.models.credit_card import CreditCardStatement
+
+    cat, card, stmt, session = await _setup(db)
+    session.parsed = {**session.parsed, "next_closing_date": "2026-10-29", "next_due_date": "2026-11-11"}
+    await db.flush()
+    await resolve_session(db, session, USER)
+    await apply_group(db, session, USER, "dates")
+    nov = await db.scalar(select(CreditCardStatement).where(CreditCardStatement.month == 10))
+    assert nov.due_date == date(2026, 11, 11)
+
+    await undo_last_group(db, session, USER)
+    await db.flush()
+    assert await db.scalar(select(CreditCardStatement).where(CreditCardStatement.month == 10)) is None

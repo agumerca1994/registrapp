@@ -41,6 +41,7 @@ from app.services.credit_cards import (
     create_expense_entry,
     create_item_in_statement,
     delete_item_tree,
+    find_or_create_statement,
 )
 from app.services.reconcile.period import is_latest_statement
 
@@ -136,14 +137,30 @@ async def apply_group(
         payload = action.payload or {}
 
         if action.op == "update_statement":
+            # `next`: las fechas del resumen que sigue, que el banco imprime
+            # como "próximo cierre / vencimiento". Si ese resumen no existe
+            # todavía, se crea: el banco dice que viene.
+            target, created = stmt, False
+            if payload.get("next"):
+                existing = await db.scalar(select(CreditCardStatement).where(
+                    CreditCardStatement.card_id == card.id,
+                    CreditCardStatement.year == payload["year"],
+                    CreditCardStatement.month == payload["month"],
+                ))
+                created = existing is None
+                target = existing or await find_or_create_statement(
+                    card, payload["year"], payload["month"], session.tenant_id, db
+                )
             before = {
-                "closing_date": stmt.closing_date.isoformat() if stmt.closing_date else None,
-                "due_date": stmt.due_date.isoformat() if stmt.due_date else None,
+                "statement_id": target.id,
+                "created_statement": created,
+                "closing_date": target.closing_date.isoformat() if target.closing_date else None,
+                "due_date": target.due_date.isoformat() if target.due_date else None,
             }
             if payload.get("closing_date"):
-                stmt.closing_date = date.fromisoformat(payload["closing_date"])
+                target.closing_date = date.fromisoformat(payload["closing_date"])
             if payload.get("due_date"):
-                stmt.due_date = date.fromisoformat(payload["due_date"])
+                target.due_date = date.fromisoformat(payload["due_date"])
             action.before = before
 
         elif action.op == "create_item":
@@ -269,13 +286,22 @@ async def undo_last_group(db: AsyncSession, session: ReconciliationSession, user
         before = action.before or {}
 
         if action.op == "update_statement":
-            if stmt is not None:
-                stmt.closing_date = (
+            target = (
+                await db.get(CreditCardStatement, before["statement_id"])
+                if before.get("statement_id") else stmt
+            )
+            if target is not None:
+                target.closing_date = (
                     date.fromisoformat(before["closing_date"]) if before.get("closing_date") else None
                 )
-                stmt.due_date = (
+                target.due_date = (
                     date.fromisoformat(before["due_date"]) if before.get("due_date") else None
                 )
+                # Un resumen que se creó sólo para ponerle fechas, si sigue vacío, se va.
+                if before.get("created_statement") and not await db.scalar(
+                    select(CreditCardItem.id).where(CreditCardItem.statement_id == target.id).limit(1)
+                ):
+                    await db.delete(target)
 
         elif action.op == "create_item":
             item = await db.get(CreditCardItem, before.get("created_item_id"))
