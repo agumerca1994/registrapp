@@ -180,11 +180,16 @@ export default function PrivacidadPage() {
           eliminación es definitiva y no se puede deshacer.</strong>
         </p>
         <List items={[
-          "Se borran tus datos personales: nombre, alias, mail, teléfono, conexiones con asistentes de IA y dispositivos registrados.",
-          "Si sos la única persona de tu hogar o negocio, se borra también todo lo cargado en él.",
+          "Tu nombre, alias, mail y teléfono se vuelven ilegibles: los reemplazamos por un código generado con una clave que se descarta en el momento, así que nadie, tampoco nosotros, puede recuperarlos ni asociarlos a vos. Se borran tu usuario de inicio de sesión, tus conexiones con asistentes de IA, tus dispositivos registrados y lo que el bot de WhatsApp recordaba.",
+          "Si sos la única persona de tu hogar o negocio, todo lo que escribiste en él (descripciones, notas, nombres de categorías, tarjetas, proveedores, productos y contactos) queda ilegible de la misma forma. Los montos y las fechas quedan, sin nada que permita saber de quién son.",
           "Si quedan otras personas, lo cargado en el hogar o negocio sigue siendo de ellas, porque también es suyo. En un negocio, si te vas como dueño, el negocio pasa al socio más antiguo.",
           "Los gastos que compartiste con personas de otros hogares siguen en las cuentas de ellas, con el nombre con el que figurabas.",
         ]} />
+        <p>
+          Si sólo querés dejar de usarla un tiempo, podés <strong>pausarla</strong> desde el mismo lugar: mientras
+          está en pausa no podés entrar ni cargar nada, el bot y los asistentes de IA no la usan y no te llega
+          ningún aviso. No se borra nada, y la reactivás al volver a iniciar sesión.
+        </p>
         <p>
           Si preferís, también podés pedir la eliminación escribiendo a <Mail />. La información puede quedar en
           las copias de seguridad hasta que se renueven en su ciclo habitual, y sólo se usa para restaurar el

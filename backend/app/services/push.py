@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.device_token import DeviceToken
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +34,11 @@ logger = logging.getLogger(__name__)
 async def tokens_for_users(db: AsyncSession, user_ids: list[int]) -> list[DeviceToken]:
     if not user_ids:
         return []
+    # Una cuenta en pausa no recibe avisos (services/account_closure.py).
     rows = await db.scalars(
-        select(DeviceToken).where(DeviceToken.user_id.in_(user_ids))
+        select(DeviceToken)
+        .join(User, User.id == DeviceToken.user_id)
+        .where(DeviceToken.user_id.in_(user_ids), User.paused_at.is_(None))
     )
     return list(rows.all())
 

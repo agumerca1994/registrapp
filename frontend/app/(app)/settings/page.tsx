@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
 import { PushNotificationsSection } from "@/components/PushNotificationsSection";
 import { ProfileSection } from "@/components/ProfileSection";
+import { AccountClosureSection } from "@/components/account/AccountClosureSection";
 import { formatARS, getErrorMessage, formatPhone } from "@/lib/utils";
 import { Copy, Check, MessageCircle, CheckCircle2, Unlink, UserPlus, Trash2 } from "lucide-react";
 import { COUNTRIES } from "@/lib/countries";
@@ -489,12 +490,8 @@ export default function SettingsPage() {
         </Button>
       </Card>
 
-      <Card className="p-6 space-y-2">
-        <h3 className="font-semibold text-foreground">Tu cuenta</h3>
-        <p className="text-sm text-foreground">{appUser?.display_name || "—"}</p>
-        <p className="text-sm text-muted-foreground">{appUser?.email}</p>
-        <p className="text-xs text-muted-foreground">Rol: {roleLabel(appUser, appUser?.role ?? "")}</p>
-      </Card>
+      {/* Un empleado no ve la lista de miembros, así que no sabe si queda alguien más. */}
+      <AccountClosureSection othersRemain={employee ? null : members.length > 1} />
     </div>
   );
 }

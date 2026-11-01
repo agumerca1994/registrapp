@@ -99,7 +99,7 @@ async def send_due_reminders() -> None:
         for reminder in reminders.all():
             user = await db.get(User, reminder.user_id)
             reminder.notified = True
-            if not user or not user.whatsapp_phone:
+            if not user or not user.whatsapp_phone or user.paused_at is not None:
                 continue
 
             card_alias = None

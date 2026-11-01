@@ -91,6 +91,11 @@ async def whatsapp_webhook(
         await send_wa_msg(inbound.phone, MSG_NOT_LINKED)
         return {"status": "not_linked"}
 
+    # En pausa no se carga nada, ni se guarda el mensaje: la cuenta está congelada.
+    if user.paused_at is not None:
+        await send_wa_msg(inbound.phone, wa_bot.MSG_PAUSED)
+        return {"status": "paused"}
+
     # Idempotencia: Evolution reintenta el webhook y un reintento no puede
     # crear el gasto (ni aplicar la conciliación) dos veces.
     if await wa_bot.already_seen(db, user.id, inbound.wa_id):

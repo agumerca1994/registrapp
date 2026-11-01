@@ -143,13 +143,21 @@ async def token_holder_valid(db: AsyncSession, row: McpToken) -> bool:
     revocarlos, porque lista por el hogar actual. Cuesta una consulta por PK.
     """
     holder = (await db.execute(
-        select(User.tenant_id, User.role).where(User.id == row.user_id)
+        select(User.tenant_id, User.role, User.paused_at).where(User.id == row.user_id)
     )).first()
     if holder is None or holder.tenant_id != row.tenant_id:
+        return False
+    # En pausa el conector no lee ni escribe, pero el token no se revoca:
+    # reactivar la cuenta lo deja andando (ver `holder_paused`).
+    if holder.paused_at is not None:
         return False
     # Un empleado de un negocio no usa el conector: lee todo el negocio, que es
     # justo lo que su rol no ve. Pasarlo a empleado mata sus tokens en el acto.
     return getattr(holder.role, "value", holder.role) != "employee"
+
+
+async def holder_paused(db: AsyncSession, row: McpToken) -> bool:
+    return await db.scalar(select(User.paused_at).where(User.id == row.user_id)) is not None
 
 
 async def revoke_grant(db: AsyncSession, grant_id: str, reason: str) -> int:

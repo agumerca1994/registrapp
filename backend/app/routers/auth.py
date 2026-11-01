@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.firebase import get_current_user
 from app.core.access import deny_employee
+from app.services import account_closure
 from app.services import contacts as contacts_service
 from app.services import tenants as tenants_service
 from app.services import user_directory
@@ -606,25 +607,63 @@ async def leave_household(
     )
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    if user.role == UserRole.admin:
-        other = (await db.scalars(
-            select(User)
-            .where(User.tenant_id == user.tenant_id, User.id != user.id)
-            .order_by(User.created_at)
-        )).all()
-        # El nuevo admin es el socio más antiguo, nunca un empleado: heredaría
-        # todo lo que su rol no le deja ver. Si sólo quedan empleados, primero
-        # hay que hacer socio a alguien.
-        heir = next((u for u in other if u.role != UserRole.employee), None)
-        if other and heir is None:
-            raise HTTPException(
-                status_code=400,
-                detail="Sos el único dueño o socio: antes de irte, hacé socio a alguien.",
-            )
-        if heir is not None:
-            heir.role = UserRole.admin
+    await account_closure.hand_over_ownership(db, user)
     await _move_to_new_solo_tenant(user, db)
     await db.commit()
+
+
+# ── Pausar y eliminar la cuenta (services/account_closure.py) ────────────────
+# Las tres van sin `get_actor` a propósito: una cuenta en pausa tiene que poder
+# reactivarse y eliminarse, y `get_actor` le da 423.
+
+async def _me_with_tenant(firebase_user: dict, db: AsyncSession) -> User:
+    user = await db.scalar(
+        select(User).options(selectinload(User.tenant)).where(User.firebase_uid == firebase_user["uid"])
+    )
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return user
+
+
+@router.post("/me/pause", response_model=UserOut)
+async def pause_account(
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await _me_with_tenant(firebase_user, db)
+    await account_closure.pause(db, user)
+    await db.commit()
+    return await _me_with_tenant(firebase_user, db)
+
+
+@router.post("/me/unpause", response_model=UserOut)
+async def unpause_account(
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await _me_with_tenant(firebase_user, db)
+    await account_closure.unpause(db, user)
+    await db.commit()
+    return await _me_with_tenant(firebase_user, db)
+
+
+class DeleteAccountBody(BaseModel):
+    confirm: str
+
+
+@router.post("/me/delete", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_account(
+    body: DeleteAccountBody,
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Irreversible. Pide escribir «eliminar»: un toque de más no puede hacerlo."""
+    if body.confirm.strip().lower() != account_closure.DELETE_CONFIRMATION:
+        raise HTTPException(status_code=400, detail="Escribí «eliminar» para confirmar.")
+    user = await _me_with_tenant(firebase_user, db)
+    uid = await account_closure.delete_account(db, user)
+    await db.commit()
+    await account_closure.delete_firebase_user(uid)
 
 
 class MemberRoleBody(BaseModel):

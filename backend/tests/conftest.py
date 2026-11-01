@@ -52,7 +52,19 @@ from app.models.currency_operation import CurrencyOperation  # noqa: E402
 from app.models.mortgage import MortgageLoan  # noqa: E402
 from app.models.payment_reminder import PaymentReminder  # noqa: E402
 from app.models.business import Payee, Product, Sale, SaleLine, SalePayment, StockMovement  # noqa: E402
-from app.models.contact import SharedContact  # noqa: E402
+from app.models.contact import SharedContact, TenantContact  # noqa: E402
+from app.models.app_log import AppLog  # noqa: E402
+from app.models.device_token import DeviceToken  # noqa: E402
+from app.models.mcp_auth import McpAuthCode  # noqa: E402
+from sqlalchemy.dialects.postgresql import JSONB  # noqa: E402
+from sqlalchemy.ext.compiler import compiles  # noqa: E402
+
+
+# JSONB no existe en SQLite; para las tablas que lo usan (logs, códigos del
+# conector) alcanza con guardarlo como JSON.
+@compiles(JSONB, "sqlite")
+def _jsonb_as_json(_type, _compiler, **_kw):
+    return "JSON"
 from app.models.reconciliation import (  # noqa: E402
     CaptureEvent,
     CaptureRule,
@@ -98,6 +110,10 @@ _TABLES = [
     StockMovement.__table__,
     # La agenda: el alta (register/join) vincula contactos al usuario nuevo.
     SharedContact.__table__,
+    TenantContact.__table__,
+    AppLog.__table__,
+    DeviceToken.__table__,
+    McpAuthCode.__table__,
 ]
 
 

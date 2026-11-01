@@ -37,7 +37,7 @@ from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.models.mcp_auth import McpAuthCode, McpOAuthAuthorization, McpOAuthClient, McpToken
 from app.services.mcp_tokens import (
-    READ_SCOPE, create_token, hash_token, revoke_grant, token_holder_valid, utcnow,
+    READ_SCOPE, create_token, hash_token, holder_paused, revoke_grant, token_holder_valid, utcnow,
 )
 
 logger = logging.getLogger(__name__)
@@ -278,6 +278,9 @@ class RegistrappOAuthProvider(
             if row.expires_at is not None and row.expires_at < utcnow():
                 raise TokenError("invalid_grant", "Refresh token expirado")
 
+            if await holder_paused(db, row):
+                # En pausa no se rota, pero tampoco se mata la concesión.
+                raise TokenError("invalid_grant", "La cuenta está en pausa")
             if not await token_holder_valid(db, row):
                 # Ya no es de ese hogar: rotar le daría un par nuevo sobre datos
                 # ajenos. Muere la concesión entera, como con un refresh reusado.

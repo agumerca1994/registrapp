@@ -33,6 +33,8 @@ export interface AppUser {
   whatsapp_notifications: boolean;
   whatsapp_phone: string | null;
   whatsapp_gate_pending: boolean;
+  // En pausa (ver components/account/PausedScreen.tsx): el layout muestra esa pantalla en vez de la app.
+  paused_at?: string | null;
   // "employee" sólo en un negocio: ve Ventas, Productos y su perfil (lib/account.ts).
   role: "admin" | "member" | "employee" | string;
 }

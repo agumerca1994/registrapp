@@ -18,6 +18,12 @@ revés —denegado por defecto— y vive acá:
 - `get_staff_user` / `get_owner_user`: lo que usan los routers del negocio, y
   de paso les dan el usuario sin una copia más de `_get_db_user`.
 
+Una cuenta en pausa (services/account_closure.py) recibe 423 en todo lo que pasa
+por `get_actor`, o sea en todo router con guardia salvo `/auth` y
+`/notifications`: ahí están su perfil, reactivar y eliminar la cuenta, que es lo
+único que puede hacer. Lo que no pasa por la app (bot, conector, avisos) mira
+`paused_at` por su lado.
+
 `tests/test_route_policies.py` recorre `app.routes` y falla si una ruta que pide
 usuario no tiene ninguna de estas, o si aparece una ruta pública que no está en
 su lista. Agregar un router sin guardia rompe un test, no la privacidad.
@@ -70,6 +76,8 @@ async def get_actor(
     )
     if user is None:
         return None
+    if user.paused_at is not None:
+        raise HTTPException(status_code=423, detail="Tu cuenta está en pausa. Reactivala para seguir.")
     return Actor(user=user, tenant_kind=user.tenant.kind)
 
 

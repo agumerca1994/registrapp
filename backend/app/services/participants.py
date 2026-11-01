@@ -109,7 +109,11 @@ async def user_exists(user_id: int, db: AsyncSession) -> bool:
     tiene que ser ruidoso: no hay contacto con el que armar una invitación, así
     que no queda ninguna forma sensata de degradar el participante.
     """
-    return await db.scalar(select(User.id).where(User.id == user_id)) is not None
+    # Una cuenta eliminada sigue teniendo su fila (services/account_closure.py),
+    # pero compartirle algo no le llegaría a nadie.
+    return await db.scalar(
+        select(User.id).where(User.id == user_id, User.deleted_at.is_(None))
+    ) is not None
 
 
 def invite_lookup_values(user: User) -> list[str]:

@@ -46,3 +46,4 @@ class UserOut(BaseModel):
     whatsapp_notifications: bool = True
     role: UserRole
     created_at: datetime
+    paused_at: datetime | None = None

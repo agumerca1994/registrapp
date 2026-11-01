@@ -49,6 +49,11 @@ MSG_NOT_LINKED = (
     "Vinculalo desde la app, en Configuración > WhatsApp."
 )
 MSG_ERROR = "No pude procesar ese mensaje. Probá de nuevo en un rato."
+# Una cuenta en pausa no carga nada por chat (services/account_closure.py).
+MSG_PAUSED = (
+    "Tu cuenta de tood está en pausa, así que no cargué nada.\n"
+    "Para volver a usarla, entrá a la app y tocá Reactivar."
+)
 MSG_HELP = (
     "No te entendí. Probá así:\n"
     "• Un gasto: *12 lucas verdulería* o *usd 20 regalo ayer*\n"

@@ -139,7 +139,8 @@ export function TermsTail({ sec, variant }: { sec: Sec; variant: Variant }) {
           Podés eliminar tu cuenta cuando quieras desde <strong>Configuración</strong>. <strong>Es definitivo y no
           se puede deshacer.</strong> Qué se borra y qué queda (por ejemplo, lo que cargaste en un{" "}
           {variant === "hogar" ? "hogar" : "negocio"} donde siguen otras personas) está explicado en la{" "}
-          <Link href="/legal/privacidad#eliminar" className="underline">política de privacidad</Link>.
+          <Link href="/legal/privacidad#eliminar" className="underline">política de privacidad</Link>. Si sólo
+          querés dejar de usarla un tiempo, podés pausarla desde el mismo lugar y reactivarla cuando vuelvas.
         </p>
         <p>
           Nosotros podemos dar de baja una cuenta que no cumpla estos términos, con aviso previo salvo que sea

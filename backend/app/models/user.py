@@ -64,6 +64,14 @@ class User(Base):
     whatsapp_notifications: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true", default=True
     )
+    # Pausada: no entra a la app, el bot no carga nada, el conector no lee y no
+    # le llega ningún aviso hasta que la reactiva al iniciar sesión. Sus datos
+    # quedan intactos. Vale sólo para esta persona, no para su hogar o negocio.
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Eliminada: la fila queda (otras tablas la referencian) con sus datos
+    # personales reemplazados por un hash cuya clave se descartó. Ver
+    # services/account_closure.py.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     tenant: Mapped["Tenant"] = relationship(back_populates="users")
 

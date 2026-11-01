@@ -6,15 +6,14 @@
  * Pendiente antes de sacar la marca de borrador:
  * - domicilio del titular (lo pide el registro de la AAIP);
  * - inscripción de la base de datos en el registro de la AAIP (Ley 25.326, art. 21);
- * - "Eliminar mi cuenta" en Configuración, que la política ya describe (ver CLAUDE.md);
  * - revisión de un abogado matriculado.
  */
 export const LEGAL = {
   owner: "Miguel Agustín Mercado",
   cuit: "20-37726925-0",
   email: "consultas@tood.com.ar",
-  updated: "31 de octubre de 2026",
-  version: "0.2",
+  updated: "1 de noviembre de 2026",
+  version: "0.3",
   draft: true,
 };
 

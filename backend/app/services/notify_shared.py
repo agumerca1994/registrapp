@@ -93,7 +93,8 @@ async def notify_share(
             # Dos condiciones, no una: tener el número vinculado y **querer**
             # recibir por ahí. El push ya salió más arriba y no se puede apagar
             # — es el canal que no depende de nada externo.
-            if wa_allowed and member and member.whatsapp_phone and member.whatsapp_notifications:
+            if (wa_allowed and member and member.whatsapp_phone and member.whatsapp_notifications
+                    and member.paused_at is None):
                 await whatsapp.send_whatsapp_member_notify(
                     member.whatsapp_phone, creator_name, title,
                     total_amount, split_amount, cuotas_count, currency,

@@ -20,6 +20,7 @@ import { stashPendingRoute, takePendingRoute } from "@/lib/pending-route";
 import { homeFor, isBusiness, isEmployee, routeAllowed } from "@/lib/account";
 import { SplashTood } from "@/components/brand/SplashTood";
 import { ReaccionProvider } from "@/components/brand/ToodReaccion";
+import { PausedScreen } from "@/components/account/PausedScreen";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { firebaseUser, appUser, loading } = useAuth();
@@ -94,7 +95,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // nadie lo vuelve a registrar, los avisos se cortan en algún momento y no hay
   // nada en la app que lo delate. No hace nada si no hay permiso.
   useEffect(() => {
-    if (!appUser) return;
+    if (!appUser || appUser.paused_at) return;
     syncPushToken().catch(() => {});
   }, [appUser]);
 
@@ -113,6 +114,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // lugar del árbol para que, al estar lista la app, se desvanezca en vez de cortarse.
   const ready = !loading && !!appUser && !appUser.whatsapp_gate_pending && !(pathname && !routeAllowed(pathname, appUser));
   if (!ready) return <>{null}<SplashTood visible /></>;
+  // En pausa no se monta nada de la app: cada pedido daría 423.
+  if (appUser.paused_at) return <><PausedScreen /><SplashTood visible={false} /></>;
 
   const shell = (
     <div className="flex min-h-screen bg-background">
