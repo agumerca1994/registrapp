@@ -87,8 +87,8 @@
         NEXT_PUBLIC_FEATURE_BUSINESS_SIGNUP: ${NEXT_PUBLIC_FEATURE_BUSINESS_SIGNUP:-false}
         # Árbol de dominios (ver lib/site.ts). Vacías = todo en un mismo host, como hasta ahora.
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://tood.com.ar}
-        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://${APP_DOMAIN}}
-        NEXT_PUBLIC_APP_ALIASES: ${NEXT_PUBLIC_APP_ALIASES:-https://app.tood.com.ar}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://app.tood.com.ar}
+        NEXT_PUBLIC_APP_ALIASES: ${NEXT_PUBLIC_APP_ALIASES:-https://${APP_DOMAIN}}
     environment:
       NEXT_PUBLIC_API_URL: https://${API_DOMAIN}
       NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY}
@@ -102,8 +102,8 @@
       NEXT_PUBLIC_FEATURE_RECONCILE: ${NEXT_PUBLIC_FEATURE_RECONCILE:-false}
       NEXT_PUBLIC_FEATURE_BUSINESS_SIGNUP: ${NEXT_PUBLIC_FEATURE_BUSINESS_SIGNUP:-false}
       NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://tood.com.ar}
-      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://${APP_DOMAIN}}
-      NEXT_PUBLIC_APP_ALIASES: ${NEXT_PUBLIC_APP_ALIASES:-https://app.tood.com.ar}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://app.tood.com.ar}
+      NEXT_PUBLIC_APP_ALIASES: ${NEXT_PUBLIC_APP_ALIASES:-https://${APP_DOMAIN}}
     restart: unless-stopped
     depends_on:
       - registrapp-backend
