@@ -55,7 +55,7 @@ export default function PrivacidadPage() {
     >
       <Section {...sec("responsable")}>
         <p>
-          El responsable de la base de datos es <strong>{LEGAL.owner}</strong>. Para cualquier consulta sobre tus
+          El responsable de la base de datos es <strong>{LEGAL.owner}</strong> (CUIT {LEGAL.cuit}). Para cualquier consulta sobre tus
           datos escribinos a <Mail />.
         </p>
       </Section>

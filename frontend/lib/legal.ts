@@ -1,19 +1,20 @@
 /**
- * Datos de los documentos legales (/legal). Es un BORRADOR: el titular y el
- * mail son provisorios hasta tener el dominio y la persona o empresa que
- * responde. Cambiar acá cambia las tres páginas.
+ * Datos de los documentos legales (/legal). Cambiar acá cambia las tres páginas.
+ * Los mails de tood.com.ar son redirecciones de Cloudflare (Email Routing) a la casilla de la marca:
+ * consultas@ para usuarios y datos personales, administracion@ para lo administrativo.
  *
  * Pendiente antes de sacar la marca de borrador:
- * - titular real (nombre o razón social, CUIT, domicilio);
+ * - domicilio del titular (lo pide el registro de la AAIP);
  * - inscripción de la base de datos en el registro de la AAIP (Ley 25.326, art. 21);
  * - "Eliminar mi cuenta" en Configuración, que la política ya describe (ver CLAUDE.md);
  * - revisión de un abogado matriculado.
  */
 export const LEGAL = {
-  owner: "Registrapp.com.ar",
-  email: "consultas@registrapp.com.ar",
-  updated: "29 de octubre de 2026",
-  version: "0.1",
+  owner: "Miguel Agustín Mercado",
+  cuit: "20-37726925-0",
+  email: "consultas@tood.com.ar",
+  updated: "31 de octubre de 2026",
+  version: "0.2",
   draft: true,
 };
 

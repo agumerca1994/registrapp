@@ -469,7 +469,7 @@ Cómo se activa:
 
 **Pendiente de la marca:**
 - Recapturar las imágenes de las landings, los instructivos (`public/*/instructivo.html`) y las capturas de Claude en `/conectar`: muestran RegistrApp.
-- `lib/legal.ts` tiene titular y mail provisorios.
+- `lib/legal.ts`: el titular (Miguel Agustín Mercado, CUIT 20-37726925-0) y el mail (consultas@tood.com.ar, redirección de Cloudflare) ya están; falta el domicilio para la AAIP.
 - Cambiar la app, el manifest y el bot.
 
 ### Landings públicas e instructivos (`/negocio`, `/hogar`)
@@ -495,7 +495,7 @@ Dos landings públicas, una por tipo de cuenta, cada una con su instructivo:
 
 ### Documentos legales (`/legal`) — borrador
 `/legal` (índice), `/legal/privacidad`, `/legal/terminos-hogar` y `/legal/terminos-negocio`: públicas, fuera de `(app)`, enlazadas desde `components/marketing/SiteFooter.tsx`, el pie común de todas las páginas públicas. Se armaron sobre las plantillas CC0 de General Legal (privacy policy GDPR y terms of use), **reescritas para la ley argentina**: Ley 25.326 (con la leyenda obligatoria de la AAIP), Ley 24.240 y el Código Civil y Comercial. Por eso no hay arbitraje, ni renuncia de derechos, ni exclusión total de responsabilidad, y la jurisdicción es la del domicilio del usuario.
-- Titular, mail, versión, fecha y la marca de borrador están en `lib/legal.ts`, con la lista de lo que falta para quitar el borrador. Las cláusulas comunes a los dos términos están en `components/legal/terms.tsx`.
+- Titular, CUIT, mail, versión, fecha y la marca de borrador están en `lib/legal.ts`, con la lista de lo que falta para quitar el borrador. Las cláusulas comunes a los dos términos están en `components/legal/terms.tsx`.
 - **El texto describe lo que el código hace.** Si cambia algo que la política afirma, cambia la política: un proveedor nuevo que recibe datos, analítica o cookies (hoy no hay), un plazo de guarda (7 días del bot, 15 minutos de los links, 30 días de los tokens) o quién ve qué.
 
 **"Eliminar mi cuenta" está prometido y todavía no existe.** La política (sección "Eliminar tu cuenta") y los dos términos dicen que se hace desde Configuración y que es irreversible. Las tiendas también lo exigen (Apple 5.1.1(v), Google). Lo que hay que construir:

@@ -47,7 +47,7 @@ export function TermsHead({ sec, variant }: { sec: Sec; variant: Variant }) {
     <>
       <Section {...sec("servicio")}>
         <p>
-          {NAME[variant]} es un servicio de <strong>{LEGAL.owner}</strong> (en adelante, &quot;nosotros&quot;).
+          {NAME[variant]} es un servicio de <strong>{LEGAL.owner}</strong>, CUIT {LEGAL.cuit} (en adelante, &quot;nosotros&quot;).
           Al crear tu cuenta aceptás estos términos y la{" "}
           <Link href="/legal/privacidad" className="font-semibold text-primary hover:underline">política de privacidad</Link>,
           que forma parte de ellos. Si no estás de acuerdo, no uses la app.
