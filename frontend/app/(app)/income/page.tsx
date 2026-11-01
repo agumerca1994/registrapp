@@ -24,6 +24,7 @@ import {
   type IncomeSource, type IncomeEntry, type SourceField, type EntryItem,
 } from "@/components/income/types";
 import { SourceFormModal, SourcesListModal } from "@/components/income/SourceFormModal";
+import { useReaccion } from "@/components/brand/ToodReaccion";
 
 const INCOME_TOUR_STEPS: Step[] = [
   {
@@ -389,6 +390,7 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function IncomePage() {
+  const reaccionar = useReaccion();
   useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const [entries, setEntries] = useState<IncomeEntry[]>([]);
   const [sources, setSources] = useState<IncomeSource[]>([]);
@@ -548,11 +550,13 @@ export default function IncomePage() {
       if (editId) await api.patch(`/income/entries/${editId}`, payload);
       else await api.post("/income/entries", payload);
       closeForm();
+      reaccionar("ingreso", editId ? "Ingreso actualizado" : "Ingreso guardado");
       await load();
     } catch (err) {
       // El formulario queda abierto con lo cargado: perderlo por un error del
       // servidor obliga a tipear de nuevo un recibo entero.
       setFormError(getErrorMessage(err, "No se pudo guardar el ingreso"));
+      reaccionar("error", "No se pudo guardar");
     } finally {
       setLoading(false);
     }
@@ -585,7 +589,13 @@ export default function IncomePage() {
 
   const handleDelete = async (id: number) => {
     if (!confirm("¿Eliminar este ingreso?")) return;
-    await api.delete(`/income/entries/${id}`);
+    try {
+      await api.delete(`/income/entries/${id}`);
+    } catch {
+      reaccionar("error", "No se pudo eliminar");
+      return;
+    }
+    reaccionar("borrado", "Ingreso eliminado");
     setSelected(s => { const n = new Set(s); n.delete(id); return n; });
     setDetailEntry(null);
     await load();
@@ -600,7 +610,11 @@ export default function IncomePage() {
   const handleBulkDelete = async () => {
     if (!confirm(`¿Eliminar ${selected.size} ingreso${selected.size !== 1 ? "s" : ""}?`)) return;
     setBulkDeleting(true);
-    await Promise.all([...selected].map(id => api.delete(`/income/entries/${id}`)));
+    const n = selected.size;
+    const results = await Promise.allSettled([...selected].map(id => api.delete(`/income/entries/${id}`)));
+    const failed = results.filter(r => r.status === "rejected").length;
+    if (failed) reaccionar("error", failed === n ? "No se pudo eliminar" : `No se pudieron eliminar ${failed} de ${n}`);
+    else reaccionar("borrado", n === 1 ? "Ingreso eliminado" : `${n} ingresos eliminados`);
     setSelected(new Set());
     await load();
     setBulkDeleting(false);

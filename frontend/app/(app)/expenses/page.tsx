@@ -25,6 +25,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { isBusiness } from "@/lib/account";
 import type { Payee } from "@/components/business/types";
 import BusinessTour from "@/components/business/BusinessTour";
+import { useReaccion } from "@/components/brand/ToodReaccion";
 import { EXPENSES_BUSINESS_INTRO_STEPS } from "@/components/business/tours";
 
 const EXPENSES_TOUR_STEPS: Step[] = [
@@ -138,6 +139,7 @@ function EntryDetailModal({
 }
 
 export default function ExpensesPage() {
+  const reaccionar = useReaccion();
   useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const router = useRouter();
   const { appUser } = useAuth();
@@ -258,6 +260,8 @@ export default function ExpensesPage() {
 
   const handleSaved = async (result: ExpenseSaved) => {
     closeForm();
+    reaccionar("guardado", result.kind === "shared" ? "Gasto compartido guardado"
+      : result.kind === "card" ? "Compra con tarjeta guardada" : "Egreso guardado");
     // Un egreso simple se ve en la lista; los de tarjeta y los compartidos
     // además tienen otra casa, y el aviso dice dónde quedaron.
     setNotice(result.kind === "simple" ? null : result);
@@ -266,7 +270,13 @@ export default function ExpensesPage() {
 
   const handleDelete = async (id: number) => {
     if (!confirm("¿Eliminar este egreso?")) return;
-    await api.delete(`/expenses/entries/${id}`);
+    try {
+      await api.delete(`/expenses/entries/${id}`);
+    } catch {
+      reaccionar("error", "No se pudo eliminar");
+      return;
+    }
+    reaccionar("borrado", "Egreso eliminado");
     setSelected(s => { const n = new Set(s); n.delete(id); return n; });
     setDetailEntry(null);
     await load();
@@ -297,7 +307,11 @@ export default function ExpensesPage() {
   const handleBulkDelete = async () => {
     if (!confirm(`¿Eliminar ${selected.size} egreso${selected.size !== 1 ? "s" : ""}?`)) return;
     setBulkDeleting(true);
-    await Promise.all([...selected].map(id => api.delete(`/expenses/entries/${id}`)));
+    const n = selected.size;
+    const results = await Promise.allSettled([...selected].map(id => api.delete(`/expenses/entries/${id}`)));
+    const failed = results.filter(r => r.status === "rejected").length;
+    if (failed) reaccionar("error", failed === n ? "No se pudo eliminar" : `No se pudieron eliminar ${failed} de ${n}`);
+    else reaccionar("borrado", n === 1 ? "Egreso eliminado" : `${n} egresos eliminados`);
     setSelected(new Set());
     await load();
     setBulkDeleting(false);

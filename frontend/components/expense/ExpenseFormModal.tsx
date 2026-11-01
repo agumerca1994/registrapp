@@ -20,6 +20,7 @@ import { ParticipantPicker, type PickedParticipant } from "@/components/Particip
 import BaseFields, { type CategoryOption } from "./BaseFields";
 import CardPaymentSection, { type CardsState } from "./CardPaymentSection";
 import SplitSection from "./SplitSection";
+import { useReaccion } from "@/components/brand/ToodReaccion";
 import {
   buildRequest, isCard, isInstallment, newDraft, periodLabel, validateDraft,
   type CreditCardLite, type ExpenseDraft, type SplitRow,
@@ -61,6 +62,7 @@ export default function ExpenseFormModal({
   onSaved: (result: ExpenseSaved) => void;
   onClose: () => void;
 }) {
+  const reaccionar = useReaccion();
   useAmountsHidden();
   const { appUser } = useAuth();
   // Un negocio no comparte gastos (eso es del hogar) y en cambio dice a quién
@@ -200,6 +202,7 @@ export default function ExpenseFormModal({
       // No se cierra ni se pierde lo cargado: el backend guarda todo o nada,
       // así que un error acá significa que no quedó nada guardado.
       setError(getErrorMessage(err, "No se pudo guardar el egreso."));
+      reaccionar("error", "No se pudo guardar");
     } finally {
       setSaving(false);
     }
