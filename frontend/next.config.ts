@@ -32,7 +32,9 @@ const CSP = [
     "https://identitytoolkit.googleapis.com",
   ].join(" "),
   // Firebase Auth resuelve el estado de sesión en un iframe de firebaseapp.com.
-  "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com",
+  // y, con authDomain propio (app.tood.com.ar), desde ese dominio: la app vieja lo enmarca.
+  ["frame-src 'self' https://*.firebaseapp.com https://accounts.google.com",
+    process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ? `https://${process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}` : ""].join(" ").trim(),
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

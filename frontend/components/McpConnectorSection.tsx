@@ -225,9 +225,11 @@ export default function McpConnectorSection() {
                   <p className="text-sm font-medium text-foreground truncate">{c.client_name}</p>
                   <p className="text-xs text-muted-foreground">Conectada el {shortDate(c.connected_at)}</p>
                   <p className="text-xs text-muted-foreground">Último uso {relative(c.last_used_at)}</p>
+                  {/* Debajo de los datos y con salto de línea: al lado del botón, en un celular, el texto largo
+                      ("Lectura + gastos, ingresos, …") apretaba el nombre y se salía del ancho. */}
+                  <Chip tone="emerald" className="mt-2 whitespace-normal text-left leading-snug">{connectorScopeLabel(appUser)}</Chip>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Chip tone="emerald">{connectorScopeLabel(appUser)}</Chip>
+                <div className="flex items-center gap-2 shrink-0 self-start">
                   {confirmRow(c.grant_id, () => disconnect(c.grant_id))}
                 </div>
               </div>

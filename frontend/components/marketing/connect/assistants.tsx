@@ -19,7 +19,8 @@ import { Shot, type ShotData } from "./Lightbox";
 
 /** settings.MCP_RESOURCE_URL de producción, la misma que muestra Configuración. */
 // Sale del backend configurado, así cambia sola el día que el backend pase a su subdominio de tood.
-export const CONNECTOR_URL = `${process.env.NEXT_PUBLIC_API_URL ?? "https://registrapp-api.imanzanastore.com.ar"}/mcp`;
+// La dirección pública del conector (mcp.tood.com.ar); sin la variable, la de la API.
+export const CONNECTOR_URL = process.env.NEXT_PUBLIC_MCP_URL || `${process.env.NEXT_PUBLIC_API_URL ?? "https://api.tood.com.ar"}/mcp`;
 
 const SCOPE_HOUSEHOLD = connectorScopeLabel({ tenant_kind: "household", role: "admin" } as Parameters<typeof connectorScopeLabel>[0]);
 const SCOPE_BUSINESS = connectorScopeLabel({ tenant_kind: "business", role: "admin" } as Parameters<typeof connectorScopeLabel>[0]);

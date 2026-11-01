@@ -55,13 +55,15 @@
       MCP_REFRESH_TOKEN_TTL_DAYS: ${MCP_REFRESH_TOKEN_TTL_DAYS:-30}
       # Escape hatches for a client rejected by the transport's Host/Origin
       # check (421/403 on /mcp). Comma-separated, normally empty.
-      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-api.tood.com.ar,api.tood.com.ar:*}
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-api.tood.com.ar,api.tood.com.ar:*,mcp.tood.com.ar,mcp.tood.com.ar:*}
       MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
       # Los tokens del conector que se crearon con la dirección vieja de la API siguen valiendo después de
       # pasar el conector a api.tood.com.ar: nadie tiene que reconectar.
       # El conector (issuer OAuth y recurso /mcp) se presenta en el dominio nuevo de la API.
       OAUTH_ISSUER_URL: ${OAUTH_ISSUER_URL:-https://api.tood.com.ar}
-      MCP_LEGACY_RESOURCE_URLS: ${MCP_LEGACY_RESOURCE_URLS:-https://${API_DOMAIN}/mcp}
+      # La dirección pública del conector. El issuer OAuth sigue en api.tood.com.ar.
+      MCP_RESOURCE_URL: https://mcp.${SITE_DOMAIN:-tood.com.ar}/mcp
+      MCP_LEGACY_RESOURCE_URLS: ${MCP_LEGACY_RESOURCE_URLS:-https://${API_DOMAIN}/mcp,https://api.tood.com.ar/mcp}
       # Alta pública de negocios (POST /auth/register con kind="business").
       # Apagada: el piloto se convierte con PATCH /internal/tenants/{id}/kind.
       BUSINESS_SIGNUP_ENABLED: ${BUSINESS_SIGNUP_ENABLED:-false}
@@ -80,6 +82,11 @@
       - "traefik.http.routers.registrapp-api2.tls=true"
       - "traefik.http.routers.registrapp-api2.tls.certresolver=letsencrypt"
       - "traefik.http.routers.registrapp-api2.service=registrapp-api"
+      # El conector en mcp.tood.com.ar: el mismo backend, con router y certificado propios.
+      - "traefik.http.routers.registrapp-mcp.rule=Host(`mcp.${SITE_DOMAIN:-tood.com.ar}`)"
+      - "traefik.http.routers.registrapp-mcp.tls=true"
+      - "traefik.http.routers.registrapp-mcp.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.registrapp-mcp.service=registrapp-api"
 
   registrapp-frontend:
     build:
@@ -87,6 +94,7 @@
       dockerfile: Dockerfile.prod
       args:
         NEXT_PUBLIC_API_URL: https://api.${SITE_DOMAIN:-tood.com.ar}
+        NEXT_PUBLIC_MCP_URL: https://mcp.${SITE_DOMAIN:-tood.com.ar}/mcp
         NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY}
         NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: app.${SITE_DOMAIN:-tood.com.ar}
         NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
@@ -103,6 +111,7 @@
         NEXT_PUBLIC_APP_ALIASES: ${NEXT_PUBLIC_APP_ALIASES:-https://${APP_DOMAIN}}
     environment:
       NEXT_PUBLIC_API_URL: https://api.${SITE_DOMAIN:-tood.com.ar}
+      NEXT_PUBLIC_MCP_URL: https://mcp.${SITE_DOMAIN:-tood.com.ar}/mcp
       NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY}
       NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: app.${SITE_DOMAIN:-tood.com.ar}
       NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
