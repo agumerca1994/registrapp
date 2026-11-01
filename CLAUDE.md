@@ -450,7 +450,15 @@ Los anuncios de features nuevas son carruseles a pantalla completa construidos *
   - Rotar el copete lo despega del palito: en las reacciones se estira o se achica desde el pie.
   - Cuando pide mejorar una pieza que ya aprobó, se conserva la forma: no se proponen alternativas nuevas.
 
-**Árbol de dominios** (`lib/site.ts` + `middleware.ts`). **Paso 1 activo desde 2026-10-31**: el sitio público vive en `tood.com.ar` (router `registrapp-site` en `docker-compose.prod.yml`, certificado propio para `tood.com.ar` y `www`) y la app sigue en `APP_DOMAIN`. `NEXT_PUBLIC_SITE_URL` (`https://tood.com.ar`) y `NEXT_PUBLIC_APP_URL` (`https://${APP_DOMAIN}`) son valores por defecto del compose, no hay que cargarlos en Easypanel. www redirige a tood.com.ar. El DNS está en Cloudflare en "Solo DNS" (nube gris), para que Traefik saque los certificados. `app.tood.com.ar` y `api.tood.com.ar` ya tienen registro DNS pero ningún servicio (muestran el certificado de Easypanel): son el paso 2. El plan completo:
+**Árbol de dominios** (`lib/site.ts` + `middleware.ts`), estado al 2026-10-31:
+- **El sitio público vive en `tood.com.ar`** (router `registrapp-site` en `docker-compose.prod.yml`, certificado propio para `tood.com.ar` y `www`; www redirige al dominio sin www).
+- **La app vive en dos dominios mientras dure el cambio de marca**: el viejo (`APP_DOMAIN`, donde están los testers con la app instalada) y `app.tood.com.ar` (router `registrapp-app2`). `NEXT_PUBLIC_APP_URL` es el dominio al que llevan los links nuevos ("Entrar"); `NEXT_PUBLIC_APP_ALIASES` (lista separada por comas) son los otros dominios donde también vive la app, que el middleware trata igual. Las tres variables tienen valores por defecto en el compose (no hay que cargarlas en Easypanel) y `NEXT_PUBLIC_APP_ALIASES` tiene sus tres piezas como todo `NEXT_PUBLIC_*`.
+- **`ALLOWED_ORIGINS` suma solo `https://app.tood.com.ar` y `https://tood.com.ar`** en el compose, además de lo que tenga cargado Easypanel.
+- **Firebase Auth** tiene autorizados `app.tood.com.ar` y `tood.com.ar`.
+- El backend sigue en `API_DOMAIN` (el conector de IA y el webhook de WhatsApp también); `FRONTEND_URL` sigue en el dominio viejo. Pasarlos a `api.tood.com.ar` / `app.tood.com.ar` es la fase 3 del plan de migración (ver memoria `migracion-tood`).
+- DNS en Cloudflare, en "Solo DNS" (nube gris) para que Traefik saque los certificados. `api.tood.com.ar` tiene registro pero todavía ningún servicio: muestra el certificado de Easypanel.
+
+El plan completo:
 - `<dominio>`: el sitio público. Es el mismo contenedor del frontend, con un segundo `Host()` en la regla de Traefik de `registrapp-web`.
 - `app.<dominio>`: la app, que es lo que hoy es `APP_DOMAIN`.
 - `api.<dominio>`: el backend, con `/mcp`, `/oauth` y el webhook de WhatsApp; hoy es `API_DOMAIN`. El MCP queda ahí, porque el issuer y el recurso OAuth tienen que tener una sola dirección.
