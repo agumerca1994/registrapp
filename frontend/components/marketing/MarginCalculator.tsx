@@ -5,7 +5,7 @@ import { Plus, X } from "lucide-react";
 import { FIELD } from "@/components/ui/form";
 import { cn, formatARS, parseAmount } from "@/lib/utils";
 
-// Las dos calculadoras de /calculadora. Todo vive en el estado del componente: nada se manda ni se guarda.
+// Las dos calculadoras de /negocio/calculadora. Todo vive en el estado del componente: nada se manda ni se guarda.
 
 /** Pesos sin centavos: en una cuenta de margen los centavos sólo agregan ruido. */
 const money = (n: number) => formatARS(Math.round(n)).replace(/,00$/, "");

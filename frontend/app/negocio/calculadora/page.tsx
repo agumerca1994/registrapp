@@ -19,7 +19,7 @@ export const metadata: Metadata = {
 export default function CalculadoraPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <SiteHeader current="calculadora" />
+      <SiteHeader current="negocio" />
 
       <main className="max-w-6xl mx-auto px-4 md:px-8 pt-10 md:pt-14 pb-12">
         <p className="text-sm font-semibold uppercase tracking-wider text-primary">Calculadora para tu negocio</p>

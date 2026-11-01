@@ -72,6 +72,11 @@ const nextConfig: NextConfig = {
   // with the sidebar's user-menu avatar (also bottom-left). Dev-only, no
   // effect on production builds.
   devIndicators: false,
+  // La calculadora vivió un día en /calculadora antes de pasar a /negocio/calculadora:
+  // la dirección vieja sigue andando por si alguien ya la compartió.
+  async redirects() {
+    return [{ source: "/calculadora", destination: "/negocio/calculadora", permanent: true }];
+  },
   async rewrites() {
     return [
       { source: "/__/auth/:path*", destination: `${FIREBASE_HOSTING}/__/auth/:path*` },

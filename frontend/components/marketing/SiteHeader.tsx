@@ -2,10 +2,9 @@ import Link from "next/link";
 import { appHref } from "@/lib/site";
 import { ToodLogoAnimado } from "@/components/brand/ToodLogoAnimado";
 
-// "calculadora" no tiene link propio en la barra: se llega desde un link compartido.
-type Section = "home" | "hogar" | "negocio" | "conectar" | "calculadora";
+type Section = "home" | "hogar" | "negocio" | "conectar";
 
-const LINKS: { key: Exclude<Section, "home" | "calculadora">; href: string; label: string; hide: string }[] = [
+const LINKS: { key: Exclude<Section, "home">; href: string; label: string; hide: string }[] = [
   { key: "hogar", href: "/hogar", label: "Hogar", hide: "hidden sm:inline" },
   { key: "negocio", href: "/negocio", label: "Negocio", hide: "hidden sm:inline" },
   { key: "conectar", href: "/conectar", label: "Con IA", hide: "hidden md:inline" },
