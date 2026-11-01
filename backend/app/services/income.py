@@ -9,6 +9,7 @@ Nada de esto hace commit: el que llama decide (el router confirma, el conector
 puede hacer rollback para una vista previa). Los errores son `HTTPException`
 porque el router es el llamador principal; el conector los traduce.
 """
+import unicodedata
 from decimal import Decimal
 
 from fastapi import HTTPException
@@ -183,6 +184,35 @@ async def apply_items(
             has_sub = True
     entry.bruto = add if has_add else None
     entry.deducciones = sub if has_sub else None
+
+
+def fold_name(s: str) -> str:
+    """La clave con la que se compara el nombre de un campo: sin mayúsculas,
+    sin acentos y con los espacios colapsados ("Obra  Social" = "obra social")."""
+    nfd = unicodedata.normalize("NFD", (s or "").strip().lower())
+    return " ".join("".join(c for c in nfd if unicodedata.category(c) != "Mn").split())
+
+
+def match_field(
+    name: str, fields: list[IncomeSourceField], allowed_archived: set[int] | frozenset = frozenset(),
+) -> IncomeSourceField | None:
+    """El campo de la fuente que se llama `name`, o None.
+
+    Un solo matcher para todo lo que carga detalle por nombre (el conector MCP
+    y el recibo de sueldo del bot), así un nombre que encuentra el campo en uno
+    lo encuentra en el otro. Primero los activos; un archivado sólo si está en
+    `allowed_archived` (el ingreso que se edita ya lo tenía).
+    """
+    key = fold_name(name)
+    if not key:
+        return None
+    for fl in fields:
+        if fl.is_active and fold_name(fl.name) == key:
+            return fl
+    for fl in fields:
+        if not fl.is_active and fl.id in allowed_archived and fold_name(fl.name) == key:
+            return fl
+    return None
 
 
 async def ensure_field(source_id: int, name: str, kind: str, db: AsyncSession) -> int:

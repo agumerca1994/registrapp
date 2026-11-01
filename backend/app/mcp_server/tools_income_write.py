@@ -24,7 +24,7 @@ from app.models.income import IncomeEntry, IncomeSource, IncomeSourceField, Inco
 from app.schemas.income import IncomeEntryItemIn, IncomeSourceFieldIn
 from app.services.income import (
     apply_items, assert_entry_writable, assert_owns_source, assert_writable_source,
-    ensure_field, entry_out, load_source, sync_fields,
+    ensure_field, entry_out, load_source, match_field, sync_fields,
 )
 
 logger = logging.getLogger(__name__)
@@ -91,13 +91,9 @@ def _fields_dict(source: IncomeSource) -> list[dict[str, Any]]:
 def _resolve_field(
     name: str, fields: list[IncomeSourceField], allowed_archived: set[int],
 ) -> IncomeSourceField:
-    key = fold(name)
-    active = [fl for fl in fields if fl.is_active and fold(fl.name) == key]
-    if active:
-        return active[0]
-    archived = [fl for fl in fields if not fl.is_active and fold(fl.name) == key and fl.id in allowed_archived]
-    if archived:
-        return archived[0]
+    fl = match_field(name, fields, allowed_archived)
+    if fl is not None:
+        return fl
     available = ", ".join(fl.name for fl in fields if fl.is_active) or "(ninguno)"
     raise ToolError(
         f"La fuente no tiene un campo «{name}». Campos disponibles: {available}. "

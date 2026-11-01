@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.expense import EXPENSE_SOURCE_WHATSAPP, ExpenseCategory, ExpenseEntry
-from app.models.income import IncomeEntry, IncomeSource
+from app.models.income import IncomeEntry, IncomeSource, IncomeSourceField
 from app.models.reconciliation import ACTION_PROPOSED, ReconciliationAction
 from app.models.tenant import TENANT_KIND_BUSINESS, Tenant
 from app.models.user import User
@@ -762,6 +762,7 @@ async def _read_with_ai(
     )).all()
     reading = await ai_capture.read_receipt(
         data, categories=sorted(c.name for c in cats), today=ar_today(), caption=inbound.text,
+        income_fields=await _income_field_names(db, user),
     )
     if reading is None:
         await record_event(
@@ -788,7 +789,9 @@ async def _read_with_ai(
                 expense_date=reading.receipt_date or ar_today(),
                 term=reading.merchant or "Sueldo", legacy=False,
             )
-            return await _capture_income(db, user, inbound, draft, notes=reading.merchant or None)
+            return await _capture_income(
+                db, user, inbound, draft, notes=reading.merchant or None, lines=reading.lines,
+            )
         return await _capture_incoming(
             db, user, inbound, reading.amount, reading.currency, reading.receipt_date, reading.merchant,
         )
@@ -1181,6 +1184,28 @@ async def _do_income(db: AsyncSession, user: User, inbound: InboundMessage) -> l
     return await _capture_income(db, user, inbound, draft)
 
 
+async def _income_field_names(db: AsyncSession, user: User) -> dict[str, list[str]]:
+    """{fuente: [campos activos]} del hogar, para que la IA pueda señalar en qué
+    campo va cada concepto de un recibo de sueldo. Vacío en un negocio."""
+    if await _is_business(db, user):
+        return {}
+    rows = (await db.execute(
+        select(IncomeSource.name, IncomeSourceField.name)
+        .join(IncomeSourceField, IncomeSourceField.source_id == IncomeSource.id)
+        .where(
+            IncomeSource.tenant_id == user.tenant_id,
+            IncomeSource.is_active.is_(True),
+            IncomeSource.system_key.is_(None),
+            IncomeSourceField.is_active.is_(True),
+        )
+        .order_by(IncomeSource.id, IncomeSourceField.position, IncomeSourceField.id)
+    )).all()
+    out: dict[str, list[str]] = {}
+    for source_name, field_name in rows:
+        out.setdefault(source_name, []).append(field_name)
+    return out
+
+
 async def _capture_income(
     db: AsyncSession,
     user: User,
@@ -1189,6 +1214,7 @@ async def _capture_income(
     *,
     notes: str | None = None,
     refund: bool = False,
+    lines: list[ai_capture.PayslipLine] | None = None,
 ) -> list[str]:
     """Resolver la fuente, preguntar si hace falta, guardar y responder.
     `refund` = plata que entró por una transferencia: puede ser alguien
@@ -1198,7 +1224,7 @@ async def _capture_income(
     sources = await income_capture.writable_sources(db, user.tenant_id)
     source = await income_capture.resolve_source(db, user.tenant_id, draft.term, sources)
     if source is not None:
-        return await _save_income(db, user, inbound, draft, source, notes)
+        return await _save_income(db, user, inbound, draft, source, notes, lines)
 
     options = [s.name for s in sources][: income_capture.MAX_OPTIONS]
     new_name = draft.term if draft.term and income_capture.match_by_name(sources, draft.term) is None else None
@@ -1219,6 +1245,9 @@ async def _capture_income(
     _remember(db, user.id, "out", "text", text=reply, pending={
         "type": "income_pick", "draft": _draft_dict(draft), "options": options,
         "new": new_name, "refund": refund, "notes": notes,
+        # El detalle del recibo viaja con la pregunta: se carga en los campos
+        # de la fuente que se elija al contestar.
+        "lines": [line.to_dict() for line in lines or []],
     })
     await db.commit()
     return [reply]
@@ -1300,7 +1329,8 @@ async def _income_from_pending(
     # de la misma persona, o el próximo "cobré … sueldo de octubre", no pregunta.
     await income_capture.learn(db, user.tenant_id, draft.term, source.id)
     row.pending = None
-    return await _save_income(db, user, inbound, draft, source, pending.get("notes"))
+    lines = [ai_capture.PayslipLine.from_dict(d) for d in pending.get("lines") or []]
+    return await _save_income(db, user, inbound, draft, source, pending.get("notes"), lines)
 
 
 async def _save_income(
@@ -1310,6 +1340,7 @@ async def _save_income(
     draft: quick_capture.QuickDraft,
     source: IncomeSource,
     notes: str | None,
+    payslip_lines: list[ai_capture.PayslipLine] | None = None,
 ) -> list[str]:
     from app.services.search import fold_text
 
@@ -1318,6 +1349,10 @@ async def _save_income(
     entry = await income_capture.create_income(
         db, tenant_id=user.tenant_id, user_id=user.id, draft=draft, source=source, notes=notes,
     )
+    filled: list[str] = []
+    has_fields = False
+    if payslip_lines:
+        filled, has_fields = await income_capture.apply_payslip_lines(db, entry, payslip_lines)
     dupes = await income_capture.same_month(db, entry)
     _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id, text=inbound.text or None,
               ref_type="income", ref_id=entry.id)
@@ -1325,6 +1360,10 @@ async def _save_income(
 
     when = "" if entry.period_date == ar_today() else f" · {entry.period_date.strftime('%d/%m')}"
     lines = [f"✅ Ingreso: {_fmt_amount(draft)} · {source.name}{when}"]
+    if filled:
+        lines.append(f"Del recibo completé {_join_names(filled)}.")
+    elif has_fields:
+        lines.append(f"No encontré en el recibo los campos de «{source.name}»: el detalle lo completás en la app.")
     if dupes:
         listed = ", ".join(_fmt_amount(d) for d in dupes[:3])
         lines.append(
@@ -1333,7 +1372,8 @@ async def _save_income(
             "Si es el mismo, respondé *deshacer*."
         )
     elif await _show_hints(db, user.id):
-        lines.append("Si algo está mal: *deshacer*, o *fuente* y el nombre.")
+        # Con detalle, la fuente y el monto se corrigen en la app (`_edit_income`).
+        lines.append("Si algo está mal: *deshacer*." if filled else "Si algo está mal: *deshacer*, o *fuente* y el nombre.")
     return ["\n".join(lines)]
 
 
@@ -1670,6 +1710,13 @@ def _draft_from_dict(d: dict) -> quick_capture.QuickDraft:
         amount=Decimal(d["amount"]), currency=d["currency"],
         expense_date=_date.fromisoformat(d["date"]), term=d["term"], legacy=False,
     )
+
+
+def _join_names(names: list[str]) -> str:
+    """"Bruto, Jubilación y Obra social"."""
+    if len(names) == 1:
+        return names[0]
+    return f"{', '.join(names[:-1])} y {names[-1]}"
 
 
 def _fmt_amount(draft) -> str:

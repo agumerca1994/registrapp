@@ -404,3 +404,194 @@ async def test_bill_never_overrides_a_real_due_date(db, ai):
     replies = await wa_bot.handle(db, USER, _txt("1", "T1"))
     assert "El resumen vence" not in replies[0]
     assert stmt.due_date == date(2026, 11, 13)
+
+
+# ------------------------------------------------ detalle del recibo de sueldo ---
+# Montos sintéticos: el repo es público.
+
+def _line(name, amount, kind, field=""):
+    from app.services.ai_capture import PayslipLine
+
+    return PayslipLine(name=name, amount=Decimal(amount), kind=kind, field=field)
+
+
+def _fields(*specs):
+    from app.models.income import IncomeSourceField
+
+    return [
+        IncomeSourceField(id=i + 1, source_id=1, name=n, kind=k, position=i, is_active=active)
+        for i, (n, k, active) in enumerate(
+            (s if len(s) == 3 else (*s, True)) for s in specs
+        )
+    ]
+
+
+def test_parse_reading_keeps_payslip_lines_only():
+    raw = dict(
+        kind="recibo_sueldo", amount=1000, currency="ARS", date="", merchant="Acme",
+        payment_method="desconocido", category="", due_date="", auto_debit=False,
+        lines=[
+            {"name": "Sueldo básico", "amount": 1200, "kind": "add", "field": "Bruto"},
+            {"name": "Jubilación 11%", "amount": 132, "kind": "subtract", "field": "Inventado"},
+            {"name": "", "amount": 5, "kind": "add", "field": ""},
+            {"name": "Cero", "amount": 0, "kind": "add", "field": ""},
+            {"name": "Raro", "amount": 10, "kind": "otro", "field": ""},
+        ],
+    )
+    r = parse_reading(raw, date(2026, 10, 30), ["Bruto"])
+    assert [(l.name, l.amount, l.kind, l.field) for l in r.lines] == [
+        ("Sueldo básico", Decimal("1200.00"), "add", "Bruto"),
+        ("Jubilación 11%", Decimal("132.00"), "subtract", ""),  # campo fuera de la lista
+        ("Raro", Decimal("10.00"), "info", ""),
+    ]
+    # En cualquier otro comprobante, los renglones no se leen.
+    assert parse_reading({**raw, "kind": "gasto"}, date(2026, 10, 30), ["Bruto"]).lines == []
+
+
+def test_match_payslip_lines_by_name_code_and_percent():
+    from app.services.income_capture import match_payslip_lines
+
+    fields = _fields(("Bruto", "add"), ("Jubilación", "subtract"), ("Ley 19032", "subtract"),
+                     ("Obra social", "subtract"), ("Viejo", "add", False))
+    lines = [
+        _line("0010 Sueldo básico", "1000", "add"),          # sin campo: no se guarda
+        _line("JUBILACION 11%", "110", "subtract"),
+        _line("Ley 19.032 3%", "30", "subtract"),
+        _line("Obra Social (3%)", "30", "subtract"),
+        _line("Viejo", "5", "add"),                           # archivado: nunca
+    ]
+    got = {f.name: l.amount for f, l in match_payslip_lines(lines, fields)}
+    assert got == {"Jubilación": Decimal("110"), "Ley 19032": Decimal("30"), "Obra social": Decimal("30")}
+
+
+def test_match_payslip_lines_ai_hint_is_checked():
+    from app.services.income_capture import match_payslip_lines
+
+    fields = _fields(("Bruto", "add"), ("Ganancias", "subtract"), ("Bono", "add"))
+    lines = [
+        # La pista de la IA lleva el total al campo Bruto.
+        _line("Total remunerativo", "1500", "info", "Bruto"),
+        # Un haber no va a un campo que resta, aunque la IA lo señale.
+        _line("Horas extra", "200", "add", "Ganancias"),
+        # Dos renglones señalados al mismo campo sin nombrarlo: queda vacío.
+        _line("Premio", "50", "add", "Bono"),
+        _line("Gratificación", "60", "add", "Bono"),
+    ]
+    got = {f.name: l.amount for f, l in match_payslip_lines(lines, fields)}
+    assert got == {"Bruto": Decimal("1500")}
+
+    # Si uno de los dos lo nombra, gana ése.
+    got = {f.name: l.amount for f, l in match_payslip_lines(
+        [_line("Bono", "70", "add"), _line("Premio", "50", "add", "Bono")], fields,
+    )}
+    assert got == {"Bono": Decimal("70")}
+
+
+def test_match_field_shared_with_mcp():
+    from app.services.income import match_field
+
+    fields = _fields(("Obra  Social", "subtract"), ("Viejo", "add", False))
+    assert match_field("obra social", fields).name == "Obra  Social"
+    assert match_field("viejo", fields) is None
+    assert match_field("viejo", fields, {2}).name == "Viejo"
+
+
+async def _salary_source(db, *fields):
+    from app.models.income import IncomeSource, IncomeSourceField, IncomeType
+
+    src = IncomeSource(tenant_id=1, name="Sueldo", income_type=IncomeType.salary)
+    db.add(src)
+    await db.flush()
+    for pos, (name, kind) in enumerate(fields):
+        db.add(IncomeSourceField(source_id=src.id, name=name, kind=kind, position=pos))
+    await db.flush()
+    return src
+
+
+_PAYSLIP_LINES = [
+    ("Total remunerativo", "1000", "info", "Bruto"),
+    ("Jubilación 11%", "110", "subtract", ""),
+    ("Obra social 3%", "30", "subtract", ""),
+    ("Cuota sindical", "20", "subtract", ""),  # la fuente no tiene ese campo
+]
+
+
+def _payslip(merchant):
+    return _reading(
+        kind="recibo_sueldo", merchant=merchant, amount=Decimal("840"),
+        lines=[_line(*row) for row in _PAYSLIP_LINES],
+    )
+
+
+async def _entry_with_items(db):
+    from sqlalchemy.orm import selectinload
+
+    from app.models.income import IncomeEntry
+
+    return await db.scalar(
+        select(IncomeEntry).options(selectinload(IncomeEntry.items)).execution_options(populate_existing=True)
+    )
+
+
+async def test_payslip_fills_source_fields(db, ai):
+    await _salary_source(db, ("Bruto", "add"), ("Jubilación", "subtract"), ("Obra social", "subtract"),
+                         ("Ganancias", "subtract"))
+    ai.reading = _payslip("Sueldo")
+    replies = await wa_bot.handle(db, USER, _img("I1"))
+    assert "✅ Ingreso" in replies[0]
+    assert "Del recibo completé Bruto, Jubilación y Obra social." in replies[0]
+    assert "—" not in replies[0]
+    # La IA recibió los campos del hogar para poder señalarlos.
+    assert ai.calls[-1]["income_fields"] == {"Sueldo": ["Bruto", "Jubilación", "Obra social", "Ganancias"]}
+
+    entry = await _entry_with_items(db)
+    assert entry.amount == Decimal("840")  # el neto impreso, no el del detalle
+    assert {i.name: i.amount for i in entry.items} == {
+        "Bruto": Decimal("1000"), "Jubilación": Decimal("110"), "Obra social": Decimal("30"),
+    }
+    assert entry.bruto == Decimal("1000") and entry.deducciones == Decimal("140")
+
+    # Deshacer se lleva el detalle con el ingreso.
+    replies = await wa_bot.handle(db, USER, InboundMessage(phone="549383", wa_id="T1", kind="text", text="deshacer"))
+    assert "Deshecho" in replies[0]
+    assert await _entry_with_items(db) is None
+
+
+async def test_payslip_lines_travel_with_the_source_question(db, ai):
+    await _salary_source(db, ("Bruto", "add"), ("Jubilación", "subtract"))
+    ai.reading = _payslip("Acme SA")
+    replies = await wa_bot.handle(db, USER, _img("I1"))
+    assert "1. Sueldo" in replies[0]
+    replies = await wa_bot.handle(db, USER, InboundMessage(phone="549383", wa_id="T1", kind="text", text="1"))
+    assert "Del recibo completé Bruto y Jubilación." in replies[0]
+    entry = await _entry_with_items(db)
+    assert {i.name for i in entry.items} == {"Bruto", "Jubilación"}
+
+
+async def test_payslip_into_new_source_saves_no_detail(db, ai):
+    """Una fuente nueva no tiene campos: el bot no los inventa."""
+    from app.models.income import IncomeSourceField
+
+    ai.reading = _payslip("Acme SA")
+    await wa_bot.handle(db, USER, _img("I1"))
+    replies = await wa_bot.handle(db, USER, InboundMessage(phone="549383", wa_id="T1", kind="text", text="1"))
+    assert "Acme SA" in replies[0] and "Del recibo" not in replies[0]
+    assert (await _entry_with_items(db)).items == []
+    assert (await db.scalar(select(IncomeSourceField))) is None
+
+
+async def test_payslip_source_without_fields_behaves_as_before(db, ai):
+    await _salary_source(db)
+    ai.reading = _payslip("Sueldo")
+    replies = await wa_bot.handle(db, USER, _img("I1"))
+    assert "Del recibo" not in replies[0] and "No encontré" not in replies[0]
+    entry = await _entry_with_items(db)
+    assert entry.amount == Decimal("840") and entry.items == [] and entry.bruto is None
+
+
+async def test_payslip_with_no_matching_concept_says_so(db, ai):
+    await _salary_source(db, ("Ganancias", "subtract"))
+    ai.reading = _payslip("Sueldo")
+    replies = await wa_bot.handle(db, USER, _img("I1"))
+    assert "No encontré en el recibo los campos de «Sueldo»" in replies[0]
+    assert (await _entry_with_items(db)).items == []

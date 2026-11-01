@@ -24,7 +24,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dc_field
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
@@ -46,6 +46,26 @@ KIND_OTHER = "no_es_comprobante"
 _FALLBACK_MODELS = {"claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"}
 
 PAYMENT_METHODS = ("efectivo", "debito", "transferencia", "tarjeta_credito", "desconocido")
+LINE_KINDS = ("add", "subtract", "info")
+MAX_PAYSLIP_LINES = 40
+
+
+def _line_schema(field_names: list[str]) -> dict:
+    """Un renglón del recibo de sueldo. `field` va atado con `enum` a los campos
+    que el hogar ya tiene en sus fuentes de ingreso, igual que la categoría de
+    `suggest_categories`: la IA puede señalar uno, nunca inventarlo."""
+    return {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "amount": {"type": "number"},
+            "kind": {"type": "string", "enum": list(LINE_KINDS)},
+            "field": {"type": "string", "enum": [*field_names, ""]},
+        },
+        "required": ["name", "amount", "kind", "field"],
+        "additionalProperties": False,
+    }
+
 
 _SCHEMA = {
     "type": "object",
@@ -59,9 +79,10 @@ _SCHEMA = {
         "category": {"type": "string"},
         "due_date": {"type": "string"},
         "auto_debit": {"type": "boolean"},
+        "lines": {"type": "array", "items": _line_schema([])},
     },
     "required": ["kind", "amount", "currency", "date", "merchant", "payment_method", "category",
-                 "due_date", "auto_debit"],
+                 "due_date", "auto_debit", "lines"],
     "additionalProperties": False,
 }
 
@@ -95,7 +116,18 @@ transferencia o un pago con dinero en cuenta (Mercado Pago, billeteras, QR); \
 - auto_debit: true si la factura dice que se paga por débito automático (de una \
 tarjeta o de una cuenta); si no, false.
 - category: el nombre EXACTO de una de las categorías de la lista que te pasan, la que \
-mejor le corresponde. "" si ninguna encaja con claridad."""
+mejor le corresponde. "" si ninguna encaja con claridad.
+- lines: SÓLO en un recibo de sueldo, cada concepto con monto tal como está impreso \
+(en cualquier otro comprobante, []). name: el concepto sin el código de la izquierda \
+("Sueldo básico", "Jubilación 11%"). amount: el monto en positivo. kind: "add" si es \
+un haber (remunerativo o no remunerativo, bono, adicional), "subtract" si es un \
+descuento o retención (jubilación, obra social, ley 19.032, sindicato, ganancias), \
+"info" si no entra en la cuenta (subtotales como "Total remunerativo" o "Total \
+descuentos", bases imponibles). No repitas el neto como renglón. field: si te pasan \
+campos de detalle, el nombre EXACTO del campo donde va ese renglón, o "". Si un campo \
+corresponde a un total (ej. "Bruto" = "Total remunerativo"), asignáselo al renglón del \
+total y dejá "" en los renglones que lo componen; nunca pongas el mismo campo en dos \
+renglones."""
 
 
 @dataclass
@@ -110,6 +142,46 @@ class AiReading:
     due_date: date | None = None
     auto_debit: bool = False
     input_tokens: int | None = None
+    lines: list["PayslipLine"] = dc_field(default_factory=list)
+
+
+@dataclass
+class PayslipLine:
+    """Un concepto del recibo de sueldo, como lo leyó la IA. `field` es el
+    campo que la IA señaló (de la lista que se le pasó), o "": es una pista,
+    el que decide a qué campo va es `income_capture.match_payslip_lines`."""
+    name: str
+    amount: Decimal
+    kind: str
+    field: str = ""
+
+    def to_dict(self) -> dict:
+        return {"name": self.name, "amount": str(self.amount), "kind": self.kind, "field": self.field}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "PayslipLine":
+        return cls(name=d["name"], amount=Decimal(d["amount"]), kind=d["kind"], field=d.get("field") or "")
+
+
+def parse_lines(raw_lines, field_names: list[str] | None = None) -> list[PayslipLine]:
+    """Los renglones del modelo, sin los que no sirven: sin nombre, con monto
+    ≤ 0 o ilegible, o con un `field` que no está en la lista."""
+    allowed = set(field_names or [])
+    out: list[PayslipLine] = []
+    for row in (raw_lines or [])[:MAX_PAYSLIP_LINES]:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or "").strip()[:80]
+        try:
+            amount = Decimal(str(row.get("amount") or 0)).quantize(Decimal("0.01"))
+        except InvalidOperation:
+            continue
+        if not name or amount <= 0:
+            continue
+        kind = row.get("kind") if row.get("kind") in LINE_KINDS else "info"
+        hint = row.get("field") or ""
+        out.append(PayslipLine(name=name, amount=amount, kind=kind, field=hint if hint in allowed else ""))
+    return out
 
 
 def enabled() -> bool:
@@ -138,7 +210,7 @@ def _content_block(data: bytes, media_type: str) -> dict:
     return {"type": block_type, "source": {"type": "base64", "media_type": media_type, "data": b64}}
 
 
-def parse_reading(raw: dict, today: date) -> AiReading:
+def parse_reading(raw: dict, today: date, field_names: list[str] | None = None) -> AiReading:
     """La salida del modelo → `AiReading`, con lo que no tiene sentido llevado a
     "no sé": un monto ≤ 0 es None, y una fecha futura o de hace más de un año
     se descarta (el bot usa hoy) — una fecha mal leída es peor que ninguna."""
@@ -160,8 +232,9 @@ def parse_reading(raw: dict, today: date) -> AiReading:
     if due is not None and not (today - timedelta(days=120) <= due <= today + timedelta(days=120)):
         due = None
     method = raw.get("payment_method")
+    kind = raw.get("kind") or KIND_OTHER
     return AiReading(
-        kind=raw.get("kind") or KIND_OTHER,
+        kind=kind,
         amount=amount if amount > 0 else None,
         currency="USD" if raw.get("currency") == "USD" else "ARS",
         receipt_date=when,
@@ -170,12 +243,19 @@ def parse_reading(raw: dict, today: date) -> AiReading:
         category=(raw.get("category") or "").strip(),
         due_date=due,
         auto_debit=bool(raw.get("auto_debit")),
+        # El detalle sólo importa en un recibo: en un ticket serían renglones
+        # de compra que nadie va a leer.
+        lines=parse_lines(raw.get("lines"), field_names) if kind == KIND_PAYSLIP else [],
     )
 
 
 async def read_receipt(
-    data: bytes, *, categories: list[str], today: date, caption: str = ""
+    data: bytes, *, categories: list[str], today: date, caption: str = "",
+    income_fields: dict[str, list[str]] | None = None,
 ) -> AiReading | None:
+    """`income_fields`: {fuente: [campos]} del hogar, para que en un recibo de
+    sueldo la IA pueda señalar en qué campo va cada concepto. Vacío o None en
+    un negocio o en un hogar sin campos."""
     if not enabled():
         return None
     media_type = sniff_media_type(data)
@@ -183,18 +263,27 @@ async def read_receipt(
         logger.warning("IA: formato de archivo no reconocido (%d bytes)", len(data))
         return None
 
+    income_fields = {k: v for k, v in (income_fields or {}).items() if v}
+    field_names = sorted({f for names in income_fields.values() for f in names})
+    fields_text = "; ".join(f"{src}: {', '.join(names)}" for src, names in income_fields.items())
     prompt = (
         f"Hoy es {today.isoformat()}.\n"
         f"Categorías: {', '.join(categories) if categories else '(ninguna)'}\n"
+        + (f"Campos de detalle de las fuentes de ingreso: {fields_text}\n" if fields_text else "")
         + (f"La persona escribió junto al archivo: {caption}\n" if caption else "")
     )
+    schema = _SCHEMA
+    if field_names:
+        schema = {**_SCHEMA, "properties": {
+            **_SCHEMA["properties"], "lines": {"type": "array", "items": _line_schema(field_names)},
+        }}
     answer = await _structured_call(
-        _SYSTEM, [_content_block(data, media_type), {"type": "text", "text": prompt}], _SCHEMA,
+        _SYSTEM, [_content_block(data, media_type), {"type": "text", "text": prompt}], schema,
     )
     if answer is None:
         return None
     raw, input_tokens = answer
-    reading = parse_reading(raw, today)
+    reading = parse_reading(raw, today, field_names)
     reading.input_tokens = input_tokens
     return reading
 
