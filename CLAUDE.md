@@ -456,7 +456,7 @@ Los anuncios de features nuevas son carruseles a pantalla completa construidos *
 - **`ALLOWED_ORIGINS` suma solo `https://app.tood.com.ar` y `https://tood.com.ar`** en el compose, además de lo que tenga cargado Easypanel.
 - **Firebase Auth** tiene autorizados `app.tood.com.ar` y `tood.com.ar`.
 - **`FRONTEND_URL` es `https://app.tood.com.ar`** por defecto en el compose (Easypanel no la define; antes el backend la derivaba de `APP_DOMAIN`): los links de invitación, los del bot y la página para autorizar el conector llevan al dominio nuevo.
-- El backend sigue en `API_DOMAIN` (el conector de IA y el webhook de WhatsApp también). Pasarlo a `api.tood.com.ar` / `app.tood.com.ar` es la fase 3 del plan de migración (ver memoria `migracion-tood`).
+- **El backend vive en `api.tood.com.ar`** (router `registrapp-api2`) y sigue respondiendo en `API_DOMAIN`. La app usa la API nueva (`NEXT_PUBLIC_API_URL` fija en el compose, no sale de Easypanel) y el conector se presenta como `https://api.tood.com.ar` (`OAUTH_ISSUER_URL`). **Los tokens del conector creados con la dirección vieja siguen valiendo**: `MCP_LEGACY_RESOURCE_URLS` (por defecto `https://${API_DOMAIN}/mcp`) cuenta como audiencia propia en `mcp_known_resources`, así mover la API no obligó a nadie a reconectar. El webhook de WhatsApp sigue entrando por el dominio viejo, que funciona igual.
 - DNS en Cloudflare, en "Solo DNS" (nube gris) para que Traefik saque los certificados. `api.tood.com.ar` tiene registro pero todavía ningún servicio: muestra el certificado de Easypanel.
 
 El plan completo:

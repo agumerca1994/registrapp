@@ -59,6 +59,8 @@
       MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
       # Los tokens del conector que se crearon con la dirección vieja de la API siguen valiendo después de
       # pasar el conector a api.tood.com.ar: nadie tiene que reconectar.
+      # El conector (issuer OAuth y recurso /mcp) se presenta en el dominio nuevo de la API.
+      OAUTH_ISSUER_URL: ${OAUTH_ISSUER_URL:-https://api.tood.com.ar}
       MCP_LEGACY_RESOURCE_URLS: ${MCP_LEGACY_RESOURCE_URLS:-https://${API_DOMAIN}/mcp}
       # Alta pública de negocios (POST /auth/register con kind="business").
       # Apagada: el piloto se convierte con PATCH /internal/tenants/{id}/kind.
@@ -84,7 +86,7 @@
       context: ./frontend
       dockerfile: Dockerfile.prod
       args:
-        NEXT_PUBLIC_API_URL: https://${API_DOMAIN}
+        NEXT_PUBLIC_API_URL: https://api.${SITE_DOMAIN:-tood.com.ar}
         NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY}
         NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
         NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
@@ -100,7 +102,7 @@
         NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://app.tood.com.ar}
         NEXT_PUBLIC_APP_ALIASES: ${NEXT_PUBLIC_APP_ALIASES:-https://${APP_DOMAIN}}
     environment:
-      NEXT_PUBLIC_API_URL: https://${API_DOMAIN}
+      NEXT_PUBLIC_API_URL: https://api.${SITE_DOMAIN:-tood.com.ar}
       NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY}
       NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
       NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
