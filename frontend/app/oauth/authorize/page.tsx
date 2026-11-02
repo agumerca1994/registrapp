@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AlertCircle, Eye, Loader2, Pencil, Plug } from "lucide-react";
+import { AlertCircle, Eye, Loader2, Pencil } from "lucide-react";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { connectorScopeLabel, isBusiness } from "@/lib/account";
+import AvatarConIA from "@/components/marketing/connect/AvatarConIA";
 
 // Deliberately outside the (app) route group: that layout bounces anyone
 // without a session to /login, which would drop the ?txn= and break the OAuth
@@ -22,6 +23,13 @@ interface TxnInfo {
   logo_uri: string | null;
   redirect_host: string;
   scopes: string[];
+}
+
+// Una app de escritorio o de terminal (Claude Code) recibe la respuesta en un puerto de la misma máquina.
+// "localhost:54982" es correcto pero se lee como un error: se dice qué significa. Otro dominio se muestra tal
+// cual, porque es el dato que permite notar un destino raro.
+function isLoopback(host: string) {
+  return /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host);
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -92,16 +100,12 @@ function AuthorizeInner() {
   }
 
   const header = (
-    <div className="flex items-center gap-3">
-      <div className="w-10 h-10 rounded-full border-2 border-ink bg-primary/10 flex items-center justify-center shrink-0">
-        <Plug className="w-5 h-5 text-primary" />
-      </div>
-      <div className="min-w-0">
-        <h1 className="font-display font-bold text-lg text-foreground truncate">
-          {info.client_name}
-        </h1>
-        <p className="text-xs text-muted-foreground truncate">quiere conectarse a tood</p>
-      </div>
+    <div className="text-center">
+      <AvatarConIA className="w-full max-w-[320px] mx-auto h-auto" surface="bg-card" />
+      <h1 className="font-display font-bold text-lg text-foreground break-words">
+        {info.client_name}
+      </h1>
+      <p className="text-sm text-muted-foreground">quiere conectarse a tood</p>
     </div>
   );
 
@@ -142,11 +146,11 @@ function AuthorizeInner() {
           <Eye className="w-4 h-4 mt-0.5 text-emerald-700 shrink-0" />
           <p className="text-sm text-foreground">
             {isBusiness(appUser) ? (
-              <><strong>Va a poder leer</strong> las ventas, los gastos, el stock, los
-              proveedores y las tarjetas de tu negocio.</>
+              <><strong>Lectura:</strong> ventas, gastos, stock, proveedores y tarjetas de tu
+              negocio.</>
             ) : (
-              <><strong>Va a poder leer</strong> los ingresos, gastos, tarjetas, cuotas,
-              hipoteca y tenencia en dólares de tu hogar.</>
+              <><strong>Lectura:</strong> ingresos, gastos, tarjetas, cuotas, gastos compartidos,
+              hipoteca y dólares de tu hogar.</>
             )}
           </p>
         </div>
@@ -154,13 +158,13 @@ function AuthorizeInner() {
           <Pencil className="w-4 h-4 mt-0.5 text-primary shrink-0" />
           <p className="text-sm text-foreground">
             {isBusiness(appUser) ? (
-              <><strong>Va a poder cargar, editar y borrar ventas, el cierre del día, stock,
-              productos, gastos y tarjetas</strong>, siempre con una vista previa que tenés que
-              confirmar. Lo demás es sólo lectura.</>
+              <><strong>Escritura:</strong> ventas, cierre del día, stock, productos, gastos y
+              tarjetas. Puede cargar, editar y borrar. Cada cambio arranca como vista previa y se
+              guarda cuando lo confirmás.</>
             ) : (
-              <><strong>Va a poder cargar, editar y borrar gastos, ingresos, tarjetas y gastos
-              compartidos</strong> (incluido avisarle a quien compartas), siempre con una vista
-              previa que tenés que confirmar. Lo demás es sólo lectura.</>
+              <><strong>Escritura:</strong> gastos, ingresos, tarjetas y gastos compartidos. Puede
+              cargar, editar y borrar, y avisarle a quien compartas. Cada cambio arranca como vista
+              previa y se guarda cuando lo confirmás.</>
             )}
           </p>
         </div>
@@ -171,12 +175,16 @@ function AuthorizeInner() {
           Conectado como <strong className="text-foreground">{appUser.email}</strong>
         </p>
         <p>
-          Te va a devolver a <span className="font-mono">{info.redirect_host}</span>
+          {isLoopback(info.redirect_host) ? (
+            "Al terminar volvés a la app que abriste en esta compu."
+          ) : (
+            <>Al terminar volvés a <span className="font-mono">{info.redirect_host}</span></>
+          )}
         </p>
         <div className="flex flex-wrap gap-1 pt-1">
           {info.scopes.map(s => (
             <Chip key={s} tone="emerald">
-              {s === "registrapp:read" ? connectorScopeLabel(appUser) : s}
+              {s === "registrapp:read" ? connectorScopeLabel() : s}
             </Chip>
           ))}
         </div>

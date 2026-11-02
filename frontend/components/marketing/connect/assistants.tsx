@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { appHref } from "@/lib/site";
 import { KeyRound, ShieldCheck } from "lucide-react";
-import { connectorScopeLabel } from "@/lib/account";
 import { CopyUrl } from "./CopyUrl";
 import { FirstQuestion } from "./KindBlocks";
 import { Shot, type ShotData } from "./Lightbox";
@@ -21,9 +20,6 @@ import { Shot, type ShotData } from "./Lightbox";
 // Sale del backend configurado, así cambia sola el día que el backend pase a su subdominio de tood.
 // La dirección pública del conector (mcp.tood.com.ar); sin la variable, la de la API.
 export const CONNECTOR_URL = process.env.NEXT_PUBLIC_MCP_URL || `${process.env.NEXT_PUBLIC_API_URL ?? "https://api.tood.com.ar"}/mcp`;
-
-const SCOPE_HOUSEHOLD = connectorScopeLabel({ tenant_kind: "household", role: "admin" } as Parameters<typeof connectorScopeLabel>[0]);
-const SCOPE_BUSINESS = connectorScopeLabel({ tenant_kind: "business", role: "admin" } as Parameters<typeof connectorScopeLabel>[0]);
 
 /** El texto literal de un botón o menú del asistente o de la app. */
 function Ui({ children }: { children: React.ReactNode }) {
@@ -51,7 +47,7 @@ const S = {
     "Claude: la ventana Agregar conector personalizado, con los campos de nombre y dirección vacíos"),
   formFull: shot("/conectar/claude/3-formulario-completo.webp", 1070, 869,
     "Claude: la ventana Agregar conector personalizado con el nombre Registrapp y la dirección del conector pegada"),
-  authorize: shot("/conectar/autorizar.webp", 960, 962,
+  authorize: shot("/conectar/autorizar.webp", 960, 1244,
     "tood: la página para autorizar a Claude, con lo que va a poder leer y cargar, y los botones Autorizar y Cancelar"),
   list: shot("/conectar/claude/4-conectores-lista.webp", 1400, 434,
     "Claude: Configuración, Conectores, pestaña Tuyos, con Registrapp marcado como Personalizado y conectado"),
@@ -96,7 +92,7 @@ export const ASSISTANTS: Assistant[] = [
       { title: "Iniciá sesión y autorizá", body: <>
         <p>
           Claude abre la página de tood. Entrá con tu cuenta de Google, revisá lo que va a poder hacer y tocá <Ui>Autorizar</Ui>.
-          En un hogar dice <strong className="text-foreground">«{SCOPE_HOUSEHOLD}»</strong>; en un negocio, <strong className="text-foreground">«{SCOPE_BUSINESS}»</strong>.
+          La pantalla detalla qué puede leer y qué puede cargar, según sea un hogar o un negocio.
         </p>
         <Shot shot={S.authorize} maxWidth={420} />
         <Callout>

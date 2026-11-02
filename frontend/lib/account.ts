@@ -71,11 +71,9 @@ export function terms(user: MaybeUser) {
   return TERMS[tenantKind(user)];
 }
 
-/** Lo que habilita una conexión del conector MCP. Hay un solo scope
- * (`registrapp:read`) y lo que deja escribir depende del tipo de cuenta: se
- * dice igual en Configuración y en la pantalla de consentimiento. */
-export function connectorScopeLabel(user: MaybeUser): string {
-  return isBusiness(user)
-    ? "Lectura + ventas, stock, gastos y tarjetas"
-    : "Lectura + gastos, ingresos, tarjetas y compartidos";
+/** Lo que habilita una conexión del conector MCP, igual en Configuración y en
+ * la pantalla de consentimiento. Hay un solo scope (`registrapp:read`) y todavía
+ * no se eligen módulos; el detalle por tipo de cuenta lo da el consentimiento. */
+export function connectorScopeLabel(): string {
+  return "Lectura y escritura";
 }

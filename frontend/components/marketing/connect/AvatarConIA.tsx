@@ -61,7 +61,8 @@ const stateAt = (list: readonly (readonly [number, ...unknown[]])[], t: number) 
   return i;
 };
 
-export default function AvatarConIA({ className }: { className?: string }) {
+// `surface` es el color de lo que hay detrás: el disco del orbe tiene que coincidir o se ve como una moneda.
+export default function AvatarConIA({ className, surface = "bg-background" }: { className?: string; surface?: string }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const orbRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef(0);
@@ -142,7 +143,7 @@ export default function AvatarConIA({ className }: { className?: string }) {
       <div ref={orbRef} className="absolute" aria-hidden="true"
         style={{ left: `${(ORB.x / W) * 100}%`, top: `${(ORB.y / H) * 100}%`, transform: "translate(-50%, -50%)", opacity: 0 }}>
         <div className="relative w-16 h-16">
-          <div className="absolute inset-0 rounded-full bg-background" />
+          <div className={`absolute inset-0 rounded-full ${surface}`} />
           {slots.map((st, i) => (
             <div key={i} className="absolute inset-0 transition-opacity ease-in-out" style={{ opacity: active === i ? 1 : 0, transitionDuration: `${FADE_MS}ms` }}>
               <ThinkingOrb state={st} size={64} theme="light" aria-hidden="true" paused={active !== i} />
