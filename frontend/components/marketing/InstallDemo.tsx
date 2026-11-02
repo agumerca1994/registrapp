@@ -10,6 +10,7 @@ import { ToodAvatar, type ToodReaction } from "@/components/brand/ToodAvatar";
 import { ToodLogo } from "@/components/brand/ToodLogo";
 import { BRAND_FIELD } from "@/lib/brand/tood-cara";
 import { appHref } from "@/lib/site";
+import { BrandIcon, type BrandIconName } from "./BrandIcon";
 import { PhoneFrame } from "./Frames";
 
 /**
@@ -30,16 +31,24 @@ type Beat = {
   to?: string; tap?: boolean; at?: [number, number]; hideT?: boolean; reaction?: ToodReaction;
 };
 
+function InlineBrand({ name, children }: { name: BrandIconName; children: ReactNode }) {
+  return (
+    <strong className="inline-flex items-center gap-1 align-bottom">
+      <BrandIcon name={name} className="h-[1.1em] w-[1.1em]" />{children}
+    </strong>
+  );
+}
+
 const STEPS: Record<Platform, ReactNode[]> = {
   iphone: [
-    <>Abrí <strong>app.tood.com.ar</strong> en <strong>Safari</strong>.</>,
+    <>Abrí <strong>app.tood.com.ar</strong> en <InlineBrand name="safari">Safari</InlineBrand>.</>,
     <>Tocá el menú <strong>☰</strong>, al lado de la dirección, y elegí <strong>Compartir</strong>.</>,
     <>Tocá <strong>Ver más</strong> y después <strong>Agregar a Inicio</strong>.</>,
     <>Dejá prendido <strong>Abrir como app web</strong> y tocá <strong>Agregar</strong>.</>,
     <>Listo: abrila desde el ícono de <strong>tood</strong>.</>,
   ],
   android: [
-    <>Abrí <strong>app.tood.com.ar</strong> en <strong>Chrome</strong>.</>,
+    <>Abrí <strong>app.tood.com.ar</strong> en <InlineBrand name="googlechrome">Chrome</InlineBrand>.</>,
     <>Tocá el menú <strong>⋮</strong>, arriba a la derecha.</>,
     <>Elegí <strong>Agregar a la pantalla principal</strong>.</>,
     <>Confirmá con <strong>Instalar</strong>.</>,
@@ -80,9 +89,9 @@ const BEATS: Record<Platform, Beat[]> = {
   ],
 };
 
-const PLATFORMS: { key: Platform; label: string; browser: string }[] = [
-  { key: "iphone", label: "iPhone", browser: "Safari" },
-  { key: "android", label: "Android", browser: "Chrome" },
+const PLATFORMS: { key: Platform; label: string; browser: string; icon: BrandIconName }[] = [
+  { key: "iphone", label: "iPhone", browser: "Safari", icon: "apple" },
+  { key: "android", label: "Android", browser: "Chrome", icon: "android" },
 ];
 
 const APP_COLORS = ["#fca5a5", "#fcd34d", "#86efac", "#93c5fd", "#c4b5fd", "#f9a8d4", "#5eead4", "#fdba74", "#a5b4fc", "#bef264", "#67e8f9", "#fda4af"];
@@ -193,12 +202,12 @@ export default function InstallDemo({ className = "" }: { className?: string }) 
     <div ref={root} className={`grid md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] gap-8 md:gap-12 items-center ${className}`}>
       <div className="min-w-0 md:order-2">
         <div role="group" aria-label="Elegí tu celular" className="flex gap-2">
-          {PLATFORMS.map(({ key, label }) => (
+          {PLATFORMS.map(({ key, label, icon }) => (
             <button key={key} type="button" aria-pressed={platform === key} onClick={() => choosePlatform(key)}
-              className={`min-h-11 rounded-full border-2 px-5 font-semibold transition-colors ${platform === key
+              className={`inline-flex min-h-11 items-center gap-2 rounded-full border-2 px-5 font-semibold transition-colors ${platform === key
                 ? "border-ink bg-primary text-primary-foreground"
                 : "border-border bg-card text-foreground hover:border-ink"}`}>
-              {label}
+              <BrandIcon name={icon} />{label}
             </button>
           ))}
         </div>
