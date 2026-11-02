@@ -5,6 +5,7 @@ import { Bell, BellOff, CheckCircle2, Smartphone, TriangleAlert } from "lucide-r
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
+import { siteHref } from "@/lib/site";
 import { enablePush, isIOS, pushConfigProblem, pushState, type PushState } from "@/lib/push";
 
 /**
@@ -122,9 +123,10 @@ export function PushNotificationsSection() {
           </div>
           <p className="text-xs text-muted-foreground">
             En iPhone y iPad, Safari sólo entrega notificaciones si la app está
-            instalada. Desde Safari: tocá <strong>Compartir</strong> (el cuadrado
-            con la flecha) → <strong>Agregar a pantalla de inicio</strong>. Después
-            abrí la app desde el ícono nuevo y volvé acá.
+            instalada. Desde Safari, buscá <strong>Compartir</strong> y después{" "}
+            <strong>Agregar a Inicio</strong>. Después abrí la app desde el ícono
+            nuevo y volvé acá.{" "}
+            <a href={siteHref("/instalar")} className="font-medium text-primary underline">Ver el paso a paso</a>
           </p>
         </div>
       )}

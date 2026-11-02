@@ -6,6 +6,7 @@ import {
   ArrowRight, Bot, Check, Home as HomeIcon, Laptop, MessageCircle, ShieldCheck, Smartphone, Store,
 } from "lucide-react";
 import HomeRedirect from "@/components/marketing/HomeRedirect";
+import InstallDemo from "@/components/marketing/InstallDemo";
 import { Phone, Screen } from "@/components/marketing/Frames";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import SiteHeader from "@/components/marketing/SiteHeader";
@@ -53,7 +54,7 @@ const PLATFORMS = [
   { icon: Laptop, title: "En la compu",
     text: "Para mirar el mes completo, las tarjetas y los resúmenes en pantalla grande." },
   { icon: Smartphone, title: "En el celular",
-    text: "Se instala desde el navegador, en iPhone y en Android, sin pasar por la tienda. Sirve para anotar el gasto o la venta en el momento." },
+    text: "Se instala desde el navegador, en iPhone y en Android, sin pasar por la tienda. Más abajo te mostramos cómo. Sirve para anotar el gasto o la venta en el momento." },
   { icon: MessageCircle, title: "Por WhatsApp",
     text: "Escribís «12 lucas verdulería» y queda cargado. Si mandás el PDF del resumen de la tarjeta, lo compara con lo que ya cargaste." },
   { icon: Bot, title: "Con tu asistente de IA",
@@ -173,6 +174,15 @@ export default function Home() {
             <Phone src="/home/celular-hogar.jpg" alt="tood Hogar en el celular" className="w-1/2 max-w-[230px]" />
             <Phone src="/home/celular-negocio.jpg" alt="tood Negocio en el celular" className="w-1/2 max-w-[230px] mt-10" />
           </div>
+        </section>
+
+        {/* Instalar */}
+        <section id="instalar" className="scroll-mt-20 max-w-6xl mx-auto px-4 md:px-8 py-14">
+          <h2 className="font-display font-bold text-3xl md:text-4xl tracking-tight">Instalala en tu celular</h2>
+          <p className="mt-3 text-lg text-muted-foreground max-w-2xl">
+            tood no está en la tienda: se instala desde el navegador y queda con su ícono, como cualquier app.
+          </p>
+          <InstallDemo className="mt-8" />
         </section>
 
         {/* IA */}

@@ -2,12 +2,13 @@ import Link from "next/link";
 import { appHref } from "@/lib/site";
 import { ToodLogoAnimado } from "@/components/brand/ToodLogoAnimado";
 
-type Section = "home" | "hogar" | "negocio" | "conectar";
+type Section = "home" | "hogar" | "negocio" | "conectar" | "instalar";
 
 const LINKS: { key: Exclude<Section, "home">; href: string; label: string; hide: string }[] = [
   { key: "hogar", href: "/hogar", label: "Hogar", hide: "hidden sm:inline" },
   { key: "negocio", href: "/negocio", label: "Negocio", hide: "hidden sm:inline" },
   { key: "conectar", href: "/conectar", label: "Con IA", hide: "hidden md:inline" },
+  { key: "instalar", href: "/instalar", label: "Instalar", hide: "hidden md:inline" },
 ];
 
 // El header de las páginas públicas: el mismo en la home, Hogar, Negocio y Con IA, para que moverse entre ellas
