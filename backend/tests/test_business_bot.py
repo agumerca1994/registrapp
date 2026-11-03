@@ -162,7 +162,7 @@ async def test_a_stock_purchase_is_an_expense_with_stock_and_undo_takes_both(db)
     await _cat(db, "Mercadería")
     reply = await _say(db, "compré 12 coca a 18 lucas")
 
-    assert "✅ $18.000 · 12 Coca-Cola · Mercadería" in reply
+    assert "✅ $18.000 en 12 Coca-Cola, lo puse en Mercadería" in reply
     assert "📦 Coca-Cola: hay 12" in reply
     entry = await db.scalar(select(ExpenseEntry))
     assert entry.amount == D(18000)  # no $12: el 12 es la cantidad
@@ -170,7 +170,7 @@ async def test_a_stock_purchase_is_an_expense_with_stock_and_undo_takes_both(db)
     move = await db.scalar(select(StockMovement))
     assert (move.expense_entry_id, move.unit_cost) == (entry.id, D(1500))
 
-    assert "Deshecho" in await _say(db, "deshacer")
+    assert "Listo, saqué" in await _say(db, "deshacer")
     assert await _count(db, ExpenseEntry) == 0
     assert await _level(db, coca) == 0
 
@@ -179,7 +179,7 @@ async def test_raw_material_is_a_plain_expense_without_stock(db):
     await _rotiseria(db)
     await _cat(db, "Materia prima")
     reply = await _say(db, "compré 3 kilos de pan a 6 lucas")
-    assert "¿En qué categoría va *Pan* ($6.000)?" in reply
+    assert "¿En qué categoría pongo $6.000 en *Pan*?" in reply
 
     await _say(db, "materia prima")
     entry = await db.scalar(select(ExpenseEntry))
@@ -193,7 +193,7 @@ async def test_raw_material_is_a_plain_expense_without_stock(db):
 async def test_a_stock_purchase_waits_for_the_category_with_its_stock(db):
     _, coca = await _rotiseria(db)
     await _cat(db, "Bebidas")  # sin "Mercadería": hay que preguntar
-    assert "¿En qué categoría va" in await _say(db, "compré 6 coca 9000")
+    assert "¿En qué categoría pongo" in await _say(db, "compré 6 coca 9000")
     assert await _level(db, coca) == 0
     reply = await _say(db, "bebidas")
     assert "📦 Coca-Cola: hay 6" in reply
@@ -205,7 +205,7 @@ async def test_paying_an_employee_goes_to_their_category(db):
     sueldos = await _cat(db, "Sueldos")
     juan = await payees.create_payee(db, 1, name="Juan Pérez", kind="empleado")
     reply = await _say(db, "pagué 80 lucas a juan")
-    assert "✅ $80.000 · Juan Pérez · Sueldos" in reply
+    assert "✅ $80.000 en Juan Pérez, lo puse en Sueldos" in reply
     entry = await db.scalar(select(ExpenseEntry))
     assert (entry.payee_id, entry.category_id) == (juan.id, sueldos.id)
 

@@ -55,6 +55,7 @@ from app.models.payment_reminder import PaymentReminder  # noqa: E402
 from app.models.business import Payee, Product, Sale, SaleLine, SalePayment, StockMovement  # noqa: E402
 from app.models.contact import SharedContact, TenantContact  # noqa: E402
 from app.models.app_log import AppLog  # noqa: E402
+from app.models.bot_case import BotCase  # noqa: E402
 from app.models.device_token import DeviceToken  # noqa: E402
 from app.models.mcp_auth import McpAuthCode  # noqa: E402
 from sqlalchemy.dialects.postgresql import JSONB  # noqa: E402
@@ -114,6 +115,7 @@ _TABLES = [
     SharedContact.__table__,
     TenantContact.__table__,
     AppLog.__table__,
+    BotCase.__table__,
     DeviceToken.__table__,
     McpAuthCode.__table__,
 ]

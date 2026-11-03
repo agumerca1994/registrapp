@@ -105,11 +105,15 @@ export default function PrivacidadPage() {
       </Section>
 
       <Section {...sec("ia")}>
-        <p>Usamos inteligencia artificial en dos casos, y en los dos la IA lee pero no decide por vos:</p>
+        <p>Usamos inteligencia artificial en estos casos, y en todos la IA lee pero no decide por vos:</p>
         <List items={[
-          <>Cuando le mandás al bot una foto o un PDF que nuestro código no sabe leer, se lo enviamos a la IA de
-            Anthropic (Claude) para que extraiga el monto, la fecha y el comercio. Antes de guardar, el bot te
-            muestra lo que entendió.</>,
+          <>Cuando le mandás al bot una foto o un PDF que nuestro código no sabe leer, incluido el resumen de una
+            tarjeta, se lo enviamos a la IA de Anthropic (Claude) para que extraiga el monto, la fecha, el comercio
+            o los consumos. El bot te muestra lo que entendió, y en un resumen los totales tienen que coincidir con
+            los impresos en el PDF.</>,
+          <>Cuando le escribís al bot algo que nuestro código no entiende, le enviamos ese mensaje a la misma IA,
+            junto con los nombres de tus categorías, fuentes de ingreso y tarjetas, para saber qué querés anotar.
+            Lo guarda el bot, por los mismos caminos de siempre, y te muestra qué hizo.</>,
           <>Cuando subís un resumen de tarjeta y hay consumos sin categoría, le enviamos a esa IA la descripción de
             esos consumos y la lista de tus categorías para que sugiera una. La sugerencia se muestra como tal y
             podés cambiarla.</>,
@@ -172,6 +176,7 @@ export default function PrivacidadPage() {
           "Los links de acceso que manda el bot vencen a los 15 minutos y se usan una sola vez.",
           "Las conexiones con asistentes de IA que se revocan o vencen se borran a los 30 días.",
           "Los registros técnicos de errores se guardan el tiempo necesario para resolverlos.",
+          "Cuando el bot no entiende algo, guardamos hasta 90 días la forma del mensaje sin datos: las palabras que no identifican a nadie quedan, y los nombres y los números se reemplazan. No queda asociada a tu cuenta, y sirve para que el bot lo entienda la próxima vez.",
         ]} />
       </Section>
 

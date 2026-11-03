@@ -41,7 +41,7 @@ from app.services import category_suggest
 from app.services.credit_cards import find_or_create_statement
 from app.services.reconcile import matching, period, rules
 from app.services.reconcile.matching import AppItem, BankItem
-from app.services.statement_parsers import detect_and_parse, detect_and_parse_text
+from app.services.statement_parsers import ParseResult, detect_and_parse, detect_and_parse_text
 
 # Orden de presentación de los grupos (el reporte y el apply lo siguen).
 GROUP_ORDER = [
@@ -92,10 +92,16 @@ async def start_session(
     text: str | None = None,
     channel: str = "app",
     card_id: int | None = None,
+    parsed: ParseResult | None = None,
 ) -> ReconciliationSession:
     """Lee el resumen (PDF, o su texto ya extraído — lo que manda el conector
-    MCP) y arma la sesión. **Sólo flush, nunca commit.**"""
-    if pdf_bytes is not None:
+    MCP) y arma la sesión. `parsed` es una lectura ya hecha (la de la IA, con la
+    misma forma que la de un parser): pasa por los mismos controles. **Sólo
+    flush, nunca commit.**"""
+    if parsed is not None:
+        result = parsed
+        input_kind = "pdf"
+    elif pdf_bytes is not None:
         result = detect_and_parse(pdf_bytes)
         input_kind = "pdf"
     else:
@@ -182,6 +188,8 @@ async def start_session(
         outcome, reason = "needs_ai", "no_items"
     else:
         outcome, reason = ("parsed_code", None) if not mismatch else ("needs_ai", "totals_mismatch")
+        if parsed is not None and not mismatch:
+            outcome = "ai_ok"
     await record_event(
         db,
         tenant_id=user.tenant_id,

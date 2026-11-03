@@ -511,18 +511,22 @@ async def capture_stats(
     by_bank: dict[str, int] = {}
     interested_tenants: set[int] = set()
     needs_ai_tokens = 0
+    ai_tokens = 0
     for e in events:
         by_outcome[e.outcome] = by_outcome.get(e.outcome, 0) + 1
         if e.outcome == "needs_ai":
             if e.reason:
                 by_reason[e.reason] = by_reason.get(e.reason, 0) + 1
             needs_ai_tokens += e.est_input_tokens or 0
+        if e.outcome == "ai_ok":
+            ai_tokens += e.est_input_tokens or 0
         if e.outcome == "interest":
             interested_tenants.add(e.tenant_id)
         if e.bank_detected:
             by_bank[e.bank_detected] = by_bank.get(e.bank_detected, 0) + 1
 
-    attempts = by_outcome.get("parsed_code", 0) + by_outcome.get("needs_ai", 0)
+    # Con la IA prendida, lo que antes era `needs_ai` ahora llega como `ai_ok`.
+    attempts = sum(by_outcome.get(k, 0) for k in ("parsed_code", "needs_ai", "ai_ok", "ai_failed"))
     # Haiku 4.5: USD 1 por millón de tokens de entrada; salida estimada en un
     # 20% de la entrada a USD 5/M. Orden de magnitud, no factura.
     projected_cost_usd = round(
@@ -536,9 +540,36 @@ async def capture_stats(
         "by_bank": by_bank,
         "interest_events": by_outcome.get("interest", 0),
         "interested_tenants": len(interested_tenants),
+        "ai_pct": round(100 * (by_outcome.get("ai_ok", 0) + by_outcome.get("ai_failed", 0)) / attempts, 1) if attempts else None,
+        "ai_input_tokens": ai_tokens,
         "needs_ai_est_input_tokens": needs_ai_tokens,
         "projected_ai_cost_usd": projected_cost_usd,
     }
+
+
+@router.get("/bot-cases")
+async def bot_cases(
+    kind: str | None = Query(default=None),
+    min_count: int = Query(default=1, ge=1),
+    limit: int = Query(default=100, ge=1, le=500),
+    _: None = Depends(_require_internal_key),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Lo que el código no resolvió, ya enmascarado (ver services/bot_cases.py):
+    la materia prima para pasarlo a código."""
+    from app.models.bot_case import BotCase
+
+    q = select(BotCase).where(BotCase.count >= min_count)
+    if kind:
+        q = q.where(BotCase.kind == kind)
+    rows = (await db.scalars(q.order_by(BotCase.count.desc(), BotCase.last_seen.desc()).limit(limit))).all()
+    return {"cases": [
+        {
+            "kind": r.kind, "count": r.count, "shape": r.shape, "resolution": r.resolution,
+            "first_seen": r.first_seen.isoformat(), "last_seen": r.last_seen.isoformat(),
+        }
+        for r in rows
+    ]}
 
 
 @router.patch("/tenants/{tenant_id}/plan")

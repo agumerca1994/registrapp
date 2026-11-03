@@ -38,8 +38,8 @@ MAX_OPTIONS = 7  # + "Nueva fuente" + "No es un ingreso" = 9, lo que entra en un
 
 _TRIGGER_RE = re.compile(
     r"^\s*(?:"
-    r"cobr[eé]|cobramos|cobraron"
-    r"|me\s+(?:pagaron|depositaron|transfirieron|mandaron|enviaron|entr[oó]|entraron)"
+    r"cobr[eé]|cobramos|cobraron|gan[eé]|ganamos"
+    r"|me\s+(?:pagaron|pag[oó]|depositaron|deposit[oó]|transfirieron|transfiri[oó]|mandaron|mand[oó]|enviaron|envi[oó]|entr[oó]|entraron)"
     r"|nos\s+(?:pagaron|depositaron|transfirieron|mandaron|enviaron|entr[oó]|entraron)"
     r"|entr[oó]|entraron|recib[ií]|recibimos|ingres[oó]|ingresaron|ingresos?"
     r")\b[\s:,-]*",
@@ -59,20 +59,22 @@ _TYPE_HINTS = [
 
 
 def looks_like_income(text: str) -> bool:
-    return bool(_TRIGGER_RE.match(text or ""))
+    return bool(_TRIGGER_RE.match(quick_capture.strip_request(text or "")))
 
 
 def parse_income_text(text: str) -> QuickDraft | None:
     """"cobré 850 lucas sueldo" → borrador con `term="sueldo"`. None si no
     empieza con un verbo de ingreso o no tiene un monto. El término puede
     quedar vacío ("cobré 850 lucas"): entonces se pregunta la fuente."""
-    m = _TRIGGER_RE.match(text or "")
+    text = quick_capture.strip_request(text or "")
+    m = _TRIGGER_RE.match(text)
     if not m:
         return None
     draft = quick_capture.parse_amount_text(text[m.end():])
     if draft is None or _BILL_RE.search(draft.term):
         return None
-    draft.term = _FILLER_RE.sub("", draft.term).strip()
+    # "categoría otros" o "fuente sueldo": lo nombró a propósito, es la fuente.
+    draft.term = (draft.category_name or _FILLER_RE.sub("", draft.term)).strip()
     return draft
 
 

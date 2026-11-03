@@ -72,6 +72,8 @@ async def _daily_wa_purge():
             removed = await purge_old_messages(db)
             tokens = await purge_expired(db)
             signups = await purge_signups(db)
+            from app.services.bot_cases import purge_old as purge_cases
+            await purge_cases(db)
             await db.commit()
         logger.info(f"WA memory purge removed {removed} rows, {tokens} auth tokens, {signups} signup intents")
     except Exception as e:

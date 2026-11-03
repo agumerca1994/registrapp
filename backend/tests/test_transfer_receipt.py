@@ -167,3 +167,41 @@ def test_incoming_phrase_alone_is_recognized():
 def test_outgoing_receipts_stay_out():
     assert parse_transfer_receipt([MP_RECEIPT]).direction == "out"
     assert parse_transfer_receipt([BANK_RECEIPT]).direction == "out"
+
+
+# Las formas que aparecieron en la semana del 28/10/2026, con datos inventados.
+
+def test_billetera_te_envio_dinero_es_plata_que_entro():
+    r = parse_transfer_receipt([
+        "Te envió dinero\nEmpresa Inventada SA\n$ 36.000\n29/10/2026 11:44:51\nN° de operación\n123456\n"
+        "CBU/CVU de destino\n0000076500000000000000\nMotivo\nVarios"
+    ])
+    assert r.direction == "in" and r.amount == 36000
+    assert r.counterparty == "Empresa Inventada SA"
+
+
+def test_billetera_compra_en():
+    r = parse_transfer_receipt([
+        "Compra en\nKiosco Inventado\n$ 7.600\n29/10/2026 09:43:57\nN° de operación\n123\nCoelsa ID\nabc\n"
+        "Medio de pago\nDinero en cuenta\nEmpresa\nKiosco Inventado\nCUIT/CUIL\n30-11111111-1"
+    ])
+    assert r.direction == "out" and r.amount == 7600 and r.kind == "pago"
+    assert r.counterparty == "Kiosco Inventado"
+
+
+def test_reintegro_es_lo_devuelto_y_no_el_monto_de_la_compra():
+    r = parse_transfer_receipt([
+        "Reintegro por compra en\nKiosco Inventado\n$ 960\n27/10/2026 09:52:39\nN° de operación\n123\n"
+        "Comercio\nKiosco Inventado\nMonto de la compra\n$2.400"
+    ])
+    assert r.direction == "in" and r.amount == 960
+
+
+def test_mercado_pago_comprobante_de_pago():
+    r = parse_transfer_receipt([
+        "Comprobante de pago\nLunes, 3 de noviembre de 2026, 10:57 hs.\n$ 6.07000\nPagaste a comercio\n"
+        "Ramiro Inventado\nCUIT: 20111111111\nMercado Pago\nAna Gomez\nCUIT: 27222222222\nMercado Pago\n"
+        "N.° de operación de Mercado Pago\n123456789012"
+    ])
+    assert r.direction == "out" and r.amount == Decimal("6070.00")
+    assert r.counterparty == "Ramiro Inventado"

@@ -397,6 +397,22 @@ def _verbless(tokens: list[str], day: int) -> Intent | None:
     )
 
 
+def _marked_sale(tokens: list[str], day: int) -> Intent | None:
+    """"2000 papa venta": la palabra dice qué es, aunque falte el verbo. Sin
+    cantidad a la vista, el número es la plata."""
+    if not any(t in ("venta", "ventas") for t in tokens):
+        return None
+    rest = [t for t in tokens if t not in ("venta", "ventas")]
+    numbers = [t for t in rest if _number(t) is not None]
+    words = [t for t in rest if _number(t) is None]
+    if len(numbers) != 1 or not words:
+        return None
+    return Intent(
+        op="sale", items=[Item(qty=Decimal(1), term=" ".join(_strip(words)))],
+        amount=_number(numbers[0]), day_offset=day,
+    )
+
+
 def parse_business_text(text: str) -> Intent | None:
     """Texto → intención de negocio, o None si no es una (va al gasto simple)."""
     raw = fold_text(text or "").lstrip("¿¡").rstrip("?!. ").strip()
@@ -429,7 +445,8 @@ def parse_business_text(text: str) -> Intent | None:
         return intent
     op = VERBS.get(verb)
     if op is None:
-        return _verbless(tokens, day)
+        marked = _marked_sale(tokens, day)
+        return marked if marked is not None else _verbless(tokens, day)
 
     parsed = _scan(rest, allow_payee=op in ("purchase", "pay"))
     day = parsed.day_offset or day

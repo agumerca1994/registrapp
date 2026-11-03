@@ -26,7 +26,7 @@ from app.services.statement_parsers.common import MONTHS
 # con billetera ("Compraste en…", Personal Pay/MP) es un gasto igual, pero
 # no es una transferencia y el medio de pago no debe decir que lo es.
 _A_TRANSFER = ("transferiste", "enviaste", "pago enviado", "le enviaste", "transferencia enviada", "comprobante de transferencia")
-_A_PURCHASE = ("compraste", "pagaste", "compra realizada", "pago realizado")
+_A_PURCHASE = ("compraste", "pagaste", "compra realizada", "pago realizado", "compra en", "comprobante de pago")
 # La plata que ENTRA. "Comprobante de transferencia" lo imprimen las dos
 # direcciones, así que sin esto un comprobante de algo que te pagaron se
 # guardaba como gasto. Gana siempre que aparezca: ante la duda, no es un gasto
@@ -34,7 +34,7 @@ _A_PURCHASE = ("compraste", "pagaste", "compra realizada", "pago realizado")
 # el mes dos veces.
 _A_INCOMING = (
     "recibiste", "te transfirieron", "te enviaron", "transferencia recibida",
-    "dinero recibido", "ingreso de dinero", "cobraste",
+    "dinero recibido", "ingreso de dinero", "cobraste", "te envio dinero", "reintegro por compra",
 )
 _B_HINTS = ("transferencia", "cbu", "cvu", "alias", "operacion", "pago", "monto", "comprobante")
 
@@ -67,9 +67,19 @@ _NAME_RE = re.compile(r"^[A-Za-zÁÉÍÓÚÑáéíóúñ][A-Za-z0-9ÁÉÍÓÚÑ�
 # El otro formato de contraparte: en la misma frase de la acción
 # ("Compraste en X", "Le transferiste a X", "Pagaste a X").
 _INLINE_PARTY_RE = re.compile(
-    r"(?:compraste en|pagaste a|le transferiste a|le enviaste a|enviaste a|transferiste a)\s+(.{3,60})",
+    r"(?:compraste en|compra en|pagaste a|le transferiste a|le enviaste a|enviaste a|transferiste a)\s+(.{3,60})",
     re.IGNORECASE,
 )
+# Lo mismo en la plata que entra: "Te envió dinero / Juan Pérez".
+_INLINE_PARTY_IN_RE = re.compile(
+    r"(?:te envi[oó] dinero|reintegro por compra en)\s+(.{3,60})", re.IGNORECASE,
+)
+# Mercado Pago: el nombre de cada parte, con su CUIT en el renglón de abajo. La
+# primera es a quién se le pagó.
+_TAX_ID_LINE_RE = re.compile(r"^cui[tl]\b", re.IGNORECASE)
+# Un reintegro imprime lo devuelto y el monto de la compra, que siempre es mayor:
+# acá el más grande del documento no es la operación.
+_REFUND_RE = "reintegro por compra"
 
 
 @dataclass
@@ -113,11 +123,14 @@ def _find_date(text: str) -> date | None:
 
 def _find_counterparty(lines: list[str], full_text: str, incoming: bool = False) -> str | None:
     if not incoming:
-        m = _INLINE_PARTY_RE.search(full_text)
-        if m:
-            value = m.group(1).strip().rstrip(".")
-            if _NAME_RE.match(value):
-                return value
+        for i, line in enumerate(lines[:-1]):
+            if _TAX_ID_LINE_RE.match(lines[i + 1]) and _NAME_RE.match(line):
+                return line
+    m = (_INLINE_PARTY_IN_RE if incoming else _INLINE_PARTY_RE).search(full_text)
+    if m:
+        value = m.group(1).strip().rstrip(".")
+        if _NAME_RE.match(value):
+            return value
     labels = _LABELS_IN if incoming else _LABELS
     for i, line in enumerate(lines):
         folded = fold_text(line)
@@ -167,7 +180,7 @@ def parse_transfer_receipt(pages_text: list[str]) -> ReceiptDraft | None:
                 amounts.append(value)
     if not amounts:
         return None
-    amount = max(amounts)
+    amount = min(amounts) if _REFUND_RE in low else max(amounts)
 
     currency = "USD" if _USD_RE.search(text) else "ARS"
 
@@ -176,7 +189,7 @@ def parse_transfer_receipt(pages_text: list[str]) -> ReceiptDraft | None:
         currency=currency,
         receipt_date=_find_date(text),
         counterparty=_find_counterparty(lines, text, incoming=is_incoming),
-        kind="transferencia" if (is_transfer or not is_purchase) else "pago",
+        kind="transferencia" if is_transfer or not is_purchase else "pago",
         direction="in" if is_incoming else "out",
     )
 

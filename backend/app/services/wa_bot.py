@@ -32,7 +32,7 @@ from app.models.reconciliation import ACTION_PROPOSED, ReconciliationAction
 from app.models.tenant import TENANT_KIND_BUSINESS, Tenant
 from app.models.user import User
 from app.models.wa_message import WaMessage
-from app.services import ai_capture, expenses as expenses_service, income_capture, quick_capture, reconcile as reconcile_service
+from app.services import ai_capture, bot_cases, expenses as expenses_service, income_capture, quick_capture, reconcile as reconcile_service
 from app.services.business import capture as business_capture
 from app.services.category_suggest import invalidate as invalidate_suggest
 from app.services.clock import ar_today
@@ -95,13 +95,17 @@ MSG_PAUSED = (
     "Tu cuenta de tood está en pausa, así que no cargué nada.\n"
     "Para volver a usarla, entrá a la app y tocá Reactivar."
 )
-MSG_HELP = (
-    "No te entendí. Probá así:\n"
-    "• Un gasto: *12 lucas verdulería* o *usd 20 regalo ayer*\n"
-    "• Un ingreso: *cobré 850 lucas sueldo*\n\n"
+MSG_CAN_DO = (
+    "Contame como se lo dirías a alguien, por ejemplo:\n"
+    "• *gasté 12 lucas en la verdulería*\n"
+    "• *20 lucas de nafta con la visa*\n"
+    "• *60 lucas en 3 cuotas heladera con la bbva*\n"
+    "• *30 lucas de asado a medias con Juan*\n"
+    "• *cobré el sueldo, 850 lucas*\n\n"
     "También podés mandarme el *PDF del resumen* de tu tarjeta o el *PDF de un comprobante*.\n"
-    "Para corregir lo último: *deshacer*, *categoría súper* o *editar monto 13000*."
+    "Si algo queda mal, decime *deshacer*, *categoría súper* o *editar monto 13000*."
 )
+MSG_HELP = "No te entendí. " + MSG_CAN_DO
 
 
 # Después de responder, la t reacciona con un sticker animado (frontend/public/brand/tood/stickers/). Uno por
@@ -138,7 +142,7 @@ async def handle_and_send(db: AsyncSession, user: User, inbound: InboundMessage)
     mark = await memory_mark(db, user.id)
     replies = await handle(db, user, inbound)
     sent_ids = [await send_wa_msg(inbound.phone, reply) for reply in replies]
-    await link_replies(db, user.id, mark, sent_ids)
+    await link_replies(db, user.id, mark, sent_ids, replies)
     # La t reacciona a lo que pasó (ver STICKERS). Después del texto, y si falla, no importa.
     kind = sticker_for(replies) if settings.WA_STICKERS_ENABLED else None
     if kind:
@@ -179,12 +183,13 @@ def sticker_url(kind: str) -> str:
 
 def _help_text() -> str:
     """Con la IA prendida, el bot también lee fotos y capturas: la ayuda lo dice."""
+    return _with_media_hint(MSG_HELP)
+
+
+def _with_media_hint(text: str) -> str:
     if not ai_capture.enabled():
-        return MSG_HELP
-    return MSG_HELP.replace(
-        "el *PDF de un comprobante*",
-        "un *comprobante* (foto, captura o PDF)",
-    )
+        return text
+    return text.replace("el *PDF de un comprobante*", "un *comprobante* (foto, captura o PDF)")
 
 
 # Una imagen casi siempre es un comprobante compartido como captura: muchas
@@ -249,7 +254,7 @@ MSG_BUSINESS_HELP = (
 )
 
 _EDIT_RE = re.compile(
-    r"^(?:editar|cambiar|corregir)\s+(?:la\s+|el\s+)?(monto|categor[ií]a|descripci[oó]n|fuente)"
+    r"^(?:editar|edit[aá]|cambiar|cambi[aá]|corregir|correg[ií])\s+(?:la\s+|el\s+)?(monto|categor[ií]a|descripci[oó]n|fuente|fecha)"
     r"\s+(?:a\s+|por\s+|es\s+)?(.+)$",
     re.IGNORECASE,
 )
@@ -258,6 +263,34 @@ _CATEGORY_RE = re.compile(r"^(categor[ií]a|fuente)\s*:?\s+(.+)$", re.IGNORECASE
 _UNDO_RE = re.compile(r"^(deshacer|deshace|anular)\b", re.IGNORECASE)
 _INTEREST_RE = re.compile(r"^me\s+interesa\b", re.IGNORECASE)
 _NUMBER_RE = re.compile(r"^\s*([1-9])\s*$")
+# Mientras un gasto espera una respuesta, *deshacer* o "no" es no cargarlo. Si
+# siguiera de largo borraría lo anterior, que no tiene nada que ver.
+_DRAFT_PENDING = {"category_pick", "category_name", "income_pick", "card_pick", "share_confirm",
+                  "share_contact", "own_transfer", "term_ask"}
+_NEW_CATEGORY_RE = re.compile(
+    r"^(?:(?:quiero|pod[eé]s|podr[ií]as)\s+)?(?:crea|cre[aá]|crear|agreg[aá]|agregar|sum[aá]|sumar|hac[eé]|hacer|armar?)(?:me)?\s+"
+    r"(?:una\s+|la\s+)?(?:categor[ií]a)(?:\s+nueva)?"
+    r"(?:\s+(?:que\s+se\s+llame|llamada|con\s+el\s+nombre(?:\s+de)?|de\s+nombre))?\s*:?\s+[«\"']?(.+?)[»\"']?$",
+    re.IGNORECASE,
+)
+_ASK_RECATEGORIZE_RE = re.compile(
+    r"^(?:puedo|se\s+puede|pod[eé]s|podr[ií]as|quiero)\s+(?:cambiar|corregir|editar|cambiarle|cambiarlo)\b.*categor[ií]a\b[?\s]*$",
+    re.IGNORECASE,
+)
+_ACTUALLY_RE = re.compile(r"^(?:no,?\s+)?(?:este\s+|esto\s+|eso\s+|era\s+)?(?:es\s+|era\s+)?(?:un\s+|una\s+|de\s+)?(.{3,40}?)[.!]?$", re.IGNORECASE)
+_IS_INCOME_RE = re.compile(r"^(?:no\s+(?:es|era)\s+un\s+gasto|(?:es|era)\s+un\s+ingreso|me\s+entr[oó]\s+a\s+m[ií])\b", re.IGNORECASE)
+_SMALL_TALK = {
+    "hola": "¡Hola! Contame qué querés anotar.", "buenas": "¡Buenas! Contame qué querés anotar.",
+    "buen dia": "¡Buen día! Contame qué querés anotar.", "buenos dias": "¡Buen día! Contame qué querés anotar.",
+    "buenas tardes": "¡Buenas! Contame qué querés anotar.", "buenas noches": "¡Buenas! Contame qué querés anotar.",
+    "gracias": "De nada.", "muchas gracias": "De nada.", "genial gracias": "De nada.", "dale gracias": "De nada.",
+    "ok": "Dale.", "oka": "Dale.", "okey": "Dale.", "dale": "Dale.", "joya": "Dale.", "genial": "Dale.",
+    "perfecto": "Dale.", "buenisimo": "Dale.", "barbaro": "Dale.", "bien": "Dale.",
+}
+_ASK_HELP = {"ayuda", "help", "menu", "que podes hacer", "que sabes hacer", "como funciona", "como funcionas", "como te uso"}
+MSG_OUT_OF_SCOPE = "Por ahora acá sólo anoto: gastos, ingresos, tarjetas y compartidos. Lo demás lo ves en la app: {url}"
+# Cuánto después de cargar algo "es un reintegro" habla de eso y no de otra cosa.
+_CORRECTION_MINUTES = 15
 
 
 @dataclass
@@ -344,12 +377,17 @@ async def already_seen(db: AsyncSession, user_id: int, wa_id: str | None) -> boo
     return row is not None
 
 
+_WAT_RE = re.compile(r"wat=[\w-]+")
+
+
 def _remember(
     db: AsyncSession, user_id: int, direction: str, kind: str,
     *, wa_id: str | None = None, text: str | None = None,
     ref_type: str | None = None, ref_id: int | None = None,
     pending: dict | None = None,
 ) -> WaMessage:
+    # El link de auto-login no se guarda: es una credencial, aunque dure 15 minutos.
+    text = _WAT_RE.sub("wat=•••", text) if text else text
     row = WaMessage(
         user_id=user_id, direction=direction, wa_message_id=wa_id, kind=kind,
         text=(text or "")[:500] or None, ref_type=ref_type, ref_id=ref_id,
@@ -378,15 +416,35 @@ async def memory_mark(db: AsyncSession, user_id: int) -> int:
     ) or 0
 
 
-async def link_replies(db: AsyncSession, user_id: int, mark: int, sent_ids: list[str | None]) -> None:
+async def link_replies(
+    db: AsyncSession, user_id: int, mark: int, sent_ids: list[str | None], replies: list[str] | None = None,
+) -> None:
     """Ata las respuestas enviadas a la entidad que creó o tocó este mensaje,
     para que citar "✅ … — Supermercado" y escribir *editar categoría …* (o
-    sólo el nombre de la categoría) corrija ESE gasto y no el último. Nunca
-    levanta: perder el vínculo es perder un atajo, no el gasto."""
+    sólo el nombre de la categoría) corrija ESE gasto y no el último. También
+    guarda lo que se contestó: sin eso, mirar la semana no decía qué le había
+    llegado a la persona. Nunca levanta: perder el vínculo es perder un atajo,
+    no el gasto."""
+    texts = list(replies or [])
     ids = [i for i in sent_ids if i]
-    if not ids:
-        return
     try:
+        already = set((await db.scalars(
+            select(WaMessage.text).where(
+                WaMessage.user_id == user_id, WaMessage.id > mark,
+                WaMessage.direction == "out", WaMessage.text.is_not(None),
+            )
+        )).all())
+        unsaved = [t for t in texts if _WAT_RE.sub("wat=•••", t)[:500] not in already]
+
+        def keep_unsaved() -> None:
+            # Con el prefijo, como las demás: una fila común cerraría la pregunta abierta.
+            for text in unsaved:
+                _remember(db, user_id, "out", "text", text=text, ref_type=f"{_REPLY_PREFIX}text")
+
+        if not ids:
+            keep_unsaved()
+            await db.commit()
+            return
         ref = await db.scalar(
             select(WaMessage).where(
                 WaMessage.user_id == user_id,
@@ -395,9 +453,12 @@ async def link_replies(db: AsyncSession, user_id: int, mark: int, sent_ids: list
             ).order_by(WaMessage.id.desc()).limit(1)
         )
         if ref is None or ref.ref_type.startswith(_REPLY_PREFIX):
+            keep_unsaved()
+            await db.commit()
             return
-        for wa_id in ids:
-            _remember(db, user_id, "out", "text", wa_id=wa_id[:64],
+        for i, wa_id in enumerate(ids):
+            text = texts[i] if i < len(texts) and texts[i] in unsaved else None
+            _remember(db, user_id, "out", "text", wa_id=wa_id[:64], text=text,
                       ref_type=f"{_REPLY_PREFIX}{ref.ref_type}"[:20], ref_id=ref.ref_id)
         await db.commit()
     except Exception:
@@ -622,6 +683,7 @@ async def _handle_pdf(
         pages, pdf_lines = [], []
 
     is_statement = bool(pdf_lines) and any(m.detect(pdf_lines) for m in REGISTRY)
+    hints = quick_capture.caption_hints(inbound.text)
     if pdf_lines and not is_statement:
         receipt = parse_transfer_receipt(pages)
         if receipt is None:
@@ -631,7 +693,7 @@ async def _handle_pdf(
             from app.services.transfer_receipt import diagnose
 
             logger.warning("WA receipt sin match: %s", diagnose(pages))
-        if receipt is not None and receipt.direction == "in":
+        if receipt is not None and (receipt.direction == "in" or hints.kind == "income"):
             # Plata que entró: guardarla como gasto descuadraba el mes dos
             # veces (un ingreso que falta y un egreso que sobra). En un hogar
             # es un ingreso; en un negocio, sus ingresos son las ventas.
@@ -642,7 +704,7 @@ async def _handle_pdf(
             if not await _is_business(db, user):
                 return await _capture_incoming(
                     db, user, inbound, receipt.amount, receipt.currency,
-                    receipt.receipt_date, receipt.counterparty,
+                    hints.when or receipt.receipt_date, receipt.counterparty, note=hints.note,
                 )
             who = f" de {receipt.counterparty}" if receipt.counterparty else ""
             reply = (
@@ -662,21 +724,22 @@ async def _handle_pdf(
             draft = quick_capture.QuickDraft(
                 amount=receipt.amount,
                 currency=receipt.currency,
-                expense_date=receipt.receipt_date or ar_today(),
+                expense_date=hints.when or receipt.receipt_date or ar_today(),
                 term=receipt.counterparty or "Transferencia",
                 legacy=False,
+                description=hints.note,
             )
-            return await _capture_draft(
-                db, user, inbound, draft,
-                payment_method="transferencia" if receipt.kind == "transferencia" else None,
-            )
+            method = "transferencia" if receipt.kind == "transferencia" else None
+            if hints.kind != "expense" and await _is_own_name(db, user, receipt.counterparty):
+                return await _ask_own_transfer(db, user, inbound, draft, method)
+            return await _capture_draft(db, user, inbound, draft, payment_method=method)
 
     # Ni resumen conocido ni comprobante que el código lea (o un PDF escaneado,
     # sin texto): lo lee la IA. Si resulta ser un resumen, o la IA no pudo,
     # sigue a la conciliación, que explica el motivo como siempre.
     if not is_statement and ai_capture.enabled():
         inbound = await _claim_inbound(db, user, inbound)
-        handled = await _read_with_ai(db, user, inbound, pdf)
+        handled = await _read_with_ai(db, user, inbound, pdf, doc_text="\n".join(pages))
         if handled is not None:
             return handled
 
@@ -686,15 +749,26 @@ async def _handle_pdf(
     session = await reconcile_service.start_session(
         db, user=user, pdf_bytes=pdf, channel="whatsapp"
     )
+    ai_read = False
+    if session.status == "needs_ai" and session.reason in _AI_STATEMENT_REASONS:
+        retried = await _statement_with_ai(db, user, session, pdf, "\n".join(pages))
+        if retried is not None:
+            session, ai_read = retried, True
 
     if session.status == "needs_ai":
         reply = {
-            "no_parser": "Todavía no sé leer los resúmenes de este banco automáticamente.",
-            "totals_mismatch": "Leí el resumen pero las sumas no coinciden con los totales del banco, así que no propongo cambios.",
+            "no_parser": "No conozco los resúmenes de este banco todavía.",
+            "totals_mismatch": "Leí el resumen pero las sumas no me dan con los totales del banco, así que prefiero no tocar nada.",
             "encrypted": "El PDF tiene contraseña. Descargalo sin contraseña y volvé a mandarlo.",
             "no_text": "No pude extraer texto del archivo.",
-            "no_items": "Reconocí el resumen pero no encontré ningún consumo adentro, así que no propongo cambios.",
+            "no_items": "Reconocí el resumen pero no encontré ningún consumo adentro, así que prefiero no tocar nada.",
         }.get(session.reason or "", "No pude leer el resumen.")
+        if ai_read or ai_capture.enabled():
+            if session.reason != "encrypted":
+                reply += "\nProbé leerlo con IA y tampoco me cerró. Los consumos los podés cargar en la app, o contármelos de a uno."
+            _remember(db, user.id, "out", "text", text=reply, ref_type="reconcile", ref_id=session.id)
+            await db.commit()
+            return [reply]
         if session.reason != "encrypted":
             # A un PDF protegido no lo arregla ningún plan: le falta la contraseña.
             reply += (
@@ -722,13 +796,15 @@ async def _handle_pdf(
     app_total = _fmt_total(session.totals, "ARS", "app_total")
     diff = _fmt_total(session.totals, "ARS", "difference")
     lines = [
-        f"Resumen {session.parsed.get('bank') or ''} {session.period_month:02d}/{session.period_year}".replace("  ", " "),
-        f"Banco {parsed_total} · tood {app_total} · diferencia {diff}",
+        f"Leí tu resumen {session.parsed.get('bank') or ''} de {session.period_month:02d}/{session.period_year}.".replace("  ", " "),
+        f"El banco dice {parsed_total} y acá tenés {app_total} (diferencia: {diff}).",
     ]
+    if ai_read:
+        lines.insert(1, "Este banco no lo conocía, así que lo leí con IA. Los totales cierran con los del PDF.")
     if (session.totals or {}).get("USD"):
         lines.append(
-            f"En dólares: banco {_fmt_total(session.totals,'USD','bank_total')} · "
-            f"tood {_fmt_total(session.totals,'USD','app_total')}"
+            f"En dólares, el banco dice {_fmt_total(session.totals,'USD','bank_total')} "
+            f"y acá tenés {_fmt_total(session.totals,'USD','app_total')}."
         )
     if session.status == "unexplained":
         lines.append("⚠️ La diferencia no se explica al centavo. Mejor revisalo en la app.")
@@ -738,7 +814,7 @@ async def _handle_pdf(
         lines.append("1. Corregir todo\n2. Nada, lo reviso en la app")
         pending = {"type": "reconcile_apply", "session_id": session.id}
     else:
-        lines.append("✅ Todo coincide con el banco.")
+        lines.append("✅ Está todo igual que en el banco.")
         pending = None
     lines.append(f"Verlo completo: {await _conciliar_link(db, user, session.id)}")
     lines.append(LINK_HINT)
@@ -752,7 +828,7 @@ async def _handle_pdf(
 
 async def _capture_incoming(
     db: AsyncSession, user: User, inbound: InboundMessage,
-    amount: Decimal, currency: str, when, counterparty: str | None,
+    amount: Decimal, currency: str, when, counterparty: str | None, note: str | None = None,
 ) -> list[str]:
     """Una transferencia que entró (comprobante en PDF o captura) → ingreso.
     El término es quien la mandó: así la regla que deja la respuesta ("de Juan
@@ -761,7 +837,7 @@ async def _capture_incoming(
         amount=amount, currency=currency, expense_date=when or ar_today(),
         term=(counterparty or "").strip(), legacy=False,
     )
-    notes = f"Transferencia de {counterparty}" if counterparty else "Transferencia recibida"
+    notes = note or (f"Transferencia de {counterparty}" if counterparty else "Transferencia recibida")
     return await _capture_income(db, user, inbound, draft, notes=notes, refund=True)
 
 
@@ -786,10 +862,6 @@ MSG_AI_UNREADABLE = (
 MSG_AI_STATEMENT_IMAGE = (
     "Parece el resumen de una tarjeta. Mandámelo en *PDF* (el que bajás "
     "del home banking) y dejo tus datos al día."
-)
-MSG_AI_CREDIT_CARD = (
-    "{what} se pagó con *tarjeta de crédito*, así que entra cuando me mandes "
-    "el resumen de la tarjeta. Si lo querés ya, cargalo en la app como gasto con tarjeta."
 )
 MSG_AI_LIMIT = (
     "Por hoy llegué al máximo de comprobantes que puedo leer. "
@@ -823,7 +895,7 @@ async def _handle_image(db: AsyncSession, user: User, inbound: InboundMessage) -
 
 
 async def _read_with_ai(
-    db: AsyncSession, user: User, inbound: InboundMessage, data: bytes
+    db: AsyncSession, user: User, inbound: InboundMessage, data: bytes, doc_text: str | None = None,
 ) -> list[str] | None:
     """Una foto o un PDF → la lectura de `ai_capture` → el gasto, por el mismo
     `_capture_draft` que el texto libre. None = un PDF que no es para cargar
@@ -861,6 +933,16 @@ async def _read_with_ai(
         input_kind=inbound.kind, outcome="ai_ok", bank_detected=reading.kind[:30],
         est_input_tokens=reading.input_tokens,
     )
+    if doc_text:
+        await bot_cases.record(db, bot_cases.KIND_DOC_AI, doc_text, {"read_as": reading.kind})
+
+    # Lo que la persona escribió junto al archivo le gana a lo que se leyó:
+    # "registrá este ingreso con fecha 1/11" es un pedido, no un comentario.
+    hints = quick_capture.caption_hints(inbound.text)
+    if hints.kind == "income" and reading.kind == ai_capture.KIND_EXPENSE:
+        reading.kind = ai_capture.KIND_INCOMING
+    if hints.when:
+        reading.receipt_date = hints.when
 
     if reading.kind == ai_capture.KIND_STATEMENT:
         return None if is_pdf else await reply_with(MSG_AI_STATEMENT_IMAGE)
@@ -879,6 +961,7 @@ async def _read_with_ai(
             )
         return await _capture_incoming(
             db, user, inbound, reading.amount, reading.currency, reading.receipt_date, reading.merchant,
+            note=hints.note,
         )
     if reading.kind == ai_capture.KIND_INCOMING:
         who = f" de {reading.merchant}" if reading.merchant else ""
@@ -899,24 +982,24 @@ async def _read_with_ai(
         or reading.amount > quick_capture.MAX_AMOUNT
     ):
         return None if is_pdf else await reply_with(MSG_AI_UNREADABLE)
-    if reading.payment_method == "tarjeta_credito":
-        # Un consumo con tarjeta entra con el resumen (conciliación). Cargarlo
-        # como gasto simple lo duplica el día que llega el resumen.
-        what = f"{_fmt_amount(reading)} en {reading.merchant}" if reading.merchant else _fmt_amount(reading)
-        return await reply_with(MSG_AI_CREDIT_CARD.format(what=what[0].upper() + what[1:]))
-
     draft = quick_capture.QuickDraft(
         amount=reading.amount,
         currency=reading.currency,
         expense_date=reading.receipt_date or ar_today(),
         term=reading.merchant or reading.category or "Comprobante",
         legacy=False,
+        description=hints.note,
+        # Un consumo con tarjeta va a la tarjeta: como gasto simple se duplicaba
+        # el día que llega el resumen. Cargado ahí, el resumen lo encuentra.
+        wants_card=reading.payment_method == "tarjeta_credito",
     )
     suggested = next(
         (c for c in cats if reading.category and fold_text(c.name) == fold_text(reading.category)),
         None,
     )
     method = reading.payment_method if reading.payment_method in ("efectivo", "debito", "transferencia") else None
+    if hints.kind != "expense" and await _is_own_name(db, user, reading.merchant):
+        return await _ask_own_transfer(db, user, inbound, draft, method)
     return await _capture_draft(db, user, inbound, draft, payment_method=method, suggested=suggested)
 
 
@@ -1177,6 +1260,10 @@ async def _handle_text(db: AsyncSession, user: User, inbound: InboundMessage) ->
     if handled is not None:
         return handled
 
+    handled = await _do_cancel_draft(db, user, inbound, text)
+    if handled is not None:
+        return handled
+
     if _UNDO_RE.match(text):
         return await _do_undo(db, user, inbound)
     edit = _EDIT_RE.match(text)
@@ -1196,6 +1283,10 @@ async def _handle_text(db: AsyncSession, user: User, inbound: InboundMessage) ->
         if handled is not None:
             return handled
 
+    handled = await _do_pending_words(db, user, inbound, text)
+    if handled is not None:
+        return handled
+
     # El negocio, antes que la categoría y la descripción pendientes y que el
     # gasto genérico: "vendí 3 empanadas" no es la descripción del último gasto.
     handled = await _do_business(db, user, inbound, text)
@@ -1210,11 +1301,19 @@ async def _handle_text(db: AsyncSession, user: User, inbound: InboundMessage) ->
     if handled is not None:
         return handled
 
+    handled = await _do_small_talk(db, user, inbound, text)
+    if handled is not None:
+        return handled
+
     if _is_employee(user):
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
         _remember(db, user.id, "out", "text", text=MSG_EMPLOYEE_ONLY)
         await db.commit()
         return [MSG_EMPLOYEE_ONLY]
+
+    handled = await _do_correction(db, user, inbound, text)
+    if handled is not None:
+        return handled
 
     handled = await _do_income(db, user, inbound)
     if handled is not None:
@@ -1242,6 +1341,10 @@ async def _do_business(
         return None
     if intent is None:
         # Parece del negocio pero no se pudo leer: la ayuda, nunca un gasto.
+        handled, inbound = await _interpret(db, user, inbound)
+        if handled is not None:
+            return handled
+        await bot_cases.record(db, bot_cases.KIND_TEXT_UNRESOLVED, inbound.text)
         await record_event(
             db, tenant_id=user.tenant_id, user_id=user.id, channel="whatsapp",
             input_kind="text", outcome="needs_ai", reason="unparseable_text",
@@ -1308,6 +1411,9 @@ async def _capture_income(
     ofrece no cargarla."""
     sources = await income_capture.writable_sources(db, user.tenant_id)
     source = await income_capture.resolve_source(db, user.tenant_id, draft.term, sources)
+    # "fuente otros": la nombró a propósito, así que no hay nada que preguntar.
+    if source is None and draft.category_name and _looks_like_name(draft.category_name):
+        source = await income_capture.create_source(db, user.tenant_id, draft.category_name)
     if source is not None:
         return await _save_income(db, user, inbound, draft, source, notes, lines)
 
@@ -1318,13 +1424,13 @@ async def _capture_income(
     if choices:
         listed = "\n".join(f"{i + 1}. {label}" for i, (_k, label) in enumerate(choices))
         reply = (
-            f"¿De qué fuente es el ingreso{who} ({_fmt_amount(draft)})?\n{listed}\n"
-            "Respondé el número, o el nombre de la fuente (si no existe, la creo)."
+            f"Entraron {_fmt_amount(draft)}{who}. ¿De qué fuente es?\n{listed}\n"
+            "Decime el número o el nombre. Si es otra, la creo."
         )
     else:
         reply = (
-            f"¿De qué es el ingreso de {_fmt_amount(draft)}? Escribime el nombre "
-            "de la fuente (sueldo, alquiler, un cliente…) y la creo."
+            f"Entraron {_fmt_amount(draft)}. ¿De qué son? Decime de dónde "
+            "(sueldo, alquiler, un cliente…) y la creo."
         )
     _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id, text=inbound.text or None)
     _remember(db, user.id, "out", "text", text=reply, pending={
@@ -1374,12 +1480,12 @@ async def _answer_income_pick(
 
 
 async def _do_pending_income_by_name(
-    db: AsyncSession, user: User, inbound: InboundMessage
+    db: AsyncSession, user: User, inbound: InboundMessage, row: WaMessage | None = None,
 ) -> list[str] | None:
     """La pregunta de fuente también acepta el nombre escrito, y uno que no
     existe crea la fuente (la pregunta lo avisa). Un texto con números es otra
     cosa — un gasto o un ingreso nuevo — y sigue su camino."""
-    row = await _open_pending(db, user.id)
+    row = row or await _open_pending(db, user.id)
     if row is None or (row.pending or {}).get("type") != "income_pick":
         return None
     from app.services.search import fold_text
@@ -1387,7 +1493,7 @@ async def _do_pending_income_by_name(
     text = inbound.text.strip()
     if fold_text(text) in _CANCEL_WORDS:
         return await _cancel_income(db, user, inbound, row, "Listo, no lo cargo.")
-    if not text or any(c.isdigit() for c in text) or len(text) > 60:
+    if not _looks_like_name(text):
         return None
     sources = await income_capture.writable_sources(db, user.tenant_id)
     source = income_capture.match_by_name(sources, text) or await income_capture.create_source(
@@ -1429,6 +1535,8 @@ async def _save_income(
 ) -> list[str]:
     from app.services.search import fold_text
 
+    if notes is None:
+        notes = draft.description
     if notes is None and draft.term and fold_text(draft.term) != fold_text(source.name):
         notes = draft.term
     entry = await income_capture.create_income(
@@ -1443,8 +1551,8 @@ async def _save_income(
               ref_type="income", ref_id=entry.id)
     await db.commit()
 
-    when = "" if entry.period_date == ar_today() else f" · {entry.period_date.strftime('%d/%m')}"
-    lines = [f"✅ Ingreso: {_fmt_amount(draft)} · {source.name}{when}"]
+    when = "" if entry.period_date == ar_today() else f", del {entry.period_date.strftime('%d/%m')}"
+    lines = [f"✅ Ingreso de {_fmt_amount(draft)} en {source.name}{when}."]
     if filled:
         lines.append(f"Del recibo completé {_join_names(filled)}.")
     elif has_fields:
@@ -1458,11 +1566,11 @@ async def _save_income(
         )
     elif await _show_hints(db, user.id):
         # Con detalle, la fuente y el monto se corrigen en la app (`_edit_income`).
-        lines.append("Si algo está mal: *deshacer*." if filled else "Si algo está mal: *deshacer*, o *fuente* y el nombre.")
+        lines.append("Si algo quedó mal, decime *deshacer*." if filled else "Si algo quedó mal, decime *deshacer* o *fuente* y el nombre.")
     return ["\n".join(lines)]
 
 
-_NO_WORDS = {"no", "n", "nop", "no gracias", "listo", "ok", "asi esta", "dejalo", "dejala"}
+_NO_WORDS = {"no", "n", "nop", "no gracias", "listo", "ok", "asi esta", "dejalo", "dejala", "nada", "asi"}
 
 
 async def _do_pending_description(
@@ -1518,21 +1626,42 @@ async def _do_pending_description(
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
         await db.commit()
         return ["Ese gasto ya no está, no cambié nada."]
+    term = entry.description
     entry.description = inbound.text.strip()[:255]
+    await _learn_description(db, user.tenant_id, term, entry)
     _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
     await db.commit()
-    return [f"✏️ Listo: {_money(entry.amount, entry.currency)} · {entry.description}"]
+    return [f"✏️ Listo: {_money(entry.amount, entry.currency)} en {entry.description}."]
+
+
+async def _learn_description(db: AsyncSession, tenant_id: int, term: str | None, entry: ExpenseEntry) -> None:
+    """La misma descripción dos veces para el mismo comercio se vuelve la de ese
+    comercio: en una semana se escribieron unas 15 a mano, y varias repetidas. Una
+    sola vez no alcanza: la del primer gasto no tiene por qué valer para el próximo."""
+    from app.services.reconcile import rules as capture_rules
+    from app.services.search import fold_text
+
+    if not term or entry.currency == "USD":
+        return
+    key = capture_rules.merchant_key(term)
+    rules = await capture_rules.get_rules(db, tenant_id, capture_rules.KIND_MERCHANT_CATEGORY)
+    payload = dict(rules.get(key) or {})
+    if fold_text(payload.get("last_description") or "") == fold_text(entry.description):
+        payload["description"] = entry.description
+        payload.setdefault("category_id", entry.category_id)
+    payload["last_description"] = entry.description
+    await capture_rules.save_rule(db, tenant_id, capture_rules.KIND_MERCHANT_CATEGORY, key, payload)
 
 
 async def _do_pending_category_by_name(
-    db: AsyncSession, user: User, inbound: InboundMessage
+    db: AsyncSession, user: User, inbound: InboundMessage, row: WaMessage | None = None,
 ) -> list[str] | None:
-    """La pregunta de categoría también acepta el nombre escrito ("súper").
-    Sólo consume el texto si coincide con una categoría existente — cualquier
-    otra cosa sigue su camino normal (puede ser un gasto nuevo). La excepción es
-    "Decime el nombre de la categoría": ahí un nombre sin números es la
-    respuesta, y la categoría se crea."""
-    row = await _open_pending(db, user.id)
+    """La pregunta de categoría acepta el nombre escrito ("súper"), entero o una
+    parte si es de una sola. Un nombre que no existe la crea: la pregunta lo
+    promete, y antes caía a la ayuda (caso real: "Limpieza", tres veces). Lo que
+    no parece un nombre (trae números o es una frase) sigue su camino: puede ser
+    un gasto nuevo."""
+    row = row or await _open_pending(db, user.id)
     if row is None:
         return None
     pending = row.pending or {}
@@ -1541,28 +1670,58 @@ async def _do_pending_category_by_name(
 
     from app.services.search import fold_text
 
+    text = (inbound.text or "").strip()
+    asked_new = _NEW_CATEGORY_RE.match(text)
+    name = asked_new.group(1).strip() if asked_new else text
     cats = (await db.scalars(
         select(ExpenseCategory).where(ExpenseCategory.tenant_id == user.tenant_id)
     )).all()
-    cat = next((c for c in cats if fold_text(c.name) == fold_text(inbound.text)), None)
+    cat, candidates = _match_name(cats, name)
+    if cat is None and candidates and not asked_new:
+        listed = "\n".join(f"{i + 1}. {c}" for i, c in enumerate(candidates))
+        reply = f"¿Cuál de estas?\n{listed}"
+        row.pending = None
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        _remember(db, user.id, "out", "text", text=reply, pending={**pending, "type": "category_pick", "options": candidates})
+        await db.commit()
+        return [reply]
+    created = False
     if cat is None:
-        name = (inbound.text or "").strip()
-        if pending.get("type") != "category_name" or not name or len(name) > 40 or any(ch.isdigit() for ch in name):
+        if not _looks_like_name(name):
             return None
-        import random
+        cat = await _create_category(db, user.tenant_id, name)
+        created = True
+    return await _create_from_pending(db, user, inbound, row, cat, created=created)
 
-        cat = ExpenseCategory(
-            tenant_id=user.tenant_id, name=name[0].upper() + name[1:],
-            color=random.choice(quick_capture.CATEGORY_COLORS), is_fixed=False,
-        )
-        db.add(cat)
-        await db.flush()
 
-    return await _create_from_pending(db, user, inbound, row, cat)
+def _looks_like_name(text: str) -> bool:
+    """Un nombre de categoría o de fuente, no una frase ni un monto."""
+    from app.services.search import fold_text
+
+    text = (text or "").strip()
+    return (
+        bool(text) and len(text) <= 40 and len(text.split()) <= 4
+        and not any(ch.isdigit() or ch == "?" for ch in text)
+        and fold_text(text) not in _SMALL_TALK and fold_text(text) not in _ASK_HELP
+    )
+
+
+async def _create_category(db: AsyncSession, tenant_id: int, name: str) -> ExpenseCategory:
+    import random
+
+    name = name.strip()
+    cat = ExpenseCategory(
+        tenant_id=tenant_id, name=name[0].upper() + name[1:],
+        color=random.choice(quick_capture.CATEGORY_COLORS), is_fixed=False,
+    )
+    db.add(cat)
+    await db.flush()
+    return cat
 
 
 async def _create_from_pending(
-    db: AsyncSession, user: User, inbound: InboundMessage, row: WaMessage, cat: ExpenseCategory
+    db: AsyncSession, user: User, inbound: InboundMessage, row: WaMessage, cat: ExpenseCategory,
+    created: bool = False,
 ) -> list[str]:
     """La respuesta a la pregunta de categoría: crea el gasto que la esperaba,
     con lo que traía colgado (en un negocio, el stock de una compra y el
@@ -1570,21 +1729,29 @@ async def _create_from_pending(
     raw = (row.pending or {}).get("draft") or {}
     draft = _draft_from_dict(raw)
     extra = raw.get("x")
-    entry = await quick_capture.create_quick_expense(
-        db, tenant_id=user.tenant_id, user_id=user.id, draft=draft, category_id=cat.id,
-        payment_method=raw.get("pm"), payee_id=(extra or {}).get("payee_id"),
-    )
-    suffix = await _finish_expense(db, user, entry, extra)
     await _learn_merchant_rule(db, user.tenant_id, draft.term, cat.id)
     row.pending = None
+    if draft.share_with or draft.wants_card:
+        return await _route_payment(db, user, inbound, draft, cat, raw.get("pm"), created=created)
+    entry = await quick_capture.create_quick_expense(
+        db, tenant_id=user.tenant_id, user_id=user.id, draft=draft, category_id=cat.id,
+        description=draft.description, payment_method=raw.get("pm"), payee_id=(extra or {}).get("payee_id"),
+    )
+    suffix = await _finish_expense(db, user, entry, extra)
     _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text,
               ref_type="expense", ref_id=entry.id)
+    line = _saved_line(draft, entry.description, _new_label(cat.name, created)) + suffix
     # La categoría la acaba de elegir la persona: no se le ofrece cambiarla.
-    reply = _offer_description(
-        db, user, entry, _saved_line(draft, entry.description, cat.name) + suffix, category_hint=False,
-    )
+    if draft.description:
+        await db.commit()
+        return [line]
+    reply = _offer_description(db, user, entry, line, category_hint=False)
     await db.commit()
     return [reply]
+
+
+def _new_label(name: str, created: bool) -> str:
+    return f"{name} (categoría nueva)" if created else name
 
 
 async def _finish_expense(db: AsyncSession, user: User, entry: ExpenseEntry, extra: dict | None) -> str:
@@ -1612,16 +1779,37 @@ async def _finish_expense(db: AsyncSession, user: User, entry: ExpenseEntry, ext
 
 async def _do_expense(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
     draft = quick_capture.parse_quick_text(inbound.text)
+    # Lo que no se entendió, y lo que se entendió con dudas (dos números parecidos,
+    # o una frase larga donde iba un comercio): un monto mal leído no da error.
+    question = await _open_pending(db, user.id)
+    if draft is None or draft.uncertain:
+        handled, inbound = await _interpret(db, user, inbound)
+        if handled is not None:
+            return handled
     if draft is None:
+        bare = quick_capture.parse_amount_text(inbound.text)
+        if bare is not None and not bare.term and bare.amount >= 100:
+            reply = f"¿{_fmt_amount(bare)} en qué?"
+            _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+            _remember(db, user.id, "out", "text", text=reply, pending={"type": "term_ask", "draft": _draft_dict(bare)})
+            await db.commit()
+            return [reply]
+        await bot_cases.record(db, bot_cases.KIND_TEXT_UNRESOLVED, inbound.text)
         await record_event(
             db, tenant_id=user.tenant_id, user_id=user.id, channel="whatsapp",
             input_kind="text", outcome="needs_ai", reason="unparseable_text",
         )
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        # Si había una pregunta abierta, se repite y sigue abierta: la ayuda general
+        # no la contesta, y la fila que se acaba de guardar la habría cerrado.
+        if question is not None and (question.pending or {}).get("type") in _DRAFT_PENDING and question.text:
+            _remember(db, user.id, "out", "text", text=question.text, pending=question.pending)
+            await db.commit()
+            return [f"No te entendí. Te pregunto de nuevo:\n\n{question.text}"]
         await db.commit()
         return [MSG_BUSINESS_HELP if await _is_business(db, user) else _help_text()]
 
-    return await _capture_draft(db, user, inbound, draft)
+    return await _capture_draft(db, user, inbound, draft, payment_method=draft.payment_method)
 
 
 async def _capture_draft(
@@ -1643,6 +1831,22 @@ async def _capture_draft(
     con la pregunta de categoría si hay que hacerla. `suggested` es la que
     propuso la lectura con IA: entra sólo si el hogar no tiene regla ni
     historial para ese comercio, y se muestra como sugerida."""
+    created = False
+    cats = (await db.scalars(
+        select(ExpenseCategory).where(ExpenseCategory.tenant_id == user.tenant_id)
+    )).all()
+    if category is None and draft.currency != "USD":
+        # La nombró a propósito ("categoría súper"): la que sea, y si no existe se crea.
+        if draft.category_name:
+            category, _candidates = _match_name(cats, draft.category_name)
+            if category is None and _looks_like_name(draft.category_name):
+                category = await _create_category(db, user.tenant_id, draft.category_name)
+                created = True
+        # Lo que escribió junto a la foto puede ser la categoría y no una descripción.
+        elif draft.description:
+            category = _match_exact(cats, draft.description)
+            if category is not None:
+                draft.description = None
     if category is not None:
         pick = quick_capture.CategoryPick(category.id, category.name, "exact", None, [])
     # En USD la categoría es siempre "Consumo en dólares" (regla del dominio).
@@ -1670,13 +1874,13 @@ async def _capture_draft(
     if pick.category_id is None:
         options = pick.options
         if not options:
-            reply = "No encontré una categoría para eso. Decime el nombre de la categoría."
+            reply = f"¿En qué categoría pongo {_fmt_amount(draft)} en *{draft.term}*? Decime el nombre y la creo."
             pending = {"type": "category_name", "draft": _draft_dict(draft, payment_method, extra)}
         else:
             listed = "\n".join(f"{i+1}. {name}" for i, name in enumerate(options))
             reply = (
-                f"¿En qué categoría va *{draft.term}* ({_fmt_amount(draft)})?\n{listed}\n"
-                "Respondé el número, o el nombre de otra categoría."
+                f"¿En qué categoría pongo {_fmt_amount(draft)} en *{draft.term}*?\n{listed}\n"
+                "Decime el número o el nombre. Si es otra, la creo."
             )
             pending = {"type": "category_pick", "draft": _draft_dict(draft, payment_method, extra), "options": options}
         _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id, text=inbound.text or None)
@@ -1684,9 +1888,14 @@ async def _capture_draft(
         await db.commit()
         return [reply]
 
+    if draft.share_with or draft.wants_card:
+        cat = next((c for c in cats if c.id == pick.category_id), None) or await db.get(ExpenseCategory, pick.category_id)
+        return await _route_payment(db, user, inbound, draft, cat, payment_method, created=created)
+
+    description = draft.description or pick.description
     entry = await quick_capture.create_quick_expense(
         db, tenant_id=user.tenant_id, user_id=user.id, draft=draft,
-        category_id=pick.category_id, description=pick.description,
+        category_id=pick.category_id, description=description,
         payment_method=payment_method, payee_id=(extra or {}).get("payee_id"),
     )
     stock_line = await _finish_expense(db, user, entry, extra)
@@ -1695,29 +1904,31 @@ async def _capture_draft(
     await db.commit()
 
     suffix = " (sugerida)" if pick.source in ("suggest", "rule") else ""
-    when = "" if entry.expense_date == ar_today() else f" · {entry.expense_date.strftime('%d/%m')}"
-    base = _saved_line(draft, entry.description, pick.category_name) + f"{suffix}{when}{stock_line}"
+    when = "" if entry.expense_date == ar_today() else f", del {entry.expense_date.strftime('%d/%m')}"
+    base = _saved_line(draft, entry.description, _new_label(pick.category_name, created)) + f"{suffix}{when}{stock_line}"
     if await _has_twin(db, entry):
         # El mismo comprobante mandado otra vez (caso real: una captura de
         # $36.000 llegó cuatro veces y eran cuatro gastos). Se avisa, no se
         # frena: dos cargas iguales el mismo día también existen.
-        base += "\n⚠️ Ya había uno igual (mismo monto y fecha). Si es el mismo, respondé *deshacer*."
-    if pick.source in ("suggest", "rule"):
+        base += "\n⚠️ Ya había uno igual, mismo monto y fecha. Si es el mismo, decime *deshacer*."
+    # Ya tiene lo que la persona quiso decir: volver a preguntar es ruido.
+    if pick.source in ("suggest", "rule") and not description:
         reply = _offer_description(db, user, entry, base)
         await db.commit()
         return [reply]
     if await _show_hints(db, user.id):
-        return [base + "\nSi algo está mal: *deshacer*, o *categoría* y el nombre."]
+        return [base + "\nSi algo quedó mal, decime *deshacer* o *categoría* y el nombre."]
     return [base]
 
 
 def _saved_line(draft, description: str | None, category: str) -> str:
-    """"✅ $12.000 · verdulería · Verdulería", sin repetir la descripción
-    cuando es la misma categoría."""
+    """"✅ $12.000 en la verdulería, lo puse en Comida", sin repetir la descripción cuando
+    es la misma categoría: "✅ $12.000 en Verdulería"."""
     from app.services.search import fold_text
 
-    desc = f" · {description}" if description and fold_text(description) != fold_text(category) else ""
-    return f"✅ {_fmt_amount(draft)}{desc} · {category}"
+    if description and fold_text(description) != fold_text(category):
+        return f"✅ {_fmt_amount(draft)} en {description}, lo puse en {category}"
+    return f"✅ {_fmt_amount(draft)} en {category}"
 
 
 # Cuántas cargas de la semana muestran cómo corregir. Después, la persona ya
@@ -1762,12 +1973,17 @@ async def _learn_merchant_rule(
     mismo comprobante volvió a preguntar). La regla es durable y, como todo
     lo de `capture_rules`, sólo produce una sugerencia visible y editable —
     nunca se aplica sin mostrarse. Sin descripción en el payload a propósito:
-    la del primer gasto no tiene por qué valer para el próximo."""
+    la del primer gasto no tiene por qué valer para el próximo (la aprende
+    `_learn_description`, recién cuando se repite, y esto la conserva)."""
     from app.services.reconcile import rules as capture_rules
 
+    if not term:
+        return
+    key = capture_rules.merchant_key(term)
+    rules = await capture_rules.get_rules(db, tenant_id, capture_rules.KIND_MERCHANT_CATEGORY)
     await capture_rules.save_rule(
-        db, tenant_id, capture_rules.KIND_MERCHANT_CATEGORY,
-        capture_rules.merchant_key(term), {"category_id": category_id},
+        db, tenant_id, capture_rules.KIND_MERCHANT_CATEGORY, key,
+        {**(rules.get(key) or {}), "category_id": category_id},
     )
 
 
@@ -1779,9 +1995,9 @@ def _offer_description(
     elegida a mano o sugerida) — cuando el usuario ya escribió lo que quería,
     repreguntar es ruido. `category_hint` = la categoría la puso el bot, así
     que se dice cómo cambiarla."""
-    reply = base_line + "\n¿Le agregás una descripción? Escribila, o respondé *no*."
+    reply = base_line + "\nSi querés, contame qué fue."
     if category_hint:
-        reply += "\nSi la categoría no va, mandá *categoría* y el nombre."
+        reply += " Y si la categoría no va, decime *categoría* y el nombre."
     _remember(db, user.id, "out", "text", text=reply,
               pending={"type": "description_offer", "entry_id": entry.id})
     return reply
@@ -1797,6 +2013,13 @@ def _draft_dict(
     }
     if extra:
         d["x"] = extra
+    # Lo que dijo además del monto viaja con la pregunta.
+    for key, value in (
+        ("desc", draft.description), ("card", draft.wants_card or None), ("hint", draft.card_hint),
+        ("n", draft.installments), ("per", draft.per_installment or None), ("share", draft.share_with or None),
+    ):
+        if value:
+            d[key] = value
     return d
 
 
@@ -1806,6 +2029,8 @@ def _draft_from_dict(d: dict) -> quick_capture.QuickDraft:
     return quick_capture.QuickDraft(
         amount=Decimal(d["amount"]), currency=d["currency"],
         expense_date=_date.fromisoformat(d["date"]), term=d["term"], legacy=False,
+        description=d.get("desc"), wants_card=bool(d.get("card")), card_hint=d.get("hint"),
+        installments=d.get("n"), per_installment=bool(d.get("per")), share_with=d.get("share") or [],
     )
 
 
@@ -1823,15 +2048,23 @@ def _fmt_amount(draft) -> str:
 async def _do_undo(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
     from app.services.business import bot as business_bot
 
-    ref = await _last_ref(db, user.id, ("expense", "income", "card_item", *business_bot.BUSINESS_REFS), inbound.quoted_wa_id)
+    ref = await _last_ref(db, user.id, ("expense", "income", "card_item", "shared", *business_bot.BUSINESS_REFS), inbound.quoted_wa_id)
     if ref is None:
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
         await db.commit()
         return ["No tengo nada para deshacer en los últimos 7 días."]
     if ref.ref_type == "income":
         return await _undo_income(db, user, inbound, ref)
+    # Deshecho enseguida: lo cargó mal, aunque no haya dado ningún error. Es la
+    # señal de que algo se entendió mal, la que un "no te entendí" no da nunca.
+    if ref.created_at and datetime.now() - ref.created_at < timedelta(minutes=5):
+        original = await _original_text(db, user.id, ref)
+        if original:
+            await bot_cases.record(db, bot_cases.KIND_UNDONE, original, {"was": ref.ref_type})
     if ref.ref_type == "card_item":
         return await _undo_card_item(db, user, inbound, ref)
+    if ref.ref_type == "shared":
+        return await _undo_shared(db, user, inbound, ref)
     if ref.ref_type != "expense":
         return await business_bot.undo(db, user, inbound, ref)
     entry = await db.get(ExpenseEntry, ref.ref_id)
@@ -1849,7 +2082,7 @@ async def _do_undo(db: AsyncSession, user: User, inbound: InboundMessage) -> lis
     _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
     await db.commit()
     invalidate_suggest(user.tenant_id)
-    return [f"🗑️ Deshecho: {_money(amount, currency)} · {desc}"]
+    return [f"🗑️ Listo, saqué {_money(amount, currency)} de {desc}."]
 
 
 async def _undo_card_item(db: AsyncSession, user: User, inbound: InboundMessage, ref: WaMessage) -> list[str]:
@@ -1873,7 +2106,7 @@ async def _undo_card_item(db: AsyncSession, user: User, inbound: InboundMessage,
     ref.ref_type = None
     ref.ref_id = None
     await db.commit()
-    return [f"🗑️ Deshecho: {_money(amount, currency)} · {desc}"]
+    return [f"🗑️ Listo, saqué {_money(amount, currency)} de {desc}."]
 
 
 async def _do_edit(
@@ -1883,11 +2116,16 @@ async def _do_edit(
     # La descripción y la categoría, en un gasto o un ingreso — la
     # "categoría" de un ingreso es su fuente: quien acaba de cargar un sueldo
     # y escribe *categoría …* habla de ese ingreso, no del último gasto.
+    field_name = field_name.lower()
     types = {
-        "monto": ("expense", "income", "sale", "card_item"),
+        "monto": ("expense", "income", "sale", "card_item", "shared"),
         "fuente": ("income",),
-    }.get(field_name, ("expense", "income", "card_item"))
+    }.get(field_name, ("expense", "income", "card_item", "shared"))
     ref = await _last_ref(db, user.id, types, inbound.quoted_wa_id)
+    if ref is not None and ref.ref_type == "shared":
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        await db.commit()
+        return ["Ese gasto ya es compartido: corregilo desde Compartidos en la app, así les llega a todos igual."]
     if ref is not None and ref.ref_type == "card_item":
         # Una factura que quedó en un resumen: se corrige donde vive, no acá
         # (y sin esto, *editar* caía en el gasto anterior).
@@ -1916,7 +2154,17 @@ async def _do_edit(
         entry.description = value[:255]
         _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
         await db.commit()
-        return [f"✏️ Listo: {_money(entry.amount, entry.currency)} · {entry.description}"]
+        return [f"✏️ Listo: {_money(entry.amount, entry.currency)} en {entry.description}."]
+
+    if field_name == "fecha":
+        when = _parse_edit_date(value)
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        if when is None:
+            await db.commit()
+            return ["No entendí la fecha. Probá: *cambiar fecha 1/11*"]
+        entry.expense_date = when
+        await db.commit()
+        return [f"✏️ Listo: {_money(entry.amount, entry.currency)} en {entry.description}, del {when:%d/%m}."]
 
     if field_name == "monto":
         amount = _parse_edit_amount(value)
@@ -1930,7 +2178,19 @@ async def _do_edit(
     _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
     await db.commit()
     invalidate_suggest(user.tenant_id)
-    return [f"✏️ Listo: {_money(entry.amount, entry.currency)} · {entry.description}"]
+    return [f"✏️ Listo: {_money(entry.amount, entry.currency)} en {entry.description}."]
+
+
+def _parse_edit_date(value: str):
+    when, _rest = quick_capture.extract_date(value, ar_today())
+    return when
+
+
+def _match_exact(cats, value: str):
+    from app.services.search import fold_text
+
+    folded = fold_text(value or "").strip()
+    return next((c for c in cats if fold_text(c.name).strip() == folded), None) if folded else None
 
 
 def _match_name(cats, value: str):
@@ -1968,7 +2228,7 @@ async def _recategorize(
         if candidates:
             return [f"¿Cuál de estas? {', '.join(candidates)}\nMandá *categoría* y el nombre completo."]
         names = ", ".join(sorted(c.name for c in cats)[:12])
-        return [f"No hay una categoría «{value}». Tenés: {names}"]
+        return [f"No tengo una categoría «{value}». Las que hay: {names}\nSi querés una nueva, decime *crear categoría {value}*."]
 
     before = next((c.name for c in cats if c.id == entry.category_id), None)
     entry.category_id = cat.id
@@ -1985,7 +2245,7 @@ async def _recategorize(
     await db.commit()
     invalidate_suggest(user.tenant_id)
     was = f" (antes: {before})" if before and before != cat.name else ""
-    return [f"✏️ Listo: {_fmt_amount(entry)} · {entry.description} · {cat.name}{was}"]
+    return [f"✏️ Listo: {_fmt_amount(entry)} en {entry.description}, a {cat.name}{was}."]
 
 
 async def _original_text(db: AsyncSession, user_id: int, ref: WaMessage) -> str | None:
@@ -2061,8 +2321,8 @@ def _parse_edit_amount(value: str) -> Decimal | None:
     if amount is None:
         m = quick_capture._AMOUNT_RE.search(value)
         if m:
-            amount = quick_capture._parse_number(m.group(1))
-            mult = quick_capture._MULTIPLIER.get((m.group(2) or "").lower())
+            amount = quick_capture._parse_number(m.group(2))
+            mult = quick_capture._MULTIPLIER.get((m.group(3) or "").lower())
             if amount is not None and mult:
                 amount = amount * mult
     return amount
@@ -2080,12 +2340,12 @@ async def _undo_income(db: AsyncSession, user: User, inbound: InboundMessage, re
         await db.commit()
         return ["Ese ingreso ya no está."]
     name = await db.scalar(select(IncomeSource.name).where(IncomeSource.id == entry.source_id))
-    what = f"{_fmt_amount(entry)} · {name}"
+    what = f"{_fmt_amount(entry)} en {name}"
     await db.delete(entry)
     ref.ref_type = None
     ref.ref_id = None
     await db.commit()
-    return [f"🗑️ Deshecho: ingreso {what}"]
+    return [f"🗑️ Listo, saqué el ingreso de {what}."]
 
 
 async def _edit_income(
@@ -2102,6 +2362,15 @@ async def _edit_income(
     if has_detail and field_name in ("monto", "fuente"):
         await db.commit()
         return ["Ese ingreso tiene el detalle cargado en la app: corregilo ahí, así la cuenta sigue cerrando."]
+
+    if field_name == "fecha":
+        when = _parse_edit_date(value)
+        if when is None:
+            await db.commit()
+            return ["No entendí la fecha. Probá: *cambiar fecha 1/11*"]
+        entry.period_date = when
+        await db.commit()
+        return [f"✏️ Listo: ingreso de {_fmt_amount(entry)}, del {when:%d/%m}."]
 
     sources = await income_capture.writable_sources(db, user.tenant_id)
     if field_name == "monto":
@@ -2125,13 +2394,13 @@ async def _edit_income(
             await income_capture.learn(db, user.tenant_id, term, source.id)
         await db.commit()
         was = f" (antes: {before})" if before and before != source.name else ""
-        return [f"✏️ Listo: ingreso {_fmt_amount(entry)} · {source.name}{was}"]
+        return [f"✏️ Listo: ingreso de {_fmt_amount(entry)}, a {source.name}{was}."]
     else:
         entry.notes = value[:500]
     await db.commit()
     name = await db.scalar(select(IncomeSource.name).where(IncomeSource.id == entry.source_id))
-    notes = f" · {entry.notes}" if entry.notes else ""
-    return [f"✏️ Listo: ingreso {_fmt_amount(entry)} · {name}{notes}"]
+    notes = f" ({entry.notes})" if entry.notes else ""
+    return [f"✏️ Listo: ingreso de {_fmt_amount(entry)} en {name}{notes}."]
 
 
 async def _do_interest(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
@@ -2148,12 +2417,678 @@ async def _do_interest(db: AsyncSession, user: User, inbound: InboundMessage) ->
     return [MSG_INTEREST]
 
 
+# ------------------------------------------------------ cómo se pagó algo ---
+# "con la visa", "en 3 cuotas", "a medias con Juan". Lo que no alcanza se pregunta,
+# y todo termina en los servicios de siempre: la tarjeta en `create_item_in_statement`,
+# el compartido en `create_shared`, igual que desde la app.
+
+async def _route_payment(
+    db: AsyncSession, user: User, inbound: InboundMessage, draft: quick_capture.QuickDraft,
+    cat: ExpenseCategory, payment_method: str | None, *, created: bool = False,
+) -> list[str]:
+    if draft.share_with:
+        return await _propose_share(db, user, inbound, draft, cat)
+    return await _capture_card(db, user, inbound, draft, cat)
+
+
+def _card_label(card) -> str:
+    alias = card.alias or card.bank or "Tarjeta"
+    if card.last_4_digits and card.last_4_digits not in alias:
+        return f"{alias} {card.last_4_digits}"
+    return alias
+
+
+def _match_cards(cards: list, hint: str | None) -> list:
+    """Por los últimos 4 dígitos, o por las palabras del nombre o del banco."""
+    from app.services.search import fold_text
+
+    if not hint:
+        return list(cards)
+    folded = fold_text(hint).strip()
+    if folded.isdigit():
+        return [c for c in cards if c.last_4_digits == folded]
+    words = folded.split()
+    # "master" tiene que encontrar "Mastercard Platinum".
+    def has(card) -> bool:
+        name = fold_text(f"{card.alias} {card.bank}")
+        return all(w in name for w in words)
+    return [c for c in cards if has(c)]
+
+
+async def _card_period(db: AsyncSession, card, when) -> tuple[int, int]:
+    """A qué resumen va una compra. El primero que cierre después de la fecha, si
+    ya se conoce; si no, con el día de cierre del último resumen. Sin ningún dato,
+    el mes de la compra: la respuesta dice cuál eligió y se puede corregir."""
+    from datetime import date as _date
+
+    from app.models.credit_card import CreditCardStatement
+    from app.services.statement_parsers.common import assign_period
+
+    closings = (await db.execute(
+        select(CreditCardStatement.closing_date, CreditCardStatement.year, CreditCardStatement.month)
+        .where(CreditCardStatement.card_id == card.id, CreditCardStatement.closing_date.is_not(None))
+        .order_by(CreditCardStatement.closing_date)
+    )).all()
+    for closing, year, month in closings:
+        if closing >= when:
+            return year, month
+    if not closings:
+        return when.year, when.month
+    day = min(closings[-1][0].day, 28)
+    closing = _date(when.year, when.month, day)
+    if when > closing:
+        closing = _date(when.year + (when.month == 12), when.month % 12 + 1, day)
+    return assign_period(closing)
+
+
+async def _capture_card(
+    db: AsyncSession, user: User, inbound: InboundMessage, draft: quick_capture.QuickDraft, cat: ExpenseCategory,
+) -> list[str]:
+    from app.models.credit_card import CreditCard
+
+    cards = list((await db.scalars(
+        select(CreditCard).where(CreditCard.tenant_id == user.tenant_id).order_by(CreditCard.id)
+    )).all())
+    matched = _match_cards(cards, draft.card_hint)
+    if len(matched) == 1:
+        return await _save_card_item(db, user, inbound, draft, matched[0], cat)
+
+    options = (matched or cards)[:7]
+    if options:
+        listed = "\n".join(f"{i + 1}. {_card_label(c)}" for i, c in enumerate(options))
+        extra_n = len(options)
+        reply = (
+            f"¿Con qué tarjeta pagaste {_fmt_amount(draft)} en *{draft.term or cat.name}*?\n{listed}\n"
+            f"{extra_n + 1}. Sin tarjeta, como gasto común\n{extra_n + 2}. Mejor no lo cargo"
+        )
+    else:
+        reply = (
+            f"Todavía no tenés tarjetas cargadas, así que no puedo poner {_fmt_amount(draft)} en un resumen.\n"
+            "1. Cargarlo como gasto común\n2. Mejor no lo cargo\n"
+            "La tarjeta la creás en la app, o mandándome su resumen en PDF."
+        )
+    _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id, text=inbound.text or None)
+    _remember(db, user.id, "out", "text", text=reply, pending={
+        "type": "card_pick", "draft": _draft_dict(draft), "cat": cat.id, "cards": [c.id for c in options],
+    })
+    await db.commit()
+    return [reply]
+
+
+async def _answer_card_pick(
+    db: AsyncSession, user: User, inbound: InboundMessage, row: WaMessage, number: int
+) -> list[str]:
+    from app.models.credit_card import CreditCard
+
+    pending = row.pending or {}
+    ids = pending.get("cards") or []
+    if not (1 <= number <= len(ids) + 2):
+        return [f"Decime un número del 1 al {len(ids) + 2}."]
+    draft = _draft_from_dict(pending["draft"])
+    cat = await db.get(ExpenseCategory, pending["cat"])
+    if cat is None or cat.tenant_id != user.tenant_id:
+        return ["Esa categoría ya no existe. Mandame el gasto de nuevo."]
+    row.pending = None
+    if number <= len(ids):
+        card = await db.get(CreditCard, ids[number - 1])
+        if card is None or card.tenant_id != user.tenant_id:
+            await db.commit()
+            return ["Esa tarjeta ya no está. Mandame el gasto de nuevo."]
+        return await _save_card_item(db, user, inbound, draft, card, cat)
+    if number == len(ids) + 2:
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        await db.commit()
+        return ["Listo, no lo cargo."]
+    draft.wants_card = False
+    return await _capture_draft(db, user, inbound, draft, category=cat)
+
+
+async def _save_card_item(
+    db: AsyncSession, user: User, inbound: InboundMessage, draft: quick_capture.QuickDraft, card, cat: ExpenseCategory,
+) -> list[str]:
+    from app.schemas.credit_card import CreditCardItemCreate
+    from app.services import auth_links, bill_capture
+    from app.services.credit_cards import create_item_in_statement, find_or_create_statement
+
+    count = draft.installments if draft.currency != "USD" else None
+    if count:
+        each = draft.amount if draft.per_installment else (draft.amount / count).quantize(Decimal("0.01"))
+        total = draft.amount * count if draft.per_installment else draft.amount
+    else:
+        each, total = draft.amount, None
+    description = (draft.description or draft.term or cat.name)[:255]
+    year, month = await _card_period(db, card, draft.expense_date)
+    stmt = await find_or_create_statement(card, year, month, user.tenant_id, db)
+    item = await create_item_in_statement(stmt, card, CreditCardItemCreate(
+        description=description, category_id=cat.id, item_date=draft.expense_date,
+        item_type="installment" if count else "single", amount=each, currency=draft.currency,
+        installment_count=count, purchase_total=total,
+    ), user, db)
+    item.capture_source = "whatsapp"
+    await db.flush()
+    _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id, text=inbound.text or None,
+              ref_type="card_item", ref_id=item.id)
+    token = await auth_links.mint_token(db, user.id)
+    link = f"{settings.FRONTEND_URL}/tarjetas/{card.id}/{stmt.id}?item={item.id}&wat={token}"
+    await db.commit()
+
+    period = bill_capture.period_label(year, month, ar_today())
+    amount = _money(total or each, draft.currency)
+    if count:
+        head = f"✅ {amount} en {description}, {count} cuotas de {_money(each, draft.currency)} con la *{_card_label(card)}*."
+        where = f"La primera va en el resumen de {period}."
+    else:
+        head = f"✅ {amount} en {description}, con la *{_card_label(card)}*."
+        where = f"Va en el resumen de {period}."
+    note = "\nEn dólares va en un solo pago, así que no lo puse en cuotas." if draft.installments and not count else ""
+    return [f"{head}{note}\n{where} Si era otro, o algo quedó mal: *deshacer*, o corregilo acá: {link}"]
+
+
+async def _holder_tokens(db: AsyncSession, user: User) -> set[str]:
+    from app.services.search import fold_text
+
+    row = (await db.execute(
+        select(User.first_name, User.last_name, User.display_name).where(User.id == user.id)
+    )).first()
+    if row is None:
+        return set()
+    return set(fold_text(" ".join(p for p in row if p)).split())
+
+
+async def _is_own_name(db: AsyncSession, user: User, name: str | None) -> bool:
+    """¿Esta contraparte es el titular de la cuenta? Nombre y apellido, como mínimo:
+    con uno solo, "Juan" sería cualquier Juan."""
+    from app.services.search import fold_text
+
+    words = set(fold_text(name or "").split())
+    return len(words) >= 2 and words <= await _holder_tokens(db, user)
+
+
+async def _ask_own_transfer(
+    db: AsyncSession, user: User, inbound: InboundMessage, draft: quick_capture.QuickDraft, method: str | None,
+) -> list[str]:
+    """Un comprobante a nombre del propio titular no es un pago a un tercero: casi
+    siempre es plata que le entró, o que movió entre sus cuentas. Cargarlo como
+    gasto (caso real: $100.000 a su nombre, en Comida) descuadra el mes dos veces."""
+    reply = (
+        f"Este comprobante de {_fmt_amount(draft)} está a tu nombre. ¿Qué fue?\n"
+        "1. Me entró esa plata\n2. La pagué yo, es un gasto\n3. La pasé entre mis cuentas, no la cargo"
+    )
+    _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id, text=inbound.text or None)
+    _remember(db, user.id, "out", "text", text=reply, pending={
+        "type": "own_transfer", "draft": _draft_dict(draft, method),
+    })
+    await db.commit()
+    return [reply]
+
+
+async def _answer_own_transfer(
+    db: AsyncSession, user: User, inbound: InboundMessage, row: WaMessage, number: int
+) -> list[str]:
+    pending = row.pending or {}
+    if not (1 <= number <= 3):
+        return ["Decime *1*, *2* o *3*."]
+    raw = pending["draft"]
+    draft = _draft_from_dict(raw)
+    row.pending = None
+    if number == 3:
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        await db.commit()
+        return ["Listo, no lo cargo."]
+    if number == 2:
+        return await _capture_draft(db, user, inbound, draft, payment_method=raw.get("pm"))
+    if await _is_business(db, user):
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        await db.commit()
+        return ["No lo cargo: en el negocio, lo que entra sale de las ventas."]
+    draft.term = ""
+    return await _capture_income(db, user, inbound, draft, refund=True)
+
+
+async def _resolve_person(db: AsyncSession, user: User, name: str) -> dict | None:
+    """Un nombre → alguien a quien se le puede compartir: del hogar, de la agenda,
+    o un alias, mail o teléfono exacto. Ante dos posibles, el más usado: la
+    confirmación muestra el nombre completo antes de avisarle a nadie."""
+    from app.models.contact import SharedContact
+    from app.services import participants, user_directory
+    from app.services.search import fold_text
+
+    words = set(fold_text(name).split())
+    if not words:
+        return None
+    members = (await db.execute(
+        select(User.id, User.first_name, User.last_name, User.display_name, User.alias)
+        .where(User.tenant_id == user.tenant_id, User.id != user.id, User.deleted_at.is_(None))
+    )).all()
+    for member in members:
+        known = set(fold_text(" ".join(p for p in member[1:] if p)).split())
+        if words <= known:
+            return {"name": member.display_name or member.first_name or name, "user_id": member.id}
+    contacts = (await db.scalars(
+        select(SharedContact).where(SharedContact.tenant_id == user.tenant_id)
+        .order_by(SharedContact.use_count.desc())
+    )).all()
+    for contact in contacts:
+        if words <= set(fold_text(contact.display_name).split()):
+            return {
+                "name": contact.display_name, "user_id": contact.contact_user_id,
+                "contact": contact.contact_phone or contact.contact_email,
+            }
+    found = await user_directory.lookup_exact(db, name)
+    if found is not None and found.id != user.id:
+        return {"name": found.display_name or name, "user_id": found.id}
+    if participants.is_email(name) or participants.is_phone(name):
+        return {"name": name, "user_id": None, "contact": name}
+    return None
+
+
+def _equal_shares(total: Decimal, people: int) -> list[Decimal]:
+    """En centavos, con el resto en la última parte, igual que `lib/split.ts`: el
+    backend rechaza una división que no suma exacto."""
+    each = (total / people).quantize(Decimal("0.01"), rounding="ROUND_DOWN")
+    return [each] * (people - 1) + [total - each * (people - 1)]
+
+
+async def _propose_share(
+    db: AsyncSession, user: User, inbound: InboundMessage, draft: quick_capture.QuickDraft, cat: ExpenseCategory,
+    people: list[dict] | None = None, missing: list[str] | None = None,
+) -> list[str]:
+    """Compartir le manda un aviso a otra persona y eso no se deshace: se pregunta
+    siempre, con quién recibe qué a la vista."""
+    if people is None:
+        people, missing = [], []
+        for name in draft.share_with:
+            person = await _resolve_person(db, user, name)
+            if person is not None:
+                people.append(person)
+            else:
+                missing.append(name)
+    _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id, text=inbound.text or None)
+    base = {"draft": _draft_dict(draft), "cat": cat.id, "people": people}
+    if missing:
+        who = missing[0]
+        reply = f"No tengo a *{who}* en tu agenda. Pasame su WhatsApp o su mail y le aviso, o decime *cancelar*."
+        _remember(db, user.id, "out", "text", text=reply, pending={**base, "type": "share_contact", "missing": missing})
+        await db.commit()
+        return [reply]
+
+    shares = _equal_shares(draft.amount, len(people) + 1)
+    lines = [f"• Vos: {_money(shares[0], draft.currency)}"]
+    lines += [f"• {p['name']}: {_money(s, draft.currency)}" for p, s in zip(people, shares[1:])]
+    names = _join_names([p["name"] for p in people])
+    reply = (
+        f"Anoto {_fmt_amount(draft)} en *{draft.term or cat.name}*, dividido así:\n" + "\n".join(lines) + "\n"
+        f"A {names} le va a llegar el aviso para aceptarlo.\n1. Dale\n2. No, dejalo"
+    )
+    _remember(db, user.id, "out", "text", text=reply, pending={**base, "type": "share_confirm"})
+    await db.commit()
+    return [reply]
+
+
+async def _answer_share(
+    db: AsyncSession, user: User, inbound: InboundMessage, row: WaMessage, yes: bool
+) -> list[str]:
+    from app.schemas.shared_expense import SharedExpenseCreate, SplitIn
+    from app.services import notify_shared, shared_expenses as shared_service
+
+    pending = row.pending or {}
+    row.pending = None
+    if not yes:
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        await db.commit()
+        return ["Listo, no lo cargo."]
+    draft = _draft_from_dict(pending["draft"])
+    people = pending.get("people") or []
+    shares = _equal_shares(draft.amount, len(people) + 1)
+    title = (draft.description or draft.term)[:200] or "Gasto compartido"
+    body = SharedExpenseCreate(
+        title=title, total_amount=draft.amount, category_id=pending["cat"], currency=draft.currency,
+        split_type="equal", expense_date=draft.expense_date,
+        splits=[
+            SplitIn(user_id=user.id, member_name=user.display_name or "Yo", amount=shares[0]),
+            *(SplitIn(
+                user_id=p.get("user_id"), member_name=p["name"], amount=s,
+                invite_contact=None if p.get("user_id") else p.get("contact"),
+            ) for p, s in zip(people, shares[1:])),
+        ],
+    )
+    created = await shared_service.create_shared(user, body, db)
+    _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text,
+              ref_type="shared", ref_id=created.shared.id)
+    await db.commit()
+    # Después del commit, como en la app: un aviso nunca sale por algo que no quedó.
+    await notify_shared.notify_share(
+        db, creator=user, title=title, total_amount=draft.amount,
+        notify=created.notify, invites=created.invites, currency=draft.currency,
+    )
+    names = _join_names([p["name"] for p in people])
+    return [f"✅ {_fmt_amount(draft)} en {title}, compartido con {names}. Te toca {_money(shares[0], draft.currency)}."]
+
+
+async def _undo_shared(db: AsyncSession, user: User, inbound: InboundMessage, ref: WaMessage) -> list[str]:
+    from fastapi import HTTPException
+
+    from app.services import shared_expenses as shared_service
+
+    _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+    try:
+        await shared_service.delete_shared(user, ref.ref_id, db)
+    except HTTPException:
+        await db.commit()
+        return ["Ese compartido ya no se puede borrar desde acá. Fijate en Compartidos, en la app."]
+    ref.ref_type = None
+    ref.ref_id = None
+    await db.commit()
+    invalidate_suggest(user.tenant_id)
+    return ["🗑️ Listo, lo saqué. Al otro ya le había llegado el aviso, por si querés avisarle."]
+
+
+# ------------------------------------------------- respuestas con palabras ---
+
+async def _do_cancel_draft(
+    db: AsyncSession, user: User, inbound: InboundMessage, text: str
+) -> list[str] | None:
+    """*deshacer* o "no" mientras un gasto espera respuesta: no cargarlo, y nada más."""
+    from app.services.search import fold_text
+
+    if not (_UNDO_RE.match(text) or fold_text(text).strip(" .!") in _CANCEL_WORDS):
+        return None
+    row = await _open_pending(db, user.id)
+    if row is None or (row.pending or {}).get("type") not in _DRAFT_PENDING:
+        return None
+    row.pending = None
+    _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+    await db.commit()
+    return ["Listo, no lo cargo."]
+
+
+async def _do_pending_words(
+    db: AsyncSession, user: User, inbound: InboundMessage, text: str
+) -> list[str] | None:
+    """Las preguntas que también se contestan con palabras."""
+    from app.services import participants
+    from app.services.search import fold_text
+
+    row = await _open_pending(db, user.id)
+    pending = (row.pending or {}) if row is not None else {}
+    ptype = pending.get("type")
+    folded = fold_text(text).strip(" .!")
+
+    if ptype == "term_ask":
+        if quick_capture.parse_amount_text(text) is not None or not text.strip():
+            return None
+        draft = _draft_from_dict(pending["draft"])
+        draft.term = text.strip()[:120]
+        row.pending = None
+        return await _capture_draft(db, user, inbound, draft)
+
+    if ptype == "recategorize":
+        row.pending = None
+        return await _do_edit(db, user, inbound, "categoria", text.strip())
+
+    if ptype == "share_confirm":
+        if folded in ("si", "dale", "ok", "de una", "listo", "sisi", "si dale", "mandale"):
+            return await _answer_share(db, user, inbound, row, True)
+        return None
+
+    if ptype == "share_contact":
+        contact = text.strip()
+        if not (participants.is_email(contact) or participants.is_phone(contact)):
+            return None
+        missing = list(pending.get("missing") or [])
+        name = missing.pop(0)
+        people = [*(pending.get("people") or []), {"name": name, "user_id": None, "contact": contact}]
+        draft = _draft_from_dict(pending["draft"])
+        cat = await db.get(ExpenseCategory, pending["cat"])
+        row.pending = None
+        return await _propose_share(db, user, inbound, draft, cat, people, missing)
+
+    if ptype == "card_pick":
+        from app.models.credit_card import CreditCard
+
+        ids = pending.get("cards") or []
+        cards = (await db.scalars(select(CreditCard).where(CreditCard.id.in_(ids)))).all() if ids else []
+        matched = _match_cards(list(cards), text.strip())
+        if len(matched) == 1:
+            return await _answer_card_pick(db, user, inbound, row, ids.index(matched[0].id) + 1)
+        return None
+
+    return None
+
+
+async def _do_small_talk(
+    db: AsyncSession, user: User, inbound: InboundMessage, text: str
+) -> list[str] | None:
+    """Saludar y agradecer no es un gasto que no se entendió. Sin IA y sin cerrar
+    ninguna pregunta abierta."""
+    from app.services.search import fold_text
+
+    folded = fold_text(text).strip(" .,!?¡¿")
+    reply = _SMALL_TALK.get(folded)
+    if reply is None and folded in _ASK_HELP:
+        reply = MSG_BUSINESS_HELP if await _is_business(db, user) else _with_media_hint(MSG_CAN_DO)
+    # Sin fila propia: una fila común cerraría la pregunta que esté abierta, y un
+    # reintento del webhook sólo repetiría un "de nada".
+    return [reply] if reply is not None else None
+
+
+async def _do_correction(
+    db: AsyncSession, user: User, inbound: InboundMessage, text: str
+) -> list[str] | None:
+    """Corregir lo recién cargado como se lo diría a una persona: "¿puedo cambiar
+    la categoría?", "este es un reintegro", "no es un gasto, es un ingreso", o
+    crear una categoría."""
+    asked_new = _NEW_CATEGORY_RE.match(text)
+    if asked_new and _looks_like_name(asked_new.group(1)):
+        cats = (await db.scalars(
+            select(ExpenseCategory).where(ExpenseCategory.tenant_id == user.tenant_id)
+        )).all()
+        name = asked_new.group(1).strip()
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        if _match_exact(cats, name) is not None:
+            await db.commit()
+            return [f"La categoría {name} ya existe."]
+        cat = await _create_category(db, user.tenant_id, name)
+        await db.commit()
+        return [f"✅ Creé la categoría {cat.name}."]
+
+    if _ASK_RECATEGORIZE_RE.match(text):
+        ref = await _last_ref(db, user.id, ("expense", "income"), inbound.quoted_wa_id)
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        if ref is None:
+            await db.commit()
+            return ["No tengo nada reciente para cambiar."]
+        reply = "Sí, ¿a cuál?"
+        _remember(db, user.id, "out", "text", text=reply, pending={"type": "recategorize"})
+        await db.commit()
+        return [reply]
+
+    recent = await _last_ref(db, user.id, ("expense", "income"), inbound.quoted_wa_id)
+    if recent is None or recent.created_at is None or (
+        datetime.now() - recent.created_at > timedelta(minutes=_CORRECTION_MINUTES)
+    ):
+        return None
+
+    if _IS_INCOME_RE.match(text) and recent.ref_type == "expense":
+        entry = await db.get(ExpenseEntry, recent.ref_id)
+        if entry is None or entry.tenant_id != user.tenant_id or entry.source != EXPENSE_SOURCE_WHATSAPP:
+            return None
+        if await _is_business(db, user):
+            return None
+        draft = quick_capture.QuickDraft(
+            amount=entry.amount, currency=entry.currency, expense_date=entry.expense_date,
+            term=entry.description or "", legacy=False,
+        )
+        await expenses_service.delete_expense(db, entry, user.tenant_id)
+        recent.ref_type = None
+        recent.ref_id = None
+        invalidate_suggest(user.tenant_id)
+        return await _capture_income(db, user, inbound, draft)
+
+    # "este es un reintegro": sólo si es el nombre de una categoría o una fuente,
+    # si no es una descripción o cualquier otra cosa.
+    if not re.match(r"^(?:no,?\s+)?(?:este\s+|esto\s+|eso\s+)?(?:es|era)\s", text, re.IGNORECASE):
+        return None
+    m = _ACTUALLY_RE.match(text)
+    if m is None:
+        return None
+    pool = (
+        await income_capture.writable_sources(db, user.tenant_id) if recent.ref_type == "income"
+        else (await db.scalars(select(ExpenseCategory).where(ExpenseCategory.tenant_id == user.tenant_id))).all()
+    )
+    match, _candidates = _match_name(pool, m.group(1))
+    if match is None:
+        return None
+    return await _do_edit(db, user, inbound, "categoria", match.name)
+
+
+# ---------------------------------------------------------- con IA: texto ---
+
+async def _interpret(
+    db: AsyncSession, user: User, inbound: InboundMessage
+) -> tuple[list[str] | None, InboundMessage]:
+    """Lo que el código no entendió, leído por la IA y ejecutado por los mismos
+    caminos. Devuelve las respuestas (None = sin IA o sin respuesta útil, el que
+    llama contesta como siempre) y el mensaje a usar de acá en más: ya registrado
+    si se llamó a la IA. Queda anotado, enmascarado, para pasarlo a código."""
+    from app.models.credit_card import CreditCard
+    from app.services import rate_limit
+
+    if not ai_capture.enabled() or not rate_limit.check(f"wa_ai:{user.tenant_id}", settings.WA_AI_DAILY_LIMIT, 86400):
+        return None, inbound
+    is_business = await _is_business(db, user)
+    row = await _open_pending(db, user.id)
+    question = row.text if row is not None and (row.pending or {}).get("type") in _DRAFT_PENDING else None
+    cats = (await db.scalars(select(ExpenseCategory.name).where(ExpenseCategory.tenant_id == user.tenant_id))).all()
+    sources = [s.name for s in await income_capture.writable_sources(db, user.tenant_id)]
+    cards = (await db.scalars(select(CreditCard).where(CreditCard.tenant_id == user.tenant_id))).all()
+    raw_text = inbound.text
+    # La llamada tarda: si Evolution reintenta el webhook no tiene que cargar dos veces.
+    inbound = await _claim_inbound(db, user, inbound)
+    intent = await ai_capture.interpret_text(
+        raw_text, today=ar_today(), is_business=is_business, categories=list(cats), sources=sources,
+        cards=[_card_label(c) for c in cards], question=question,
+    )
+    if intent is None:
+        return None, inbound
+    await record_event(
+        db, tenant_id=user.tenant_id, user_id=user.id, channel="whatsapp", input_kind="text",
+        outcome="ai_ok", bank_detected=f"texto:{intent.action}"[:30], est_input_tokens=intent.input_tokens,
+    )
+    slots = [k for k in ("amount", "term", "category", "description", "card", "installments", "share_with", "value")
+             if getattr(intent, k)]
+    await bot_cases.record(db, bot_cases.KIND_TEXT_AI, raw_text, {"action": intent.action, "slots": slots})
+    return await _run_intent(db, user, inbound, intent, is_business, row), inbound
+
+
+async def _run_intent(
+    db: AsyncSession, user: User, inbound: InboundMessage, intent: ai_capture.TextIntent,
+    is_business: bool, row: WaMessage | None,
+) -> list[str] | None:
+    async def say(text: str) -> list[str]:
+        _remember(db, user.id, "out", "text", text=text)
+        await db.commit()
+        return [text]
+
+    action = intent.action
+    if action in (ai_capture.ACTION_EXPENSE, ai_capture.ACTION_INCOME):
+        if intent.amount is None or intent.amount > quick_capture.MAX_AMOUNT:
+            return await say("¿Cuánto fue? Mandámelo de nuevo con el monto.")
+        draft = quick_capture.QuickDraft(
+            amount=intent.amount, currency=intent.currency, expense_date=intent.when or ar_today(),
+            term=intent.term, legacy=False, description=intent.description or None,
+            category_name=intent.category or None,
+            wants_card=bool(intent.card or intent.installments or intent.payment == "tarjeta_credito"),
+            card_hint=intent.card or None, installments=intent.installments or None,
+            share_with=intent.share_with,
+        )
+        if action == ai_capture.ACTION_EXPENSE:
+            draft.term = draft.term or intent.category or "Gasto"
+            method = intent.payment if intent.payment in ("efectivo", "debito", "transferencia") else None
+            return await _capture_draft(db, user, inbound, draft, payment_method=method)
+        if is_business:
+            return await say("En el negocio, lo que entra sale de las ventas: contame qué vendiste.")
+        draft.term = intent.category or intent.term
+        return await _capture_income(db, user, inbound, draft, notes=intent.description or None)
+
+    if action == ai_capture.ACTION_SALE and is_business:
+        parsed = business_capture.parse_business_text(intent.sale_text)
+        if parsed is not None:
+            from app.services.business import bot as business_bot
+
+            return await business_bot.handle_intent(db, user, inbound, parsed)
+        return None
+
+    if action == ai_capture.ACTION_ANSWER and row is not None and intent.value:
+        number = _NUMBER_RE.match(intent.value)
+        if number:
+            return await _do_pending_answer(db, user, inbound, int(number.group(1)), row)
+        answered = replace(inbound, text=intent.value)
+        for handler in (_do_pending_income_by_name, _do_pending_category_by_name):
+            handled = await handler(db, user, answered, row)
+            if handled is not None:
+                return handled
+        return None
+
+    if action == ai_capture.ACTION_NEW_CATEGORY and intent.value:
+        if row is not None and (row.pending or {}).get("type") in ("category_pick", "category_name"):
+            return await _do_pending_category_by_name(db, user, replace(inbound, text=intent.value), row)
+        if _looks_like_name(intent.value):
+            cat = await _create_category(db, user.tenant_id, intent.value)
+            return await say(f"✅ Creé la categoría {cat.name}.")
+        return None
+
+    if action == ai_capture.ACTION_FIX and intent.fix_field and intent.value:
+        return await _do_edit(db, user, inbound, intent.fix_field, intent.value)
+    if action == ai_capture.ACTION_UNDO:
+        return await _do_undo(db, user, inbound)
+    if action == ai_capture.ACTION_CHAT and intent.reply:
+        return await say(intent.reply)
+    if action == ai_capture.ACTION_OUT_OF_SCOPE:
+        return await say(MSG_OUT_OF_SCOPE.format(url=settings.FRONTEND_URL))
+    return None
+
+
+# Un parser que no existe, o que leyó mal: los dos se pueden leer de otra manera.
+# Una contraseña o un archivo sin texto, no.
+_AI_STATEMENT_REASONS = {"no_parser", "totals_mismatch", "no_items"}
+
+
+async def _statement_with_ai(
+    db: AsyncSession, user: User, failed, pdf: bytes, pdf_text: str
+):
+    """Un resumen que ningún parser lee, leído por la IA y pasado por el mismo
+    motor: control de totales, grupos, deshacer. La sesión fallida no queda, para
+    no figurar como pendiente. None si no se pudo: sigue el mensaje de siempre."""
+    from app.services import rate_limit
+    from app.services.statement_parsers import ParseResult
+
+    if not ai_capture.enabled() or not rate_limit.check(f"wa_ai:{user.tenant_id}", settings.WA_AI_DAILY_LIMIT, 86400):
+        return None
+    await db.commit()  # la llamada tarda hasta 3 minutos: nada abierto mientras tanto
+    answer = await ai_capture.read_statement(pdf, pdf_text)
+    if answer is None:
+        return None
+    data, tokens = answer
+    await db.delete(failed)
+    await db.flush()
+    session = await reconcile_service.start_session(
+        db, user=user, channel="whatsapp",
+        parsed=ParseResult(
+            status="ok", bank_id=f"ai:{data.get('bank') or 'otro'}"[:30], data=data,
+            est_input_tokens=tokens or 0,
+        ),
+    )
+    await bot_cases.record(db, bot_cases.KIND_STATEMENT_AI, pdf_text, {"bank": data.get("bank"), "status": session.status})
+    return session
+
+
 async def _do_pending_answer(
-    db: AsyncSession, user: User, inbound: InboundMessage, number: int
+    db: AsyncSession, user: User, inbound: InboundMessage, number: int, row: WaMessage | None = None,
 ) -> list[str] | None:
     """Respuesta "1".."9" a la última pregunta abierta. None = no había
     pregunta (el número se intenta como gasto, p. ej. "5000 kiosco")."""
-    row = await _open_pending(db, user.id)
+    row = row or await _open_pending(db, user.id)
     if row is None:
         return None
     pending = row.pending or {}
@@ -2170,10 +3105,17 @@ async def _do_pending_answer(
     if ptype in ("bill_card", "bill_pick"):
         return await _answer_bill(db, user, inbound, row, number)
 
+    if ptype == "card_pick":
+        return await _answer_card_pick(db, user, inbound, row, number)
+    if ptype == "own_transfer":
+        return await _answer_own_transfer(db, user, inbound, row, number)
+    if ptype == "share_confirm":
+        return await _answer_share(db, user, inbound, row, number == 1)
+
     if ptype == "category_pick":
         options = pending.get("options") or []
         if not (1 <= number <= len(options)):
-            return [f"Respondé un número del 1 al {len(options)}, o el nombre de la categoría."]
+            return [f"Decime un número del 1 al {len(options)}, o el nombre de la categoría."]
         name = options[number - 1]
         cats = (await db.scalars(
             select(ExpenseCategory).where(ExpenseCategory.tenant_id == user.tenant_id)

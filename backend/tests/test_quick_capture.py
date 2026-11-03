@@ -26,7 +26,7 @@ def test_plain_amounts_argentine_format():
 
 def test_term_is_the_rest_of_the_text():
     d = _p("12 lucas en la verdu")
-    assert d.term == "en la verdu"
+    assert d.term == "verdu"
     d = _p("supermercado dia 15.000")
     assert d.term == "supermercado dia"
 

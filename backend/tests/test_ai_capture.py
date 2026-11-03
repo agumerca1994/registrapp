@@ -63,7 +63,7 @@ async def test_image_becomes_expense_with_ai_suggested_category(db, ai):
     ai.reading = _reading(category="salud")
     replies = await wa_bot.handle(db, USER, _img(caption="remedios"))
 
-    assert "✅ $15.400 · Farmacity · Salud (sugerida)" in replies[0]
+    assert "✅ $15.400 en remedios, lo puse en Salud" in replies[0]
     entry = await db.scalar(select(ExpenseEntry))
     assert entry.amount == Decimal("15400.00")
     assert entry.payment_method == "debito"
@@ -75,14 +75,14 @@ async def test_image_becomes_expense_with_ai_suggested_category(db, ai):
 
     # deshacer funciona igual que con un gasto escrito
     undo = await wa_bot.handle(db, USER, InboundMessage(phone="549383", wa_id="T2", kind="text", text="deshacer"))
-    assert "Deshecho" in undo[0]
+    assert "Listo, saqué" in undo[0]
 
 
 async def test_without_category_asks_like_free_text(db, ai):
     await _cat(db, "Súper")
     await _cat(db, "Salud")
     replies = await wa_bot.handle(db, USER, _img())
-    assert "¿En qué categoría va *Farmacity*" in replies[0]
+    assert "¿En qué categoría pongo $15.400 en *Farmacity*" in replies[0]
     assert (await db.scalar(select(ExpenseEntry))) is None
 
     done = await wa_bot.handle(db, USER, InboundMessage(phone="549383", wa_id="T2", kind="text", text="salud"))
@@ -105,11 +105,13 @@ async def test_learned_rule_wins_over_ai_suggestion(db, ai):
     assert "Salud" in replies[0]
 
 
-async def test_credit_card_payment_is_not_loaded(db, ai):
+async def test_credit_card_payment_is_not_a_simple_expense(db, ai):
+    """Sin tarjetas no se puede poner en un resumen: se pregunta, nunca se carga
+    como gasto simple sin decirlo (el resumen lo duplicaría)."""
     await _cat(db, "Salud")
     ai.reading = _reading(payment_method="tarjeta_credito", category="Salud")
     replies = await wa_bot.handle(db, USER, _img())
-    assert "tarjeta de crédito" in replies[0]
+    assert "tarjetas cargadas" in replies[0]
     assert (await db.scalar(select(ExpenseEntry))) is None
 
 
@@ -124,7 +126,7 @@ async def test_incoming_transfer_becomes_income_not_expense(db, ai):
     assert "No es un ingreso" in replies[0]
 
     replies = await wa_bot.handle(db, USER, InboundMessage(phone="549383", wa_id="T1", kind="text", text="1"))
-    assert "✅ Ingreso: $15.400 · Alquiler" in replies[0]
+    assert "✅ Ingreso de $15.400 en Alquiler" in replies[0]
     entry = await db.scalar(select(IncomeEntry))
     assert entry.notes == "Transferencia de Juan Perez"
     assert (await db.scalar(select(ExpenseEntry))) is None
@@ -215,7 +217,7 @@ async def test_unknown_pdf_is_read_by_ai(db, ai, monkeypatch):
     ai.reading = _reading(merchant="Edenor", amount=Decimal("32100.00"), category="Luz",
                           payment_method="transferencia")
     replies = await wa_bot.handle(db, USER, InboundMessage(phone="549383", wa_id="P1", kind="pdf"))
-    assert "✅ $32.100 · Edenor · Luz" in replies[0]
+    assert "✅ $32.100 en Edenor, lo puse en Luz" in replies[0]
 
 
 # ------------------------------------------------------------- lectura ---
@@ -345,7 +347,7 @@ async def test_bill_goes_to_the_next_statement_of_the_card_it_lives_in(db, ai):
 
     # deshacer se lleva el ítem y su egreso
     undo = await wa_bot.handle(db, USER, _txt("deshacer", "T2"))
-    assert "Deshecho" in undo[0]
+    assert "Listo, saqué" in undo[0]
     assert await db.get(CreditCardItem, item.id) is None
     assert await db.get(ExpenseEntry, item.expense_entry_id) is None
 
@@ -553,7 +555,7 @@ async def test_payslip_fills_source_fields(db, ai):
 
     # Deshacer se lleva el detalle con el ingreso.
     replies = await wa_bot.handle(db, USER, InboundMessage(phone="549383", wa_id="T1", kind="text", text="deshacer"))
-    assert "Deshecho" in replies[0]
+    assert "Listo, saqué" in replies[0]
     assert await _entry_with_items(db) is None
 
 
