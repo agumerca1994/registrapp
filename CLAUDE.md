@@ -58,6 +58,12 @@ The rebuild is rolling: `registrapp.imanzanastore.com.ar` kept answering 200 thr
 
 Current flags: `NEXT_PUBLIC_FEATURE_IOS_SHORTCUT` — the iOS Shortcut section in Settings (downloads + automation instructions), **paused**. Off only hides the offer: `/registrar?source=shortcut` keeps working, so an already-installed shortcut doesn't break. Note it no longer fills the form: **the receipt reader (`/receipts/parse`, "Pegar comprobante" / "Subir PDF") was removed in 2026-09**, so the Android share target and this shortcut both land on `/registrar` with a "complete it by hand" notice — the page still consumes the share target's IndexedDB payload so it doesn't linger.
 
+**Backups de la base** (desde 2026-11-04). Antes no había ninguno. Dos mitades, porque una copia que vive en el mismo servidor no sobrevive a perderlo:
+- **VPS:** `/etc/cron.d/registrapp-backup` corre `/usr/local/sbin/registrapp-backup.sh` (copia versionada: `scripts/backup-db-server.sh`) a las 06:30 UTC y deja un `pg_dump -Fc` en `/var/backups/registrapp`, 14 días. Lo chequea con `pg_restore --list` antes de darlo por bueno. Log en `/var/log/registrapp-backup.log`.
+- **Mac:** `scripts/backup-pull.sh` baja los dumps a `~/Backups/tood/registrapp` (30 días, disco cifrado), verifica los checksums y avisa con una notificación si falla o si la copia más nueva tiene más de 48 h. Se activa con `cp scripts/ar.com.tood.backup.plist ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/ar.com.tood.backup.plist`. Si la Mac está apagada corre al despertar; mientras tanto la única copia es la del servidor.
+
+Restaurar: `pg_restore -U registrapp -d registrapp --no-owner <dump>` sobre una base vacía. Probado el 2026-11-04 en un contenedor descartable: 41 tablas y las mismas filas que producción. Los plazos sostienen lo que dice `/legal/privacidad` ("hasta que se renueven en su ciclo habitual"): si se alargan, revisar ese texto.
+
 **Firebase credentials**: never committed. The `FIREBASE_CREDENTIALS_B64` env var (base64-encoded JSON) is decoded to `/tmp/firebase-credentials.json` by `backend/entrypoint.sh` at container startup. `entrypoint.sh` also runs `alembic upgrade head` before starting uvicorn, so all pending migrations apply automatically on every deploy.
 
 **CORS**: the backend reads `ALLOWED_ORIGINS` from env (default: `http://localhost:3000`). In production this must include the frontend domain, e.g. `https://registrapp.imanzanastore.com.ar`.
