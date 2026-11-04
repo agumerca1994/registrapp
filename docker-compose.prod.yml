@@ -67,12 +67,23 @@
       # Alta pública de negocios (POST /auth/register con kind="business").
       # Apagada: el piloto se convierte con PATCH /internal/tenants/{id}/kind.
       BUSINESS_SIGNUP_ENABLED: ${BUSINESS_SIGNUP_ENABLED:-false}
+      # Audios del bot. Sin depends_on a propósito: si whisper no levanta, el
+      # backend tiene que arrancar igual y el bot pide que se lo escriban.
+      WHISPER_URL: ${WHISPER_URL:-http://registrapp-whisper:9000}
+      WA_AUDIO_ENABLED: ${WA_AUDIO_ENABLED:-true}
+      WA_AUDIO_DAILY_LIMIT: ${WA_AUDIO_DAILY_LIMIT:-30}
+      WA_AUDIO_MAX_SECONDS: ${WA_AUDIO_MAX_SECONDS:-120}
     restart: unless-stopped
     depends_on:
       registrapp-db:
         condition: service_healthy
+    networks:
+      - default
+      - whisper-internal
     labels:
       - "traefik.enable=true"
+      # Con dos redes, sin esto Traefik puede elegir la privada y la API da 504.
+      - "traefik.docker.network=easypanel"
       - "traefik.http.routers.registrapp-api.rule=Host(`${API_DOMAIN}`)"
       - "traefik.http.routers.registrapp-api.tls=true"
       - "traefik.http.routers.registrapp-api.tls.certresolver=letsencrypt"
@@ -87,6 +98,25 @@
       - "traefik.http.routers.registrapp-mcp.tls=true"
       - "traefik.http.routers.registrapp-mcp.tls.certresolver=letsencrypt"
       - "traefik.http.routers.registrapp-mcp.service=registrapp-api"
+
+  # Transcribe los audios del bot. Sólo en la red privada: sin salida a internet,
+  # sin Traefik, y las otras apps del servidor no lo alcanzan.
+  registrapp-whisper:
+    build:
+      context: ./whisper
+    environment:
+      WHISPER_THREADS: ${WHISPER_THREADS:-3}
+    restart: unless-stopped
+    cpus: 3
+    mem_limit: 3g
+    networks:
+      - whisper-internal
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
 
   registrapp-frontend:
     build:
@@ -154,4 +184,6 @@ networks:
   default:
     external: true
     name: easypanel
+  whisper-internal:
+    internal: true
 

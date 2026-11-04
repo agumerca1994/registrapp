@@ -114,6 +114,10 @@ export default function PrivacidadPage() {
           <>Cuando le escribís al bot algo que nuestro código no entiende, le enviamos ese mensaje a la misma IA,
             junto con los nombres de tus categorías, fuentes de ingreso y tarjetas, para saber qué querés anotar.
             Lo guarda el bot, por los mismos caminos de siempre, y te muestra qué hizo.</>,
+          <>Cuando le mandás un audio al bot, lo pasamos a texto con un modelo de IA que corre en nuestro propio
+            servidor: tu voz no se envía a ningún otro proveedor y el audio no se guarda. El texto sigue como cualquier
+            mensaje escrito, así que si nuestro código no lo entiende se lo enviamos a Anthropic, como en el caso
+            anterior.</>,
           <>Cuando subís un resumen de tarjeta y hay consumos sin categoría, le enviamos a esa IA la descripción de
             esos consumos y la lista de tus categorías para que sugiera una. La sugerencia se muestra como tal y
             podés cambiarla.</>,

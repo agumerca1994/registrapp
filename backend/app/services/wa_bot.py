@@ -32,7 +32,7 @@ from app.models.reconciliation import ACTION_PROPOSED, ReconciliationAction
 from app.models.tenant import TENANT_KIND_BUSINESS, Tenant
 from app.models.user import User
 from app.models.wa_message import WaMessage
-from app.services import ai_capture, bot_cases, expenses as expenses_service, income_capture, quick_capture, reconcile as reconcile_service
+from app.services import ai_capture, bot_cases, expenses as expenses_service, income_capture, quick_capture, reconcile as reconcile_service, transcribe
 from app.services.business import capture as business_capture
 from app.services.category_suggest import invalidate as invalidate_suggest
 from app.services.clock import ar_today
@@ -209,6 +209,11 @@ MSG_NEEDS_AI_AUDIO = (
     "*12 lucas verdulería*.\n\n"
     "Entender audios va a ser parte del plan Pro. Si te sirve, respondé *me interesa*."
 )
+MSG_AUDIO_HEARD = "🎙️ Escuché: «{text}»"
+MSG_AUDIO_TOO_LONG = "Ese audio es muy largo: escucho hasta {minutes} minutos. Mandame uno más corto o escribilo."
+MSG_AUDIO_LIMIT = "Por hoy llegaste al límite de audios. Escribime el gasto y lo cargo igual: *12 lucas verdulería*."
+MSG_AUDIO_DOWN = "No pude escuchar el audio ahora. Escribime el gasto y lo cargo igual: *12 lucas verdulería*."
+MSG_AUDIO_EMPTY = "No pude entender el audio. ¿Me lo repetís o me lo escribís?"
 MSG_INTEREST = "Anotado, gracias. Me sirve para saber qué hacer primero."
 
 # Lo que escribe un NEGOCIO: ventas, cierres, producción, conteos, compras con
@@ -302,6 +307,7 @@ class InboundMessage:
     quoted_wa_id: str | None = None
     raw_message: dict = field(default_factory=dict)
     media_key: dict = field(default_factory=dict)
+    media_seconds: int | None = None
 
 
 def parse_evolution_payload(payload: dict) -> InboundMessage | None:
@@ -326,6 +332,7 @@ def parse_evolution_payload(payload: dict) -> InboundMessage | None:
 
     kind = "other"
     text = ""
+    media_seconds = None
     if doc is not None:
         kind = "pdf" if "pdf" in (doc.get("mimetype") or "").lower() else "other"
         if kind == "pdf":
@@ -337,6 +344,7 @@ def parse_evolution_payload(payload: dict) -> InboundMessage | None:
         text = (message["imageMessage"].get("caption") or "").strip()
     elif "audioMessage" in message or "pttMessage" in message:
         kind = "audio"
+        media_seconds = (message.get("audioMessage") or message.get("pttMessage") or {}).get("seconds")
     else:
         text = (
             message.get("conversation")
@@ -361,6 +369,7 @@ def parse_evolution_payload(payload: dict) -> InboundMessage | None:
         quoted_wa_id=quoted,
         raw_message=message,
         media_key={k: v for k, v in key.items() if k in ("id", "remoteJid", "fromMe")},
+        media_seconds=media_seconds,
     )
 
 
@@ -556,8 +565,9 @@ async def purge_old_messages(db: AsyncSession) -> int:
 async def handle(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
     """Procesa un mensaje entrante. Commitea; devuelve las respuestas."""
     try:
-        if _is_employee(user) and inbound.kind != "text":
+        if _is_employee(user) and inbound.kind not in ("text", "audio"):
             # Un PDF es un resumen o un comprobante de pago: cosa de los dueños.
+            # Un audio termina siendo texto, con los mismos límites que el escrito.
             _remember(db, user.id, "in", inbound.kind, wa_id=inbound.wa_id)
             _remember(db, user.id, "out", "text", text=MSG_EMPLOYEE_ONLY)
             await db.commit()
@@ -566,6 +576,8 @@ async def handle(db: AsyncSession, user: User, inbound: InboundMessage) -> list[
             return await _handle_pdf(db, user, inbound)
         if inbound.kind == "image" and ai_capture.enabled():
             return await _handle_image(db, user, inbound)
+        if inbound.kind == "audio" and transcribe.enabled():
+            return await _handle_audio(db, user, inbound)
         if inbound.kind in ("image", "audio"):
             return await _handle_unsupported_media(db, user, inbound)
         return await _handle_text(db, user, inbound)
@@ -1172,6 +1184,58 @@ async def _answer_bill(
         f"{due_line}\nSi algo está mal: *deshacer*, o corregilo acá: {link}",
         ref_type="card_item", ref_id=item.id,
     )
+
+
+async def _handle_audio(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
+    """Un audio es un mensaje de texto que hay que escuchar primero. Lo que se
+    entendió va adelante, en su propio mensaje: un monto mal oído no da error, y
+    leerlo es la única forma de darse cuenta.
+
+    El registro lleva el prefijo de las respuestas por lo mismo que ellas: una
+    fila común cerraría la pregunta abierta, y contestarla es un uso normal de un
+    audio. Los rechazos tampoco guardan nada, así esa pregunta sigue en pie."""
+    from app.services import rate_limit
+    from app.services.whatsapp import download_media_base64
+
+    _remember(db, user.id, "in", "audio", wa_id=inbound.wa_id, ref_type=f"{_REPLY_PREFIX}audio")
+    await db.commit()
+
+    async def give_up(reason: str, reply: str) -> list[str]:
+        await record_event(
+            db, tenant_id=user.tenant_id, user_id=user.id, channel="whatsapp",
+            input_kind="audio", outcome="audio_failed", reason=reason,
+        )
+        await db.commit()
+        return [reply]
+
+    if (inbound.media_seconds or 0) > settings.WA_AUDIO_MAX_SECONDS:
+        return await give_up("too_long", MSG_AUDIO_TOO_LONG.format(minutes=settings.WA_AUDIO_MAX_SECONDS // 60))
+    if not rate_limit.check(f"wa_audio:{user.tenant_id}", settings.WA_AUDIO_DAILY_LIMIT, 86400):
+        return await give_up("limit", MSG_AUDIO_LIMIT)
+    data = await download_media_base64(inbound.media_key, inbound.raw_message)
+    if data is None:
+        return await give_up("download", "No pude bajar el audio. Mandalo de nuevo.")
+    text = await transcribe.transcribe(data)
+    if text is None:
+        return await give_up("service", MSG_AUDIO_DOWN)
+    if not text:
+        return await give_up("empty", MSG_AUDIO_EMPTY)
+
+    await record_event(
+        db, tenant_id=user.tenant_id, user_id=user.id, channel="whatsapp",
+        input_kind="audio", outcome="audio_ok",
+    )
+    await db.commit()
+    replies = await _handle_text(db, user, replace(inbound, kind="text", text=text, wa_id=None))
+    return [MSG_AUDIO_HEARD.format(text=text), *[_with_audio_undo(r) for r in replies]]
+
+
+def _with_audio_undo(reply: str) -> str:
+    """Con un audio, cómo deshacer se dice siempre y no sólo en las primeras cargas
+    (`_show_hints`): acá el error puede ser del oído del bot y no de quien habló."""
+    if reply.startswith("✅") and "deshacer" not in reply:
+        return f"{reply}\nSi escuché mal, respondé *deshacer*."
+    return reply
 
 
 async def _handle_unsupported_media(

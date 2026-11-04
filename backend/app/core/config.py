@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     WA_AI_MODEL: str = "claude-opus-5-5"
     # Lecturas por hogar por día: el freno de costo si alguien manda 200 fotos.
     WA_AI_DAILY_LIMIT: int = 40
+    # Audios del bot: `services/transcribe.py` + el servicio `whisper/`. Sin URL, o
+    # con el apagador, contesta que no puede escuchar. El tope de duración se mira
+    # antes de bajar el audio; el de cantidad es por hogar por día.
+    WHISPER_URL: str = ""
+    WA_AUDIO_ENABLED: bool = True
+    WA_AUDIO_DAILY_LIMIT: int = 30
+    WA_AUDIO_MAX_SECONDS: int = 120
     FRONTEND_URL: str = "http://localhost:3000"
     INTERNAL_LOG_KEY: str = ""
 

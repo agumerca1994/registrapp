@@ -15,7 +15,7 @@ Qué entiende el bot hoy:
   responder citando un mensaje anterior;
 - una foto, una captura o un PDF que el código no reconoce → lectura con IA
   (`services/ai_capture.py`) y el gasto por el mismo camino que el texto;
-- audio → se registra en el embudo (`capture_events`) y se ofrece el plan Pro.
+- audio → se transcribe (`services/transcribe.py`) y sigue como texto; sin el servicio, se ofrece el plan Pro.
 """
 import logging
 import secrets

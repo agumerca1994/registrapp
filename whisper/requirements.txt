@@ -1,0 +1,7 @@
+faster-whisper==1.2.1
+ctranslate2==4.8.5
+# av 19 saca un argumento que faster-whisper 1.2.1 usa: falla al abrir cualquier audio.
+av==15.1.0
+requests==2.34.2
+starlette==0.41.3
+uvicorn==0.32.1

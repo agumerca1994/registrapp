@@ -18,7 +18,8 @@ from app.models.shared_expense import SharedExpense, SharedExpenseSplit
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 from app.models.wa_message import WaMessage
-from app.services import ai_capture, bot_cases, notify_shared, quick_capture, wa_bot, whatsapp
+from app.services import ai_capture, bot_cases, notify_shared, quick_capture, rate_limit, wa_bot, whatsapp
+from app.services import transcribe as wa_transcribe
 from app.services.clock import ar_today
 from app.services import statement_parsers
 from app.services.statement_parsers import common as parser_common
@@ -619,3 +620,122 @@ async def test_se_guarda_lo_que_se_contesto_sin_el_token_del_link(db):
     await wa_bot.link_replies(db, 1, mark, [None], ["Mirá acá: https://x/y?wat=wat_secreto123"])
     row = await db.scalar(select(WaMessage).where(WaMessage.direction == "out"))
     assert "secreto" not in row.text and "wat=•••" in row.text
+
+
+# ---------------------------------------------------------------- audios ---
+@pytest.fixture
+def audio(monkeypatch):
+    """El servicio y Evolution, de mentira: `said` es lo que "se escuchó"."""
+    state = SimpleNamespace(said="", downloads=0)
+
+    async def download(_key, _raw=None):
+        state.downloads += 1
+        return b"ogg"
+
+    async def transcribe(_data):
+        return state.said
+
+    monkeypatch.setattr(wa_bot.settings, "WHISPER_URL", "http://whisper")
+    monkeypatch.setattr(wa_bot.transcribe, "transcribe", transcribe)
+    monkeypatch.setattr(whatsapp, "download_media_base64", download)
+    rate_limit._hits.clear()
+    return state
+
+
+def _audio(seconds=5):
+    return InboundMessage(
+        phone="549383", wa_id=f"S{next(_seq)}", kind="audio", media_key={"id": "x"}, media_seconds=seconds,
+    )
+
+
+async def test_audio_loads_expense_and_shows_what_it_heard(db, audio):
+    await _cat(db, "Comida")
+    audio.said = "22 lucas en comida"
+    replies = await wa_bot.handle(db, USER, _audio())
+    assert replies[0] == "🎙️ Escuché: «22 lucas en comida»"
+    assert replies[1].startswith("✅")
+    assert "deshacer" in replies[1]
+    entry = await db.scalar(select(ExpenseEntry))
+    assert entry.amount == Decimal("22000")
+
+
+async def test_audio_answers_the_open_question(db, audio):
+    await _cat(db, "Comida")
+    await _cat(db, "Hogar")
+    question = await _say(db, "22 lucas en la feria")
+    assert "1. " in question
+    assert await db.scalar(select(func.count()).select_from(ExpenseEntry)) == 0
+    audio.said = "1"
+    replies = await wa_bot.handle(db, USER, _audio())
+    assert replies[1].startswith("✅")
+    assert await db.scalar(select(func.count()).select_from(ExpenseEntry)) == 1
+
+
+async def test_failed_audio_keeps_the_question_open(db, audio):
+    await _cat(db, "Comida")
+    await _cat(db, "Hogar")
+    await _say(db, "22 lucas en la feria")
+    audio.said = None
+    replies = await wa_bot.handle(db, USER, _audio())
+    assert replies == [wa_bot.MSG_AUDIO_DOWN]
+    assert await wa_bot._open_pending(db, USER.id) is not None
+    assert (await _say(db, "1")).startswith("✅")
+
+
+async def test_audio_retry_is_not_loaded_twice(db, audio):
+    await _cat(db, "Comida")
+    audio.said = "22 lucas en comida"
+    message = _audio()
+    await wa_bot.handle(db, USER, message)
+    assert await wa_bot.already_seen(db, USER.id, message.wa_id)
+    assert await db.scalar(select(func.count()).select_from(ExpenseEntry)) == 1
+
+
+async def test_undo_after_audio_removes_the_expense(db, audio):
+    await _cat(db, "Comida")
+    audio.said = "22 lucas en comida"
+    await wa_bot.handle(db, USER, _audio())
+    await _say(db, "deshacer")
+    assert await db.scalar(select(func.count()).select_from(ExpenseEntry)) == 0
+
+
+async def test_long_audio_is_not_even_downloaded(db, audio):
+    replies = await wa_bot.handle(db, USER, _audio(seconds=600))
+    assert "muy largo" in replies[0]
+    assert audio.downloads == 0
+
+
+async def test_audio_daily_limit(db, audio, monkeypatch):
+    monkeypatch.setattr(wa_bot.settings, "WA_AUDIO_DAILY_LIMIT", 1)
+    audio.said = ""
+    await wa_bot.handle(db, USER, _audio())
+    assert await wa_bot.handle(db, USER, _audio()) == [wa_bot.MSG_AUDIO_LIMIT]
+    assert audio.downloads == 1
+
+
+async def test_silence_asks_again(db, audio):
+    audio.said = ""
+    assert await wa_bot.handle(db, USER, _audio()) == [wa_bot.MSG_AUDIO_EMPTY]
+
+
+async def test_without_service_keeps_the_old_answer(db, audio, monkeypatch):
+    monkeypatch.setattr(wa_bot.settings, "WHISPER_URL", "")
+    assert await wa_bot.handle(db, USER, _audio()) == [wa_bot.MSG_NEEDS_AI_AUDIO]
+
+
+async def test_audio_seconds_come_from_the_payload():
+    payload = {"data": {"key": {"remoteJid": "549383@s.whatsapp.net", "id": "A"}, "message": {"audioMessage": {"seconds": 12}}}}
+    message = wa_bot.parse_evolution_payload(payload)
+    assert message.kind == "audio"
+    assert message.media_seconds == 12
+
+
+@pytest.mark.parametrize("heard,expected", [
+    ("Gasté 22 lucas en carne.", "Gasté 22 lucas en carne"),
+    ("Uno.", "1"),
+    ("  dos  ", "2"),
+    ("Subtítulos realizados por la comunidad", ""),
+    ("", ""),
+])
+def test_clean_transcript(heard, expected):
+    assert wa_transcribe.clean(heard) == expected
