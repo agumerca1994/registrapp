@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.mcp_server.context import McpCaller, current_caller, tool_session
+from app.services.people import people_of
 from app.mcp_server.instance import READ_ONLY, mcp
 from app.mcp_server.params import parse_date
 from app.mcp_server.serialize import f0, guard
@@ -171,8 +172,8 @@ def _refuse_shared(items: list[CreditCardItem], what: str) -> None:
 async def get_card_statement(card_id: int, year: int, month: int) -> dict[str, Any]:
     """Un resumen de tarjeta con todos sus ítems e ids, para compararlo con el del banco.
 
-    Cada ítem trae id, fecha, descripción, monto, moneda, cuota (n/N), categoría
-    y si está compartido. Las cuotas 2..N traen `root_item_id`: se editan o
+    Cada ítem trae id, fecha, descripción, monto, moneda, cuota (n/N), categoría,
+    si está compartido y quién lo cargó (`loaded_by`). Las cuotas 2..N traen `root_item_id`: se editan o
     borran desde la cuota 1. Si el resumen no existe, devuelve los períodos
     que sí hay para esa tarjeta.
 
@@ -207,10 +208,13 @@ async def get_card_statement(card_id: int, year: int, month: int) -> dict[str, A
             }
         stmt = await _load_statement(db, caller, stmt_id)
         items = sorted(stmt.items, key=lambda i: (i.item_date, i.id))
+        names = {p.id: p.name for p in await people_of(db, caller.tenant_id)}
         return guard({
             "found": True,
             "statement": _statement_dict(stmt),
-            "items": [_item_dict(i) for i in items],
+            # `loaded_by` va sólo acá: `_item_dict` también responde a escrituras,
+            # y después de un flush leer `user_id` es un MissingGreenlet.
+            "items": [{**_item_dict(i), "loaded_by": names.get(i.user_id)} for i in items],
             "notes": [
                 "Los totales son por moneda; pesos y dólares no se suman.",
                 "amount de una cuota es el monto de esa cuota, no el total de la compra.",

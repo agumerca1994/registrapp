@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.credit_card import CreditCard, CreditCardItem, CreditCardStatement
-from app.models.expense import ExpenseCategory, ExpenseEntry
+from app.models.expense import EXPENSE_SOURCE_MORTGAGE, ExpenseCategory, ExpenseEntry
 from app.models.income import IncomeEntry, IncomeSource
 from app.models.macro_variable import MacroVariable
 from app.models.mortgage import MortgageLoan, MortgageRecord
@@ -37,6 +37,7 @@ from app.services.currency import (
     get_tenant_rate_type, get_usd_holding, statement_due_date, with_statement,
 )
 from app.services.clock import ar_today
+from app.services.people import people_of
 
 
 class CategorySummary(BaseModel):
@@ -414,6 +415,14 @@ def _mortgage_entry_ids():
     )
 
 
+# La fila de un agrupado por persona que no cargó nadie (hipoteca, ventas del día).
+NOBODY_LOADED_IT = "(lo generó la app)"
+
+
+async def _person_names(db: AsyncSession, tenant_id: int) -> dict[int, str]:
+    return {p.id: p.name for p in await people_of(db, tenant_id)}
+
+
 async def expense_aggregate(
     db: AsyncSession,
     tenant_id: int,
@@ -426,6 +435,7 @@ async def expense_aggregate(
     entity: str | None = None,
     search: str | None = None,
     min_amount: Decimal | None = None,
+    loaded_by: int | None = None,
     group_by: str = "category",
     limit: int = 50,
 ) -> dict:
@@ -455,6 +465,11 @@ async def expense_aggregate(
         filters.append(ExpenseEntry.description.ilike(f"%{search}%"))
     if min_amount is not None:
         filters.append(ExpenseEntry.amount >= min_amount)
+    # La cuota de la hipoteca la genera la sincronización: nadie la cargó. Misma
+    # regla que `GET /expenses/entries`.
+    someone_loaded_it = func.coalesce(ExpenseEntry.source, "") != EXPENSE_SOURCE_MORTGAGE
+    if loaded_by:
+        filters.extend([ExpenseEntry.user_id == loaded_by, someone_loaded_it])
     if category:
         filters.append(ExpenseEntry.category_id.in_(
             select(ExpenseCategory.id).where(
@@ -516,7 +531,25 @@ async def expense_aggregate(
         )
         groups = [{"key": r.k or "(sin dato)", "total": r.total, "count": r.n} for r in rows]
 
+    elif group_by == "loaded_by":
+        names = await _person_names(db, tenant_id)
+        rows = await db.execute(
+            with_statement(select(
+                case((someone_loaded_it, ExpenseEntry.user_id), else_=None).label("k"),
+                func.sum(ExpenseEntry.amount).label("total"),
+                func.count(ExpenseEntry.id).label("n"),
+            ))
+            .where(*filters)
+            .group_by(text("1"))
+            .order_by(func.sum(ExpenseEntry.amount).desc())
+        )
+        groups = [
+            {"key": names.get(r.k, NOBODY_LOADED_IT), "total": r.total, "count": r.n}
+            for r in rows
+        ]
+
     else:  # "none" — raw rows, capped
+        names = await _person_names(db, tenant_id)
         rows = await db.execute(
             with_statement(select(ExpenseEntry, ExpenseCategory.name, cash_out.label("paid_on")))
             .join(ExpenseCategory, ExpenseEntry.category_id == ExpenseCategory.id)
@@ -538,6 +571,7 @@ async def expense_aggregate(
                 "category": cat_name,
                 "payment_method": e.payment_method,
                 "entity": e.entity,
+                "loaded_by": None if e.source == EXPENSE_SOURCE_MORTGAGE else names.get(e.user_id),
             }
             for e, cat_name, paid_on in rows
         ]
@@ -560,6 +594,7 @@ async def income_aggregate(
     currency: str = "ARS",
     source: str | None = None,
     income_type: str | None = None,
+    loaded_by: int | None = None,
     group_by: str = "month",
     limit: int = 50,
 ) -> dict:
@@ -581,6 +616,14 @@ async def income_aggregate(
         if income_type:
             src.append(IncomeSource.income_type == income_type)
         filters.append(IncomeEntry.source_id.in_(select(IncomeSource.id).where(*src)))
+    if loaded_by:
+        # El ingreso por día de las ventas lo arma el sistema: nadie lo cargó.
+        filters.extend([
+            IncomeEntry.user_id == loaded_by,
+            IncomeEntry.source_id.in_(select(IncomeSource.id).where(
+                IncomeSource.tenant_id == tenant_id, IncomeSource.system_key.is_(None),
+            )),
+        ])
 
     totals = (await db.execute(
         select(
@@ -621,9 +664,28 @@ async def income_aggregate(
         )
         groups = [{"key": r.k, "neto": r.neto, "bruto": r.bruto} for r in rows]
 
-    else:
+    elif group_by == "loaded_by":
+        names = await _person_names(db, tenant_id)
         rows = await db.execute(
-            select(IncomeEntry, IncomeSource.name)
+            select(
+                case((IncomeSource.system_key.is_(None), IncomeEntry.user_id), else_=None).label("k"),
+                func.sum(IncomeEntry.amount).label("neto"),
+                func.sum(IncomeEntry.bruto).label("bruto"),
+            )
+            .join(IncomeSource, IncomeEntry.source_id == IncomeSource.id)
+            .where(*filters)
+            .group_by(text("1"))
+            .order_by(func.sum(IncomeEntry.amount).desc())
+        )
+        groups = [
+            {"key": names.get(r.k, NOBODY_LOADED_IT), "neto": r.neto, "bruto": r.bruto}
+            for r in rows
+        ]
+
+    else:
+        names = await _person_names(db, tenant_id)
+        rows = await db.execute(
+            select(IncomeEntry, IncomeSource.name, IncomeSource.system_key)
             .join(IncomeSource, IncomeEntry.source_id == IncomeSource.id)
             .where(*filters)
             .options(selectinload(IncomeEntry.items))
@@ -647,8 +709,9 @@ async def income_aggregate(
                 "neto": e.amount,
                 "bruto": e.bruto,
                 "deducciones": e.deducciones,
+                "loaded_by": None if system_key else names.get(e.user_id),
             }
-            for e, src_name in rows
+            for e, src_name, system_key in rows
         ]
 
     return {

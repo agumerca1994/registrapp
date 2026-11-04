@@ -4,7 +4,7 @@ from typing import Any
 
 from app.mcp_server.context import current_caller, tool_session
 from app.mcp_server.instance import READ_ONLY, mcp
-from app.mcp_server.params import MAX_LIMIT, clamp, parse_range
+from app.mcp_server.params import MAX_LIMIT, clamp, parse_range, person_id
 from app.mcp_server.serialize import f0, guard, pct
 from app.services import analytics
 
@@ -52,6 +52,7 @@ async def list_expenses(
     entity: str | None = None,
     search: str | None = None,
     min_amount: float | None = None,
+    loaded_by: str | None = None,
     group_by: str = "category",
     limit: int = 50,
 ) -> dict[str, Any]:
@@ -77,7 +78,12 @@ async def list_expenses(
         entity: Alias de tarjeta o entidad, búsqueda parcial.
         search: Texto a buscar en la descripción del gasto.
         min_amount: Monto mínimo, útil para encontrar gastos grandes.
-        group_by: "category", "month", "description", "entity" o "none".
+        loaded_by: Nombre de quien lo cargó, desde la app, WhatsApp o el conector
+            (nombres en get_taxonomy → people). Es quién lo registró, no quién
+            lo pagó ni de quién es el gasto.
+        group_by: "category", "month", "description", "entity", "loaded_by"
+            (total por persona que cargó) o "none". Con "none" cada movimiento
+            trae `loaded_by`.
         limit: Máximo de filas cuando group_by es "none", "description" o "entity".
     """
     start, end = parse_range(date_from, date_to)
@@ -94,6 +100,7 @@ async def list_expenses(
             entity=entity,
             search=search,
             min_amount=Decimal(str(min_amount)) if min_amount is not None else None,
+            loaded_by=await person_id(db, caller.tenant_id, loaded_by),
             limit=limit,
         )
 

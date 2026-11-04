@@ -11,7 +11,7 @@ from typing import Any
 from app.mcp_server.context import current_caller, tool_session
 from app.mcp_server.instance import READ_ONLY, mcp
 from app.mcp_server.params import (
-    MAX_LIMIT, MAX_SERIES_MONTHS, check_month, clamp, parse_range,
+    MAX_LIMIT, MAX_SERIES_MONTHS, check_month, clamp, parse_range, person_id,
 )
 from app.mcp_server.serialize import f, f0, guard
 from app.services import analytics
@@ -35,6 +35,7 @@ async def list_income(
     currency: str = "ARS",
     source: str | None = None,
     income_type: str | None = None,
+    loaded_by: str | None = None,
     group_by: str = "month",
     limit: int = 50,
 ) -> dict[str, Any]:
@@ -49,9 +50,12 @@ async def list_income(
         currency: "ARS" o "USD". La mayoría de los hogares sólo tiene ARS.
         source: Nombre (o parte) de la fuente de ingreso.
         income_type: "salary", "bonus", "aguinaldo", "investment" u "other".
-        group_by: "month", "source" o "none". Con "none" cada ingreso trae su
-            `id` y el detalle por campo (`items`): es lo que hay que usar
-            para comparar un recibo con lo cargado antes de editarlo.
+        loaded_by: Nombre de quien lo cargó (nombres en get_taxonomy → people).
+            Es quién lo registró, no de quién es el ingreso.
+        group_by: "month", "source", "loaded_by" (total por persona que cargó) o
+            "none". Con "none" cada ingreso trae su `id`, `loaded_by` y el detalle
+            por campo (`items`): es lo que hay que usar para comparar un recibo
+            con lo cargado antes de editarlo.
         limit: Máximo de filas cuando group_by es "none".
     """
     start, end = parse_range(date_from, date_to)
@@ -61,6 +65,7 @@ async def list_income(
         r = await analytics.income_aggregate(
             db, caller.tenant_id, start, end, currency=currency,
             source=source, income_type=income_type,
+            loaded_by=await person_id(db, caller.tenant_id, loaded_by),
             group_by=group_by, limit=clamp(limit, 1, MAX_LIMIT),
         )
 

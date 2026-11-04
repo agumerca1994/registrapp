@@ -67,13 +67,14 @@ Reglas del dominio que tenés que respetar al interpretar los números:
   payment_method="tarjeta_credito"); no los sumes de nuevo.
 - Las cuotas futuras ya están cargadas en los resúmenes de los meses que vienen:
   son compromisos ciertos, no una proyección.
-- Los datos son del hogar completo, no de una sola persona.
+- Los datos son del hogar completo, no de una sola persona. `loaded_by` dice quién
+  registró cada dato, no quién lo pagó ni de quién es.
 - Contexto argentino: la inflación es alta, así que comparar montos nominales de
   meses distintos engaña. Usá las variaciones reales (deflactadas) que devuelven
   las herramientas antes de sacar conclusiones.
 
-Empezá por `get_taxonomy` si necesitás nombres de categorías, fuentes de ingreso
-o tarjetas para filtrar.
+Empezá por `get_taxonomy` si necesitás nombres de categorías, fuentes de ingreso,
+tarjetas o personas para filtrar.
 """
 
 mcp = FastMCP(

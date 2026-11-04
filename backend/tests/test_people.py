@@ -1,18 +1,31 @@
 """Quién cargó cada cosa en un hogar con varias personas."""
+from contextlib import asynccontextmanager
 from datetime import date, datetime
 from decimal import Decimal
+from types import SimpleNamespace
 
-from app.models.credit_card import CreditCard, CreditCardItem
-from app.models.expense import EXPENSE_SOURCE_MORTGAGE, ExpenseCategory, ExpenseEntry
-from app.models.income import IncomeEntry, IncomeSource, IncomeType
-from app.models.tenant import Tenant
-from app.models.user import User, UserRole
-from app.routers import credit_cards as card_router
-from app.routers import expenses as expenses_router
-from app.routers import income as income_router
-from app.schemas.credit_card import CreditCardItemCreate, CreditCardItemOut, CreditCardItemUpdate
-from app.services.credit_cards import create_item_in_statement, find_or_create_statement
-from app.services.people import DELETED_LABEL, people_of
+import pytest
+
+pytest.importorskip("mcp")
+
+from mcp.server.fastmcp.exceptions import ToolError  # noqa: E402
+from sqlalchemy import select  # noqa: E402
+
+from app.mcp_server import tools_cards_write, tools_expenses, tools_income, tools_meta  # noqa: E402
+from app.mcp_server.context import McpCaller  # noqa: E402
+from app.models.credit_card import CreditCard, CreditCardItem  # noqa: E402
+from app.models.expense import EXPENSE_SOURCE_MORTGAGE, ExpenseCategory, ExpenseEntry  # noqa: E402
+from app.models.income import IncomeEntry, IncomeSource, IncomeType  # noqa: E402
+from app.models.tenant import Tenant  # noqa: E402
+from app.models.user import User, UserRole  # noqa: E402
+from app.routers import credit_cards as card_router  # noqa: E402
+from app.routers import expenses as expenses_router  # noqa: E402
+from app.routers import income as income_router  # noqa: E402
+from app.schemas.credit_card import CreditCardItemCreate, CreditCardItemOut, CreditCardItemUpdate  # noqa: E402
+from app.services import analytics, wa_bot  # noqa: E402
+from app.services.credit_cards import create_item_in_statement, find_or_create_statement  # noqa: E402
+from app.services.people import DELETED_LABEL, people_of  # noqa: E402
+from app.services.wa_bot import InboundMessage  # noqa: E402
 
 
 def _user(id, tenant_id=1, first=None, display=None, **kw):
@@ -217,3 +230,149 @@ async def test_editing_a_card_item_still_answers_with_who_loaded_it(db):
         firebase_user={"uid": "uid1"}, db=db,
     )
     assert CreditCardItemOut.model_validate(out).user_id == 1
+
+
+# ---------------------------------------------------------- bot de WhatsApp ---
+
+def _says(text, wa_id):
+    return InboundMessage(phone="549383", wa_id=wa_id, kind="text", text=text)
+
+
+async def test_what_the_bot_loads_is_marked_with_who_wrote(db):
+    cat = await _household(db, _user(1, first="Ana"), _user(2, first="Beto"))
+    db.add(IncomeSource(tenant_id=1, name="Sueldo", income_type=IncomeType.salary))
+    db.add(CreditCard(id=1, tenant_id=1, user_id=1, bank="Galicia", alias="Visa", last_4_digits="4919", due_day=10))
+    await db.flush()
+    ana, beto = SimpleNamespace(id=1, tenant_id=1), SimpleNamespace(id=2, tenant_id=1)
+
+    await wa_bot.handle(db, beto, _says(f"12 lucas {cat.name}", "B1"))
+    await wa_bot.handle(db, ana, _says(f"5 lucas {cat.name}", "A1"))
+    await wa_bot.handle(db, beto, _says("cobré 850 lucas sueldo", "B2"))
+    await wa_bot.handle(db, beto, _says(f"20 lucas nafta categoría {cat.name} con la visa", "B3"))
+
+    who = {e.amount: e.user_id for e in (await db.scalars(select(ExpenseEntry))).all()}
+    assert who == {Decimal("12000.00"): 2, Decimal("5000.00"): 1, Decimal("20000.00"): 2}
+    income = await db.scalar(select(IncomeEntry))
+    assert income.amount == Decimal("850000.00") and income.user_id == 2
+    item = await db.scalar(select(CreditCardItem))
+    assert item.capture_source == "whatsapp"
+
+    # Y en la lista de la app salen con quien los escribió, como cualquier otro.
+    listed = await _list(db, loaded_by=2)
+    assert {e.amount for e in listed} == {Decimal("12000.00"), Decimal("20000.00")}
+    assert {e.source for e in listed} == {"whatsapp", "credit_card"}
+
+
+# ---------------------------------------------------------------- conector ---
+
+@pytest.fixture
+def connector(db, monkeypatch):
+    @asynccontextmanager
+    async def _session():
+        yield db
+
+    async def _caller(_db):
+        return McpCaller(user_id=1, tenant_id=1, scopes=("registrapp:read",), client_name="test")
+
+    for module in (tools_expenses, tools_income, tools_meta, tools_cards_write):
+        monkeypatch.setattr(module, "tool_session", _session)
+        monkeypatch.setattr(module, "current_caller", _caller)
+    return db
+
+
+async def _two_people_expenses(db):
+    cat = await _household(db, _user(1, first="Ana"), _user(2, first="José", display="José Paz"))
+    db.add_all([
+        _expense(cat, 1, "mío"),
+        _expense(cat, 2, "suyo", source="whatsapp"),
+        _expense(cat, 1, "cuota", source=EXPENSE_SOURCE_MORTGAGE),
+    ])
+    await db.flush()
+    return cat
+
+
+RANGE = dict(date_from="2026-11-01", date_to="2026-11-30")
+
+
+async def test_connector_rows_say_who_loaded_them(connector):
+    await _two_people_expenses(connector)
+    out = await tools_expenses.list_expenses(**RANGE, group_by="none")
+    assert {e["description"]: e["loaded_by"] for e in out["entries"]} == {
+        "mío": "Ana", "suyo": "José", "cuota": None,
+    }
+
+
+async def test_connector_filters_by_name_without_accents(connector):
+    await _two_people_expenses(connector)
+    out = await tools_expenses.list_expenses(**RANGE, loaded_by="jose", group_by="none")
+    assert out["total"] == 100 and [e["description"] for e in out["entries"]] == ["suyo"]
+
+
+async def test_connector_filter_leaves_out_the_mortgage(connector):
+    await _two_people_expenses(connector)
+    out = await tools_expenses.list_expenses(**RANGE, loaded_by="ana", group_by="none")
+    assert [e["description"] for e in out["entries"]] == ["mío"]
+
+
+async def test_connector_totals_by_person_add_up(connector):
+    await _two_people_expenses(connector)
+    out = await tools_expenses.list_expenses(**RANGE, group_by="loaded_by")
+    assert {g["key"]: g["total"] for g in out["groups"]} == {
+        "Ana": 100, "José": 100, analytics.NOBODY_LOADED_IT: 100,
+    }
+    assert out["total"] == 300
+
+
+async def test_connector_rejects_a_name_it_cannot_resolve(connector):
+    await _household(connector, _user(1, first="Ana", display="Ana Gómez"), _user(2, first="Ana", display="Ana Ruiz"))
+    await connector.flush()
+    with pytest.raises(ToolError, match="no es nadie"):
+        await tools_expenses.list_expenses(**RANGE, loaded_by="Beto")
+    with pytest.raises(ToolError, match="más de una persona"):
+        await tools_expenses.list_expenses(**RANGE, loaded_by="ana")
+    # El nombre completo sí alcanza.
+    assert (await tools_expenses.list_expenses(**RANGE, loaded_by="Ana Ruiz"))["count"] == 0
+
+
+async def test_connector_income_by_person(connector):
+    await _household(connector, _user(1, first="Ana"), _user(2, first="Beto"))
+    source = IncomeSource(tenant_id=1, name="Sueldo", income_type=IncomeType.salary)
+    sales = IncomeSource(tenant_id=1, name="Ventas", income_type=IncomeType.other, system_key="sales")
+    connector.add_all([source, sales])
+    await connector.flush()
+    connector.add_all([
+        IncomeEntry(tenant_id=1, user_id=2, source_id=source.id, amount=Decimal("10"), period_date=date(2026, 11, 1)),
+        IncomeEntry(tenant_id=1, user_id=1, source_id=sales.id, amount=Decimal("5"), period_date=date(2026, 11, 2)),
+    ])
+    await connector.flush()
+
+    rows = await tools_income.list_income(**RANGE, group_by="none")
+    assert {e["source"]: e["loaded_by"] for e in rows["entries"]} == {"Sueldo": "Beto", "Ventas": None}
+    grouped = await tools_income.list_income(**RANGE, group_by="loaded_by")
+    assert {g["key"]: g["neto"] for g in grouped["groups"]} == {"Beto": 10, analytics.NOBODY_LOADED_IT: 5}
+    filtered = await tools_income.list_income(**RANGE, loaded_by="ana", group_by="none")
+    assert filtered["entries"] == []  # El ingreso de ventas no lo cargó nadie.
+
+
+async def test_connector_taxonomy_lists_people_and_marks_the_caller(connector):
+    await _household(connector, _user(1, first="Ana"), _user(2, first="Beto"))
+    await connector.flush()
+    out = await tools_meta.get_taxonomy()
+    assert out["people"] == [{"id": 1, "name": "Ana", "me": True}, {"id": 2, "name": "Beto", "me": False}]
+
+
+async def test_connector_card_statement_says_who_loaded_each_item(connector):
+    cat = await _household(connector, _user(1, first="Ana"), _user(2, first="Beto"))
+    card = CreditCard(id=1, tenant_id=1, user_id=1, bank="BBVA", alias="Visa", due_day=10)
+    connector.add(card)
+    await connector.flush()
+    statement = await find_or_create_statement(card, 2026, 11, 1, connector)
+    await create_item_in_statement(
+        statement, card,
+        CreditCardItemCreate(description="Nafta", category_id=cat.id, item_date=date(2026, 11, 1), item_type="single", amount=Decimal("50")),
+        await connector.get(User, 2), connector,
+    )
+    await connector.commit()
+    connector.expire_all()
+    out = await tools_cards_write.get_card_statement(1, 2026, 11)
+    assert [i["loaded_by"] for i in out["items"]] == ["Beto"]

@@ -7,6 +7,10 @@ stack trace.
 from datetime import date
 
 from mcp.server.fastmcp.exceptions import ToolError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.services.people import people_of
+from app.services.search import fold_text
 
 MAX_SERIES_MONTHS = 60
 MAX_LIMIT = 200
@@ -36,3 +40,20 @@ def clamp(value: int, low: int, high: int) -> int:
 def check_month(month: int) -> None:
     if not 1 <= month <= 12:
         raise ToolError("month debe estar entre 1 y 12")
+
+
+async def person_id(db: AsyncSession, tenant_id: int, name: str | None) -> int | None:
+    """El id de quien se nombra en `loaded_by`. Un nombre que no resuelve a una
+    sola persona es un error: filtrar por otra daría un total creíble y falso."""
+    if not name or not name.strip():
+        return None
+    people = await people_of(db, tenant_id)
+    term = fold_text(name)
+    matches = [p for p in people if fold_text(p.name) == term] or [
+        p for p in people if term in fold_text(p.name)
+    ]
+    if len(matches) == 1:
+        return matches[0].id
+    names = ", ".join(p.name for p in people) or "(nadie)"
+    problem = "es más de una persona" if matches else "no es nadie de esta cuenta"
+    raise ToolError(f"«{name}» {problem}. Personas: {names}")

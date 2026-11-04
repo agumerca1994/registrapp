@@ -14,6 +14,7 @@ from app.models.income import IncomeSource
 from app.models.tenant import TENANT_KIND_BUSINESS, Tenant
 from app.services import analytics
 from app.services.currency import get_tenant_rate_type
+from app.services.people import people_of
 
 
 # Las reglas de un negocio. Viajan en la respuesta y no en INSTRUCTIONS porque
@@ -81,6 +82,8 @@ async def get_taxonomy() -> dict[str, Any]:
 
         rate_type = await get_tenant_rate_type(db, tid)
         kind = await db.scalar(select(Tenant.kind).where(Tenant.id == tid))
+        people = await people_of(db, tid)
+        me = caller.user_id
         payees = (await db.execute(
             select(Payee)
             .where(Payee.tenant_id == tid, Payee.is_active.is_(True))
@@ -133,12 +136,15 @@ async def get_taxonomy() -> dict[str, Any]:
             {"id": c.id, "alias": c.alias, "bank": c.bank, "last_4_digits": c.last_4_digits}
             for c in cards
         ],
+        "people": [{"id": p.id, "name": p.name, "me": p.id == me} for p in people],
         "currencies": ["ARS", "USD"],
         "fx_rate_type": rate_type,
         "notes": [
             "is_fixed marca las categorías que el usuario declaró como gasto fijo.",
             "Los gastos en USD siempre caen en la categoría 'Consumo en dólares'.",
             "fields.kind: add suma al neto, subtract resta, info no entra en la cuenta.",
+            "people son quienes cargaron algo acá, incluso quien ya no está. Sirven para "
+            "el filtro loaded_by, que dice quién lo registró, no quién pagó.",
         ],
     })
 
