@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.config import settings
+from app.core.timing import route_summary
 from app.models.app_log import AppLog
 
 router = APIRouter(prefix="/internal", tags=["internal"])
@@ -27,6 +28,12 @@ def _require_internal_key(x_internal_key: str = Header(...)) -> None:
         x_internal_key, settings.INTERNAL_LOG_KEY
     ):
         raise HTTPException(status_code=403, detail="Invalid internal key")
+
+
+@router.get("/request-timings")
+async def request_timings(_: None = Depends(_require_internal_key)) -> dict[str, Any]:
+    # Desde el último arranque del proceso, de la ruta más lenta a la más rápida.
+    return {"routes": route_summary()}
 
 
 @router.get("/logs")

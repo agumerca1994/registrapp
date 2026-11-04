@@ -22,7 +22,9 @@ from app.routers.business import (
 )
 from app.core.access import deny_employee, employee_allowed
 from app.core.config import settings
+from app.core.database import engine
 from app.core.logging_config import setup_logging, log_queue_consumer, log_http_error
+from app.core.timing import TimingMiddleware, install_query_timing
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +217,11 @@ def _is_expected_auth_noise(request: Request, response) -> bool:
     if (path.startswith("/oauth/") or path.startswith("/.well-known/")) and response.status_code < 500:
         return True
     return False
+
+
+# El último que se agrega es el de más afuera: así mide también a los otros dos.
+install_query_timing(engine.sync_engine)
+app.add_middleware(TimingMiddleware, allowed_origins=_origins)
 
 
 # Empleados de un negocio: denegados por defecto (core/access.py). Los routers

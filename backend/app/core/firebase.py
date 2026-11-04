@@ -1,9 +1,12 @@
+import time
+
 import firebase_admin
 from firebase_admin import credentials, auth
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.core.config import settings
+from app.core.timing import add_auth_time
 
 _bearer = HTTPBearer()
 
@@ -18,8 +21,10 @@ _init_firebase()
 async def get_current_user(
     token: HTTPAuthorizationCredentials = Depends(_bearer),
 ) -> dict:
+    started = time.perf_counter()
     try:
         decoded = auth.verify_id_token(token.credentials)
+        add_auth_time((time.perf_counter() - started) * 1000)
         return decoded
     except Exception:
         raise HTTPException(
