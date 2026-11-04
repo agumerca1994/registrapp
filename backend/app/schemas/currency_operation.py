@@ -99,6 +99,8 @@ class CurrencyOperationOut(BaseModel):
     rate_type: str | None
     entity: str | None
     notes: str | None
+    # Quién la cargó. La pantalla lo cruza con /auth/people.
+    user_id: int | None = None
 
 
 class CurrencySettingsOut(BaseModel):

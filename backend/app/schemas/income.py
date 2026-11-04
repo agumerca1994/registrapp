@@ -117,6 +117,8 @@ class IncomeEntryOut(BaseModel):
     currency: str = "ARS"
     period_date: date
     notes: str | None
+    # Quién lo cargó. La pantalla lo cruza con /auth/people.
+    user_id: int | None = None
     created_at: datetime
     source: IncomeSourceBrief
     items: list[IncomeEntryItemOut] = []

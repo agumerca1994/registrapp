@@ -25,6 +25,7 @@ import {
 } from "@/components/income/types";
 import { SourceFormModal, SourcesListModal } from "@/components/income/SourceFormModal";
 import { useReaccion } from "@/components/brand/ToodReaccion";
+import { LoadedByTag, useLoadedBy } from "@/components/LoadedBy";
 
 const INCOME_TOUR_STEPS: Step[] = [
   {
@@ -69,9 +70,9 @@ const SORT_LABELS: Record<SortKey, string> = {
 // ── Entry detail modal ─────────────────────────────────────────────────────────
 
 function EntryDetailModal({
-  entry, fieldOrder, onEdit, onDelete, onClose,
+  entry, fieldOrder, loadedBy, onEdit, onDelete, onClose,
 }: {
-  entry: IncomeEntry; fieldOrder: Map<number, number>;
+  entry: IncomeEntry; fieldOrder: Map<number, number>; loadedBy?: string;
   onEdit: () => void; onDelete: () => void; onClose: () => void;
 }) {
   const fmt = entry.currency === "USD" ? formatUSD : formatARS;
@@ -131,6 +132,12 @@ function EntryDetailModal({
             <div className="flex justify-between py-2 gap-4">
               <span className="text-muted-foreground shrink-0">Notas</span>
               <span className="font-medium text-right">{entry.notes}</span>
+            </div>
+          )}
+          {loadedBy && (
+            <div className="flex justify-between py-2 gap-4">
+              <span className="text-muted-foreground shrink-0">Lo cargó</span>
+              <span className="font-medium text-right">{loadedBy}</span>
             </div>
           )}
         </div>
@@ -392,6 +399,7 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
 export default function IncomePage() {
   const reaccionar = useReaccion();
   useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
+  const loadedBy = useLoadedBy();
   const [entries, setEntries] = useState<IncomeEntry[]>([]);
   const [sources, setSources] = useState<IncomeSource[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -421,6 +429,7 @@ export default function IncomePage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showCustomFilter, setShowCustomFilter] = useState(false);
   const [sourceFilter, setSourceFilter] = useState("");
+  const [loadedByFilter, setLoadedByFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   // Null = no chip active, which the backend reads as its own default (most
@@ -434,7 +443,7 @@ export default function IncomePage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const panelFilterActive = !!(sourceFilter || dateFrom || dateTo);
+  const panelFilterActive = !!(sourceFilter || loadedByFilter || dateFrom || dateTo);
   // Any active filter takes the list out of the month view and into the whole
   // history: a search that only looks inside the month currently on screen
   // would miss what the user is looking for and give no hint that it did.
@@ -447,6 +456,7 @@ export default function IncomePage() {
       ? {
           q: debouncedSearch || undefined,
           source_id: sourceFilter || undefined,
+          loaded_by: loadedByFilter || undefined,
           date_from: dateFrom || undefined,
           date_to: dateTo || undefined,
           ...ordering,
@@ -462,7 +472,7 @@ export default function IncomePage() {
   };
 
   useEffect(() => { load(); },
-    [year, month, debouncedSearch, sourceFilter, dateFrom, dateTo, sort, order]);
+    [year, month, debouncedSearch, sourceFilter, loadedByFilter, dateFrom, dateTo, sort, order]);
 
   // Tap cycle: inactive -> asc -> desc -> inactive (back to the default).
   const toggleSort = (key: SortKey) => {
@@ -822,12 +832,16 @@ export default function IncomePage() {
           <FilterPanel>
             <PillSelect value={sourceFilter} onChange={setSourceFilter} placeholder="Fuente"
               options={sources.map(s => ({ value: String(s.id), label: `${s.name} (${INCOME_TYPE_LABELS[s.income_type]})` }))} />
+            {loadedBy.active && (
+              <PillSelect value={loadedByFilter} onChange={setLoadedByFilter} placeholder="Lo cargó"
+                options={loadedBy.options} />
+            )}
             <PillDateRange
               from={dateFrom} to={dateTo}
               onChange={(f, t) => { setDateFrom(f); setDateTo(t); }}
             />
             {panelFilterActive && (
-              <ClearFilters onClick={() => { setSourceFilter(""); setDateFrom(""); setDateTo(""); }} />
+              <ClearFilters onClick={() => { setSourceFilter(""); setLoadedByFilter(""); setDateFrom(""); setDateTo(""); }} />
             )}
           </FilterPanel>
         )}
@@ -887,6 +901,7 @@ export default function IncomePage() {
                 {filtering && entry.notes && (
                   <span className="block text-xs text-muted-foreground truncate">{entry.notes}</span>
                 )}
+                <LoadedByTag name={loadedBy.nameOf(entry.user_id)} />
                 <span className="block sm:hidden text-xs text-muted-foreground">{formatDate(entry.period_date)}</span>
               </div>
               <span className="hidden sm:block w-[10ch] shrink-0 text-xs text-muted-foreground text-right truncate">{formatDate(entry.period_date)}</span>
@@ -904,6 +919,7 @@ export default function IncomePage() {
         <EntryDetailModal
           entry={detailEntry}
           fieldOrder={fieldOrder}
+          loadedBy={loadedBy.nameOf(detailEntry.user_id)}
           onEdit={() => { setDetailEntry(null); openEdit(detailEntry); }}
           onDelete={() => handleDelete(detailEntry.id)}
           onClose={() => setDetailEntry(null)}

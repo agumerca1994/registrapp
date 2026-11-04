@@ -25,6 +25,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { isBusiness } from "@/lib/account";
 import type { Payee } from "@/components/business/types";
 import BusinessTour from "@/components/business/BusinessTour";
+import { LoadedByTag, useLoadedBy } from "@/components/LoadedBy";
 import { useReaccion } from "@/components/brand/ToodReaccion";
 import { EXPENSES_BUSINESS_INTRO_STEPS } from "@/components/business/tours";
 
@@ -43,8 +44,12 @@ interface ExpenseEntry {
   description?: string; expense_date: string; notes?: string;
   payment_method?: string; entity?: string; currency?: string;
   payee_id?: number | null;
+  user_id?: number | null; source?: string | null;
   category: Category;
 }
+
+// La cuota de la hipoteca la genera la sincronización: nadie la cargó.
+const loaderId = (entry: ExpenseEntry) => (entry.source === "mortgage" ? null : entry.user_id);
 
 type SortKey = "date" | "category" | "amount";
 const SORT_LABELS: Record<SortKey, string> = {
@@ -56,10 +61,11 @@ const SORT_LABELS: Record<SortKey, string> = {
 // creating what you're missing shouldn't cost you the form you already began.
 
 function EntryDetailModal({
-  entry, payeeName, onEdit, onDelete, onViewStatement, onClose,
+  entry, payeeName, loadedBy, onEdit, onDelete, onViewStatement, onClose,
 }: {
   entry: ExpenseEntry;
   payeeName?: string;
+  loadedBy?: string;
   onEdit: () => void;
   onDelete: () => void;
   onViewStatement: () => void;
@@ -115,6 +121,12 @@ function EntryDetailModal({
               <span className="font-medium text-right">{entry.notes}</span>
             </div>
           )}
+          {loadedBy && (
+            <div className="flex justify-between py-2 gap-4">
+              <span className="text-muted-foreground shrink-0">Lo cargó</span>
+              <span className="font-medium text-right">{loadedBy}</span>
+            </div>
+          )}
         </div>
         {isCreditCard ? (
           <div className="pt-1">
@@ -144,6 +156,7 @@ export default function ExpensesPage() {
   const router = useRouter();
   const { appUser } = useAuth();
   const business = isBusiness(appUser);
+  const loadedBy = useLoadedBy();
   const [payees, setPayees] = useState<Payee[]>([]);
   const [entries, setEntries] = useState<ExpenseEntry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -171,6 +184,7 @@ export default function ExpensesPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [currencyFilter, setCurrencyFilter] = useState("");
   const [payeeFilter, setPayeeFilter] = useState("");
+  const [loadedByFilter, setLoadedByFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [sort, setSort] = useState<SortKey | null>(null);
@@ -182,7 +196,7 @@ export default function ExpensesPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const panelFilterActive = !!(categoryFilter || currencyFilter || payeeFilter || dateFrom || dateTo);
+  const panelFilterActive = !!(categoryFilter || currencyFilter || payeeFilter || loadedByFilter || dateFrom || dateTo);
   // Any active filter takes the list out of the month view and into the whole
   // history: a search that only looks inside the month currently on screen
   // would miss what the user is looking for and give no hint that it did.
@@ -197,6 +211,7 @@ export default function ExpensesPage() {
           category_id: categoryFilter || undefined,
           currency: currencyFilter || undefined,
           payee_id: payeeFilter || undefined,
+          loaded_by: loadedByFilter || undefined,
           date_from: dateFrom || undefined,
           date_to: dateTo || undefined,
           ...ordering,
@@ -212,7 +227,7 @@ export default function ExpensesPage() {
   };
 
   useEffect(() => { load(); },
-    [year, month, debouncedSearch, categoryFilter, currencyFilter, payeeFilter, dateFrom, dateTo, sort, order]);
+    [year, month, debouncedSearch, categoryFilter, currencyFilter, payeeFilter, loadedByFilter, dateFrom, dateTo, sort, order]);
 
   // Los nombres de proveedores y empleados: para el filtro, las filas y el
   // detalle (el egreso trae sólo el id).
@@ -431,7 +446,7 @@ export default function ExpensesPage() {
             onClose={() => { setSearch(""); setSearchOpen(false); }}
             value={search}
             onChange={setSearch}
-            placeholder="Buscar por descripción, categoría o tarjeta..."
+            placeholder={loadedBy.active ? "Buscar por descripción, categoría, tarjeta o persona..." : "Buscar por descripción, categoría o tarjeta..."}
           />
           {!searchOpen && (
             <>
@@ -457,13 +472,17 @@ export default function ExpensesPage() {
               <PillSelect value={payeeFilter} onChange={setPayeeFilter} placeholder="Proveedor"
                 options={payees.map(p => ({ value: String(p.id), label: p.name }))} />
             )}
+            {loadedBy.active && (
+              <PillSelect value={loadedByFilter} onChange={setLoadedByFilter} placeholder="Lo cargó"
+                options={loadedBy.options} />
+            )}
             <PillDateRange
               from={dateFrom} to={dateTo}
               onChange={(f, t) => { setDateFrom(f); setDateTo(t); }}
             />
             {panelFilterActive && (
               <ClearFilters onClick={() => {
-                setCategoryFilter(""); setCurrencyFilter(""); setPayeeFilter(""); setDateFrom(""); setDateTo("");
+                setCategoryFilter(""); setCurrencyFilter(""); setPayeeFilter(""); setLoadedByFilter(""); setDateFrom(""); setDateTo("");
               }} />
             )}
           </FilterPanel>
@@ -539,6 +558,7 @@ export default function ExpensesPage() {
                     <CreditCard className="w-3 h-3" />{entry.entity}
                   </span>
                 )}
+                <LoadedByTag name={loadedBy.nameOf(loaderId(entry))} />
                 <span className="block sm:hidden text-xs text-muted-foreground">{formatDate(entry.expense_date)}</span>
               </div>
               <span className="hidden sm:block w-[10ch] shrink-0 text-xs text-muted-foreground text-right truncate">{formatDate(entry.expense_date)}</span>
@@ -568,6 +588,7 @@ export default function ExpensesPage() {
         <EntryDetailModal
           entry={detailEntry}
           payeeName={payeeName(detailEntry.payee_id)}
+          loadedBy={loadedBy.nameOf(loaderId(detailEntry))}
           onEdit={() => { setDetailEntry(null); openEdit(detailEntry); }}
           onDelete={() => handleDelete(detailEntry.id)}
           onViewStatement={() => handleViewStatement(detailEntry.id)}

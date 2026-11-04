@@ -131,6 +131,11 @@ def _postgres_date_functions(dbapi_connection, _record):
     resumen sin `due_date` tiene que cargarle la fecha."""
     dbapi_connection.create_function("make_date", 3, lambda *_: None)
     dbapi_connection.create_function("make_interval", 4, lambda *_: None)
+    # SQLite no trae translate(), y las búsquedas lo usan para plegar acentos.
+    dbapi_connection.create_function(
+        "translate", 3,
+        lambda text, src, dst: None if text is None else text.translate(str.maketrans(src, dst)),
+    )
 
 
 @pytest_asyncio.fixture

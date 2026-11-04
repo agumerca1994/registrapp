@@ -3,14 +3,15 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, extract, func, or_
+from sqlalchemy import and_, select, extract, func, or_
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.firebase import get_current_user
 from app.models.user import User
 from app.models.business import Payee
-from app.models.expense import EXPENSE_SOURCE_MANUAL, ExpenseCategory, ExpenseEntry
+from app.models.expense import EXPENSE_SOURCE_MANUAL, EXPENSE_SOURCE_MORTGAGE, ExpenseCategory, ExpenseEntry
+from app.services.people import loaded_by_match
 from app.services.search import fold, fold_term
 from app.services import category_suggest
 from app.services import expenses as expenses_service
@@ -173,6 +174,7 @@ async def list_entries(
     category_id: int | None = None,
     currency: str | None = None,
     payee_id: int | None = None,
+    loaded_by: int | None = Query(None, description="Sólo lo que cargó esta persona"),
     date_from: _date | None = None,
     date_to: _date | None = None,
     sort: Literal["date", "category", "amount"] = "date",
@@ -208,6 +210,10 @@ async def list_entries(
         stmt = stmt.where(ExpenseEntry.currency == currency.upper())
     if payee_id:
         stmt = stmt.where(ExpenseEntry.payee_id == payee_id)
+    # La cuota de la hipoteca la genera la sincronización: nadie la cargó.
+    loaded_by_someone = func.coalesce(ExpenseEntry.source, "") != EXPENSE_SOURCE_MORTGAGE
+    if loaded_by:
+        stmt = stmt.where(ExpenseEntry.user_id == loaded_by, loaded_by_someone)
     if date_from:
         stmt = stmt.where(ExpenseEntry.expense_date >= date_from)
     if date_to:
@@ -225,6 +231,7 @@ async def list_entries(
             fold(func.coalesce(ExpenseEntry.entity, "")).like(term),
             fold(ExpenseCategory.name).like(term),
             fold(func.coalesce(Payee.name, "")).like(term),
+            and_(loaded_by_someone, loaded_by_match(ExpenseEntry.user_id, term, user.id)),
         ))
 
     cols = SORT_COLUMNS[sort]

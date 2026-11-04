@@ -157,7 +157,8 @@ export default function PrivacidadPage() {
       <Section {...sec("visibilidad")}>
         <List items={[
           <><strong>En un hogar,</strong> todas las personas que se suman con el código del hogar ven y cargan lo
-            mismo. Compartir el código es darle acceso a todo.</>,
+            mismo, y cada una ve quién cargó cada dato. Si te vas, lo que cargaste queda en el hogar con tu nombre.
+            Compartir el código es darle acceso a todo.</>,
           <><strong>En un negocio,</strong> el dueño y los socios ven todo. Los empleados ven y cargan ventas y
             stock, y no ven los números del negocio ni los datos de los demás miembros.</>,
           <><strong>Cuando compartís un gasto,</strong> cada participante ve el gasto, el total, su parte y los

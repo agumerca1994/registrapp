@@ -107,5 +107,7 @@ class ExpenseEntryOut(BaseModel):
     # el servidor. Ver EXPENSE_SOURCES en models/expense.py.
     source: str | None = None
     payee_id: int | None = None
+    # Quién lo cargó. La pantalla lo cruza con /auth/people.
+    user_id: int | None = None
     created_at: datetime
     category: ExpenseCategoryOut

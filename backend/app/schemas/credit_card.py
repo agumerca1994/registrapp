@@ -129,6 +129,8 @@ class CreditCardItemOut(BaseModel):
     installment_root_statement_id: int | None = None
     shared_expense_id: int | None = None
     currency: str = "ARS"
+    # Quién lo cargó: el dueño de su gasto espejo. La pantalla lo cruza con /auth/people.
+    user_id: int | None = None
     category: CategoryOut
 
 

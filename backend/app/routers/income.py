@@ -17,6 +17,7 @@ from app.models.user import User
 from app.models.income import (
     IncomeSource, IncomeEntry, IncomeType, IncomeSourceField,
 )
+from app.services.people import loaded_by_match
 from app.services.search import fold, fold_term
 from app.services.income import (
     assert_owns_source, load_source, source_out, sync_fields, apply_items,
@@ -183,6 +184,7 @@ async def list_entries(
     month: int | None = None,
     q: str | None = Query(None, description="Coincidencia parcial en fuente o notas"),
     source_id: int | None = None,
+    loaded_by: int | None = Query(None, description="Sólo lo que cargó esta persona"),
     date_from: _date | None = None,
     date_to: _date | None = None,
     sort: Literal["date", "source", "amount"] = "date",
@@ -210,6 +212,8 @@ async def list_entries(
         stmt = stmt.where(extract("month", IncomeEntry.period_date) == month)
     if source_id:
         stmt = stmt.where(IncomeEntry.source_id == source_id)
+    if loaded_by:
+        stmt = stmt.where(IncomeEntry.user_id == loaded_by)
     if date_from:
         stmt = stmt.where(IncomeEntry.period_date >= date_from)
     if date_to:
@@ -222,6 +226,7 @@ async def list_entries(
         stmt = stmt.where(or_(
             fold(IncomeSource.name).like(term),
             fold(func.coalesce(IncomeEntry.notes, "")).like(term),
+            loaded_by_match(IncomeEntry.user_id, term, user.id),
         ))
 
     cols = SORT_COLUMNS[sort]

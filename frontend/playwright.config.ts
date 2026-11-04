@@ -35,7 +35,7 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/user.json" },
-      testIgnore: [/visual\.spec\.ts/, /new-expense\.spec\.ts/, /income-fields\.spec\.ts/, /business-.*\.spec\.ts/],
+      testIgnore: [/visual\.spec\.ts/, /new-expense\.spec\.ts/, /income-fields\.spec\.ts/, /loaded-by\.spec\.ts/, /business-.*\.spec\.ts/],
       dependencies: ["setup"],
     },
     // Los flujos que crean datos corren aparte y antes que los visuales. Con
@@ -44,7 +44,7 @@ export default defineConfig({
     {
       name: "flows",
       use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/user.json" },
-      testMatch: /(new-expense|income-fields)\.spec\.ts/,
+      testMatch: /(new-expense|income-fields|loaded-by)\.spec\.ts/,
       dependencies: ["setup"],
     },
     // Un NEGOCIO (tenants.kind="business"), con su propia cuenta: sus rutas

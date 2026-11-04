@@ -11,6 +11,7 @@ import {
   Pencil, Trash2, Wallet, MoreVertical, X,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { LoadedByTag, useLoadedBy } from "@/components/LoadedBy";
 import { Fab } from "@/components/ui/fab";
 import { FIELD, FormGrid, SelectField, DateField } from "@/components/ui/form";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -55,6 +56,7 @@ interface Operation {
   rate_type: string | null;
   entity: string | null;
   notes: string | null;
+  user_id: number | null;
 }
 
 interface Summary {
@@ -123,6 +125,7 @@ function StatTile({ label, value, hint, tone = "neutral" }: {
 
 export default function DivisasPage() {
   useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
+  const loadedBy = useLoadedBy();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
@@ -669,6 +672,7 @@ export default function DivisasPage() {
                     {formatDate(op.operation_date)}
                   </p>
                   {op.notes && <p className="text-xs text-muted-foreground/80 truncate">{op.notes}</p>}
+                  <LoadedByTag name={loadedBy.nameOf(op.user_id)} />
                 </div>
                 <p className={`text-sm font-bold shrink-0 ${isIn ? "text-emerald-600" : "text-rose-600"}`}>
                   {isIn ? "+" : "−"}{formatUSD(Math.abs(amount))}

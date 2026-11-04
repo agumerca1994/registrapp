@@ -17,13 +17,14 @@ from app.core.firebase import get_current_user
 from app.core.access import deny_employee
 from app.services import account_closure
 from app.services import contacts as contacts_service
+from app.services import people as people_service
 from app.services import tenants as tenants_service
 from app.services import user_directory
 from app.models.shared_expense import SharedExpenseSplit
 from app.models.tenant import TENANT_KIND_BUSINESS, Tenant
 from app.models.user import User, UserRole
 from app.routers.shared_expenses import _normalize_phone
-from app.schemas.user import UserJoinTenant, UserOut, UserRegister
+from app.schemas.user import PersonOut, UserJoinTenant, UserOut, UserRegister
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
@@ -575,6 +576,18 @@ async def _move_to_new_solo_tenant(user: User, db: AsyncSession) -> None:
     await db.flush()
     user.tenant_id = new_tenant.id
     user.role = UserRole.admin
+
+
+@router.get("/people", response_model=list[PersonOut], dependencies=[Depends(deny_employee)])
+async def list_people(
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Los nombres para mostrar quién cargó cada cosa. Incluye a quien ya se fue."""
+    user = await db.scalar(select(User).where(User.firebase_uid == firebase_user["uid"]))
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return await people_service.people_of(db, user.tenant_id)
 
 
 @router.delete("/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)

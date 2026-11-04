@@ -34,6 +34,7 @@ export interface IncomeEntry {
   id: number; source_id: number;
   bruto: number | null; deducciones: number | null; amount: number;
   period_date: string; notes?: string; currency?: string;
+  user_id?: number | null;
   source: IncomeSource;
   items?: EntryItem[];
 }

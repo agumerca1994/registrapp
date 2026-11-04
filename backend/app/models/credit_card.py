@@ -1,8 +1,9 @@
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy import String, Date, DateTime, ForeignKey, Numeric, func, Integer, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import String, Date, DateTime, ForeignKey, Numeric, func, Integer, UniqueConstraint, select
+from sqlalchemy.orm import Mapped, column_property, mapped_column, relationship
 from app.core.database import Base
+from app.models.expense import ExpenseEntry
 
 
 class CreditCard(Base):
@@ -90,6 +91,13 @@ class CreditCardItem(Base):
     capture_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    # Quién lo cargó. El ítem no lo guarda: lo sabe su gasto espejo. Va como
+    # subconsulta para que `CreditCardItemOut` lo lea sin relación que cargar,
+    # en cualquiera de los lugares que arman un ítem.
+    user_id: Mapped[int | None] = column_property(
+        select(ExpenseEntry.user_id).where(ExpenseEntry.id == expense_entry_id).scalar_subquery()
+    )
 
     statement: Mapped["CreditCardStatement"] = relationship(back_populates="items")
     category: Mapped["ExpenseCategory"] = relationship()

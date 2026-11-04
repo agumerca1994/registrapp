@@ -25,6 +25,12 @@ class UserJoinTenant(BaseModel):
     phone_number: str | None = None
 
 
+class PersonOut(BaseModel):
+    """Lo justo para decir quién cargó algo: sin mail, teléfono ni código."""
+    id: int
+    name: str
+
+
 class UserOut(BaseModel):
     model_config = {"from_attributes": True}
 

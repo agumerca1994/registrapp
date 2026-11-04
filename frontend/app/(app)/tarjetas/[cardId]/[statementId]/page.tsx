@@ -6,6 +6,7 @@ import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { formatARS, formatDate, formatUSD, parseAmount, getErrorMessage, pickCategoryColor, foldText, cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { LoadedByTag, useLoadedBy } from "@/components/LoadedBy";
 import { Plus, ChevronLeft, X, ExternalLink, Users2, SlidersHorizontal, MoreVertical, Trash2 } from "lucide-react";
 import { features } from "@/lib/features";
 import { UploadStatementButton } from "@/components/UploadStatementButton";
@@ -27,7 +28,7 @@ interface Category { id: number; name: string; color?: string; is_fixed: boolean
 interface CardItem {
   id: number; description: string; category_id: number; item_date: string; item_type: string;
   amount: number; installment_count?: number; installment_number?: number;
-  purchase_total?: number; installment_group_id?: number; installment_root_statement_id?: number; shared_expense_id?: number; expense_entry_id?: number; currency?: string;
+  purchase_total?: number; installment_group_id?: number; installment_root_statement_id?: number; shared_expense_id?: number; expense_entry_id?: number; currency?: string; user_id?: number | null;
   category: { id: number; name: string; color?: string };
 }
 interface Statement {
@@ -559,6 +560,8 @@ export default function StatementDetailPage() {
   const [showCustomFilter, setShowCustomFilter] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const loadedBy = useLoadedBy();
+  const [loadedByFilter, setLoadedByFilter] = useState("");
   const [currencyFilter, setCurrencyFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -646,9 +649,9 @@ export default function StatementDetailPage() {
     await load();
   };
 
-  const panelFilterActive = !!(categoryFilter || typeFilter || currencyFilter || dateFrom || dateTo);
+  const panelFilterActive = !!(categoryFilter || typeFilter || loadedByFilter || currencyFilter || dateFrom || dateTo);
   const clearPanelFilters = () => {
-    setCategoryFilter(""); setTypeFilter(""); setCurrencyFilter("");
+    setCategoryFilter(""); setTypeFilter(""); setLoadedByFilter(""); setCurrencyFilter("");
     setDateFrom(""); setDateTo("");
   };
 
@@ -689,6 +692,10 @@ export default function StatementDetailPage() {
     return Array.from(seen, ([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name, "es"));
   }, [items]);
+  const presentLoaders = useMemo(
+    () => loadedBy.options.filter(o => items.some(i => String(i.user_id) === o.value)),
+    [loadedBy, items],
+  );
   const presentTypes = useMemo(
     () => (Object.keys(ITEM_TYPE_LABELS) as ItemType[]).filter(t => items.some(i => i.item_type === t)),
     [items],
@@ -702,7 +709,8 @@ export default function StatementDetailPage() {
     const q = foldText(search.trim());
     const out = items.filter(i => {
       // Match every field the row shows: its description and its category.
-      if (q && !foldText(`${i.description} ${i.category.name}`).includes(q)) return false;
+      if (q && !foldText(`${i.description} ${i.category.name} ${loadedBy.nameOf(i.user_id) ?? ""}`).includes(q)) return false;
+      if (loadedByFilter && String(i.user_id) !== loadedByFilter) return false;
       if (categoryFilter && String(i.category.id) !== categoryFilter) return false;
       if (typeFilter && i.item_type !== typeFilter) return false;
       if (currencyFilter && (i.currency || "ARS") !== currencyFilter) return false;
@@ -722,7 +730,7 @@ export default function StatementDetailPage() {
       if (ca !== cb) return ca.localeCompare(cb);
       return dir * (Number(a.amount) - Number(b.amount));
     });
-  }, [items, search, categoryFilter, typeFilter, currencyFilter, dateFrom, dateTo, sort, order]);
+  }, [items, search, categoryFilter, typeFilter, loadedByFilter, loadedBy, currencyFilter, dateFrom, dateTo, sort, order]);
 
   if (!card || !statement) return <div className="p-6 text-sm text-muted-foreground">Cargando...</div>;
 
@@ -890,6 +898,10 @@ export default function StatementDetailPage() {
                 <PillSelect value={currencyFilter} onChange={setCurrencyFilter} placeholder="Moneda"
                   options={presentCurrencies.map(c => ({ value: c, label: c === "ARS" ? "Pesos" : "Dólares" }))} />
               )}
+              {presentLoaders.length > 1 && (
+                <PillSelect value={loadedByFilter} onChange={setLoadedByFilter} placeholder="Lo cargó"
+                  options={presentLoaders} />
+              )}
               <PillDateRange
                 from={dateFrom} to={dateTo}
                 onChange={(f, t) => { setDateFrom(f); setDateTo(t); }}
@@ -942,6 +954,7 @@ export default function StatementDetailPage() {
                         <span className="text-xs text-muted-foreground/70 shrink-0 sm:hidden">{formatDate(item.item_date).replace(/\/\d{2}(\d{2})$/, "/$1")}</span>
                         <span className="text-xs text-muted-foreground/70 shrink-0 hidden sm:inline">{formatDate(item.item_date)}</span>
                       </div>
+                      <LoadedByTag name={loadedBy.nameOf(item.user_id)} />
                       {chips.length > 0 && (
                         <div className="flex flex-wrap items-center gap-1 mt-1.5 sm:hidden">{itemChips(item, true)}</div>
                       )}
