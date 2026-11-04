@@ -648,13 +648,13 @@ def _audio(seconds=5):
     )
 
 
-async def test_audio_loads_expense_and_shows_what_it_heard(db, audio):
+async def test_audio_loads_expense_and_says_how_to_undo(db, audio):
     await _cat(db, "Comida")
     audio.said = "22 lucas en comida"
     replies = await wa_bot.handle(db, USER, _audio())
-    assert replies[0] == "🎙️ Escuché: «22 lucas en comida»"
-    assert replies[1].startswith("✅")
-    assert "deshacer" in replies[1]
+    assert len(replies) == 1
+    assert replies[0].startswith("✅ $22.000")
+    assert "deshacer" in replies[0]
     entry = await db.scalar(select(ExpenseEntry))
     assert entry.amount == Decimal("22000")
 
@@ -667,7 +667,7 @@ async def test_audio_answers_the_open_question(db, audio):
     assert await db.scalar(select(func.count()).select_from(ExpenseEntry)) == 0
     audio.said = "1"
     replies = await wa_bot.handle(db, USER, _audio())
-    assert replies[1].startswith("✅")
+    assert replies[0].startswith("✅")
     assert await db.scalar(select(func.count()).select_from(ExpenseEntry)) == 1
 
 
@@ -697,6 +697,22 @@ async def test_undo_after_audio_removes_the_expense(db, audio):
     await wa_bot.handle(db, USER, _audio())
     await _say(db, "deshacer")
     assert await db.scalar(select(func.count()).select_from(ExpenseEntry)) == 0
+
+
+async def test_listening_sticker_goes_out_before_transcribing(db, audio, monkeypatch):
+    order = []
+
+    async def sticker(_phone, url):
+        order.append(url.rsplit("/", 1)[1])
+
+    async def transcribe(_data):
+        order.append("transcribe")
+        return ""
+
+    monkeypatch.setattr(whatsapp, "send_wa_sticker", sticker)
+    monkeypatch.setattr(wa_bot.transcribe, "transcribe", transcribe)
+    await wa_bot.handle(db, USER, _audio())
+    assert order == ["sticker-escuchando.webp", "transcribe"]
 
 
 async def test_long_audio_is_not_even_downloaded(db, audio):

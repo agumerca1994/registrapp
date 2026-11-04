@@ -209,7 +209,6 @@ MSG_NEEDS_AI_AUDIO = (
     "*12 lucas verdulería*.\n\n"
     "Entender audios va a ser parte del plan Pro. Si te sirve, respondé *me interesa*."
 )
-MSG_AUDIO_HEARD = "🎙️ Escuché: «{text}»"
 MSG_AUDIO_TOO_LONG = "Ese audio es muy largo: escucho hasta {minutes} minutos. Mandame uno más corto o escribilo."
 MSG_AUDIO_LIMIT = "Por hoy llegaste al límite de audios. Escribime el gasto y lo cargo igual: *12 lucas verdulería*."
 MSG_AUDIO_DOWN = "No pude escuchar el audio ahora. Escribime el gasto y lo cargo igual: *12 lucas verdulería*."
@@ -1187,15 +1186,14 @@ async def _answer_bill(
 
 
 async def _handle_audio(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str]:
-    """Un audio es un mensaje de texto que hay que escuchar primero. Lo que se
-    entendió va adelante, en su propio mensaje: un monto mal oído no da error, y
-    leerlo es la única forma de darse cuenta.
+    """Un audio es un mensaje de texto que hay que escuchar primero. Tarda unos
+    segundos, así que la t con auriculares avisa enseguida que llegó.
 
     El registro lleva el prefijo de las respuestas por lo mismo que ellas: una
     fila común cerraría la pregunta abierta, y contestarla es un uso normal de un
     audio. Los rechazos tampoco guardan nada, así esa pregunta sigue en pie."""
     from app.services import rate_limit
-    from app.services.whatsapp import download_media_base64
+    from app.services.whatsapp import download_media_base64, send_wa_sticker
 
     _remember(db, user.id, "in", "audio", wa_id=inbound.wa_id, ref_type=f"{_REPLY_PREFIX}audio")
     await db.commit()
@@ -1212,6 +1210,8 @@ async def _handle_audio(db: AsyncSession, user: User, inbound: InboundMessage) -
         return await give_up("too_long", MSG_AUDIO_TOO_LONG.format(minutes=settings.WA_AUDIO_MAX_SECONDS // 60))
     if not rate_limit.check(f"wa_audio:{user.tenant_id}", settings.WA_AUDIO_DAILY_LIMIT, 86400):
         return await give_up("limit", MSG_AUDIO_LIMIT)
+    if settings.WA_STICKERS_ENABLED:
+        await send_wa_sticker(inbound.phone, sticker_url("escuchando"))
     data = await download_media_base64(inbound.media_key, inbound.raw_message)
     if data is None:
         return await give_up("download", "No pude bajar el audio. Mandalo de nuevo.")
@@ -1227,12 +1227,12 @@ async def _handle_audio(db: AsyncSession, user: User, inbound: InboundMessage) -
     )
     await db.commit()
     replies = await _handle_text(db, user, replace(inbound, kind="text", text=text, wa_id=None))
-    return [MSG_AUDIO_HEARD.format(text=text), *[_with_audio_undo(r) for r in replies]]
+    return [_with_audio_undo(r) for r in replies]
 
 
 def _with_audio_undo(reply: str) -> str:
     """Con un audio, cómo deshacer se dice siempre y no sólo en las primeras cargas
-    (`_show_hints`): acá el error puede ser del oído del bot y no de quien habló."""
+    (`_show_hints`): un monto mal oído no da error, y sólo se ve en esta respuesta."""
     if reply.startswith("✅") and "deshacer" not in reply:
         return f"{reply}\nSi escuché mal, respondé *deshacer*."
     return reply
