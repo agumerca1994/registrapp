@@ -16,6 +16,7 @@ mensaje viejo apunta a su entidad aunque ya no sea la última.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from dataclasses import dataclass, field, replace
@@ -1210,12 +1211,17 @@ async def _handle_audio(db: AsyncSession, user: User, inbound: InboundMessage) -
         return await give_up("too_long", MSG_AUDIO_TOO_LONG.format(minutes=settings.WA_AUDIO_MAX_SECONDS // 60))
     if not rate_limit.check(f"wa_audio:{user.tenant_id}", settings.WA_AUDIO_DAILY_LIMIT, 86400):
         return await give_up("limit", MSG_AUDIO_LIMIT)
-    if settings.WA_STICKERS_ENABLED:
-        await send_wa_sticker(inbound.phone, sticker_url("escuchando"))
+    # En paralelo: la transcripción no tiene por qué esperar al sticker. Se espera
+    # antes de contestar, para que nunca llegue después de la respuesta.
+    listening = asyncio.create_task(
+        send_wa_sticker(inbound.phone, sticker_url("escuchando")) if settings.WA_STICKERS_ENABLED else asyncio.sleep(0)
+    )
+    await asyncio.sleep(0)
     data = await download_media_base64(inbound.media_key, inbound.raw_message)
+    text = await transcribe.transcribe(data) if data is not None else None
+    await listening
     if data is None:
         return await give_up("download", "No pude bajar el audio. Mandalo de nuevo.")
-    text = await transcribe.transcribe(data)
     if text is None:
         return await give_up("service", MSG_AUDIO_DOWN)
     if not text:

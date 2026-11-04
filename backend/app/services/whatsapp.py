@@ -10,6 +10,7 @@ no sale es un aviso perdido; una excepción es la operación entera perdida.
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
 from decimal import Decimal
@@ -72,27 +73,46 @@ async def send_wa_msg(phone: str, msg: str) -> str | None:
         return None
 
 
+_sticker_cache: dict[str, str] = {}
+
+
+async def _sticker_base64(client: httpx.AsyncClient, url: str) -> str | None:
+    if url not in _sticker_cache:
+        resp = await client.get(url)
+        if resp.status_code != 200 or not resp.content.startswith(b"RIFF"):
+            logger.warning(f"Sticker no disponible {resp.status_code}: {url}")
+            return None
+        _sticker_cache[url] = base64.b64encode(resp.content).decode()
+    return _sticker_cache[url]
+
+
 async def send_wa_sticker(phone: str, url: str) -> str | None:
     """Manda un sticker (WebP animado, 512×512, menos de 500 KB) desde una URL pública. Igual que el texto:
-    nunca levanta excepción y deja en el log por qué no salió."""
+    nunca levanta excepción y deja en el log por qué no salió.
+
+    Va en base64 con `notConvertSticker`: desde una URL, Evolution lo vuelve a codificar cuadro por cuadro,
+    unos 4 s por sticker, aunque ya venga en el formato justo. La URL queda de respaldo."""
     if not settings.EVOLUTION_API_URL or not settings.EVOLUTION_INSTANCE:
         return None
     try:
         async with httpx.AsyncClient(timeout=20) as client:
             resolved = await resolve_whatsapp_jid(client, phone)
             target = resolved or phone.lstrip("+")
-            resp = await client.post(
-                f"{settings.EVOLUTION_API_URL}/message/sendSticker/{settings.EVOLUTION_INSTANCE}",
-                json={"number": target, "sticker": url},
-                headers={"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"},
-            )
-            if resp.status_code >= 400:
+            encoded = await _sticker_base64(client, url)
+            attempts = [{"sticker": encoded, "notConvertSticker": True}] if encoded else []
+            for body in [*attempts, {"sticker": url}]:
+                resp = await client.post(
+                    f"{settings.EVOLUTION_API_URL}/message/sendSticker/{settings.EVOLUTION_INSTANCE}",
+                    json={"number": target, **body},
+                    headers={"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"},
+                )
+                if resp.status_code < 400:
+                    try:
+                        return ((resp.json() or {}).get("key") or {}).get("id")
+                    except ValueError:
+                        return None
                 logger.warning(f"WhatsApp sticker failed {resp.status_code} to {phone}: {resp.text[:300]}")
-                return None
-            try:
-                return ((resp.json() or {}).get("key") or {}).get("id")
-            except ValueError:
-                return None
+            return None
     except Exception as e:
         logger.warning(f"WhatsApp sticker error to {phone}: {e}")
         return None
@@ -132,9 +152,7 @@ async def download_media_base64(message_key: dict, raw_message: dict | None = No
                 logger.warning("WhatsApp media download sin base64 en la respuesta: %s",
                                str(data)[:300])
                 return None
-            import base64 as _b64
-
-            return _b64.b64decode(b64)
+            return base64.b64decode(b64)
     except Exception as e:
         logger.warning("WhatsApp media download error: %s", e)
         return None
