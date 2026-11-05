@@ -3,12 +3,12 @@
 # Saca una versión: sube el número, commitea y deja la etiqueta en GitHub. Después
 # se deploya como siempre. Las reglas están en CLAUDE.md ("Versiones").
 #
-#   ./scripts/release.sh patch     # 0.9.0 → 0.9.1           arreglos
-#   ./scripts/release.sh minor     # 0.9.1 → 0.10.0          algo nuevo que se ve
-#   ./scripts/release.sh beta      # 0.10.0-beta.1 → beta.2  otra tanda para la beta
-#   ./scripts/release.sh 1.0.0     # un número exacto
+#   ./scripts/release.sh patch     # 1.0.0 → 1.0.1          arreglos
+#   ./scripts/release.sh minor     # 1.0.1 → 1.1.0          algo nuevo que se ve
+#   ./scripts/release.sh beta      # 1.1.0-beta.1 → beta.2  otra tanda para la beta
+#   ./scripts/release.sh 2.0.0     # un número exacto
 #
-# Una beta que pasa a producción: `patch` le saca el "-beta" (0.10.0-beta.3 → 0.10.0).
+# Una beta que pasa a producción: `patch` le saca el "-beta" (1.1.0-beta.3 → 1.1.0).
 # Antes hay que anotar qué cambió en frontend/lib/changelog.ts: es lo que ve la
 # gente en Configuración, y sin esa entrada el script no sigue.
 
