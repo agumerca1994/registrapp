@@ -13,7 +13,7 @@ from starlette.routing import Route
 from app.routers import (
     auth, income, expenses, macro, dashboard, mortgage,
     shared_expenses, whatsapp, credit_cards, contacts, reminders, currency,
-    notifications, directory, reconcile,
+    notifications, client_errors, directory, reconcile,
 )
 from app.routers.internal_logs import router as internal_logs_router
 from app.routers.business import (
@@ -246,6 +246,7 @@ app.include_router(contacts.router, dependencies=_deny_employees)
 app.include_router(reminders.router, dependencies=_deny_employees)
 app.include_router(currency.router, dependencies=_deny_employees)
 app.include_router(notifications.router, dependencies=_employees_ok)  # registrar el push
+app.include_router(client_errors.router, dependencies=_employees_ok)  # lo que falla en su pantalla
 app.include_router(directory.router, dependencies=_deny_employees)
 if settings.RECONCILE_ENABLED:
     app.include_router(reconcile.router, dependencies=_deny_employees)
