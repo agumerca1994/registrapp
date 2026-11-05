@@ -144,6 +144,14 @@ class StatementCalendarOut(BaseModel):
     due_date: date | None
     status: str
     total: Decimal = Decimal("0")
+    total_usd: Decimal = Decimal("0")
+
+
+def totals_by_currency(items) -> tuple[Decimal, Decimal]:
+    """(pesos, dólares) de un resumen. Nunca una sola cifra: sumarlos daría un número sin moneda."""
+    ars = sum((i.amount for i in items if i.currency != "USD"), Decimal("0"))
+    usd = sum((i.amount for i in items if i.currency == "USD"), Decimal("0"))
+    return ars, usd
 
 
 class StatementOut(BaseModel):
@@ -159,6 +167,7 @@ class StatementOut(BaseModel):
     created_at: datetime
     items: list[CreditCardItemOut] = []
     total: Decimal = Decimal("0")
+    total_usd: Decimal = Decimal("0")
     # The date the money is expected to leave: the real one when the bank has
     # sent it, otherwise the estimate the dashboard is actually using.
     due_date_effective: date | None = None
@@ -173,7 +182,7 @@ class StatementOut(BaseModel):
         obj.due_date_effective = stmt.due_date or estimate_due_date_py(
             stmt.year, stmt.month, due_day
         )
-        obj.total = sum(i.amount for i in obj.items)
+        obj.total, obj.total_usd = totals_by_currency(obj.items)
         for pydantic_item, orm_item in zip(obj.items, stmt.items):
             if orm_item.installment_group_id and orm_item.installment_group:
                 pydantic_item.installment_root_statement_id = orm_item.installment_group.statement_id

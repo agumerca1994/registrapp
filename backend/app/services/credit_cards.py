@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.credit_card import CreditCard, CreditCardStatement, CreditCardItem
 from app.models.expense import EXPENSE_SOURCE_CREDIT_CARD, ExpenseEntry
+from app.models.shared_expense import SharedExpense
 from app.routers.expenses import assert_owns_category
 from app.schemas.credit_card import CreditCardItemCreate
 from app.services.currency import get_or_create_usd_category
@@ -258,6 +259,22 @@ async def _delete_entry(entry_id: int | None, db: AsyncSession) -> None:
         entry = await db.get(ExpenseEntry, entry_id)
         if entry:
             await db.delete(entry)
+
+
+async def assert_no_shared_items(item_ids: list[int], db: AsyncSession) -> None:
+    """409 si alguno de estos ítems está compartido.
+
+    Borrarlo con su egreso deja vivo el `SharedExpense` (`credit_card_item_id` es
+    SET NULL) y a cada participante con un gasto que ya no existe del otro lado.
+    Lo llama el router; el conector y el bot tienen su propio rechazo.
+    """
+    if item_ids and await db.scalar(
+        select(SharedExpense.id).where(SharedExpense.credit_card_item_id.in_(item_ids)).limit(1)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Tiene gastos compartidos: eliminalos primero desde Gastos compartidos.",
+        )
 
 
 async def delete_item_tree(item: CreditCardItem, db: AsyncSession) -> None:

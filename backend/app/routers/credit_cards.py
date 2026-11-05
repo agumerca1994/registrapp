@@ -17,14 +17,14 @@ from app.schemas.credit_card import (
     CreditCardCreate, CreditCardUpdate, CreditCardOut,
     StatementCreate, StatementUpdate, StatementOut, StatementCalendarOut,
     CreditCardItemCreate, CreditCardItemUpdate, CreditCardItemOut, CardItemCreateForCard,
-    ForExpenseOut,
+    ForExpenseOut, totals_by_currency,
 )
 from app.models.shared_expense import SharedExpense, SharedExpenseSplit
 from app.schemas.shared_expense import SharedExpenseOut, ShareCreditCardItemBody
 from app.services.currency import estimate_due_date_py
 from app.services.credit_cards import (
     next_month_date, find_or_create_statement, create_expense_entry,
-    create_item_in_statement, apply_item_update, delete_item_tree,
+    assert_no_shared_items, create_item_in_statement, apply_item_update, delete_item_tree,
     delete_statement_tree, delete_card_tree,
 )
 
@@ -128,6 +128,8 @@ async def delete_card(
     if not card:
         raise HTTPException(status_code=404, detail="Tarjeta no encontrada")
 
+    if not keep_expenses:
+        await assert_no_shared_items([i.id for s in card.statements for i in s.items], db)
     await delete_card_tree(card, keep_expenses, db)
     await db.commit()
 
@@ -224,11 +226,12 @@ async def statements_calendar(
     )
     out = []
     for stmt, alias in rows.all():
+        ars, usd = totals_by_currency(stmt.items)
         out.append(StatementCalendarOut(
             id=stmt.id, card_id=stmt.card_id, card_alias=alias,
             year=stmt.year, month=stmt.month,
             closing_date=stmt.closing_date, due_date=stmt.due_date,
-            status=stmt.status, total=sum((i.amount for i in stmt.items), Decimal("0")),
+            status=stmt.status, total=ars, total_usd=usd,
         ))
     return out
 
@@ -277,6 +280,8 @@ async def delete_statement(
     if not stmt or stmt.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Resumen no encontrado")
 
+    if not keep_expenses:
+        await assert_no_shared_items([i.id for i in stmt.items], db)
     await delete_statement_tree(stmt, keep_expenses, db)
     await db.commit()
 
@@ -516,6 +521,8 @@ async def delete_item(
     if not item or item.statement.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Ítem no encontrado")
 
+    children = await db.scalars(select(CreditCardItem.id).where(CreditCardItem.installment_group_id == item.id))
+    await assert_no_shared_items([item.id, *children.all()], db)
     await delete_item_tree(item, db)
     await db.commit()
 

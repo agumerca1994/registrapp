@@ -326,6 +326,7 @@ async def delete_entry(
     entry = await db.get(ExpenseEntry, entry_id)
     if not entry or entry.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
+    await expenses_service.assert_deletable(db, entry)
     # Hipoteca y split compartido que lo referencian: ver services/expenses.
     await expenses_service.delete_expense(db, entry, user.tenant_id)
     await db.commit()

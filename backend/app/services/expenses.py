@@ -126,6 +126,20 @@ async def update_expense(
     category_suggest.invalidate(tenant_id)
 
 
+async def assert_deletable(db: AsyncSession, entry: ExpenseEntry) -> None:
+    """409 si el egreso es espejo de algo que se maneja en otro lado.
+
+    Borrar el de una tarjeta deja el ítem sin egreso, y el resumen deja de coincidir
+    con Egresos. El de una cuota de la hipoteca borraría la cuota, que no se borra.
+    La parte aceptada de un compartido sí se puede: vuelve a quedar pendiente.
+    """
+    link = await linked_to(db, entry)
+    if link == "tarjeta":
+        raise HTTPException(status_code=409, detail="Es de tarjeta: se elimina desde su resumen.")
+    if link == "hipoteca":
+        raise HTTPException(status_code=409, detail="Es una cuota de la hipoteca: las cuotas no se eliminan.")
+
+
 async def delete_expense(db: AsyncSession, entry: ExpenseEntry, tenant_id: int) -> None:
     """Borra un egreso y suelta lo que lo referencia. **Sólo flush.**
 
