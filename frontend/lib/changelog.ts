@@ -11,6 +11,17 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "0.10.0-beta.1",
+    date: "2026-11-05",
+    notes: [
+      "tood tiene un diseño nuevo en todas las pantallas.",
+      "Inicio te cuenta cómo viene el día, además del mes.",
+      "Ingresos y egresos ahora están juntos en Movimientos.",
+      "Las guías muestran lo que hay en cada pantalla, también en el celular.",
+      "Cerrar sesión pasó a Configuración, en Tu cuenta.",
+    ],
+  },
+  {
     version: "0.9.0",
     date: "2026-11-05",
     notes: [
