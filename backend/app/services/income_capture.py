@@ -39,7 +39,8 @@ MAX_OPTIONS = 7  # + "Nueva fuente" + "No es un ingreso" = 9, lo que entra en un
 _TRIGGER_RE = re.compile(
     r"^\s*(?:"
     r"cobr[eé]|cobramos|cobraron|gan[eé]|ganamos"
-    r"|me\s+(?:pagaron|pag[oó]|depositaron|deposit[oó]|transfirieron|transfiri[oó]|mandaron|mand[oó]|enviaron|envi[oó]|entr[oó]|entraron)"
+    r"|me\s+(?:pagaron|pag[oó]|depositaron|deposit[oó]|transfirieron|transfiri[oó]|mandaron|mand[oó]|enviaron|envi[oó]|entr[oó]|entraron"
+    r"|reintegraron|reintegr[oó]|devolvieron|devolvi[oó]|reembolsaron|reembols[oó])"
     r"|nos\s+(?:pagaron|depositaron|transfirieron|mandaron|enviaron|entr[oó]|entraron)"
     r"|entr[oó]|entraron|recib[ií]|recibimos|ingres[oó]|ingresaron|ingresos?"
     r")\b[\s:,-]*",
@@ -47,6 +48,9 @@ _TRIGGER_RE = re.compile(
 )
 # "recibí la factura de luz 45 lucas" es un gasto que llegó, no plata que entró.
 _BILL_RE = re.compile(r"\b(?:factura|boleta|expensas|resumen|multa|impuesto|vencimiento)\b", re.IGNORECASE)
+# "9500 reintegro": la palabra sola ya dice que la plata entró, aunque no haya verbo.
+# El verbo es la regla para "sueldo", que puede ser de la empleada; acá no hay esa duda.
+_REFUND_RE = re.compile(r"\b(?:reintegros?|reintegraron|reintegr[oó]|reembolsos?|reembolsaron|reembols[oó]|devolvieron|devolvi[oó])\b", re.IGNORECASE)
 # Lo que queda entre el verbo y el nombre: "cobré *el* sueldo", "850 lucas *de* alquiler".
 _FILLER_RE = re.compile(r"^(?:(?:de|del|el|la|los|las|por|en|un|una|mi|mis)\s+)+", re.IGNORECASE)
 
@@ -59,7 +63,8 @@ _TYPE_HINTS = [
 
 
 def looks_like_income(text: str) -> bool:
-    return bool(_TRIGGER_RE.match(quick_capture.strip_request(text or "")))
+    stripped = quick_capture.strip_request(text or "")
+    return parse_income_text(stripped) is not None or bool(_TRIGGER_RE.match(stripped))
 
 
 def parse_income_text(text: str) -> QuickDraft | None:
@@ -68,13 +73,18 @@ def parse_income_text(text: str) -> QuickDraft | None:
     quedar vacío ("cobré 850 lucas"): entonces se pregunta la fuente."""
     text = quick_capture.strip_request(text or "")
     m = _TRIGGER_RE.match(text)
-    if not m:
+    # "Pagué el reintegro de la señal": ahí la plata salió.
+    refund = None if quick_capture._LEADING_VERB_RE.match(text) else _REFUND_RE.search(text)
+    if not m and not refund:
         return None
-    draft = quick_capture.parse_amount_text(text[m.end():])
+    draft = quick_capture.parse_amount_text(text[m.end():] if m else text)
     if draft is None or _BILL_RE.search(draft.term):
         return None
     # "categoría otros" o "fuente sueldo": lo nombró a propósito, es la fuente.
     draft.term = (draft.category_name or _FILLER_RE.sub("", draft.term)).strip()
+    # "me reintegraron 780": el verbo se fue con el monto, pero dice de qué es.
+    if refund and (not draft.term or _REFUND_RE.fullmatch(draft.term)):
+        draft.term = "reintegro"
     return draft
 
 
@@ -116,8 +126,9 @@ async def resolve_source(
         return exact
     # "sueldo de octubre" → "Sueldo". Sólo si es una sola: con dos candidatas
     # elegir una es adivinar.
-    words = set(fold_text(term).split())
-    contained = [s for s in sources if fold_text(s.name).strip() and set(fold_text(s.name).split()) <= words]
+    singular = lambda value: {w.rstrip("s") for w in fold_text(value).split()}  # "Reintegros" y "reintegro"
+    words = singular(term)
+    contained = [s for s in sources if fold_text(s.name).strip() and singular(s.name) <= words]
     if len(contained) == 1:
         return contained[0]
     rules = await capture_rules.get_rules(db, tenant_id, KIND_INCOME_SOURCE)
