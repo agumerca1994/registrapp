@@ -11,6 +11,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.0.1",
+    date: "2026-11-05",
+    notes: [
+      "En el bot podés corregir como hablás: \"me equivoqué, eran 35.000\" o \"fue descartables\".",
+      "El bot entiende categoría y descripción en un mismo mensaje.",
+      "Un reintegro se carga como ingreso, aunque no digas \"cobré\".",
+    ],
+  },
+  {
     version: "1.0.0",
     date: "2026-11-05",
     notes: [
