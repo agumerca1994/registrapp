@@ -1,6 +1,6 @@
 # Una copia del frontend en beta.tood.com.ar, para probar un cambio grande antes de
 # pasarlo a todos. Usa el backend y la base de producción: los datos son los reales.
-# No lo levanta Easypanel: corre aparte en el servidor, desde /opt/tood-beta, con
+# No lo levanta Easypanel: corre aparte en el servidor, desde ~/tood-beta, con
 #   git pull && docker compose -f docker-compose.beta.yml up -d --build
 # El .env de esa carpeta trae los NEXT_PUBLIC_FIREBASE_* de producción.
 name: tood-beta
