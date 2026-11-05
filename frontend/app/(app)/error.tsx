@@ -2,10 +2,11 @@
 
 import { useEffect } from "react";
 import { ToodAvatar } from "@/components/brand/ToodAvatar";
+import { reportError } from "@/lib/report-error";
 
 /** Si una pantalla falla: lo que pasó y cómo seguir, en vez de la página de error del navegador. */
 export default function AppError({ error, reset }: { error: Error; reset: () => void }) {
-  useEffect(() => { console.error("[AppError]", error); }, [error]);
+  useEffect(() => { console.error("[AppError]", error); reportError(error); }, [error]);
   return (
     <div className="min-h-[70vh] flex flex-col items-center justify-center text-center px-4">
       <ToodAvatar size={110} reaction="duda" reactionKey={1} duration={0} className="translate-x-[5.5%]" />

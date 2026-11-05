@@ -1,6 +1,7 @@
 "use client";
 
 import { Component, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { reportError } from "@/lib/report-error";
 import dynamic from "next/dynamic";
 import type { EventData, Step, TooltipRenderProps } from "react-joyride";
 
@@ -136,7 +137,7 @@ function TourTooltip({ step, index, size, isLastStep, tooltipProps, primaryProps
 class TourBoundary extends Component<{ children: React.ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
-  componentDidCatch(error: unknown) { console.error("[ProductTour]", error); }
+  componentDidCatch(error: unknown) { console.error("[ProductTour]", error); reportError(error); }
   render() { return this.state.failed ? null : this.props.children; }
 }
 
