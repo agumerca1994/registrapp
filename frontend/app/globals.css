@@ -144,6 +144,27 @@
 .animate-page-in { animation: fade-in 160ms ease-out backwards; }
 .animate-thumb-slide { animation: thumb-slide 220ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
 
+/* La pantalla de carga: el contenido sube, y al terminar el violeta se levanta como un telón. */
+@keyframes splash-up {
+  from { opacity: 0; transform: translateY(12px); }
+}
+@keyframes splash-curtain {
+  from { clip-path: inset(0 0 0 0 round 0); }
+  to { clip-path: inset(0 0 100% 0 round 0 0 44px 44px); }
+}
+@keyframes splash-bar {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(260%); }
+}
+.animate-splash-up { animation: splash-up 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.animate-splash-curtain { animation: splash-curtain 560ms cubic-bezier(0.76, 0, 0.24, 1) both; }
+.animate-splash-bar { animation: splash-bar 1100ms cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-splash-up, .animate-splash-bar { animation: none; }
+  .animate-splash-curtain { animation: fade-out 180ms ease-out both; }
+}
+
 /* Quien pidió menos movimiento tampoco ve deslizarse tiras ni girar flechas. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0.01ms !important; }

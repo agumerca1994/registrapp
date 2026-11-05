@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { Component, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import type { EventData, Step, TooltipRenderProps } from "react-joyride";
 
@@ -72,7 +72,8 @@ const isVisible = (el: Element) => {
 // nada, si no. Si todavía no existe, se deja el selector para que Joyride lo espere.
 function shapeFor(step: Step): Step | null {
   if (typeof step.target !== "string") return step;
-  const all = Array.from(document.querySelectorAll(step.target));
+  const selector = step.target;
+  const all = Array.from(document.querySelectorAll(selector));
   if (all.length === 0) return step;
   const el = all.find(isVisible);
   if (!el) return null;
@@ -84,7 +85,9 @@ function shapeFor(step: Step): Step | null {
   // concéntrico, su radio crece lo mismo (salvo en un rectángulo recto).
   return {
     ...step,
-    target: el as HTMLElement,
+    // Se busca cada vez, no se guarda el elemento: una lista se vuelve a crear al
+    // llegar sus datos, y un elemento que ya no está en la página rompe a Joyride.
+    target: () => Array.from(document.querySelectorAll<HTMLElement>(selector)).find(isVisible) ?? null,
     // Lo que flota (las barras, el +) no se alcanza desplazando la página.
     isFixed: !!el.closest(".fixed"),
     spotlightPadding: SPOTLIGHT_PADDING,
@@ -127,6 +130,14 @@ function TourTooltip({ step, index, size, isLastStep, tooltipProps, primaryProps
       </div>
     </div>
   );
+}
+
+/** La guía es un extra: si falla, se apaga ella sola y la pantalla sigue andando. */
+class TourBoundary extends Component<{ children: React.ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(error: unknown) { console.error("[ProductTour]", error); }
+  render() { return this.state.failed ? null : this.props.children; }
 }
 
 export default function ProductTour({ tourId, steps, requireDesktop }: {
@@ -173,6 +184,7 @@ export default function ProductTour({ tourId, steps, requireDesktop }: {
   if (!run || shapedSteps.length === 0) return null;
 
   return (
+    <TourBoundary>
     <Joyride
       steps={shapedSteps}
       run={run}
@@ -199,5 +211,6 @@ export default function ProductTour({ tourId, steps, requireDesktop }: {
         zIndex: 10000,
       }}
     />
+    </TourBoundary>
   );
 }
