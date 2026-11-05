@@ -55,10 +55,10 @@ Two things about it, both found the hard way:
 The rebuild is rolling: `registrapp.imanzanastore.com.ar` kept answering 200 throughout, so a deploy doesn't take the site down. It still doesn't return a build id or status, and a failed build leaves the old container answering 200, so the webhook's response says nothing. **`GET /health` returns `started_at`, the time the backend process started**: a value later than the deploy means the new image is up. It's the only signal for a backend-only change — the frontend's build id (the `<!--…-->` comment in the HTML) stays the same when Docker reuses the cached frontend image. The frontend `NEXT_PUBLIC_*` variables are **baked in at build time** via Dockerfile.prod `ARG`s — changing them requires a rebuild.
 
 **Versiones** (desde 2026-11-05, antes `package.json` siguió en 0.1.0 desde el primer commit). El número vive en `frontend/package.json`, es uno solo para toda la app y lo que se ve en Configuración sale de ahí. Formato `MAYOR.MENOR.ARREGLO`:
-- **Arreglo** (0.9.0 → 0.9.1): sólo correcciones.
-- **Menor** (0.9.1 → 0.10.0): algo nuevo que la gente nota. Un cambio de backend que no se ve no la justifica.
-- **Mayor**: `1.0.0` queda para el lanzamiento público, cuando estén los legales.
-- **Beta**: una rama que se prueba en `beta.tood.com.ar` lleva `0.10.0-beta.N`, y cada tanda sube la N. Al pasar a producción pierde el `-beta`.
+- **Arreglo** (1.0.0 → 1.0.1): sólo correcciones.
+- **Menor** (1.0.1 → 1.1.0): algo nuevo que la gente nota. Un cambio de backend que no se ve no la justifica.
+- **Mayor** (1.x → 2.0.0): un cambio que obliga a la gente a reaprender la app o que rompe lo que usaba. Es una decisión, no una regla automática. La app ya está lanzada al público: `1.0.0` es lo que estaba en producción cuando se empezó a numerar.
+- **Beta**: una rama que se prueba en `beta.tood.com.ar` lleva `1.1.0-beta.N`, y cada tanda sube la N. Al pasar a producción pierde el `-beta`.
 
 Se saca con `scripts/release.sh patch|minor|beta`, que exige la entrada en `frontend/lib/changelog.ts` (lo que lee la gente), commitea, etiqueta `vX.Y.Z` y la sube. `scripts/deploy.sh` no deploya un commit sin su etiqueta: **cada deploy a producción es una versión**.
 
