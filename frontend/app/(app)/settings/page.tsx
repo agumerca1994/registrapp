@@ -1,5 +1,9 @@
 "use client";
 
+import { format, parseISO } from "date-fns";
+import { es } from "date-fns/locale";
+import { CHANGELOG } from "@/lib/changelog";
+import { APP_VERSION, BUILD_DATE, IS_BETA } from "@/lib/version";
 import { SheetSwitch } from "@/components/movimientos/FormSheet";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -10,7 +14,7 @@ import { PushNotificationsSection } from "@/components/PushNotificationsSection"
 import { ProfileSection } from "@/components/ProfileSection";
 import { AccountClosureSection } from "@/components/account/AccountClosureSection";
 import { formatARS, getErrorMessage, formatPhone } from "@/lib/utils";
-import { BookOpen, Check, CheckCircle2, Copy, DollarSign, Home, MessageCircle, Store, UserPlus } from "lucide-react";
+import { BookOpen, Info, Check, CheckCircle2, Copy, DollarSign, Home, MessageCircle, Store, UserPlus } from "lucide-react";
 import { COUNTRIES } from "@/lib/countries";
 import WhatsAppVerifyForm from "@/components/WhatsAppVerifyForm";
 import McpConnectorSection from "@/components/McpConnectorSection";
@@ -28,7 +32,7 @@ import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
 import { FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions } from "@/components/movimientos/FormSheet";
 import {
-  ConfirmInline, SettingsGroup, SettingsRow, SHEET_BLOCK, SHEET_TEXT,
+  ConfirmInline, SessionRow, SettingsGroup, SettingsRow, SHEET_BLOCK, SHEET_TEXT,
 } from "@/components/settings/SettingsParts";
 
 interface Member {
@@ -300,9 +304,36 @@ function WhatsAppSection() {
 
 const memberCount = (n: number) => (n === 1 ? "sólo vos" : `${n} personas`);
 
+/** Qué versión es y qué trajo cada una. */
+function VersionSheet({ onClose }: { onClose: () => void }) {
+  return (
+    <FormSheet title={`tood ${APP_VERSION}`} onClose={onClose}>
+      <div className={`${FORM_SHEET_BODY} !pb-4 space-y-3`}>
+        {IS_BETA && (
+          <p className={`${SHEET_TEXT} px-1.5`}>Es una versión de prueba. Tus datos son los reales: lo que cargues o borres acá también cambia en la app.</p>
+        )}
+        {CHANGELOG.map(r => (
+          <section key={r.version} className={SHEET_BLOCK}>
+            <div className="flex items-baseline justify-between gap-3">
+              <h4 className="font-semibold text-[15.5px] text-foreground">{r.version}</h4>
+              <span className="font-marca text-xs text-muted-foreground shrink-0">
+                {format(parseISO(r.date), "d MMM yyyy", { locale: es }).replace(".", "")}
+              </span>
+            </div>
+            <ul className="mt-1.5 space-y-1 text-[15px] leading-snug text-[#3F3B4B]">
+              {r.notes.map(n => <li key={n}>{n}</li>)}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </FormSheet>
+  );
+}
+
 export default function SettingsPage() {
   const reaccionar = useReaccion();
-  const { appUser, clearUser } = useAuth();
+  const { appUser, firebaseUser, logout, clearUser } = useAuth();
+  const [versionOpen, setVersionOpen] = useState(false);
   const router = useRouter();
   // Un negocio no tiene divisas, gastos compartidos (los avisos de hoy son de
   // eso) ni la invitación a crear un hogar propio.
@@ -414,10 +445,20 @@ export default function SettingsPage() {
         </SettingsGroup>
 
         <SettingsGroup title="Tu cuenta">
+          <SessionRow photoURL={firebaseUser?.photoURL} email={appUser?.email} onLogout={logout}
+            google={!!firebaseUser?.providerData.some(p => p.providerId === "google.com")} />
           {/* Un empleado no ve la lista de miembros, así que no sabe si queda alguien más. */}
           <AccountClosureSection othersRemain={employee ? null : members.length > 1} />
         </SettingsGroup>
+
+        <SettingsGroup title="La app">
+          <SettingsRow icon={Info} title={`tood ${APP_VERSION}`}
+            hint={BUILD_DATE ? `Actualizada el ${BUILD_DATE}. Qué cambió` : "Qué cambió"}
+            onClick={() => setVersionOpen(true)} />
+        </SettingsGroup>
       </div>
+
+      {versionOpen && <VersionSheet onClose={() => setVersionOpen(false)} />}
 
       {spaceOpen && !employee && (
         <FormSheet title={t.YourSpace} onClose={() => { setSpaceOpen(false); setConfirmKickId(null); setConfirmLeave(false); setActionError(null); }}>

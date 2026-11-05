@@ -2,6 +2,7 @@
 
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { GoogleAvatar } from "@/components/account/GoogleAvatar";
 
 /**
  * Las piezas de Configuración. La pantalla es una lista corta de filas agrupadas
@@ -46,6 +47,28 @@ export function SettingsRow({ id, icon: Icon, title, hint, danger = false, onCli
         {hint && <span className="block text-sm leading-snug text-muted-foreground truncate">{hint}</span>}
       </span>
     </button>
+  );
+}
+
+/** Con qué cuenta entraste y cómo salir. */
+export function SessionRow({ photoURL, email, google, onLogout }: {
+  photoURL?: string | null;
+  email?: string | null;
+  google: boolean;
+  onLogout: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 min-h-[64px] py-2.5 border-b border-border">
+      <GoogleAvatar photoURL={photoURL} className="w-10 h-10" />
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold text-[15.5px] leading-snug text-foreground truncate">{email}</span>
+        <span className="block text-sm leading-snug text-muted-foreground">{google ? "Cuenta de Google" : "Tu sesión"}</span>
+      </span>
+      <button type="button" onClick={onLogout}
+        className="shrink-0 min-h-[44px] px-4 rounded-full bg-ink/[0.06] font-semibold text-sm text-foreground active:scale-[0.97] transition-transform duration-100">
+        Cerrar sesión
+      </button>
+    </div>
   );
 }
 

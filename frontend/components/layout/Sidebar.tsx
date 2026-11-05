@@ -10,18 +10,17 @@ import { usePendingShared } from "@/contexts/PendingSharedContext";
 import { usePendingStatements } from "@/contexts/PendingStatementsContext";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import * as Dialog from "@radix-ui/react-dialog";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
 import { cn, formatUSD } from "@/lib/utils";
 import {
   LayoutDashboard, TrendingDown, BarChart3, ArrowDownUp, Plus,
-  Home, LogOut, Settings, MoreHorizontal, Users2, CreditCard, CalendarDays,
-  CircleUserRound, ArrowLeftRight, Contact, ShoppingBag, Package,
+  Home, Settings, MoreHorizontal, Users2, CreditCard, CalendarDays,
+  ArrowLeftRight, Contact, ShoppingBag, Package,
 } from "lucide-react";
 import { isBusiness, isEmployee } from "@/lib/account";
 import { AddSheet } from "@/components/layout/AddSheet";
-import pkg from "../../package.json";
+import { GoogleAvatar } from "@/components/account/GoogleAvatar";
 
 interface NavItem {
   href: string;
@@ -126,48 +125,14 @@ function usePendingHrefs(): Set<string> {
   return hrefs;
 }
 
-const BUILD_DATE = process.env.NEXT_PUBLIC_BUILD_DATE
-  ? new Date(process.env.NEXT_PUBLIC_BUILD_DATE).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })
-  : null;
-
 function greeting(displayName?: string | null, email?: string | null): string {
   const firstName = displayName?.trim().split(/\s+/)[0] || email?.split("@")[0];
   return firstName ? `Hola, ${firstName}` : "Hola";
 }
 
-function Avatar({ photoURL, className }: { photoURL?: string | null; className?: string }) {
-  const [errored, setErrored] = useState(false);
-  if (photoURL && !errored) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={photoURL}
-        alt=""
-        referrerPolicy="no-referrer"
-        onError={() => setErrored(true)}
-        className={cn("rounded-full object-cover shrink-0", className)}
-      />
-    );
-  }
-  return (
-    <div className={cn("rounded-full bg-accent text-primary flex items-center justify-center shrink-0", className)}>
-      <CircleUserRound className="w-[65%] h-[65%]" />
-    </div>
-  );
-}
-
-function VersionInfo() {
-  return (
-    <div className="px-1 py-0.5">
-      <p className="text-xs text-muted-foreground">Versión {pkg.version}</p>
-      {BUILD_DATE && <p className="text-xs text-muted-foreground mt-0.5">Actualizado el {BUILD_DATE}</p>}
-    </div>
-  );
-}
-
 function NavContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
-  const { appUser, firebaseUser, logout } = useAuth();
+  const { appUser, firebaseUser } = useAuth();
   // Hay que llamar al hook acá, no leer el contexto por otro lado: las
   // pantallas llegan como children del provider y React no las re-renderiza
   // cuando cambia su estado. Esto es lo que suscribe al puntito.
@@ -204,37 +169,13 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
         ))}
       </nav>
 
+      {/* Cerrar sesión y la versión están en Configuración: acá sólo con qué cuenta entraste. */}
       <div className="p-4 border-t">
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
-            <button className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-accent transition-colors w-full text-left">
-              <Avatar photoURL={firebaseUser?.photoURL} className="w-8 h-8" />
-              <span className="text-xs text-muted-foreground truncate min-w-0">
-                {appUser?.email}
-              </span>
-            </button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content
-              side="top"
-              align="start"
-              sideOffset={8}
-              className="bg-card border rounded-xl shadow-lg p-3 w-56 z-50"
-            >
-              <VersionInfo />
-              <DropdownMenu.Separator className="h-px bg-border my-2" />
-              <DropdownMenu.Item asChild>
-                <button
-                  onClick={logout}
-                  className="flex items-center gap-2 px-1 py-1.5 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 w-full outline-none cursor-pointer"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Cerrar sesión
-                </button>
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+        <Link href="/settings" onClick={onNavigate}
+          className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-accent transition-colors w-full text-left">
+          <GoogleAvatar photoURL={firebaseUser?.photoURL} className="w-8 h-8" />
+          <span className="text-xs text-muted-foreground truncate min-w-0">{appUser?.email}</span>
+        </Link>
       </div>
     </>
   );
@@ -266,7 +207,7 @@ interface MoreToday {
 function MoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   useAmountsHidden();  // repinta la hoja al ocultar/mostrar montos
   const pathname = usePathname();
-  const { appUser, firebaseUser, logout } = useAuth();
+  const { appUser } = useAuth();
   const pendingHrefs = usePendingHrefs();
   const { count: sharedCount } = usePendingShared();
   const { moreItems } = useNav();
@@ -335,21 +276,6 @@ function MoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bo
                 </Link>
               );
             })}
-          </div>
-
-          <div className="mt-2 flex items-center gap-2.5 pl-2 pr-1 pt-1">
-            <Avatar photoURL={firebaseUser?.photoURL} className="w-9 h-9" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">{appUser?.email}</p>
-              <p className="text-xs text-[#4A4658]">Versión {pkg.version}{BUILD_DATE && ` · ${BUILD_DATE}`}</p>
-            </div>
-            <button
-              onClick={() => { onOpenChange(false); logout(); }}
-              className="shrink-0 min-h-[44px] inline-flex items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-destructive active:scale-[0.97] transition-transform duration-100"
-            >
-              <LogOut className="w-4 h-4" />
-              Cerrar sesión
-            </button>
           </div>
         </Dialog.Content>
       </Dialog.Portal>
