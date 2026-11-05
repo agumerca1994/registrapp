@@ -22,11 +22,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.credit_card import CreditCardItem
-from app.models.expense import ExpenseEntry
+from app.models.expense import ExpenseCategory, ExpenseEntry
 from app.models.mortgage import MortgageRecord
 from app.models.shared_expense import SharedExpenseSplit
 from app.services import category_suggest
 from app.services.currency import get_or_create_usd_category
+from app.services.search import fold_text
 
 PAYMENT_METHODS = ("efectivo", "debito", "transferencia")
 
@@ -54,6 +55,13 @@ async def linked_to(db: AsyncSession, entry: ExpenseEntry) -> str | None:
     ):
         return "hipoteca"
     return None
+
+
+async def find_category_by_name(db: AsyncSession, tenant_id: int, name: str) -> ExpenseCategory | None:
+    """La categoría del hogar con este nombre, sin mirar mayúsculas ni acentos."""
+    key = fold_text(name)
+    rows = await db.scalars(select(ExpenseCategory).where(ExpenseCategory.tenant_id == tenant_id))
+    return next((c for c in rows.all() if fold_text(c.name) == key), None)
 
 
 async def resolve_category_id(

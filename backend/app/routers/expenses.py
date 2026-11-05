@@ -11,6 +11,7 @@ from app.core.firebase import get_current_user
 from app.models.user import User
 from app.models.business import Payee
 from app.models.expense import EXPENSE_SOURCE_MANUAL, EXPENSE_SOURCE_MORTGAGE, ExpenseCategory, ExpenseEntry
+from app.services.currency import cash_out_date, with_statement
 from app.services.people import loaded_by_match
 from app.services.search import fold, fold_term
 from app.services import category_suggest
@@ -72,6 +73,9 @@ async def create_category(
     db: AsyncSession = Depends(get_db),
 ):
     user = await _get_db_user(firebase_user, db)
+    existing = await expenses_service.find_category_by_name(db, user.tenant_id, body.name)
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Ya tenés una categoría «{existing.name}».")
     cat = ExpenseCategory(**body.model_dump(), tenant_id=user.tenant_id)
     db.add(cat)
     await db.commit()
@@ -179,14 +183,20 @@ async def list_entries(
     date_to: _date | None = None,
     sort: Literal["date", "category", "amount"] = "date",
     order: Literal["asc", "desc"] = "desc",
+    basis: Literal["purchase", "payment"] = Query(
+        "purchase", description="Con year y month: por fecha de compra, o por el mes en que sale la plata"
+    ),
     firebase_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Expenses for a month, or across all of them when searching.
 
-    Dates are the entry's own `expense_date`, not `cash_out_date()`: this is
-    the ledger the user typed, and a row has to be findable by the date printed
-    next to it. The dashboard is the one that reports by when the money left.
+    By default dates are the entry's own `expense_date`: this is the ledger the
+    user typed, and a row has to be findable by the date printed next to it.
+    `basis="payment"` lists the month by `cash_out_date()` instead, the same rule
+    as the month summary. It's what lets Movimientos show the summary and its
+    detail on one screen: the rows add up to "Egresos", and tapping a category
+    finds the card purchase behind it, bought the month before.
 
     `year`/`month` and the filters are alternatives — the frontend drops the
     month as soon as a filter is set, since a search that only looks inside the
@@ -200,10 +210,16 @@ async def list_entries(
         .where(ExpenseEntry.tenant_id == user.tenant_id)
         .options(selectinload(ExpenseEntry.category))
     )
-    if year:
-        stmt = stmt.where(extract("year", ExpenseEntry.expense_date) == year)
-    if month:
-        stmt = stmt.where(extract("month", ExpenseEntry.expense_date) == month)
+    if basis == "payment" and year and month:
+        start = _date(year, month, 1)
+        end = _date(year + 1, 1, 1) if month == 12 else _date(year, month + 1, 1)
+        cash_out = cash_out_date()
+        stmt = with_statement(stmt).where(cash_out >= start, cash_out < end)
+    else:
+        if year:
+            stmt = stmt.where(extract("year", ExpenseEntry.expense_date) == year)
+        if month:
+            stmt = stmt.where(extract("month", ExpenseEntry.expense_date) == month)
     if category_id:
         stmt = stmt.where(ExpenseEntry.category_id == category_id)
     if currency:

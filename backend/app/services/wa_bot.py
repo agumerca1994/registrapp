@@ -1780,6 +1780,9 @@ async def _create_category(db: AsyncSession, tenant_id: int, name: str) -> Expen
     import random
 
     name = name.strip()
+    existing = await expenses_service.find_category_by_name(db, tenant_id, name)
+    if existing:
+        return existing
     cat = ExpenseCategory(
         tenant_id=tenant_id, name=name[0].upper() + name[1:],
         color=random.choice(quick_capture.CATEGORY_COLORS), is_fixed=False,

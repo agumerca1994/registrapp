@@ -117,3 +117,14 @@ async def test_shared_split_mirror_is_detected_and_delete_resets_split(db):
     await db.refresh(split)
     assert split.expense_entry_id is None
     assert split.status == "pending"
+
+
+async def test_find_category_by_name_ignores_case_and_accents(db):
+    from app.models.expense import ExpenseCategory
+    from app.services.expenses import find_category_by_name
+
+    db.add(ExpenseCategory(tenant_id=1, name="Educación", color="#ef4444", is_fixed=False))
+    db.add(ExpenseCategory(tenant_id=2, name="Comida", color="#ef4444", is_fixed=False))
+    await db.flush()
+    assert (await find_category_by_name(db, 1, "  EDUCACION ")).name == "Educación"
+    assert await find_category_by_name(db, 1, "Comida") is None  # la de otro hogar no cuenta

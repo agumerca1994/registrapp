@@ -8,7 +8,7 @@ from app.models.user import User
 from app.services import analytics
 # Re-exported so `from app.routers.dashboard import MonthSummary` keeps working;
 # the real definitions live in services/analytics.py alongside the queries.
-from app.services.analytics import CategorySummary, HistoryPoint, MonthSummary  # noqa: F401
+from app.services.analytics import CategorySummary, HistoryPoint, MonthSummary, TodaySummary  # noqa: F401
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -29,6 +29,15 @@ async def monthly_summary(
 ):
     user = await _get_db_user(firebase_user, db)
     return await analytics.month_summary(db, user.tenant_id, year, month)
+
+
+@router.get("/today", response_model=TodaySummary)
+async def today(
+    firebase_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await _get_db_user(firebase_user, db)
+    return await analytics.today_summary(db, user.tenant_id)
 
 
 @router.get("/history", response_model=list[HistoryPoint])

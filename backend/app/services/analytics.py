@@ -18,6 +18,7 @@ Domain rules encoded here (they are load-bearing, not stylistic):
   card-heavy household that ran ~50% high — and made `ars_available` claim
   pesos that were already committed to next month's statement.
 """
+import calendar
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -948,6 +949,228 @@ async def reminders_by_period(
             {"title": r.title, "date": r.remind_date.isoformat()}
         )
     return out
+
+
+def mortgage_payment_date(year: int, month: int, payment_day: int | None) -> date:
+    """The day a loan's cuota falls in a given month."""
+    if payment_day is not None:
+        return date(year, month, min(payment_day, calendar.monthrange(year, month)[1]))
+    # Primer día hábil.
+    d = date(year, month, 1)
+    while d.weekday() >= 5:
+        d += timedelta(days=1)
+    return d
+
+
+class UpcomingItem(BaseModel):
+    kind: str  # card | mortgage | reminder
+    title: str
+    date: date
+    amount: Decimal | None = None  # None en un recordatorio: no tiene monto
+    amount_usd: Decimal = Decimal(0)
+    estimated: bool = False
+    detail: str | None = None
+
+
+class DaySpend(BaseModel):
+    date: date
+    total: Decimal
+
+
+class TodaySummary(BaseModel):
+    """Lo que Inicio muestra hoy: el día, la semana y lo que falta del mes."""
+    today: date
+    # no_income: el mes todavía no tiene ingresos, así que no se puede decir cuánto queda.
+    # running: lo normal. closing: del 25 en adelante el mes ya se puede comparar con otro.
+    moment: str
+    is_empty: bool
+    month_end: date
+    days_left: int  # contando hoy
+    # Ingresos − todo lo que sale este mes por fecha de pago, vencido o no − dólares
+    # comprados. Es un flujo del mes: la app no conoce el saldo real en pesos.
+    left_to_spend: Decimal
+    per_day: Decimal
+    next_10_days: Decimal
+    last_month_income: Decimal
+    last_month_close: Decimal
+    next_month_committed: Decimal
+    # Consumo: por fecha de compra, para contestar "cuánto gasté hoy". Es otra
+    # pregunta que "cuánto salió" (`paid_month`, por fecha de pago) y da otro número.
+    spent_today: Decimal
+    spent_today_usd: Decimal
+    spent_week: Decimal
+    spent_prev_week: Decimal
+    spent_mtd: Decimal
+    spent_mtd_prev: Decimal
+    week: list[DaySpend]
+    paid_month: Decimal
+    upcoming: list[UpcomingItem]
+    usd_holding: Decimal
+    usd_holding_ars: Decimal | None
+    usd_rate: Decimal | None
+    usd_rate_type: str
+
+
+async def _upcoming_items(
+    db: AsyncSession, tenant_id: int, today: date, until: date
+) -> list[UpcomingItem]:
+    """Lo que vence entre hoy y `until`. Los montos de tarjeta son brutos: es lo que debita el banco."""
+    periods = periods_between(date(today.year, today.month, 1), until)
+    by_period = await statement_totals_by_period(db, tenant_id, periods)
+    items = [
+        UpcomingItem(
+            kind="card",
+            title=card["card"],
+            date=date.fromisoformat(card["due_date_effective"]),
+            amount=card["total_ars"],
+            amount_usd=card["total_usd"],
+            estimated=card["due_date_is_estimated"],
+        )
+        for cards in by_period.values()
+        for card in cards
+        if today.isoformat() <= card["due_date_effective"] < until.isoformat()
+    ]
+
+    reminders = await reminders_by_period(db, tenant_id, today, until)
+    items += [
+        UpcomingItem(kind="reminder", title=r["title"], date=date.fromisoformat(r["date"]))
+        for rows in reminders.values()
+        for r in rows
+    ]
+
+    loan = await db.scalar(
+        select(MortgageLoan).where(
+            MortgageLoan.tenant_id == tenant_id,
+            MortgageLoan.is_active == True,  # noqa: E712 — SQLAlchemy needs the literal
+        ).limit(1)
+    )
+    if loan:
+        # La cuota del mes si todavía no se registró; si ya está, la del mes que viene.
+        start, end = month_bounds(today.year, today.month)
+        year, month = today.year, today.month
+        amount, projected = await mortgage_payment_for_month(db, tenant_id, start, end)
+        if not projected:
+            year, month = add_months(year, month, 1)
+            amount, _ = await mortgage_payment_for_month(db, tenant_id, *month_bounds(year, month))
+        number = (year - loan.first_payment_date.year) * 12 + month - loan.first_payment_date.month + 1
+        if amount is not None and number <= loan.total_cuotas:
+            items.append(UpcomingItem(
+                kind="mortgage",
+                title="Hipoteca",
+                date=mortgage_payment_date(year, month, loan.payment_day),
+                amount=amount,
+                detail=f"Cuota {number} de {loan.total_cuotas}",
+            ))
+
+    return sorted(items, key=lambda i: i.date)
+
+
+async def today_summary(db: AsyncSession, tenant_id: int, today: date | None = None) -> TodaySummary:
+    """Todo lo de Inicio en un solo pedido, sobre las mismas cuentas que el resumen del mes."""
+    today = today or ar_today()
+    start, end = month_bounds(today.year, today.month)
+    prev_year, prev_month = add_months(today.year, today.month, -1)
+    prev_start, prev_end = month_bounds(prev_year, prev_month)
+    next_year, next_month = add_months(today.year, today.month, 1)
+    next_start, next_end = month_bounds(next_year, next_month)
+
+    month = await month_summary(db, tenant_id, today.year, today.month)
+    previous = await month_summary(db, tenant_id, prev_year, prev_month)
+
+    # `ars_available` ya descuenta lo que vence más adelante en el mes, porque los
+    # gastos cuentan por fecha de pago. La cuota de la hipoteca no está todavía:
+    # recién es un gasto cuando se registra.
+    left = month.ars_available
+    if month.mortgage_is_projected and month.mortgage_payment:
+        left -= month.mortgage_payment
+
+    # Una cuota 2 de 12 se fecha meses después de la compra: ese día no se gastó
+    # nada. La cuota 1 sí cuenta, y la hipoteca no la compró nadie.
+    later_cuotas = select(CreditCardItem.expense_entry_id).where(
+        CreditCardItem.item_type == "installment",
+        CreditCardItem.installment_number > 1,
+        CreditCardItem.expense_entry_id.is_not(None),
+    )
+    rows = await db.execute(
+        select(ExpenseEntry.expense_date, ExpenseEntry.currency, func.sum(ExpenseEntry.amount))
+        .where(
+            ExpenseEntry.tenant_id == tenant_id,
+            ExpenseEntry.expense_date >= min(prev_start, today - timedelta(days=13)),
+            ExpenseEntry.expense_date <= today,
+            ExpenseEntry.id.not_in(later_cuotas),
+            ExpenseEntry.id.not_in(_mortgage_entry_ids()),
+        )
+        .group_by(ExpenseEntry.expense_date, ExpenseEntry.currency)
+    )
+    ars: dict[date, Decimal] = {}
+    usd: dict[date, Decimal] = {}
+    for day, currency, total in rows:
+        (usd if currency == "USD" else ars)[day] = Decimal(total)
+
+    def spent(first: date, last: date) -> Decimal:
+        return sum((v for d, v in ars.items() if first <= d <= last), Decimal(0))
+
+    # "A esta altura" del mes pasado: el mismo día, o su último si era más corto.
+    same_day_prev = prev_start.replace(day=min(today.day, (prev_end - timedelta(days=1)).day))
+
+    cash_out = cash_out_date()
+    paid_month = await db.scalar(
+        with_statement(select(func.coalesce(func.sum(ExpenseEntry.amount), 0))).where(
+            ExpenseEntry.tenant_id == tenant_id,
+            ExpenseEntry.currency == "ARS",
+            cash_out >= start,
+            cash_out <= today,
+        )
+    )
+
+    upcoming = await _upcoming_items(db, tenant_id, today, today + timedelta(days=45))
+    horizon = today + timedelta(days=10)
+    next_10_days = sum((i.amount or Decimal(0) for i in upcoming if i.date <= horizon), Decimal(0))
+
+    next_cards = await statement_totals_by_period(db, tenant_id, [f"{next_year}-{next_month:02d}"])
+    next_mortgage, _ = await mortgage_payment_for_month(db, tenant_id, next_start, next_end)
+    committed = sum((c["total_ars"] for cards in next_cards.values() for c in cards), Decimal(0))
+
+    has_entries = await db.scalar(select(ExpenseEntry.id).where(ExpenseEntry.tenant_id == tenant_id).limit(1))
+    has_income = await db.scalar(select(IncomeEntry.id).where(IncomeEntry.tenant_id == tenant_id).limit(1))
+
+    if not month.total_income and not month.total_income_usd:
+        moment = "no_income"
+    elif today.day >= 25:
+        moment = "closing"
+    else:
+        moment = "running"
+
+    days_left = (end - today).days
+    return TodaySummary(
+        today=today,
+        moment=moment,
+        is_empty=not has_entries and not has_income,
+        month_end=end - timedelta(days=1),
+        days_left=days_left,
+        left_to_spend=left,
+        per_day=(left / days_left).quantize(Decimal("0.01")),
+        next_10_days=next_10_days,
+        last_month_income=previous.total_income,
+        last_month_close=previous.ars_available,
+        next_month_committed=committed + (next_mortgage or Decimal(0)),
+        spent_today=ars.get(today, Decimal(0)),
+        spent_today_usd=usd.get(today, Decimal(0)),
+        spent_week=spent(today - timedelta(days=6), today),
+        spent_prev_week=spent(today - timedelta(days=13), today - timedelta(days=7)),
+        spent_mtd=spent(start, today),
+        spent_mtd_prev=spent(prev_start, same_day_prev),
+        week=[
+            DaySpend(date=today - timedelta(days=n), total=ars.get(today - timedelta(days=n), Decimal(0)))
+            for n in range(6, -1, -1)
+        ],
+        paid_month=paid_month,
+        upcoming=upcoming[:6],
+        usd_holding=month.usd_holding,
+        usd_holding_ars=month.usd_holding_ars,
+        usd_rate=month.usd_rate,
+        usd_rate_type=month.usd_rate_type,
+    )
 
 
 async def baseline_run_rate(

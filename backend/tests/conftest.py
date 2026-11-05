@@ -52,6 +52,7 @@ from app.models.income import IncomeEntry, IncomeEntryItem, IncomeSource, Income
 from app.models.currency_operation import CurrencyOperation  # noqa: E402
 from app.models.mortgage import MortgageLoan  # noqa: E402
 from app.models.payment_reminder import PaymentReminder  # noqa: E402
+from app.models.macro_variable import MacroVariable  # noqa: E402
 from app.models.business import Payee, Product, Sale, SaleLine, SalePayment, StockMovement  # noqa: E402
 from app.models.contact import SharedContact, TenantContact  # noqa: E402
 from app.models.app_log import AppLog  # noqa: E402
@@ -104,6 +105,7 @@ _TABLES = [
     CurrencyOperation.__table__,
     MortgageLoan.__table__,
     PaymentReminder.__table__,
+    MacroVariable.__table__,
     # Negocio.
     Payee.__table__,
     Product.__table__,

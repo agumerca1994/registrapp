@@ -4,7 +4,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update as sa_update
 from datetime import date
 from decimal import Decimal
-import calendar
 
 from app.core.database import get_db, AsyncSessionLocal
 from app.core.firebase import get_current_user
@@ -12,6 +11,7 @@ from app.models.user import User
 from app.models.mortgage import MortgageLoan, MortgageRecord
 from app.models.expense import EXPENSE_SOURCE_MORTGAGE, ExpenseCategory, ExpenseEntry
 from app.models.macro_variable import MacroVariable
+from app.services import analytics
 from app.schemas.mortgage import (
     MortgageLoanCreate, MortgageLoanUpdate, MortgageLoanOut,
     MortgageSummary, MortgageRecordOut,
@@ -53,14 +53,7 @@ async def _get_or_create_hipoteca_category(tenant_id: int, user_id: int, db: Asy
 
 def _compute_payment_date(year: int, month: int, payment_day: int | None) -> date:
     """Return the payment date for a given month based on loan configuration."""
-    if payment_day is not None:
-        max_day = calendar.monthrange(year, month)[1]
-        return date(year, month, min(payment_day, max_day))
-    # Primer día hábil: skip Saturday (5) and Sunday (6)
-    d = date(year, month, 1)
-    while d.weekday() >= 5:
-        d = date(year, month, d.day + 1)
-    return d
+    return analytics.mortgage_payment_date(year, month, payment_day)
 
 
 def _compute_cuota_numero(first_payment_date: date) -> int:
@@ -377,21 +370,3 @@ async def list_records(
         .order_by(MortgageRecord.period_date.desc())
     )
     return result.all()
-
-
-@router.delete("/{record_id}", status_code=204)
-async def delete_record(
-    record_id: int,
-    firebase_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    user = await _get_db_user(firebase_user, db)
-    record = await db.get(MortgageRecord, record_id)
-    if not record or record.tenant_id != user.tenant_id:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-    if record.expense_entry_id:
-        expense = await db.get(ExpenseEntry, record.expense_entry_id)
-        if expense:
-            await db.delete(expense)
-    await db.delete(record)
-    await db.commit()

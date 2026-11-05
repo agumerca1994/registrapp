@@ -26,7 +26,7 @@
       ENVIRONMENT: production
       # La app vive en dos dominios mientras dure el cambio de marca: el de APP_DOMAIN (lo que tiene cargado
       # Easypanel) y app.tood.com.ar. Se suman acá para no depender de editar la variable a mano.
-      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:3000},https://app.tood.com.ar,https://tood.com.ar"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:3000},https://app.tood.com.ar,https://tood.com.ar,https://beta.tood.com.ar"
       EVOLUTION_API_URL: ${EVOLUTION_API_URL:-}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-}
