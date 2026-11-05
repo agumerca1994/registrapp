@@ -84,16 +84,14 @@ export function ChoiceChips({
               onClick={() => onChange(o.value)}
               onKeyDown={e => onKeyDown(e, i)}
               className={cn(
-                // Mismo vocabulario que `Chip`: píldora, borde ink de 2px,
-                // sombra chica. Y el estado elegido es el mismo violeta que el
-                // ítem activo del Sidebar y el `Button` primary, para que
-                // "seleccionado" se vea igual en toda la app.
-                "inline-flex shrink-0 items-center gap-1.5 rounded-full border-2 border-ink",
-                "px-3 py-1.5 text-xs font-medium shadow-chip whitespace-nowrap",
-                "transition-transform active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
+                // El estado elegido es oscuro, como el `Button` primary, para
+                // que "seleccionado" se vea igual en toda la app.
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full border",
+                "min-h-[44px] px-3.5 text-[13px] font-medium whitespace-nowrap",
+                "transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]",
                 selected
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-white text-foreground hover:bg-accent",
+                  ? "border-transparent bg-ink text-background"
+                  : "border-border bg-card text-foreground hover:bg-accent",
               )}
             >
               {selected ? (

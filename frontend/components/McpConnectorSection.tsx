@@ -3,14 +3,18 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/utils";
-import { KeyRound, Plug, Trash2 } from "lucide-react";
+import { siteHref } from "@/lib/site";
+import { Plug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
-import { Card } from "@/components/ui/card";
+import { FORM_SHEET_BODY, FormSheet } from "@/components/movimientos/FormSheet";
+import { ConfirmInline, SettingsRow, SHEET_BLOCK, SHEET_NOTICE, SHEET_TEXT } from "@/components/settings/SettingsParts";
 import { useAuth } from "@/contexts/AuthContext";
 import { connectorScopeLabel, isBusiness } from "@/lib/account";
 import { FIELD, SelectField } from "@/components/ui/form";
 import { Chip } from "@/components/ui/chip";
+import { useReaccion } from "@/components/brand/ToodReaccion";
+import { MotionList } from "@/components/ui/motion-list";
 
 interface Connection {
   grant_id: string;
@@ -58,16 +62,19 @@ function relative(iso: string | null): string {
 }
 
 function shortDate(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleDateString("es-AR") : "—";
+  return iso ? new Date(iso).toLocaleDateString("es-AR") : "";
 }
 
 export default function McpConnectorSection() {
   const { appUser } = useAuth();
   const business = isBusiness(appUser);
+  const [open, setOpen] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [connectorUrl, setConnectorUrl] = useState("");
   const [connections, setConnections] = useState<Connection[]>([]);
   const [tokens, setTokens] = useState<PersonalToken[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const reaccionar = useReaccion();
   const [busy, setBusy] = useState(false);
 
   const [showForm, setShowForm] = useState(false);
@@ -83,6 +90,7 @@ export default function McpConnectorSection() {
       .then(res => {
         setConnections(res.data.connections);
         setConnectorUrl(res.data.connector_url);
+        setLoaded(true);
       })
       .catch(e => setError(getErrorMessage(e)));
     api
@@ -117,6 +125,7 @@ export default function McpConnectorSection() {
     try {
       await api.delete(`/oauth/tokens/${id}`);
       setConfirmId(null);
+      reaccionar("borrado", "Token revocado");
       load();
     } catch (e) {
       setError(getErrorMessage(e));
@@ -130,6 +139,7 @@ export default function McpConnectorSection() {
     try {
       await api.delete(`/oauth/connections/${grantId}`);
       setConfirmId(null);
+      reaccionar("borrado", "Conexión cerrada");
       load();
     } catch (e) {
       setError(getErrorMessage(e));
@@ -138,186 +148,187 @@ export default function McpConnectorSection() {
     }
   };
 
-  const confirmRow = (id: string | number, onConfirm: () => void) =>
-    confirmId === id ? (
-      <div className="flex items-center gap-1">
-        <button
-          onClick={onConfirm}
-          disabled={busy}
-          className="text-xs bg-destructive text-destructive-foreground px-2 py-1 rounded disabled:opacity-50"
-        >
-          {busy ? "..." : "Confirmar"}
-        </button>
-        <button
-          onClick={() => setConfirmId(null)}
-          className="text-xs border px-2 py-1 rounded text-muted-foreground hover:bg-accent"
-        >
-          Cancelar
-        </button>
-      </div>
-    ) : (
-      <button
-        onClick={() => setConfirmId(id)}
-        className="text-destructive/60 hover:text-destructive transition-colors"
-        title="Revocar acceso"
-      >
-        <Trash2 className="w-4 h-4" />
-      </button>
-    );
+  // Revocar no se deshace: pregunta ahí mismo, debajo de la fila.
+  const revokeButton = (id: string | number, label: string) => confirmId !== id && (
+    <button type="button" onClick={() => setConfirmId(id)}
+      className="min-h-[44px] -my-1 px-1 shrink-0 text-sm font-semibold text-destructive">
+      {label}
+    </button>
+  );
+  const revokeConfirm = (id: string | number, question: string, confirmLabel: string, onConfirm: () => void) => confirmId === id && (
+    <div className="mt-2 mb-1">
+      <ConfirmInline question={question} confirmLabel={confirmLabel} busy={busy}
+        onConfirm={onConfirm} onCancel={() => setConfirmId(null)} />
+    </div>
+  );
+
+  const appsCount = connections.length === 0
+    ? "Ninguna app conectada"
+    : connections.length === 1 ? "1 app conectada" : `${connections.length} apps conectadas`;
+  const hint = error
+    ? "No se pudo cargar"
+    : loaded
+      ? [appsCount, tokens.length ? (tokens.length === 1 ? "1 token" : `${tokens.length} tokens`) : null].filter(Boolean).join(" · ")
+      : "Preguntale por tus números, o cargá conversando";
 
   return (
-    <Card className="p-6 space-y-5">
-      <div className="flex items-center gap-2">
-        <Plug className="w-4 h-4 text-primary" />
-        <h3 className="font-semibold text-foreground">Conectar con una IA</h3>
-      </div>
-      <p className="text-sm text-muted-foreground">
-        {business ? (
-          <>
-            Conectá tood a un asistente de IA para consultar cómo viene tu negocio y
-            cargar movimientos conversando. Antes de guardar cualquier cambio, el asistente te
-            muestra qué va a hacer para que lo confirmes.
-          </>
-        ) : (
-          <>
-            Conectá tood a un asistente de IA para preguntarle sobre tus gastos, tus
-            ingresos o el impacto de una compra. El asistente puede{" "}
-            <strong className="text-foreground">leer</strong> los datos de tu hogar y{" "}
-            <strong className="text-foreground">cargar o corregir gastos, ingresos, tarjetas y gastos
-            compartidos</strong> (por ejemplo «anotá 12 lucas de verdulería», un recibo de sueldo o
-            un resumen del banco),
-            siempre con una vista previa que confirmás vos.
-          </>
-        )}
-      </p>
-
-      <div className="space-y-2">
-        <p className="text-xs text-muted-foreground">Dirección del conector</p>
-        <div className="flex items-center gap-2">
-          {/* An input, not a <code> block: `break-all` wrapped the URL across
-              lines and a copy from the rendered text dragged those breaks with
-              it. One line that scrolls, read-only, and copying takes the value
-              from the field rather than from the selection. */}
-          <input
-            readOnly
-            value={connectorUrl || "—"}
-            onFocus={e => e.currentTarget.select()}
-            aria-label="Dirección del conector"
-            className="flex-1 min-w-0 bg-muted border-2 border-ink rounded-lg px-3 py-2 text-xs font-mono text-foreground truncate"
-          />
-          {connectorUrl && <CopyButton value={connectorUrl} />}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Agregala en tu asistente como conector personalizado. Te va a pedir iniciar
-          sesión para autorizarlo.
-        </p>
-      </div>
-
-      <div className="space-y-3">
-        <h4 className="text-sm font-semibold text-foreground">Apps conectadas</h4>
-        {connections.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Todavía no conectaste ninguna app.</p>
-        ) : (
-          <div className="divide-y">
-            {connections.map(c => (
-              <div key={c.grant_id} className="flex items-center justify-between py-3 gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground truncate">{c.client_name}</p>
-                  <p className="text-xs text-muted-foreground">Conectada el {shortDate(c.connected_at)}</p>
-                  <p className="text-xs text-muted-foreground">Último uso {relative(c.last_used_at)}</p>
-                  <Chip tone="emerald" className="mt-2">{connectorScopeLabel()}</Chip>
-                </div>
-                <div className="flex items-center gap-2 shrink-0 self-start">
-                  {confirmRow(c.grant_id, () => disconnect(c.grant_id))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-            <KeyRound className="w-3.5 h-3.5" />
-            Token
-          </h4>
-          {!showForm && (
-            <Button variant="outline" onClick={() => setShowForm(true)}>
-              Crear token
-            </Button>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Para los asistentes que piden una clave en vez de iniciar sesión.
-        </p>
-
-        {showForm && (
-          <div className="space-y-2 border rounded-lg p-3">
-            <input
-              className={FIELD}
-              placeholder="Nombre (ej. asistente de la notebook)"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              maxLength={100}
-            />
-            <SelectField value={expiry} onChange={setExpiry}
-              options={EXPIRY_OPTIONS.map(o => ({ value: o.value, label: o.value === "never" ? o.label : `Vence en ${o.label}` }))} />
-            <div className="flex gap-2">
-              <Button onClick={createToken} disabled={busy}>
-                {busy ? "Creando..." : "Crear"}
-              </Button>
-              <Button variant="outline" onClick={() => setShowForm(false)}>
-                Cancelar
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {created && (
-          <div className="border-2 border-ink rounded-lg p-3 space-y-2 bg-amber-50">
-            <p className="text-sm font-semibold text-foreground">
-              Guardá este token ahora: no vas a poder verlo de nuevo.
+    <>
+      <SettingsRow icon={Plug} title="Conectar con una IA" hint={hint} onClick={() => setOpen(true)} />
+      {open && (
+        <FormSheet title="Conectar con una IA" onClose={() => { setOpen(false); setConfirmId(null); }}>
+          <div className={`${FORM_SHEET_BODY} !pb-4`}>
+            <p className={`${SHEET_TEXT} px-1.5`}>
+              {business ? (
+                <>
+                  Conectá tood a un asistente de IA para consultar cómo viene tu negocio y
+                  cargar movimientos conversando. Antes de guardar cualquier cambio, el asistente te
+                  muestra qué va a hacer para que lo confirmes.
+                </>
+              ) : (
+                <>
+                  Conectá tood a un asistente de IA para preguntarle sobre tus gastos, tus
+                  ingresos o el impacto de una compra. El asistente puede{" "}
+                  <strong className="text-foreground">leer</strong> los datos de tu hogar y{" "}
+                  <strong className="text-foreground">cargar o corregir gastos, ingresos, tarjetas y gastos
+                  compartidos</strong> (por ejemplo «anotá 12 lucas de verdulería», un recibo de sueldo o
+                  un resumen del banco),
+                  siempre con una vista previa que confirmás vos.
+                </>
+              )}
             </p>
-            <code className="block bg-white border rounded px-3 py-2 text-xs font-mono break-all">
-              {created.token}
-            </code>
-            <div className="flex gap-2">
-              <CopyButton value={created.token} label="Copiar token" />
-              <Button variant="outline" onClick={() => setCreated(null)}>
-                Ya lo guardé
-              </Button>
-            </div>
-          </div>
-        )}
 
-        {tokens.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Todavía no creaste ninguno.</p>
-        ) : (
-          <div className="divide-y">
-            {tokens.map(t => (
-              <div key={t.id} className="flex items-center justify-between py-3 gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {t.name || "Sin nombre"}
-                  </p>
-                  <p className="text-xs text-muted-foreground font-mono">{t.token_prefix}…</p>
-                  <p className="text-xs text-muted-foreground">
-                    {t.expires_at ? `Vence el ${shortDate(t.expires_at)}` : "Sin vencimiento"} ·
-                    último uso {relative(t.last_used_at)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {t.expired && <Chip tone="rose">Vencido</Chip>}
-                  {confirmRow(t.id, () => revokeToken(t.id))}
-                </div>
+            <div className={SHEET_BLOCK}>
+              <label htmlFor="mcp-url" className="text-xs text-[#4A4658]">Dirección del conector</label>
+              <div className="mt-1 flex items-center gap-2">
+                {/* An input, not a <code> block: `break-all` wrapped the URL across
+                    lines and a copy from the rendered text dragged those breaks with
+                    it. One line that scrolls, read-only, and copying takes the value
+                    from the field rather than from the selection. */}
+                <input
+                  id="mcp-url"
+                  readOnly
+                  value={connectorUrl || "Cargando…"}
+                  onFocus={e => e.currentTarget.select()}
+                  aria-label="Dirección del conector"
+                  className="flex-1 min-w-0 bg-transparent font-marca !text-[13px] text-foreground truncate outline-none"
+                />
+                {connectorUrl && <CopyButton value={connectorUrl} className="shrink-0 h-11" />}
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+              <p className="mt-2 text-sm leading-snug text-[#4A4658]">
+                Agregala en tu asistente como conector personalizado. Te va a pedir iniciar
+                sesión para autorizarlo.{" "}
+                <a href={siteHref("/conectar")} className="font-semibold text-[#3B2FB3] underline underline-offset-2">Ver el paso a paso</a>
+              </p>
+            </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
-    </Card>
+            <div>
+              <h4 className="px-1.5 text-[15px] font-medium text-[#4A4658]">Apps conectadas</h4>
+              {connections.length === 0 ? (
+                <p className={`${SHEET_TEXT} px-1.5 py-2`}>Todavía no conectaste ninguna app.</p>
+              ) : (
+                <MotionList className="divide-y divide-ink/[0.08]">
+                  {connections.map(c => (
+                    <div key={c.grant_id} className="px-1.5 py-2.5">
+                      <div className="flex items-start gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[15px] font-semibold text-foreground truncate">{c.client_name}</p>
+                          {c.connected_at && <p className="text-sm text-[#4A4658]">Conectada el {shortDate(c.connected_at)}</p>}
+                          <p className="text-sm text-[#4A4658]">Último uso {relative(c.last_used_at)}</p>
+                          <Chip tone="violet" className="mt-1.5">{connectorScopeLabel()}</Chip>
+                        </div>
+                        {revokeButton(c.grant_id, "Desconectar")}
+                      </div>
+                      {revokeConfirm(c.grant_id, `¿Desconectar ${c.client_name}? Deja de poder leer y cargar datos.`, "Sí, desconectar", () => disconnect(c.grant_id))}
+                    </div>
+                  ))}
+                </MotionList>
+              )}
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between gap-2 px-1.5">
+                <h4 className="text-[15px] font-medium text-[#4A4658]">Token</h4>
+                {!showForm && (
+                  <Button variant="outline" className="h-10" onClick={() => setShowForm(true)}>
+                    Crear token
+                  </Button>
+                )}
+              </div>
+              <p className={`${SHEET_TEXT} px-1.5 mt-1`}>
+                Para los asistentes que piden una clave en vez de iniciar sesión.
+              </p>
+
+              {showForm && (
+                <div className={`${SHEET_BLOCK} mt-2 space-y-2`}>
+                  <input
+                    className={`${FIELD} !mt-0`}
+                    placeholder="Nombre (ej. asistente de la notebook)"
+                    aria-label="Nombre del token"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    maxLength={100}
+                  />
+                  <SelectField value={expiry} onChange={setExpiry}
+                    options={EXPIRY_OPTIONS.map(o => ({ value: o.value, label: o.value === "never" ? o.label : `Vence en ${o.label}` }))} />
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button variant="ghost" className="h-11 px-3 text-foreground" onClick={() => setShowForm(false)}>
+                      Cancelar
+                    </Button>
+                    <Button className="flex-1 h-11" onClick={createToken} disabled={busy}>
+                      {busy ? "Creando…" : "Crear"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {created && (
+                <div className={`${SHEET_NOTICE} mt-2`}>
+                  <p className="text-[15px] font-semibold text-foreground">
+                    Guardá este token ahora: no vas a poder verlo de nuevo.
+                  </p>
+                  <code className="block bg-white rounded-xl px-3 py-2 font-marca text-xs break-all">
+                    {created.token}
+                  </code>
+                  <div className="flex gap-2 pt-1">
+                    <CopyButton value={created.token} label="Copiar token" className="h-11" />
+                    <Button variant="outline" className="h-11" onClick={() => setCreated(null)}>
+                      Ya lo guardé
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {tokens.length === 0 ? (
+                !showForm && !created && <p className={`${SHEET_TEXT} px-1.5 mt-1`}>Todavía no creaste ninguno.</p>
+              ) : (
+                <MotionList className="mt-1 divide-y divide-ink/[0.08]">
+                  {tokens.map(t => (
+                    <div key={t.id} className="px-1.5 py-2.5">
+                      <div className="flex items-start gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[15px] font-semibold text-foreground truncate">
+                            {t.name || "Sin nombre"}
+                          </p>
+                          <p className="font-marca text-xs text-[#4A4658]">{t.token_prefix}…</p>
+                          <p className="text-sm text-[#4A4658]">
+                            {t.expires_at ? `Vence el ${shortDate(t.expires_at)}` : "Sin vencimiento"} ·
+                            último uso {relative(t.last_used_at)}
+                          </p>
+                          {t.expired && <Chip tone="rose" className="mt-1.5">Vencido</Chip>}
+                        </div>
+                        {revokeButton(t.id, "Revocar")}
+                      </div>
+                      {revokeConfirm(t.id, `¿Revocar ${t.name || "este token"}? Lo que lo use deja de andar.`, "Sí, revocar", () => revokeToken(t.id))}
+                    </div>
+                  ))}
+                </MotionList>
+              )}
+            </div>
+
+            {error && <p role="alert" className="text-sm text-rose-800 bg-rose-50 rounded-xl px-3 py-2">{error}</p>}
+          </div>
+        </FormSheet>
+      )}
+    </>
   );
 }

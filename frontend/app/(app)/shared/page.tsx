@@ -1,10 +1,11 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, Users, Copy, Link, Layers, CalendarDays, ChevronLeft, ChevronRight, Share2, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Pencil, X, MoreVertical } from "lucide-react";
+import { ArrowLeftRight, Check, Copy, Share2, UserPlus, X } from "lucide-react";
+import type { Step } from "react-joyride";
 
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
@@ -12,19 +13,60 @@ import { formatARS, formatUSD, getErrorMessage, parseAmount, pickCategoryColor }
 import { equalSplit, fromCents, remainder, sumMatches, toCents } from "@/lib/split";
 import { useAuth } from "@/contexts/AuthContext";
 import { ParticipantPicker, type PickedParticipant } from "@/components/ParticipantPicker";
+import NewCategoryModal from "@/components/NewCategoryModal";
+import ProductTour from "@/components/ProductTour";
+import { useReaccion } from "@/components/brand/ToodReaccion";
+import { MotionList } from "@/components/ui/motion-list";
+import { MonthPill } from "@/components/dashboard/MonthPill";
+import { EntrySheet, SheetActions, SheetLink, SheetRow } from "@/components/movimientos/EntrySheet";
+import { AmountField, FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions } from "@/components/movimientos/FormSheet";
+import { LedgerRow, LedgerTotal, ledgerAmount } from "@/components/movimientos/Ledger";
 import { usePendingShared } from "@/contexts/PendingSharedContext";
-import { Card } from "@/components/ui/card";
-import { FIELD, FormGrid, SelectField, DateField } from "@/components/ui/form";
-import { Fab } from "@/components/ui/fab";
-import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { ChoiceChips } from "@/components/ui/choice-chips";
+import { DateField, FIELD, FormGrid, SegmentedToggle, SelectField } from "@/components/ui/form";
+import { Fab } from "@/components/ui/fab";
+import { ScrollRow } from "@/components/ui/scroll-row";
+import { useNuevo } from "@/lib/nuevo";
+
+// Un componente y no el hook suelto: esta pantalla tiene varios `return` antes del
+// principal, y un hook no puede ir después de ellos.
+function NuevoListener({ onNuevo }: { onNuevo: () => void }) {
+  useNuevo(onNuevo, "nuevo");
+  return null;
+}
+
+// Muestra lo que hay en la pantalla, en el orden en que se mira. Lo pendiente y
+// las personas sólo si están: una pantalla vacía no lleva guía.
+const tourSteps = (hasPending: boolean, hasPeople: boolean, hasList: boolean): Step[] => [
+  ...(hasPending ? [{
+    target: "[data-tour='shared-pending']",
+    title: "Lo que espera tu respuesta",
+    content: "Aceptá o rechazá lo que te compartieron. Si aceptás, tu parte se suma a tus Egresos.",
+  }] : []),
+  ...(hasPeople ? [{
+    target: "[data-tour='shared-people']",
+    title: "Por persona",
+    content: "Elegí a alguien para ver quién le debe a quién en cada mes y mandarle el detalle por WhatsApp.",
+  }] : []),
+  ...(hasList ? [{
+    target: "[data-tour='shared-list']",
+    title: "Cada gasto",
+    content: "Tocá uno para ver cuánto pone cada persona y si ya aceptó. Si invitaste a alguien, ahí copiás el link.",
+  }] : []),
+  {
+    // En el celular es el + de la barra; en la compu, el botón flotante.
+    target: "[data-tour='nav-add'], [data-tour='shared-add']",
+    title: "Compartí un gasto",
+    content: "Cargá cuánto salió y elegí con quién: en partes iguales o lo que ponga cada uno.",
+  },
+];
 
 function buildPhone(prefix: string, local: string): string {
   const digits = local.replace(/\D/g, "");
   return prefix === "54" ? prefix + "9" + digits : prefix + digits;
 }
-
-// Pick a contact from device and normalize phone to prefix + local format
 
 interface Split {
   id: number;
@@ -78,13 +120,17 @@ interface SharedExpense {
   splits: Split[];
 }
 
+/** Un gasto suelto, o las cuotas de un plan: cada cuota es su propio registro. */
+interface Group {
+  root: SharedExpense;
+  cuotas: SharedExpense[];
+}
 
 interface Category {
   id: number;
   name: string;
   color: string | null;
 }
-
 
 /** Qué se muestra debajo del nombre de un participante ya elegido. */
 function participantHint(p: ParticipantRow): string {
@@ -112,8 +158,13 @@ interface ParticipantRow {
   invite_phone_local: string;
 }
 
+const EMPTY_ROW: ParticipantRow = {
+  type: "member", user_id: null, member_name: "", amount: "", manual: false,
+  invite_method: "none", invite_email: "", invite_phone_prefix: "54", invite_phone_local: "",
+};
+
 function fmtDate(d: string) {
-  try { return format(new Date(d + "T12:00:00"), "d MMM yyyy", { locale: es }); }
+  try { return format(new Date(d + "T12:00:00"), "d MMM yyyy", { locale: es }).replace(".", ""); }
   catch { return d; }
 }
 
@@ -121,12 +172,14 @@ function fmtByCurrency(amount: number | string, currency: string) {
   return currency === "USD" ? formatUSD(amount) : formatARS(amount);
 }
 
-// Compact "d MMM" (no year) — used in the per-person monthly table, where
-// the year is already shown once in the month selector above.
-function fmtDateShort(d: string) {
-  try { return format(new Date(d + "T12:00:00"), "d MMM", { locale: es }); }
-  catch { return d; }
-}
+// Un monto en un campo se ve como se escribe acá: "4.069.000,00". El backend manda "4069000.00".
+const amountText = (n: number | string) =>
+  Number(n).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// La fecha del teléfono, no la de `toISOString()`: a las 21 de Buenos Aires esa ya es mañana.
+const today = () => format(new Date(), "yyyy-MM-dd");
+
+const firstName = (name: string) => name.trim().split(/\s+/)[0];
 
 /**
  * Reparte lo que queda del total entre las filas que el usuario no fijó a mano.
@@ -147,25 +200,10 @@ function redistAuto(parts: ParticipantRow[], total: number): ParticipantRow[] {
   const byIdx = new Map(autoIdx.map((i, k) => [i, shares[k]]));
   return parts.map((p, i) => {
     const share = byIdx.get(i);
-    return share === undefined ? p : { ...p, amount: share.toFixed(2) };
+    return share === undefined ? p : { ...p, amount: amountText(share) };
   });
 }
 
-// Deterministic color per person (same name/key always gets the same tone),
-// distinct from pickCategoryColor which optimizes for "not already used".
-const PERSON_COLOR_PALETTE = [
-  "#5B4FE9", "#10b981", "#f59e0b", "#f43f5e", "#0ea5e9",
-  "#14b8a6", "#f97316", "#ec4899", "#8b5cf6", "#64748b",
-];
-function colorForKey(key: string): string {
-  let hash = 0;
-  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
-  return PERSON_COLOR_PALETTE[Math.abs(hash) % PERSON_COLOR_PALETTE.length];
-}
-function getInitials(name: string): string {
-  const words = name.trim().split(/\s+/);
-  return (words.length > 1 ? words[0][0] + words[1][0] : name.trim().slice(0, 2)).toUpperCase();
-}
 // Stable identity for a split's participant across expenses: registered
 // members dedupe by user_id, external guests dedupe by name (no other
 // stable id available for them).
@@ -173,41 +211,57 @@ function personKey(split: Split): string {
   return split.user_id != null ? `u:${split.user_id}` : `n:${split.member_name.trim().toLowerCase()}`;
 }
 
-function PersonAvatar({ name, active, onClick }: { name: string; active: boolean; onClick: () => void }) {
-  const color = colorForKey(name);
+/** En qué está esta parte, dicho en una frase. `waiting` es lo que espera algo: va en lila. */
+function splitStatus(split: Split, exp: SharedExpense): { text: string; waiting: boolean } {
+  const isCreatorSplit = split.user_id != null && split.user_id === exp.created_by_user_id;
+  if (split.status === "rejected") return { text: split.mine ? "Lo rechazaste" : "Lo rechazó", waiting: false };
+  if (split.mine) {
+    if (split.status === "pending") return { text: "Falta que aceptes", waiting: true };
+    return { text: isCreatorSplit ? "Lo cargaste" : "Aceptaste", waiting: false };
+  }
+  if (isCreatorSplit) return { text: "Lo cargó", waiting: false };
+  if (split.status === "accepted") {
+    // Un externo sin cuenta nace aceptado: no hay nada que esperar de él.
+    return { text: split.user_id === null ? "Sin cuenta, sólo anotado" : "Aceptó", waiting: false };
+  }
+  if (split.invite_token) return { text: "Invitación sin aceptar", waiting: true };
+  return { text: split.user_id === null ? "Sin cuenta, sólo anotado" : "Falta que acepte", waiting: split.user_id !== null };
+}
+
+/** La línea de abajo de una fila: con quién, y lo único que todavía importa de su estado. */
+function rowSub(exp: SharedExpense, cuotas: number, currentUserId: number | undefined): string {
+  const others = exp.splits.filter(s => !s.mine);
+  const parts: string[] = [];
+  if (exp.created_by_user_id === currentUserId) {
+    const names = others.slice(0, 2).map(s => firstName(s.member_name));
+    const extra = others.length - names.length;
+    parts.push(`Con ${names.join(" y ")}${extra > 0 ? ` y ${extra} más` : ""}`);
+    const waiting = others.filter(s => splitStatus(s, exp).waiting).length;
+    if (waiting === 1) parts.push("falta 1 respuesta");
+    if (waiting > 1) parts.push(`faltan ${waiting} respuestas`);
+    const rejected = others.filter(s => s.status === "rejected");
+    if (rejected.length === 1) parts.push(`${firstName(rejected[0].member_name)} lo rechazó`);
+    if (rejected.length > 1) parts.push(`${rejected.length} lo rechazaron`);
+  } else {
+    const creator = exp.splits.find(s => s.user_id === exp.created_by_user_id);
+    if (creator) parts.push(`De ${firstName(creator.member_name)}`);
+    if (exp.splits.find(s => s.mine)?.status === "rejected") parts.push("lo rechazaste");
+  }
+  if (cuotas > 1) parts.push(`${cuotas} cuotas`);
+  return parts.join(" · ");
+}
+
+function SplitBalance({ left, money }: { left: number; money: (n: number) => string }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex flex-col items-center gap-1 shrink-0 w-16"
-    >
-      <div
-        className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-white text-sm transition-all ${active ? "ring-2 ring-offset-2 ring-primary" : ""}`}
-        style={{ backgroundColor: color }}
-      >
-        {getInitials(name)}
-      </div>
-      <span className={`text-[11px] truncate w-full text-center ${active ? "text-primary font-medium" : "text-muted-foreground"}`}>
-        {name.trim().split(/\s+/)[0]}
-      </span>
-    </button>
+    <p className={`text-sm ${left === 0 ? "text-muted-foreground" : left > 0 ? "text-[#3B2FB3]" : "text-destructive"}`}>
+      {left === 0 ? "La división suma justo." : left > 0 ? `Falta repartir ${money(left)}.` : `Te pasaste por ${money(-left)}.`}
+    </p>
   );
 }
 
-function StatusChip({ status, hasToken }: { status: string; hasToken?: boolean }) {
-  if (status === "accepted") return (
-    <Chip tone="emerald"><CheckCircle className="w-3 h-3" /> Aceptado</Chip>
-  );
-  if (status === "rejected") return (
-    <Chip tone="rose"><XCircle className="w-3 h-3" /> Rechazado</Chip>
-  );
-  if (hasToken) return (
-    <Chip tone="violet"><Link className="w-3 h-3" /> Invitado</Chip>
-  );
-  return (
-    <Chip tone="amber"><Clock className="w-3 h-3" /> Pendiente</Chip>
-  );
-}
+const FORM_BLOCK = "rounded-[22px] bg-white/70 border border-white/80 px-3.5 py-3";
+const FORM_ERROR = "text-sm text-destructive bg-destructive/10 rounded-2xl px-3.5 py-2.5";
+const FIELD_LABEL = "text-xs font-medium text-muted-foreground";
 
 // Field-level edit permissions mirror the backend (PATCH /shared-expenses/{id}):
 // not locked (nobody but the creator accepted yet) → everything editable,
@@ -223,12 +277,12 @@ function EditExpenseModal({
 }) {
   const unlocked = !expense.locked;
   const [title, setTitle] = useState(expense.title);
-  const [totalAmount, setTotalAmount] = useState(String(expense.total_amount));
+  const [totalAmount, setTotalAmount] = useState(amountText(expense.total_amount));
   const [categoryId, setCategoryId] = useState(String(expense.category_id));
   const [expenseDate, setExpenseDate] = useState(expense.expense_date);
   const [paymentDate, setPaymentDate] = useState(expense.payment_date);
   const [splitAmounts, setSplitAmounts] = useState<Record<number, string>>(
-    () => Object.fromEntries(expense.splits.map(s => [s.id, String(s.amount)]))
+    () => Object.fromEntries(expense.splits.map(s => [s.id, amountText(s.amount)]))
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -236,8 +290,7 @@ function EditExpenseModal({
   const total = parseAmount(totalAmount);
   // En el orden de `expense.splits`, que es el que se manda en el PATCH.
   const splitValues = expense.splits.map(sp => parseAmount(splitAmounts[sp.id] ?? ""));
-  const splitsSum = splitValues.reduce((s, v) => s + v, 0);
-  const splitsClose = sumMatches(total, splitValues);
+  const money = (n: number) => fmtByCurrency(n, expense.currency);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -253,8 +306,8 @@ function EditExpenseModal({
       if (!sumMatches(total, splitValues)) {
         const left = remainder(total, splitValues);
         setError(left > 0
-          ? `Faltan ${fmtByCurrency(left, expense.currency)} por asignar`
-          : `Sobran ${fmtByCurrency(-left, expense.currency)}: la división supera el total`);
+          ? `Faltan ${money(left)} por asignar`
+          : `Sobran ${money(-left)}: la división supera el total`);
         return;
       }
       body.total_amount = total;
@@ -273,90 +326,76 @@ function EditExpenseModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-foreground">Editar gasto</h3>
-          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <FormSheet title="Editar gasto" onClose={onClose}>
+      <form onSubmit={handleSubmit} className={FORM_SHEET_FORM}>
+        <div className={FORM_SHEET_BODY}>
+          {unlocked ? (
+            <AmountField label="Monto total" currency={expense.currency} required
+              value={totalAmount} onChange={e => setTotalAmount(e.target.value)} />
+          ) : (
+            <p className="rounded-2xl bg-accent border border-[#CFC9E4] px-3.5 py-2.5 text-sm text-foreground">
+              Ya lo aceptó otro participante: sólo se pueden corregir el título y las fechas.
+            </p>
+          )}
 
-        {!unlocked && (
-          <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-            Ya lo aceptó otro participante: sólo se pueden corregir el título y las fechas.
-          </p>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="text-xs font-medium text-muted-foreground">Descripción</label>
-            <input required value={title} onChange={e => setTitle(e.target.value)}
-              className={FIELD} />
+            <label className={FIELD_LABEL}>Descripción</label>
+            <input required aria-label="Descripción" value={title} onChange={e => setTitle(e.target.value)} className={FIELD} />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <FormGrid>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Fecha del gasto</label>
+              <label className={FIELD_LABEL}>Fecha del gasto</label>
               <DateField required value={expenseDate} onChange={setExpenseDate} />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Fecha de pago</label>
+              <label className={FIELD_LABEL}>Fecha de pago</label>
               <DateField required value={paymentDate} onChange={setPaymentDate} />
             </div>
-          </div>
+          </FormGrid>
 
           {unlocked ? (
             <>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground">Monto total</label>
-                  <input required type="text" inputMode="decimal" value={totalAmount}
-                    onChange={e => setTotalAmount(e.target.value)}
-                    className={FIELD} />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground">Categoría</label>
-                  <SelectField required value={categoryId} onChange={setCategoryId}
-                    options={categories.map(c => ({ value: String(c.id), label: c.name }))} />
-                </div>
+              <div>
+                <label className={FIELD_LABEL}>Categoría</label>
+                <SelectField required value={categoryId} onChange={setCategoryId}
+                  options={categories.map(c => ({ value: String(c.id), label: c.name }))} />
               </div>
 
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">Participantes</label>
-                <div className="space-y-1.5">
-                  {expense.splits.map(s => (
-                    <div key={s.id} className="flex items-center gap-2">
-                      <span className="flex-1 text-sm text-foreground truncate">{s.member_name}</span>
-                      <input type="text" inputMode="decimal" value={splitAmounts[s.id] ?? ""}
+              <div className={`${FORM_BLOCK} space-y-2`}>
+                <p className="text-sm font-medium text-foreground">Cuánto pone cada uno</p>
+                {expense.splits.map(s => (
+                  <div key={s.id} className="flex items-center gap-2">
+                    <span className="flex-1 min-w-0 text-[15px] text-foreground truncate">{s.mine ? "Vos" : s.member_name}</span>
+                    {/* `FIELD` trae `w-full`: el ancho lo pone el envoltorio. */}
+                    <span className="w-32 shrink-0">
+                      <input type="text" inputMode="decimal" pattern="[0-9.,]*"
+                        aria-label={`Parte de ${s.member_name}`}
+                        value={splitAmounts[s.id] ?? ""}
                         onChange={e => setSplitAmounts(prev => ({ ...prev, [s.id]: e.target.value }))}
-                        className={`${FIELD} mt-0 w-28 text-right`} />
-                    </div>
-                  ))}
-                </div>
-                <p className={`text-xs mt-1.5 ${splitsClose ? "text-muted-foreground" : "text-destructive"}`}>
-                  Repartido: {fmtByCurrency(splitsSum, expense.currency)} de {fmtByCurrency(total, expense.currency)}
-                </p>
+                        className={`${FIELD} mt-0 text-right tabular-nums`} />
+                    </span>
+                  </div>
+                ))}
+                <SplitBalance left={remainder(total, splitValues)} money={money} />
               </div>
             </>
           ) : (
-            <div className="text-sm text-muted-foreground space-y-1 bg-muted rounded-lg px-3 py-2">
-              <p>Monto: <strong className="text-foreground">{fmtByCurrency(expense.total_amount, expense.currency)}</strong></p>
+            <div className={`${FORM_BLOCK} divide-y divide-ink/[0.08] !py-0`}>
+              <SheetRow label="Monto" strong><span className="tabular-nums">{money(expense.total_amount)}</span></SheetRow>
               {expense.splits.map(s => (
-                <p key={s.id}>{s.member_name}: {fmtByCurrency(s.amount, expense.currency)}</p>
+                <SheetRow key={s.id} label={s.mine ? "Vos" : s.member_name}>
+                  <span className="tabular-nums">{money(s.amount)}</span>
+                </SheetRow>
               ))}
             </div>
           )}
 
-          {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
-
-          <div className="flex gap-2 justify-end pt-1">
-            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-            <Button type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar"}</Button>
-          </div>
-        </form>
-      </Card>
-    </div>
+          {error && <p className={FORM_ERROR} role="alert">{error}</p>}
+        </div>
+        <FormSheetActions onCancel={onClose} saving={saving} label="Guardar" />
+      </form>
+    </FormSheet>
   );
 }
 
@@ -377,7 +416,7 @@ function ConvertToArsModal({
     (targetSplits[0]?.converted_ars_rate_type as RateType | null) ?? "blue"
   );
   const [rate, setRate] = useState<string>(
-    targetSplits[0]?.converted_ars_rate != null ? Number(targetSplits[0].converted_ars_rate).toFixed(2) : ""
+    targetSplits[0]?.converted_ars_rate != null ? amountText(targetSplits[0].converted_ars_rate) : ""
   );
   const [suggested, setSuggested] = useState<Partial<Record<RateType, number>> | null>(null);
   const [loadingRate, setLoadingRate] = useState(true);
@@ -400,7 +439,7 @@ function ConvertToArsModal({
             mep: n(latest.usd_mep), ccl: n(latest.usd_ccl),
           };
           setSuggested(map);
-          setRate(prev => prev || (map[rateType] != null ? map[rateType]!.toFixed(2) : prev));
+          setRate(prev => prev || (map[rateType] != null ? amountText(map[rateType]!) : prev));
         }
       } catch { /* sin cotización sugerida, se completa a mano */ }
       finally { setLoadingRate(false); }
@@ -410,7 +449,7 @@ function ConvertToArsModal({
 
   function handleRateTypeChange(t: RateType) {
     setRateType(t);
-    if (t !== "personalizado" && suggested?.[t] != null) setRate(suggested[t]!.toFixed(2));
+    if (t !== "personalizado" && suggested?.[t] != null) setRate(amountText(suggested[t]!));
   }
 
   // Editing the rate by hand no longer matches whichever published quote was
@@ -422,7 +461,8 @@ function ConvertToArsModal({
 
   const rateNum = parseAmount(rate);
 
-  async function handleConfirm() {
+  async function handleConfirm(e: React.FormEvent) {
+    e.preventDefault();
     setError("");
     if (rateNum <= 0) { setError("Ingresá una cotización válida"); return; }
     setSaving(true);
@@ -449,138 +489,87 @@ function ConvertToArsModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-foreground">Convertir a pesos</h3>
-          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Cotización</label>
-            <SelectField value={rateType} onChange={v => handleRateTypeChange(v as RateType)}
-              options={RATE_TYPES.map(t => ({ value: t, label: RATE_TYPE_LABELS[t] }))} />
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Valor del dólar</label>
-            <input required type="text" inputMode="decimal" value={rate} onChange={e => handleRateInputChange(e.target.value)}
-              placeholder={loadingRate ? "Cargando..." : "0,00"}
-              className={FIELD} />
-          </div>
-        </div>
-
-        <div className="space-y-1 border-t pt-3">
-          {targetSplits.map(s => (
-            <div key={s.id} className="flex items-center justify-between text-sm gap-2">
-              <span className="text-muted-foreground truncate">{s.member_name}</span>
-              <span className="font-medium text-foreground whitespace-nowrap">
-                {formatUSD(s.amount)} → {rateNum > 0 ? formatARS(Number(s.amount) * rateNum) : "-"}
-              </span>
+    <FormSheet title="Convertir a pesos" onClose={onClose}>
+      <form onSubmit={handleConfirm} className={FORM_SHEET_FORM}>
+        <div className={FORM_SHEET_BODY}>
+          <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
+            <div>
+              <label className={FIELD_LABEL}>Cotización</label>
+              <SelectField value={rateType} onChange={v => handleRateTypeChange(v as RateType)}
+                options={RATE_TYPES.map(t => ({ value: t, label: RATE_TYPE_LABELS[t] }))} />
             </div>
-          ))}
-        </div>
+            <div>
+              <label className={FIELD_LABEL}>Valor del dólar</label>
+              <input required type="text" inputMode="decimal" pattern="[0-9.,]*" aria-label="Valor del dólar"
+                value={rate} onChange={e => handleRateInputChange(e.target.value)}
+                placeholder={loadingRate ? "Cargando..." : "0,00"}
+                className={`${FIELD} tabular-nums`} />
+            </div>
+          </div>
 
-        {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
+          <div className={`${FORM_BLOCK} !py-0 divide-y divide-ink/[0.08]`}>
+            {targetSplits.map(s => (
+              <SheetRow key={s.id} label={s.mine ? "Vos" : s.member_name}>
+                <span className="tabular-nums">
+                  {formatUSD(s.amount)}
+                  <span className="block text-sm font-normal text-muted-foreground">
+                    {rateNum > 0 ? formatARS(Number(s.amount) * rateNum) : "Falta la cotización"}
+                  </span>
+                </span>
+              </SheetRow>
+            ))}
+          </div>
 
-        <div className="flex gap-2 justify-end pt-1">
           {alreadyConverted && (
-            <Button type="button" variant="outline" onClick={handleRevert} disabled={saving} className="mr-auto text-muted-foreground">
+            <button type="button" onClick={handleRevert} disabled={saving}
+              className="min-h-[44px] px-1.5 text-sm font-semibold text-foreground underline underline-offset-2 disabled:opacity-50">
               Volver a dólares
-            </Button>
+            </button>
           )}
-          <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button type="button" onClick={handleConfirm} disabled={saving || rateNum <= 0}>
-            {saving ? "Convirtiendo..." : "Convertir"}
-          </Button>
+
+          {error && <p className={FORM_ERROR} role="alert">{error}</p>}
         </div>
-      </Card>
-    </div>
+        <FormSheetActions onCancel={onClose} saving={saving} disabled={rateNum <= 0} label="Convertir" />
+      </form>
+    </FormSheet>
   );
 }
 
-export default function SharedExpensesPage() {
-  const { refresh: refreshPending } = usePendingShared();
-  // Índice de la fila que está eligiendo participante, o null.
-  const [pickerFor, setPickerFor] = useState<number | null>(null);
-  useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
+function NewSharedForm({ categories, reloadCategories, onClose, onSaved }: {
+  categories: Category[];
+  reloadCategories: () => Promise<void>;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const { appUser } = useAuth();
-  const [expenses, setExpenses] = useState<SharedExpense[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
+  // Índice de la fila que está eligiendo participante, "new" para sumar una, o null.
+  const [pickerFor, setPickerFor] = useState<number | "new" | null>(null);
   const [showCatForm, setShowCatForm] = useState(false);
-  const [catName, setCatName] = useState("");
-  const [catColor, setCatColor] = useState("#6366f1");
-  const [savingCat, setSavingCat] = useState(false);
-  const [copiedToken, setCopiedToken] = useState<string | null>(null);
-  const [editingExpense, setEditingExpense] = useState<SharedExpense | null>(null);
-  const [converting, setConverting] = useState<{ expense: SharedExpense; splitIds: number[] } | null>(null);
 
   const [title, setTitle] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [expenseDate, setExpenseDate] = useState(today);
   const [differentPaymentDate, setDifferentPaymentDate] = useState(false);
-  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [paymentDate, setPaymentDate] = useState(today);
   const [splitType, setSplitType] = useState<"equal" | "custom">("equal");
-  const [participants, setParticipants] = useState<ParticipantRow[]>([
-    { type: "member", user_id: null, member_name: "", amount: "", manual: false, invite_method: "none", invite_email: "", invite_phone_prefix: "54", invite_phone_local: "" },
-  ]);
+  // La primera fila es quien carga: appUser siempre está, el layout no deja llegar sin él.
+  const [participants, setParticipants] = useState<ParticipantRow[]>([{
+    ...EMPTY_ROW, user_id: appUser?.id ?? null, member_name: appUser?.display_name || appUser?.email || "",
+  }]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
-  const now = new Date();
-  const [selectedPersonKey, setSelectedPersonKey] = useState<string | null>(null);
-  const [personYear, setPersonYear] = useState(now.getFullYear());
-  const [personMonth, setPersonMonth] = useState(now.getMonth() + 1);
-
   const total = parseAmount(totalAmount);
-
-  const loadCategories = async () => {
-    try {
-      const res = await api.get("/expenses/categories");
-      setCategories(res.data);
-    } catch { /* ignorar */ }
-  };
-
-  const load = async () => {
-    setLoading(true);
-    // Miembros y agenda ya no se piden acá: los carga ParticipantPicker cuando
-    // se abre, que es el único lugar que los usa. Pedirlos en cada visita a la
-    // pantalla era traer dos listas para no mostrarlas.
-    const [se] = await Promise.allSettled([api.get("/shared-expenses")]);
-    if (se.status === "fulfilled") setExpenses(se.value.data);
-    await loadCategories();
-    setLoading(false);
-  };
-
-  useEffect(() => { load(); }, []);
-
-  // Pre-cargar el primer participante con el usuario actual (appUser siempre disponible)
-  useEffect(() => {
-    if (!appUser) return;
-    setParticipants(prev => {
-      if (prev[0].user_id !== null) return prev;
-      const updated: ParticipantRow[] = [
-        { ...prev[0], user_id: appUser.id, member_name: appUser.display_name || appUser.email },
-        ...prev.slice(1),
-      ];
-      return splitType === "custom" ? redistAuto(updated, total) : updated;
-    });
-  }, [appUser]);
 
   // Redistribuir automaticos cuando cambia el monto total
   useEffect(() => {
     if (splitType === "custom" && total > 0) {
       setParticipants(prev => redistAuto(prev, total));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalAmount, splitType]);
 
-  // --- Valores derivados ---
   // Una parte por fila, no un solo número repetido: `equalSplit` le deja el
   // resto de centavos a la última, que es lo que hace que la suma dé el total.
   const equalShares = total > 0 ? equalSplit(total, participants.length) : [];
@@ -588,15 +577,7 @@ export default function SharedExpensesPage() {
   const manualSum = splitType === "custom"
     ? participants.filter(p => p.manual).reduce((s, p) => s + parseAmount(p.amount), 0)
     : 0;
-  const assignedSum = splitType === "custom"
-    ? participants.reduce((s, p) => s + parseAmount(p.amount), 0)
-    : 0;
   const overBudget = splitType === "custom" && total > 0 && toCents(manualSum) > toCents(total);
-
-  // --- Helpers de participantes ---
-  function updateParticipant(idx: number, patch: Partial<ParticipantRow>) {
-    setParticipants(prev => prev.map((p, i) => i === idx ? { ...p, ...patch } : p));
-  }
 
   function setManualAmount(idx: number, value: string) {
     setParticipants(prev => {
@@ -609,16 +590,17 @@ export default function SharedExpensesPage() {
 
   // Traduce lo que devuelve el selector a la fila que este formulario maneja.
   // El selector no sabe de montos ni de redistribución: eso es de acá.
-  function applyPick(idx: number, picked: PickedParticipant) {
+  function rowFromPick(picked: PickedParticipant): Partial<ParticipantRow> {
     const base = {
       user_id: null as number | null, member_name: "", invite_method: "none" as const,
       invite_email: "", invite_phone_prefix: "54", invite_phone_local: "",
     };
     if (picked.kind === "member" || picked.kind === "user") {
-      updateParticipant(idx, { ...base, type: "member", user_id: picked.user_id, member_name: picked.member_name });
-    } else if (picked.kind === "invite") {
+      return { ...base, type: "member", user_id: picked.user_id, member_name: picked.member_name };
+    }
+    if (picked.kind === "invite") {
       const isMail = picked.contact.includes("@");
-      updateParticipant(idx, {
+      return {
         ...base, type: "external", member_name: picked.member_name,
         invite_method: isMail ? "email" : "whatsapp",
         invite_email: isMail ? picked.contact : "",
@@ -629,18 +611,17 @@ export default function SharedExpensesPage() {
         // Anteponerle otro prefijo duplicaría el código de país.
         invite_phone_local: isMail ? "" : picked.contact.replace(/\D/g, ""),
         invite_phone_prefix: "",
-      });
-    } else {
-      updateParticipant(idx, { ...base, type: "external", member_name: picked.member_name });
+      };
     }
+    return { ...base, type: "external", member_name: picked.member_name };
   }
 
-  function addParticipant() {
+  function applyPick(picked: PickedParticipant) {
+    const patch = rowFromPick(picked);
     setParticipants(prev => {
-      const newRow: ParticipantRow = {
-        type: "member", user_id: null, member_name: "", amount: "", manual: false, invite_method: "none", invite_email: "", invite_phone_prefix: "54", invite_phone_local: "",
-      };
-      const updated = [...prev, newRow];
+      const updated = pickerFor === "new"
+        ? [...prev, { ...EMPTY_ROW, ...patch }]
+        : prev.map((p, i) => (i === pickerFor ? { ...p, ...patch } : p));
       return splitType === "custom" ? redistAuto(updated, total) : updated;
     });
   }
@@ -662,35 +643,11 @@ export default function SharedExpensesPage() {
     }
   }
 
-  function resetForm() {
-    setTitle(""); setTotalAmount(""); setCategoryId("");
-    setExpenseDate(new Date().toISOString().slice(0, 10));
-    setDifferentPaymentDate(false);
-    setPaymentDate(new Date().toISOString().slice(0, 10));
-    setSplitType("equal");
-    setParticipants([{
-      type: "member",
-      user_id: appUser?.id ?? null,
-      member_name: appUser?.display_name || appUser?.email || "",
-      amount: "",
-      manual: false,
-      invite_method: "none",
-      invite_email: "",
-      invite_phone_prefix: "54",
-      invite_phone_local: "",
-    }]);
-    setFormError("");
-  }
-
-  async function saveCat() {
-    if (!catName.trim()) return;
-    setSavingCat(true);
-    try {
-      await api.post("/expenses/categories", { name: catName, color: catColor, is_fixed: false });
-      setCatName(""); setCatColor("#6366f1");
-      setShowCatForm(false);
-      await loadCategories();
-    } finally { setSavingCat(false); }
+  async function saveCat(cat: { name: string; color: string; is_fixed: boolean }) {
+    const res = await api.post("/expenses/categories", cat);
+    await reloadCategories();
+    setCategoryId(String(res.data.id));
+    setShowCatForm(false);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -731,42 +688,504 @@ export default function SharedExpensesPage() {
         payment_date: differentPaymentDate ? paymentDate : expenseDate,
         splits,
       });
-      resetForm(); setShowForm(false); await load();
+      onSaved();
     } catch (err: unknown) {
       setFormError(getErrorMessage(err, "No se pudo crear el gasto compartido"));
     } finally { setSaving(false); }
   }
 
-  // `refreshPending` además del `load()` de la pantalla: resolver acá tiene que
-  // apagar el puntito de la navegación, que se alimenta de otra consulta.
-  async function handleAccept(sharedId: number) {
-    await api.post(`/shared-expenses/${sharedId}/accept`); await load(); await refreshPending();
-  }
-  async function handleReject(sharedId: number) {
-    await api.post(`/shared-expenses/${sharedId}/reject`); await load(); await refreshPending();
-  }
-  async function handleDelete(sharedId: number, isGrouped: boolean) {
-    const msg = isGrouped
-      ? "Se eliminará esta cuota y todas las cuotas futuras del plan. Las cuotas ya pasadas no se van a tocar. ¿Continuar?"
-      : "¿Eliminar este gasto compartido? También se borra la parte de cada participante en Egresos.";
-    if (!confirm(msg)) return;
+  const customAmounts = participants.map(p => parseAmount(p.amount));
+
+  return (
+    <>
+      <FormSheet title="Nuevo gasto compartido" onClose={onClose}>
+        <form onSubmit={handleSubmit} className={FORM_SHEET_FORM}>
+          <div className={FORM_SHEET_BODY}>
+            <AmountField label="Monto" currency="ARS" required
+              value={totalAmount} onChange={e => setTotalAmount(e.target.value)} />
+
+            <div>
+              <label className={FIELD_LABEL}>Descripción</label>
+              <input required aria-label="Descripción" value={title} onChange={e => setTitle(e.target.value)}
+                className={FIELD} placeholder="ej: Supermercado del fin de semana" />
+            </div>
+
+            <FormGrid>
+              <div>
+                <label className={FIELD_LABEL}>Categoría</label>
+                <div className="flex gap-1.5">
+                  <SelectField className="flex-1" required value={categoryId} onChange={setCategoryId}
+                    placeholder="Categoría"
+                    options={categories.map(c => ({ value: String(c.id), label: c.name }))} />
+                  <button type="button" title="Nueva categoría" aria-label="Nueva categoría" onClick={() => setShowCatForm(true)}
+                    className="mt-1 w-11 border border-border bg-card rounded-lg text-muted-foreground hover:bg-accent shrink-0 text-lg leading-none">+</button>
+                </div>
+                {categories.length === 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">Todavía no hay categorías. Creá una con el +.</p>
+                )}
+              </div>
+              <div>
+                <label className={FIELD_LABEL}>Fecha</label>
+                <DateField required value={expenseDate} onChange={setExpenseDate} />
+              </div>
+            </FormGrid>
+
+            <div>
+              <label className="flex items-center gap-2.5 min-h-[44px] text-sm text-foreground cursor-pointer">
+                <input type="checkbox" checked={differentPaymentDate}
+                  onChange={e => { setDifferentPaymentDate(e.target.checked); if (e.target.checked) setPaymentDate(expenseDate); }}
+                  className="w-[18px] h-[18px] rounded-md accent-[#1C1B25] shrink-0" />
+                Se paga otro día
+              </label>
+              {differentPaymentDate && (
+                <div>
+                  <label className={FIELD_LABEL}>Fecha de pago</label>
+                  <DateField required value={paymentDate} onChange={setPaymentDate} />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Se usa para saber en qué mes aparece este gasto en la vista por persona. No cambia tus Egresos.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className={`${FORM_BLOCK} space-y-3`}>
+              <SegmentedToggle ariaLabel="Cómo se divide" value={splitType} onChange={handleSplitTypeChange}
+                options={[
+                  { value: "equal", label: "En partes iguales" },
+                  { value: "custom", label: "Personalizado" },
+                ]} />
+
+              <MotionList as="ul" className="space-y-2.5">
+                {participants.map((p, idx) => {
+                  const isCreator = idx === 0;
+                  return (
+                    <li key={idx} className="flex items-center gap-2">
+                      <button type="button" disabled={isCreator} onClick={() => setPickerFor(idx)}
+                        aria-label={isCreator ? undefined : `Cambiar a ${p.member_name}`}
+                        className="flex-1 min-w-0 min-h-[44px] text-left disabled:cursor-default">
+                        <span className="block text-[15px] font-medium text-foreground truncate">{p.member_name || "Elegí a quién"}</span>
+                        <span className="block text-xs text-muted-foreground truncate">{isCreator ? "Vos" : participantHint(p)}</span>
+                      </button>
+                      {splitType === "custom" ? (
+                        <span className="w-[116px] shrink-0">
+                          <input type="text" inputMode="decimal" pattern="[0-9.,]*" placeholder="0,00"
+                            aria-label={`Parte de ${p.member_name || "la fila " + (idx + 1)}`}
+                            value={p.amount}
+                            onChange={e => setManualAmount(idx, e.target.value)}
+                            className={`${FIELD} mt-0 text-right tabular-nums ${!p.manual ? "text-muted-foreground italic" : ""}`} />
+                          {!p.manual && parseAmount(p.amount) > 0 && (
+                            <span className="block text-right text-[11px] text-[#3B2FB3] mt-0.5">sugerencia</span>
+                          )}
+                        </span>
+                      ) : total > 0 && (
+                        <span className="text-[15px] font-medium tabular-nums text-foreground shrink-0">{formatARS(equalShares[idx] ?? 0)}</span>
+                      )}
+                      {!isCreator ? (
+                        <button type="button" onClick={() => removeParticipant(idx)} aria-label={`Quitar a ${p.member_name}`}
+                          className="w-10 h-11 -mr-1.5 flex items-center justify-center text-muted-foreground shrink-0">
+                          <X className="w-4 h-4" />
+                        </button>
+                      ) : <span className="w-[34px] shrink-0" />}
+                    </li>
+                  );
+                })}
+              </MotionList>
+
+              <button type="button" onClick={() => setPickerFor("new")}
+                className="w-full min-h-[44px] rounded-full border border-border bg-card inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-foreground active:scale-[0.98] transition-transform duration-100">
+                <UserPlus className="w-4 h-4" /> Agregar persona
+              </button>
+
+              {splitType === "custom" && total > 0 && (
+                <SplitBalance left={remainder(total, customAmounts)} money={formatARS} />
+              )}
+            </div>
+
+            {participants.length > 1 && (
+              <p className="px-1.5 text-xs text-muted-foreground">
+                Puede llegarles un aviso al compartirlo, y eso no se deshace.
+              </p>
+            )}
+
+            {formError && <p className={FORM_ERROR} role="alert">{formError}</p>}
+          </div>
+          <FormSheetActions onCancel={onClose} saving={saving} disabled={overBudget} label="Compartir gasto" />
+        </form>
+      </FormSheet>
+
+      {/* Fuera de la hoja: su `backdrop-filter` encerraría a estas ventanas fijas. */}
+      <ParticipantPicker
+        open={pickerFor !== null}
+        onClose={() => setPickerFor(null)}
+        onPick={applyPick}
+        excludeUserIds={participants.map(x => x.user_id).filter((x): x is number => x !== null)}
+      />
+      {showCatForm && (
+        <NewCategoryModal
+          initialColor={pickCategoryColor(categories.map(c => c.color))}
+          onSave={saveCat}
+          onClose={() => setShowCatForm(false)}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * Editar y eliminar, con la pregunta ahí mismo. Es `SheetActions` con dos cosas que
+ * ésa no deja: un gasto de tarjeta no tiene "Editar" (se edita en el resumen) pero
+ * sí se puede eliminar, y la pregunta tiene que decir qué más se lleva puesto.
+ */
+/** Lo que se abre al tocar una fila: cuánto, quién pone qué y qué se puede hacer. */
+function SharedSheet({
+  exp, group, scope, focusSplit, categories, currentUserId,
+  onEdit, onConvert, onAccept, onReject, onDelete, onClose,
+}: {
+  exp: SharedExpense;
+  group: Group;
+  /** "group": el plan entero, como en la lista. "cuota": esta sola, como en la vista por persona. */
+  scope: "group" | "cuota";
+  /** Vista por persona: convertir a pesos es la parte de esa persona, no la de todos. */
+  focusSplit: Split | null;
+  categories: Category[];
+  currentUserId: number | undefined;
+  onEdit: () => void;
+  onConvert: (splitIds: number[]) => void;
+  onAccept: () => Promise<void>;
+  onReject: () => Promise<void>;
+  onDelete: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [showCuotas, setShowCuotas] = useState(false);
+  const [copiedToken, setCopiedToken] = useState<string | null>(null);
+
+  const { cuotas } = group;
+  const inPlan = cuotas.length > 1;
+  const wholePlan = scope === "group" && inPlan;
+  const isCreator = exp.created_by_user_id === currentUserId;
+  const mySplit = exp.splits.find(s => s.mine);
+  const pendingMine = mySplit?.status === "pending";
+  const category = categories.find(c => c.id === exp.category_id);
+
+  const allConverted = exp.splits.every(s => s.converted_ars_amount != null);
+  const groupTotal = cuotas.reduce((s, c) => s + Number(c.total_amount), 0);
+  const headerAmount = allConverted
+    ? exp.splits.reduce((s, sp) => s + Number(sp.converted_ars_amount), 0)
+    : wholePlan ? groupTotal : Number(exp.total_amount);
+  const headerCurrency: "ARS" | "USD" = allConverted ? "ARS" : exp.currency;
+
+  // "Convertir todo" only makes sense whole-expense — a cuota group is always
+  // ARS (USD only allowed for single-item purchases).
+  const convertIds = focusSplit ? [focusSplit.id] : exp.splits.map(s => s.id);
+  const canConvert = isCreator && exp.currency === "USD" && (!!focusSplit || !inPlan);
+  const converted = focusSplit ? focusSplit.converted_ars_amount != null : allConverted;
+
+  const run = async (action: () => Promise<void>, fallback: string) => {
+    setBusy(true);
+    setError("");
     try {
-      await api.delete(`/shared-expenses/${sharedId}`);
-      await load();
+      await action();
     } catch (err) {
-      alert(getErrorMessage(err, "No se pudo eliminar el gasto compartido"));
+      setError(getErrorMessage(err, fallback));
+    } finally {
+      setBusy(false);
     }
-  }
+  };
 
   function copyInviteLink(token: string) {
     const link = `${window.location.origin}/invite/${token}`;
     navigator.clipboard.writeText(link).then(() => {
       setCopiedToken(token);
       setTimeout(() => setCopiedToken(null), 2000);
-    });
+    }).catch(() => setError(`No se pudo copiar. El link es: ${link}`));
+  }
+
+  // Lo creado desde una tarjeta se edita desde la tarjeta. La parte de quien lo
+  // cargó es el mismo egreso que tiene el ítem, y por ahí se llega a su resumen.
+  const openStatement = () => run(async () => {
+    const entryId = mySplit?.expense_entry_id;
+    if (!entryId) throw new Error("sin egreso");
+    const res = await api.get(`/credit-cards/for-expense/${entryId}`);
+    onClose();
+    router.push(`/tarjetas/${res.data.card_id}/${res.data.statement_id}?item=${exp.credit_card_item_id}`);
+  }, "No se encontró el resumen de tarjeta de este gasto.");
+
+  // Lo dice `delete_shared`: de un plan se borran sólo las cuotas de hoy en adelante.
+  const deleteDetail = inPlan
+    ? "Se borran esta cuota y las futuras del plan. Las que ya pasaron quedan."
+    : "También se borra la parte de cada participante en Egresos.";
+
+  const cuotaNumber = cuotas.findIndex(c => c.id === exp.id) + 1;
+
+  return (
+    <EntrySheet
+      date={exp.expense_date}
+      title={exp.title}
+      badge={category ? { label: category.name, color: category.color } : undefined}
+      amount={fmtByCurrency(headerAmount, headerCurrency)}
+      onClose={onClose}
+      footer={(
+        <div className="space-y-2.5">
+          {error && <p className={FORM_ERROR} role="alert">{error}</p>}
+          {pendingMine && mySplit && (
+            <div>
+              <p className="px-1.5 pb-2.5 text-sm leading-snug text-[#4A4658]">
+                Te corresponden {fmtByCurrency(resolveDisplay(mySplit, exp.currency).amount, resolveDisplay(mySplit, exp.currency).currency)}
+                {wholePlan && ` por cuota (${cuotas.length} cuotas)`}. Si aceptás, tu parte se suma a tus Egresos.
+              </p>
+              <div className="flex items-center gap-2">
+                <button type="button" disabled={busy} onClick={() => run(onReject, "No se pudo rechazar")}
+                  className="h-[52px] px-4 rounded-full font-semibold text-[15px] text-foreground disabled:opacity-50 active:scale-[0.98] transition-transform duration-100">
+                  Rechazar
+                </button>
+                <button type="button" disabled={busy} onClick={() => run(onAccept, "No se pudo aceptar")}
+                  className="flex-1 h-[52px] rounded-full bg-ink text-background font-semibold text-[15.5px] disabled:opacity-50 active:scale-[0.98] transition-transform duration-100">
+                  {inPlan ? "Aceptar todas" : "Aceptar"}
+                </button>
+              </div>
+            </div>
+          )}
+          {canConvert && (
+            <button type="button" onClick={() => onConvert(convertIds)}
+              className="w-full h-12 rounded-full bg-white/70 border border-white/80 inline-flex items-center justify-center gap-2 font-semibold text-[15px] text-foreground active:scale-[0.98] transition-transform duration-100">
+              <ArrowLeftRight className="w-4 h-4" /> {converted ? "Cambiar cotización" : "Convertir a pesos"}
+            </button>
+          )}
+          {isCreator && exp.credit_card_item_id && mySplit?.expense_entry_id && (
+            <SheetLink note="Es de tarjeta: se edita desde su resumen." label="Ver en resumen" onClick={openStatement} />
+          )}
+          {isCreator && (
+            <SheetActions question={`¿Eliminarlo? ${deleteDetail} No se puede deshacer.`} onEdit={exp.credit_card_item_id ? undefined : onEdit}
+              onDelete={() => run(onDelete, "No se pudo eliminar el gasto compartido")} />
+          )}
+          {!isCreator && !pendingMine && (
+            <p className="px-1.5 pb-1 text-sm leading-snug text-[#4A4658]">Sólo quien lo cargó lo puede cambiar o eliminar.</p>
+          )}
+        </div>
+      )}
+    >
+      {exp.splits.map(split => {
+        const { amount, currency } = resolveDisplay(split, exp.currency);
+        const status = splitStatus(split, exp);
+        const token = split.invite_token;
+        return (
+          <SheetRow key={split.id} label={(
+            <>
+              <span className="block font-medium text-foreground truncate">{split.mine ? "Vos" : split.member_name}</span>
+              <span className={`block text-[13px] ${status.waiting ? "text-[#3B2FB3]" : ""}`}>{status.text}</span>
+              {token && isCreator && (
+                <button type="button" onClick={() => copyInviteLink(token)}
+                  className="mt-0.5 -ml-0.5 min-h-[36px] inline-flex items-center gap-1 text-[13px] font-semibold text-foreground">
+                  {copiedToken === token ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedToken === token ? "Link copiado" : "Copiar link de invitación"}
+                </button>
+              )}
+            </>
+          )}>
+            <span className="tabular-nums whitespace-nowrap">
+              {fmtByCurrency(amount, currency)}
+              {wholePlan && <span className="text-muted-foreground font-normal"> /cuota</span>}
+              {split.converted_ars_amount != null && (
+                <span className="block text-[13px] font-normal text-muted-foreground">
+                  {ledgerAmount(split.amount, "USD")} · {RATE_TYPE_LABELS[split.converted_ars_rate_type ?? "blue"]}
+                </span>
+              )}
+            </span>
+          </SheetRow>
+        );
+      })}
+      {scope === "cuota" && inPlan && (
+        <SheetRow label="Cuota">{cuotaNumber} de {cuotas.length}</SheetRow>
+      )}
+      {!wholePlan && exp.payment_date !== exp.expense_date && (
+        <SheetRow label="Fecha de pago">{fmtDate(exp.payment_date)}</SheetRow>
+      )}
+      {wholePlan && (
+        <MotionList className="py-1">
+          <button type="button" onClick={() => setShowCuotas(v => !v)} aria-expanded={showCuotas}
+            className="w-full min-h-[44px] text-left text-[15px] font-semibold text-foreground">
+            {showCuotas ? "Ocultar las cuotas" : `Ver las ${cuotas.length} cuotas`}
+          </button>
+          {showCuotas && (
+            <div className="pb-2 space-y-1.5">
+              {cuotas.map((c, i) => (
+                <div key={c.id} className="flex items-baseline justify-between gap-3 text-sm text-[#4A4658]">
+                  <span>Cuota {i + 1}/{cuotas.length} · {fmtDate(c.expense_date)}</span>
+                  <span className="tabular-nums font-medium text-foreground">{fmtByCurrency(c.total_amount, c.currency)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </MotionList>
+      )}
+    </EntrySheet>
+  );
+}
+
+// Lo que espera una respuesta se ve primero, pero no puede crecer con los datos:
+// es una fila que se desliza, y la lista queda a la misma altura con uno o con diez.
+function PendingBlock({ groups, currentUserId, onOpen, onAccept, onReject }: {
+  groups: Group[];
+  currentUserId: number | undefined;
+  onOpen: (g: Group) => void;
+  onAccept: (id: number) => Promise<void>;
+  onReject: (id: number) => Promise<void>;
+}) {
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [error, setError] = useState("");
+  const single = groups.length === 1;
+
+  const resolve = async (id: number, action: (id: number) => Promise<void>) => {
+    setBusyId(id);
+    setError("");
+    try {
+      await action(id);
+    } catch (err) {
+      setError(getErrorMessage(err, "No se pudo guardar la respuesta"));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <section data-tour="shared-pending" aria-label="Para resolver" className="rounded-3xl bg-accent border border-[#CFC9E4] p-2.5 space-y-2">
+      <p className="px-1.5 pt-0.5 font-marca text-xs text-[#3F3B4B]">
+        {groups.length} para resolver
+      </p>
+      <ScrollRow gap="gap-2">
+      {groups.map(({ root: exp, cuotas }) => {
+        const mine = exp.splits.find(s => s.mine)!;
+        const { amount, currency } = resolveDisplay(mine, exp.currency);
+        const plan = cuotas.length > 1;
+        return (
+          <div key={exp.id} className={`rounded-2xl bg-white p-1.5 pb-2 shrink-0 ${single ? "w-full" : "w-[86%] md:w-[340px]"}`}>
+            <button type="button" onClick={() => onOpen({ root: exp, cuotas })}
+              data-no-press className="w-full min-h-[52px] px-1.5 py-1 flex items-center gap-3 text-left active:opacity-60 transition-opacity">
+              <span className="flex-1 min-w-0">
+                <span className="block font-semibold text-[15.5px] text-foreground truncate">{exp.title}</span>
+                <span className="block text-sm text-muted-foreground truncate">{rowSub(exp, cuotas.length, currentUserId)}</span>
+              </span>
+              <span className="shrink-0 text-right">
+                <span className="block font-medium text-base tabular-nums text-foreground">{ledgerAmount(amount, currency)}</span>
+                <span className="block text-xs text-muted-foreground">{plan ? "tu parte por cuota" : "tu parte"}</span>
+              </span>
+            </button>
+            <div className="mt-1 grid grid-cols-2 gap-2 px-1">
+              <button type="button" disabled={busyId !== null} onClick={() => resolve(exp.id, onReject)}
+                aria-label={`Rechazar ${exp.title}`}
+                className="h-11 rounded-full bg-ink/[0.06] font-semibold text-sm text-foreground disabled:opacity-50 active:scale-[0.97] transition-transform duration-100">
+                Rechazar
+              </button>
+              <button type="button" disabled={busyId !== null} onClick={() => resolve(exp.id, onAccept)}
+                aria-label={`Aceptar ${exp.title}`}
+                className="h-11 rounded-full bg-ink text-background font-semibold text-sm disabled:opacity-50 active:scale-[0.97] transition-transform duration-100">
+                {busyId === exp.id ? "Guardando…" : plan ? "Aceptar todas" : "Aceptar"}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+      </ScrollRow>
+      {error && <p className={FORM_ERROR} role="alert">{error}</p>}
+    </section>
+  );
+}
+
+export default function SharedExpensesPage() {
+  const { refresh: refreshPending } = usePendingShared();
+  useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
+  const { appUser } = useAuth();
+  const reaccionar = useReaccion();
+  const [expenses, setExpenses] = useState<SharedExpense[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [formKey, setFormKey] = useState(0);
+  const [showForm, setShowForm] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<SharedExpense | null>(null);
+  const [converting, setConverting] = useState<{ expense: SharedExpense; splitIds: number[] } | null>(null);
+  // Por id y no el objeto: la ficha sigue a lo que devuelve la última recarga.
+  const [detail, setDetail] = useState<{ expId: number; scope: "group" | "cuota"; splitId: number | null } | null>(null);
+
+  const now = new Date();
+  const [selectedPersonKey, setSelectedPersonKey] = useState<string | null>(null);
+  const [personYear, setPersonYear] = useState(now.getFullYear());
+  const [personMonth, setPersonMonth] = useState(now.getMonth() + 1);
+
+  const loadCategories = async () => {
+    try {
+      const res = await api.get("/expenses/categories");
+      setCategories(res.data);
+    } catch { /* ignorar */ }
+  };
+
+  const load = async () => {
+    setLoading(true);
+    // Miembros y agenda ya no se piden acá: los carga ParticipantPicker cuando
+    // se abre, que es el único lugar que los usa. Pedirlos en cada visita a la
+    // pantalla era traer dos listas para no mostrarlas.
+    const [se] = await Promise.allSettled([api.get("/shared-expenses")]);
+    if (se.status === "fulfilled") setExpenses(se.value.data);
+    setFailed(se.status === "rejected");
+    await loadCategories();
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const openForm = () => { setFormKey(k => k + 1); setShowForm(true); };
+
+  // `refreshPending` además del `load()` de la pantalla: resolver acá tiene que
+  // apagar el puntito de la navegación, que se alimenta de otra consulta.
+  async function handleAccept(sharedId: number) {
+    await api.post(`/shared-expenses/${sharedId}/accept`);
+    reaccionar("guardado", "Sumado a tus Egresos");
+    setDetail(null);
+    await load(); await refreshPending();
+  }
+  async function handleReject(sharedId: number) {
+    await api.post(`/shared-expenses/${sharedId}/reject`);
+    reaccionar("borrado", "Gasto rechazado");
+    setDetail(null);
+    await load(); await refreshPending();
+  }
+  async function handleDelete(sharedId: number) {
+    await api.delete(`/shared-expenses/${sharedId}`);
+    reaccionar("borrado", "Gasto compartido eliminado");
+    setDetail(null);
+    await load();
   }
 
   const currentUserId = appUser?.id;
+
+  // Las cuotas de un plan se muestran como una sola fila. Las dos vistas leen de acá.
+  const groups = useMemo(() => {
+    const map = new Map<number, SharedExpense[]>();
+    for (const exp of expenses) {
+      const rootId = exp.installment_group_id ?? exp.id;
+      if (!map.has(rootId)) map.set(rootId, []);
+      map.get(rootId)!.push(exp);
+    }
+    const out = new Map<number, Group>();
+    for (const [rootId, members] of Array.from(map.entries())) {
+      out.set(rootId, {
+        root: members.find(m => m.id === rootId) ?? members[0],
+        cuotas: [...members].sort((a, b) => a.expense_date.localeCompare(b.expense_date)),
+      });
+    }
+    return out;
+  }, [expenses]);
+
+  const displayGroups = useMemo(
+    () => Array.from(groups.values()).sort((a, b) => b.root.expense_date.localeCompare(a.root.expense_date)),
+    [groups],
+  );
+  const pendingGroups = displayGroups.filter(g => g.root.splits.find(s => s.mine)?.status === "pending");
+  // Lo que espera tu respuesta ya está en el bloque de arriba: no se repite abajo.
+  const listGroups = displayGroups.filter(g => g.root.splits.find(s => s.mine)?.status !== "pending");
 
   // Distinct people I share expenses with (excluding myself), derived from
   // every split across every expense I can see — not just ones I created.
@@ -793,7 +1212,7 @@ export default function SharedExpensesPage() {
   // (the accounting date, which can land in a different month — e.g. a bill
   // closed end-of-July but due August 10th). Each installment cuota is its
   // own record with its own dates, so no cuota-grouping is needed here
-  // (unlike the "Todos" list below, which stays on expense_date).
+  // (unlike the "Todos" list, which stays on expense_date).
   const personExpenses = useMemo(() => {
     if (!selectedPerson) return [];
     return expenses
@@ -884,595 +1303,205 @@ export default function SharedExpensesPage() {
     window.open("https://wa.me/?text=" + encodeURIComponent(lines.join(String.fromCharCode(10))), "_blank");
   }
 
-  // Shared table renderer for both direction tables below (Fecha/Descripción/Monto/delete) —
-  // identical shape, differing only in which expenses, which split's amount, and the column label.
-  function renderDirectionTable(
+  // Las dos direcciones de la vista por persona tienen la misma forma: cambian los
+  // gastos y qué parte se muestra. Sólo se dibuja la que tiene algo.
+  function renderDirection(
+    heading: string,
     exps: SharedExpense[],
     splitFor: (exp: SharedExpense) => Split | undefined,
-    columnLabel: string,
     totals: { ARS: number; USD: number },
-    emptyLabel: string
+    focusOnSplit: boolean,
   ) {
-    if (exps.length === 0) {
-      return <Card className="p-4 text-center text-muted-foreground text-xs">{emptyLabel}</Card>;
-    }
+    if (exps.length === 0) return null;
     return (
-      <Card className="p-0 md:p-0 divide-y overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm table-fixed">
-            <thead>
-              <tr className="text-left text-xs text-muted-foreground border-b">
-                <th className="w-[7ch] px-2 py-2.5 font-medium">Fecha</th>
-                <th className="px-2 sm:px-4 py-2.5 font-medium">Descripción</th>
-                <th className="w-[18ch] px-2 sm:px-4 py-2.5 font-medium text-right">{columnLabel}</th>
-                <th className="w-9 px-1 py-2.5"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {exps.map(exp => {
-                const split = splitFor(exp);
-                if (!split) return null;
-                const { amount, currency } = resolveDisplay(split, exp.currency);
-                const isCreator = exp.created_by_user_id === currentUserId;
-                const canConvert = isCreator && exp.currency === "USD";
-                const isConverted = split.converted_ars_amount != null;
-                return (
-                  <tr key={exp.id}>
-                    <td className="w-[7ch] px-2 py-2.5 whitespace-nowrap text-muted-foreground">{fmtDateShort(exp.payment_date)}</td>
-                    <td className="px-2 sm:px-4 py-2.5 text-foreground truncate">{exp.title}</td>
-                    <td className="w-[18ch] px-2 sm:px-4 py-2.5 text-right font-medium text-foreground whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1">
-                        {isConverted && (
-                          <span title={`Convertido a ${RATE_TYPE_LABELS[split.converted_ars_rate_type ?? "blue"]}`} className="text-primary">
-                            <ArrowLeftRight className="w-3 h-3" />
-                          </span>
-                        )}
-                        {fmtByCurrency(amount, currency)}
-                      </div>
-                    </td>
-                    <td className="w-9 px-1 py-2.5 text-right">
-                      {isCreator && (
-                        <DropdownMenu.Root>
-                          <DropdownMenu.Trigger asChild>
-                            <button className="p-1 text-muted-foreground hover:text-foreground transition-colors outline-none" title="Más acciones" aria-label="Más acciones">
-                              <MoreVertical className="w-3.5 h-3.5" />
-                            </button>
-                          </DropdownMenu.Trigger>
-                          <DropdownMenu.Portal>
-                            <DropdownMenu.Content align="end" sideOffset={4} className="bg-card border rounded-xl shadow-lg p-1 w-48 z-50">
-                              {canConvert && (
-                                <DropdownMenu.Item asChild>
-                                  <button onClick={() => setConverting({ expense: exp, splitIds: [split.id] })}
-                                    className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full text-left outline-none cursor-pointer">
-                                    <ArrowLeftRight className="w-4 h-4 text-muted-foreground" />
-                                    {isConverted ? "Cambiar cotización" : "Convertir a pesos"}
-                                  </button>
-                                </DropdownMenu.Item>
-                              )}
-                              <DropdownMenu.Item asChild>
-                                <button onClick={() => handleDelete(exp.id, false)}
-                                  className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-destructive hover:bg-destructive/10 w-full text-left outline-none cursor-pointer">
-                                  <Trash2 className="w-4 h-4" /> Eliminar
-                                </button>
-                              </DropdownMenu.Item>
-                            </DropdownMenu.Content>
-                          </DropdownMenu.Portal>
-                        </DropdownMenu.Root>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              {totals.ARS > 0 && (
-                <tr className="border-t bg-muted font-semibold">
-                  <td className="px-2 sm:px-4 py-2.5 text-foreground" colSpan={2}>Total ARS</td>
-                  <td className="w-[18ch] px-2 sm:px-4 py-2.5 text-right text-foreground whitespace-nowrap">{formatARS(totals.ARS)}</td>
-                  <td className="w-9 px-1 py-2.5" />
-                </tr>
-              )}
-              {totals.USD > 0 && (
-                <tr className="border-t bg-muted font-semibold">
-                  <td className="px-2 sm:px-4 py-2.5 text-foreground" colSpan={2}>Total USD</td>
-                  <td className="w-[18ch] px-2 sm:px-4 py-2.5 text-right text-foreground whitespace-nowrap">{formatUSD(totals.USD)}</td>
-                  <td className="w-9 px-1 py-2.5" />
-                </tr>
-              )}
-            </tfoot>
-          </table>
-        </div>
-      </Card>
+      <section className="px-2">
+        <h3 className="text-[15.5px] font-semibold text-foreground pb-1">{heading}</h3>
+        <MotionList key={`${selectedPersonKey}-${personYear}-${personMonth}`} className="animate-page-in">
+          {exps.map((exp, i) => {
+            const split = splitFor(exp);
+            if (!split) return null;
+            const { amount, currency } = resolveDisplay(split, exp.currency);
+            const group = groups.get(exp.installment_group_id ?? exp.id);
+            const inPlan = (group?.cuotas.length ?? 1) > 1;
+            const notes = [
+              inPlan ? `Cuota ${(group?.cuotas.findIndex(c => c.id === exp.id) ?? 0) + 1} de ${group?.cuotas.length}` : "",
+              split.converted_ars_amount != null ? `Convertido a ${RATE_TYPE_LABELS[split.converted_ars_rate_type ?? "blue"]}` : "",
+            ].filter(Boolean).join(" · ");
+            return (
+              <LedgerRow key={exp.id}
+                date={exp.payment_date}
+                showDate={i === 0 || exps[i - 1].payment_date !== exp.payment_date}
+                title={exp.title}
+                sub={notes || undefined}
+                amount={ledgerAmount(amount, currency)}
+                onOpen={() => setDetail({ expId: exp.id, scope: "cuota", splitId: focusOnSplit ? split.id : null })}
+              />
+            );
+          })}
+        </MotionList>
+        <LedgerTotal label="Total" ars={totals.ARS} usd={totals.USD} />
+      </section>
     );
   }
 
+  const detailExp = detail ? expenses.find(e => e.id === detail.expId) ?? null : null;
+  const detailGroup = detailExp ? groups.get(detailExp.installment_group_id ?? detailExp.id) ?? null : null;
+
+  const firstLoad = loading && expenses.length === 0;
+  const steps = useMemo(
+    () => tourSteps(pendingGroups.length > 0, people.length > 0, listGroups.length > 0),
+    [pendingGroups.length > 0, people.length > 0, listGroups.length > 0], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
   return (
     <div className="space-y-4 md:space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg md:text-2xl font-display font-bold text-foreground">Gastos compartidos</h1>
-      </div>
+      <NuevoListener onNuevo={openForm} />
+      {!firstLoad && expenses.length > 0 && <ProductTour tourId="shared-intro" steps={steps} />}
+      <h1 className="text-[28px] md:text-[34px] font-medium leading-tight tracking-[-0.03em] text-foreground">Gastos compartidos</h1>
 
-      <Fab label="Nuevo gasto compartido"
-        onClick={() => { setShowForm(true); resetForm(); }} />
+      <Fab label="Nuevo gasto compartido" data-tour="shared-add" onClick={openForm} />
 
       {people.length > 0 && (
-        <div className="flex items-start gap-3 overflow-x-auto no-scrollbar pt-1.5 pb-1 -mx-4 px-4 md:mx-0 md:px-0">
-          <button
-            type="button"
-            onClick={() => setSelectedPersonKey(null)}
-            className="flex flex-col items-center gap-1 shrink-0 w-16"
-          >
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center bg-accent text-primary transition-all ${!selectedPerson ? "ring-2 ring-offset-2 ring-primary" : ""}`}>
-              <Users className="w-5 h-5" />
-            </div>
-            <span className={`text-[11px] ${!selectedPerson ? "text-primary font-medium" : "text-muted-foreground"}`}>Todos</span>
-          </button>
-          {people.map(p => (
-            <PersonAvatar key={p.key} name={p.name} active={selectedPersonKey === p.key} onClick={() => setSelectedPersonKey(p.key)} />
-          ))}
-        </div>
-      )}
-
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40"
-          onClick={() => setShowForm(false)}>
-          <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg p-5 max-h-[92vh] overflow-y-auto"
-            onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-foreground">Nuevo gasto compartido</h3>
-            <button type="button" onClick={() => setShowForm(false)} aria-label="Cerrar"
-              className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
-          </div>
-          <form onSubmit={handleSubmit} className="space-y-4">
-
-          <FormGrid>
-            <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-muted-foreground">Descripción</label>
-              <input required value={title} onChange={e => setTitle(e.target.value)}
-                className={FIELD}
-                placeholder="ej: Supermercado del fin de semana" />
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Monto</label>
-              <input
-                required
-                type="text"
-                inputMode="decimal"
-                value={totalAmount}
-                onChange={e => setTotalAmount(e.target.value)}
-                className={FIELD}
-                placeholder="0,00"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Fecha</label>
-              <DateField required value={expenseDate} onChange={setExpenseDate} />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <input type="checkbox" checked={differentPaymentDate}
-                  onChange={e => { setDifferentPaymentDate(e.target.checked); if (e.target.checked) setPaymentDate(expenseDate); }}
-                  className="rounded border-input" />
-                La fecha de pago real es distinta a la fecha del gasto
-              </label>
-              {differentPaymentDate && (
-                <div className="mt-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Fecha de pago</label>
-                  <DateField required value={paymentDate} onChange={setPaymentDate} />
-                  <p className="text-xs text-muted-foreground/70 mt-1">
-                    Se usa para saber en qué mes aparece este gasto en la vista por persona. No cambia tus Egresos.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-medium text-muted-foreground">Categoría</label>
-                <button type="button" onClick={() => setShowCatForm(v => {
-                  if (!v) setCatColor(pickCategoryColor(categories.map(c => c.color)));
-                  return !v;
-                })}
-                  className="text-xs text-primary hover:underline">
-                  + Nueva categoría
-                </button>
-              </div>
-              {showCatForm && (
-                <div className="mb-1 border rounded-lg p-2 bg-muted space-y-2">
-                  <div className="flex gap-2">
-                    <input
-                      value={catName}
-                      onChange={e => setCatName(e.target.value)}
-                      placeholder="Nombre de la categoría"
-                      className={`${FIELD} mt-0 flex-1`}
-                    />
-                    <input type="color" value={catColor}
-                      onChange={e => setCatColor(e.target.value)}
-                      className="h-8 w-10 border rounded-lg cursor-pointer" />
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <button type="button" onClick={() => setShowCatForm(false)}
-                      className="text-xs border px-2 py-1 rounded-lg hover:bg-card">Cancelar</button>
-                    <button type="button" disabled={savingCat || !catName.trim()} onClick={saveCat}
-                      className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded-lg disabled:opacity-60">
-                      Crear
-                    </button>
-                  </div>
-                </div>
-              )}
-              <SelectField required value={categoryId} onChange={setCategoryId}
-                placeholder="Categoría"
-                options={categories.map(c => ({ value: String(c.id), label: c.name }))} />
-              {!showCatForm && categories.length === 0 && (
-                <p className="text-xs text-amber-600 mt-1">
-                  Todavía no hay categorías. Creá una con <strong>+ Nueva categoría</strong>.
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">División</label>
-              <SelectField value={splitType} onChange={v => handleSplitTypeChange(v as "equal" | "custom")}
-                options={[
-                  { value: "equal", label: "Equitativa" },
-                  { value: "custom", label: "Personalizada" },
-                ]} />
-            </div>
-          </FormGrid>
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-medium text-muted-foreground">Participantes</label>
-              <button type="button" onClick={addParticipant}
-                className="text-xs text-primary hover:underline flex items-center gap-1">
-                <Plus className="w-3 h-3" /> Agregar persona
-              </button>
-            </div>
-
-            <ParticipantPicker
-              open={pickerFor !== null}
-              onClose={() => setPickerFor(null)}
-              onPick={picked => { if (pickerFor !== null) applyPick(pickerFor, picked); }}
-              excludeUserIds={participants.map(x => x.user_id).filter((x): x is number => x !== null)}
-            />
-
-            <div className="space-y-2">
-              {participants.map((p, idx) => {
-                const isCreator = idx === 0;
-                return (
-                  <div key={idx} className="border rounded-lg p-2.5 bg-muted space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-sm font-medium text-foreground truncate">
-                          {p.member_name || <span className="text-muted-foreground font-normal">Sin elegir</span>}
-                        </span>
-                        <span className="block text-xs text-muted-foreground truncate">
-                          {isCreator ? "Vos" : participantHint(p)}
-                        </span>
-                      </span>
-                      {!isCreator && (
-                        <>
-                          <button type="button" onClick={() => setPickerFor(idx)}
-                            className="text-xs text-primary hover:underline shrink-0">
-                            {p.member_name ? "Cambiar" : "Elegir"}
-                          </button>
-                          <button type="button" onClick={() => removeParticipant(idx)}
-                            aria-label="Quitar participante"
-                            className="text-muted-foreground hover:text-destructive px-1 text-base leading-none shrink-0">
-                            x
-                          </button>
-                        </>
-                      )}
-                    </div>
-
-                    {splitType === "custom" ? (
-                      <div>
-                        <label className="text-xs text-muted-foreground">Monto</label>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          placeholder="0,00"
-                          value={p.amount}
-                          onChange={e => setManualAmount(idx, e.target.value)}
-                          className={`${FIELD} ${!p.manual ? "text-muted-foreground italic" : ""}`}
-                        />
-                        {!p.manual && parseAmount(p.amount) > 0 && (
-                          <p className="text-xs text-primary mt-0.5">sugerencia</p>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between px-1">
-                        <span className="text-xs text-muted-foreground">Monto</span>
-                        <span className="text-sm font-medium text-foreground">
-                          {total > 0 ? formatARS(equalShares[idx] ?? 0) : "-"}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {splitType === "equal" && total > 0 && (
-              <p className="text-xs text-muted-foreground mt-1.5">
-                {formatARS(total)} / {participants.length} = {formatARS(equalShares[0] ?? 0)} por persona
-              </p>
-            )}
-
-            {splitType === "custom" && total > 0 && (
-              <div className={`mt-2 text-xs rounded-lg px-3 py-2 ${overBudget ? "bg-destructive/10 text-destructive font-medium" : "bg-accent text-primary"}`}>
-                {overBudget
-                  ? `La división supera el total: asignaste ${formatARS(manualSum)} de ${formatARS(total)}`
-                  : `Repartido: ${formatARS(assignedSum)} · Falta repartir: ${formatARS(total - assignedSum)}`
-                }
-              </div>
-            )}
-          </div>
-
-          {formError && (
-            <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{formError}</p>
-          )}
-          <div className="flex gap-2 justify-end">
-            <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
-            <Button type="submit" disabled={saving || overBudget}>
-              {saving ? "Compartiendo..." : "Compartir gasto"}
-            </Button>
-          </div>
-          </form>
-          </Card>
+        <div data-tour="shared-people">
+          <ChoiceChips
+            ariaLabel="Ver por persona"
+            className="-mx-4 px-4 md:mx-0 md:px-0"
+            value={selectedPerson ? selectedPerson.key : "all"}
+            onChange={v => setSelectedPersonKey(v === "all" ? null : v)}
+            options={[{ value: "all", label: "Todos" }, ...people.map(p => ({ value: p.key, label: p.name }))]}
+          />
         </div>
       )}
 
       {selectedPerson ? (
-        <div className="space-y-3">
-          <div className="flex justify-end">
-            <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
-              <CalendarDays className="w-4 h-4 text-primary shrink-0" />
-              <button onClick={personPrev} aria-label="Mes anterior" className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{personPeriodLabel}</span>
-              <button onClick={personNext} aria-label="Mes siguiente" className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="min-w-0 truncate text-[22px] font-medium tracking-[-0.03em] text-foreground">Con {firstName(selectedPerson.name)}</h2>
+            <MonthPill compact label={personPeriodLabel} onPrev={personPrev} onNext={personNext} />
           </div>
 
           {personExpenses.length === 0 ? (
-            <Card className="p-8 text-center text-muted-foreground text-sm">
+            <p className="px-2 py-6 text-muted-foreground text-[15px]">
               No hay gastos compartidos con {selectedPerson.name} en {personPeriodLabel}.
-            </Card>
+            </p>
+          ) : owedToMeExpenses.length === 0 && iOweExpenses.length === 0 ? (
+            <p className="px-2 py-6 text-muted-foreground text-[15px]">
+              En {personPeriodLabel} sólo comparten gastos que cargó otra persona: entre ustedes dos no hay nada que saldar.
+            </p>
           ) : (
             <>
-              <Card className="p-3 md:p-4 flex items-start justify-between gap-4">
-                <span className="text-sm font-semibold text-foreground shrink-0">Balance</span>
-                <div className="flex flex-col items-end gap-0.5">
+              <Card className="space-y-3">
+                <div className="space-y-2">
                   {(["ARS", "USD"] as const).map(cur => {
                     const owed = personTotals.owedToMe[cur];
                     const owe = personTotals.iOwe[cur];
                     if (owed === 0 && owe === 0) return null;
                     const net = owed - owe;
-                    const fmt = cur === "USD" ? formatUSD : formatARS;
+                    if (net === 0) {
+                      return <p key={cur} className="text-[22px] font-medium tracking-[-0.03em] text-foreground">Están a mano en {cur === "USD" ? "dólares" : "pesos"}</p>;
+                    }
                     return (
-                      <span key={cur} className={`text-sm font-medium flex items-center gap-1 ${net > 0 ? "text-emerald-600" : net < 0 ? "text-rose-600" : "text-muted-foreground"}`}>
-                        {net > 0 && <ArrowDownLeft className="w-3.5 h-3.5" />}
-                        {net < 0 && <ArrowUpRight className="w-3.5 h-3.5" />}
-                        {net === 0 ? `Están a mano (${cur})` : net > 0 ? `Te debe ${fmt(net)}` : `Debo ${fmt(-net)}`}
-                      </span>
+                      <div key={cur}>
+                        <p className="text-sm text-muted-foreground">{net > 0 ? `${firstName(selectedPerson.name)} te debe` : `Le debés a ${firstName(selectedPerson.name)}`}</p>
+                        <p className={`text-[34px] font-medium leading-tight tracking-[-0.04em] tabular-nums ${net > 0 ? "text-emerald-800" : "text-foreground"}`}>
+                          {ledgerAmount(Math.abs(net), cur)}
+                        </p>
+                      </div>
                     );
                   })}
                 </div>
+                <Button variant="outline" onClick={shareByWhatsApp} className="w-full min-h-[44px]">
+                  <Share2 className="w-4 h-4" /> Compartir por WhatsApp
+                </Button>
               </Card>
 
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1.5 px-1">Te debe</p>
-                {renderDirectionTable(
-                  owedToMeExpenses,
-                  exp => exp.splits.find(s => personKey(s) === selectedPerson.key),
-                  selectedPerson.name.split(/\s+/)[0],
-                  personTotals.owedToMe,
-                  `${selectedPerson.name} no te debe nada en ${personPeriodLabel}.`
-                )}
-              </div>
-
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1.5 px-1">Vos debés</p>
-                {renderDirectionTable(
-                  iOweExpenses,
-                  exp => exp.splits.find(s => s.mine),
-                  "Vos",
-                  personTotals.iOwe,
-                  `No le debés nada a ${selectedPerson.name} en ${personPeriodLabel}.`
-                )}
-              </div>
+              {renderDirection("Te debe", owedToMeExpenses,
+                exp => exp.splits.find(s => personKey(s) === selectedPerson.key), personTotals.owedToMe, true)}
+              {renderDirection("Vos debés", iOweExpenses,
+                exp => exp.splits.find(s => s.mine), personTotals.iOwe, false)}
             </>
           )}
-
-          {personExpenses.length > 0 && (
-            <div className="flex justify-end">
-              <Button variant="outline" onClick={shareByWhatsApp} className="text-emerald-700">
-                <Share2 className="w-4 h-4" /> Compartir por WhatsApp
-              </Button>
-            </div>
-          )}
         </div>
-      ) : loading ? (
-        <div className="space-y-3">
-          {[1, 2].map(i => <Card key={i} className="h-28 animate-pulse" />)}
+      ) : firstLoad ? (
+        <div className="space-y-2 px-2" aria-busy="true" aria-label="Cargando gastos compartidos">
+          {[1, 2, 3].map(i => <div key={i} className="h-16 rounded-2xl bg-ink/[0.05] animate-pulse" />)}
+        </div>
+      ) : failed && expenses.length === 0 ? (
+        <div className="px-2 py-6 space-y-3">
+          <p className="text-muted-foreground text-[15px]">No se pudieron traer tus gastos compartidos. Revisá la conexión y probá de nuevo.</p>
+          <Button variant="outline" onClick={load}>Reintentar</Button>
         </div>
       ) : expenses.length === 0 ? (
-        <Card className="p-8 text-center text-muted-foreground text-sm">
-          <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
-          Todavía no hay gastos compartidos. Con el botón + cargás uno y elegís con quién dividirlo.
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {(() => {
-            const groupsMap = new Map<number, SharedExpense[]>();
-            for (const exp of expenses) {
-              const rootId = exp.installment_group_id ?? exp.id;
-              if (!groupsMap.has(rootId)) groupsMap.set(rootId, []);
-              groupsMap.get(rootId)!.push(exp);
-            }
-            const displayGroups = Array.from(groupsMap.entries())
-              .map(([rootId, members]) => ({
-                root: members.find(m => m.id === rootId) ?? members[0],
-                cuotas: [...members].sort((a, b) => a.expense_date.localeCompare(b.expense_date)),
-              }))
-              .sort((a, b) => b.root.expense_date.localeCompare(a.root.expense_date));
-
-            return displayGroups.map(({ root: exp, cuotas }) => {
-              const isGrouped = cuotas.length > 1;
-              const groupTotal = cuotas.reduce((s, c) => s + Number(c.total_amount), 0);
-              const myMemberSplit = exp.splits.find(s => s.mine);
-              const pendingCount = exp.splits.filter(s => s.user_id !== null && s.status === "pending" && !s.invite_token).length;
-              const isCreator = exp.created_by_user_id === currentUserId;
-              // "Convertir todo" (header) only makes sense whole-expense — a cuota
-              // group is always ARS (USD only allowed for single-item purchases).
-              const canConvertAll = isCreator && exp.currency === "USD" && !isGrouped;
-              const allConverted = exp.splits.every(s => s.converted_ars_amount != null);
-              const headerAmount = allConverted
-                ? exp.splits.reduce((s, sp) => s + Number(sp.converted_ars_amount), 0)
-                : groupTotal;
-              const headerCurrency: "ARS" | "USD" = allConverted ? "ARS" : exp.currency;
-              return (
-                <Card key={exp.id} className="space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-foreground truncate flex items-center gap-1.5">
-                        {exp.title}
-                        {isGrouped && (
-                          <Chip tone="violet" className="shrink-0">
-                            <Layers className="w-3 h-3" /> {cuotas.length} cuotas
-                          </Chip>
-                        )}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {isGrouped
-                          ? `${fmtDate(cuotas[0].expense_date)} a ${fmtDate(cuotas[cuotas.length - 1].expense_date)}`
-                          : fmtDate(exp.expense_date)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <p className="text-lg font-bold text-foreground">{fmtByCurrency(headerAmount, headerCurrency)}</p>
-                      {isCreator && (
-                        <DropdownMenu.Root>
-                          <DropdownMenu.Trigger asChild>
-                            <button className="p-1.5 text-muted-foreground hover:text-foreground transition-colors outline-none" title="Más acciones" aria-label="Más acciones">
-                              <MoreVertical className="w-4 h-4" />
-                            </button>
-                          </DropdownMenu.Trigger>
-                          <DropdownMenu.Portal>
-                            <DropdownMenu.Content align="end" sideOffset={4} className="bg-card border rounded-xl shadow-lg p-1 w-48 z-50">
-                              {!exp.credit_card_item_id && (
-                                <DropdownMenu.Item asChild>
-                                  <button onClick={() => setEditingExpense(exp)}
-                                    className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full text-left outline-none cursor-pointer">
-                                    <Pencil className="w-4 h-4 text-muted-foreground" /> Editar
-                                  </button>
-                                </DropdownMenu.Item>
-                              )}
-                              {canConvertAll && (
-                                <DropdownMenu.Item asChild>
-                                  <button onClick={() => setConverting({ expense: exp, splitIds: exp.splits.map(s => s.id) })}
-                                    className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full text-left outline-none cursor-pointer">
-                                    <ArrowLeftRight className="w-4 h-4 text-muted-foreground" />
-                                    {allConverted ? "Cambiar cotización" : "Convertir a pesos"}
-                                  </button>
-                                </DropdownMenu.Item>
-                              )}
-                              <DropdownMenu.Item asChild>
-                                <button onClick={() => handleDelete(exp.id, isGrouped)}
-                                  className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-destructive hover:bg-destructive/10 w-full text-left outline-none cursor-pointer">
-                                  <Trash2 className="w-4 h-4" /> Eliminar
-                                </button>
-                              </DropdownMenu.Item>
-                            </DropdownMenu.Content>
-                          </DropdownMenu.Portal>
-                        </DropdownMenu.Root>
-                      )}
-                    </div>
-                  </div>
-
-                  {isGrouped && (
-                    <details className="text-xs">
-                      <summary className="cursor-pointer text-primary hover:opacity-80 select-none">
-                        Ver detalle de las {cuotas.length} cuotas
-                      </summary>
-                      <div className="mt-1.5 space-y-1 border-l-2 border-primary/20 pl-2.5">
-                        {cuotas.map((c, i) => (
-                          <div key={c.id} className="flex items-center justify-between text-muted-foreground">
-                            <span>Cuota {i + 1}/{cuotas.length} &middot; {fmtDate(c.expense_date)}</span>
-                            <span className="font-medium text-muted-foreground">{fmtByCurrency(c.total_amount, c.currency)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  )}
-
-                  <div className="border-t border-gray-200" />
-
-                  <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-1.5 text-sm">
-                    {exp.splits.map(split => {
-                      const { amount: splitAmount, currency: splitCurrency } = resolveDisplay(split, exp.currency);
-                      return (
-                      <Fragment key={split.id}>
-                        <span className="text-foreground truncate">{split.member_name}</span>
-                        <span className="text-muted-foreground text-right whitespace-nowrap">
-                          {split.converted_ars_amount != null && <ArrowLeftRight className="w-3 h-3 inline mr-0.5 text-primary" />}
-                          {fmtByCurrency(splitAmount, splitCurrency)}{isGrouped && <span className="text-muted-foreground/60"> /cuota</span>}
-                        </span>
-                        <span className="flex items-center gap-1 justify-self-end">
-                          <StatusChip
-                            status={split.user_id === null && !split.invite_token ? "accepted" : split.status}
-                            hasToken={!!split.invite_token && !split.mine}
-                          />
-                          {split.invite_token && isCreator && (
-                            <button
-                              onClick={() => copyInviteLink(split.invite_token!)}
-                              title="Copiar link de invitación" aria-label="Copiar link de invitación"
-                              className={`p-1 rounded transition-colors ${copiedToken === split.invite_token ? "text-emerald-600" : "text-muted-foreground hover:text-primary"}`}
-                            >
-                              {copiedToken === split.invite_token
-                                ? <CheckCircle className="w-4 h-4" />
-                                : <Copy className="w-4 h-4" />
-                              }
-                            </button>
-                          )}
-                        </span>
-                      </Fragment>
-                      );
-                    })}
-                  </div>
-
-                  {myMemberSplit?.status === "pending" && (
-                    <div className="flex items-center gap-2 pt-2 border-t">
-                      <p className="text-sm text-muted-foreground flex-1">
-                        Te corresponden <strong>{fmtByCurrency(resolveDisplay(myMemberSplit, exp.currency).amount, resolveDisplay(myMemberSplit, exp.currency).currency)}</strong>{isGrouped && ` por cuota (${cuotas.length} cuotas)`}
-                      </p>
-                      <button onClick={() => handleAccept(exp.id)}
-                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded-full border-2 border-ink shadow-chip hover:opacity-90">
-                        <CheckCircle className="w-3.5 h-3.5" /> {isGrouped ? "Aceptar todas" : "Aceptar"}
-                      </button>
-                      <button onClick={() => handleReject(exp.id)}
-                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium border text-muted-foreground rounded-full hover:bg-accent">
-                        <XCircle className="w-3.5 h-3.5" /> Rechazar
-                      </button>
-                    </div>
-                  )}
-                  {pendingCount > 0 && isCreator && (
-                    <p className="text-xs text-muted-foreground pt-1 border-t">
-                      {pendingCount > 1 ? `${pendingCount} participantes todavía no aceptaron` : "1 participante todavía no aceptó"}
-                    </p>
-                  )}
-                </Card>
-              );
-            });
-          })()}
+        <div className="px-2 py-6 space-y-3">
+          <p className="text-[22px] font-medium tracking-[-0.03em] text-foreground">Todavía no compartiste nada</p>
+          <p className="text-muted-foreground text-[15px]">Cargá un gasto, elegí con quién dividirlo y acá ves quién aceptó y cuánto se deben.</p>
+          <Button onClick={openForm} className="min-h-[44px]">Compartir un gasto</Button>
         </div>
+      ) : (
+        <>
+          {pendingGroups.length > 0 && (
+            <PendingBlock groups={pendingGroups} currentUserId={currentUserId}
+              onOpen={g => setDetail({ expId: g.root.id, scope: "group", splitId: null })}
+              onAccept={handleAccept} onReject={handleReject} />
+          )}
+          {listGroups.length > 0 && (
+            <MotionList as="section" className="px-2">
+              {listGroups.map(({ root: exp, cuotas }, i) => {
+                const isGrouped = cuotas.length > 1;
+                const groupTotal = cuotas.reduce((s, c) => s + Number(c.total_amount), 0);
+                const allConverted = exp.splits.every(s => s.converted_ars_amount != null);
+                const headerAmount = allConverted
+                  ? exp.splits.reduce((s, sp) => s + Number(sp.converted_ars_amount), 0)
+                  : isGrouped ? groupTotal : Number(exp.total_amount);
+                // La guía ilumina la primera fila: la lista entera no deja lugar para el globo.
+                // Por eso la línea va en este envoltorio y no en la fila.
+                return (
+                  <div key={exp.id} data-tour={i === 0 ? "shared-list" : undefined} className="border-b border-border last:border-b-0">
+                    <LedgerRow
+                      date={exp.expense_date}
+                      showDate={i === 0 || listGroups[i - 1].root.expense_date !== exp.expense_date}
+                      title={exp.title}
+                      sub={rowSub(exp, cuotas.length, currentUserId)}
+                      amount={ledgerAmount(headerAmount, allConverted ? "ARS" : exp.currency)}
+                      onOpen={() => setDetail({ expId: exp.id, scope: "group", splitId: null })}
+                    />
+                  </div>
+                );
+              })}
+            </MotionList>
+          )}
+        </>
+      )}
+
+      {detailExp && detailGroup && detail && (
+        <SharedSheet
+          exp={detailExp}
+          group={detailGroup}
+          scope={detail.scope}
+          focusSplit={detail.splitId ? detailExp.splits.find(s => s.id === detail.splitId) ?? null : null}
+          categories={categories}
+          currentUserId={currentUserId}
+          onClose={() => setDetail(null)}
+          onEdit={() => { setDetail(null); setEditingExpense(detailExp); }}
+          onConvert={splitIds => { setDetail(null); setConverting({ expense: detailExp, splitIds }); }}
+          onAccept={() => handleAccept(detailExp.id)}
+          onReject={() => handleReject(detailExp.id)}
+          onDelete={() => handleDelete(detailExp.id)}
+        />
+      )}
+
+      {showForm && (
+        <NewSharedForm
+          key={formKey}
+          categories={categories}
+          reloadCategories={loadCategories}
+          onClose={() => setShowForm(false)}
+          onSaved={() => {
+            setShowForm(false);
+            reaccionar("guardado", "Gasto compartido");
+            load();
+          }}
+        />
       )}
 
       {editingExpense && (
@@ -1480,7 +1509,7 @@ export default function SharedExpensesPage() {
           expense={editingExpense}
           categories={categories}
           onClose={() => setEditingExpense(null)}
-          onSaved={() => { setEditingExpense(null); load(); }}
+          onSaved={() => { setEditingExpense(null); reaccionar("guardado", "Gasto actualizado"); load(); }}
         />
       )}
 

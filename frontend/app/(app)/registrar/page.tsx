@@ -8,9 +8,10 @@ import { CalendarDays, Check, Undo2 } from "lucide-react";
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { formatARS, formatUSD, parseAmount, pickCategoryColor } from "@/lib/utils";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useReaccion } from "@/components/brand/ToodReaccion";
 import { CurrencyToggle, DateField, FIELD, FieldLabel } from "@/components/ui/form";
+import { AmountField } from "@/components/movimientos/FormSheet";
 import CategoryChips, { type CategoryLite } from "@/components/CategoryChips";
 import NewCategoryModal from "@/components/NewCategoryModal";
 import { takeSharedPayload } from "@/lib/pending-draft";
@@ -92,8 +93,10 @@ function RegistrarForm() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<SavedEntry | null>(null);
   const [undoing, setUndoing] = useState(false);
+  const reaccionar = useReaccion();
 
   const amountRef = useRef<HTMLInputElement>(null);
+  const focusAmount = () => amountRef.current?.focus();
   // De qué canal vino, para la columna `source`. Se congela al montar: si el
   // usuario carga otro gasto sin recargar, el segundo ya no vino de la hoja de
   // compartir.
@@ -149,7 +152,7 @@ function RegistrarForm() {
   }, [loadCategories]);
 
   useEffect(() => {
-    amountRef.current?.focus();
+    focusAmount();
   }, []);
 
   // ── Sugerencia de categoría ────────────────────────────────────────────────
@@ -217,7 +220,7 @@ function RegistrarForm() {
     const value = parseAmount(amount);
     if (!value || value <= 0) {
       setError("Poné un monto mayor a cero.");
-      amountRef.current?.focus();
+      focusAmount();
       return;
     }
     if (currency === "ARS" && !categoryId) {
@@ -254,8 +257,9 @@ function RegistrarForm() {
     setUndoing(true);
     try {
       await api.delete(`/expenses/entries/${saved.id}`);
+      reaccionar("borrado", "Gasto deshecho");
       setSaved(null);          // vuelve al formulario con los valores puestos
-      setTimeout(() => amountRef.current?.focus(), 0);
+      setTimeout(focusAmount, 0);
     } catch {
       setError("No pudimos deshacer. Buscalo en Egresos.");
     } finally {
@@ -272,7 +276,7 @@ function RegistrarForm() {
     setCategoryId("");
     setExpenseDate(todayISO());
     sourceRef.current = "quick";
-    setTimeout(() => amountRef.current?.focus(), 0);
+    setTimeout(focusAmount, 0);
   };
 
   const handleAddCat = async (cat: { name: string; color: string; is_fixed: boolean }) => {
@@ -288,34 +292,31 @@ function RegistrarForm() {
   // porque un formulario que se vacía solo miente sobre si guardó.
   if (saved) {
     const money = saved.currency === "USD" ? formatUSD(saved.amount) : formatARS(saved.amount);
+    const what = [saved.categoryName, saved.description].filter((v, i, all) => v && all.indexOf(v) === i).join(" · ");
     return (
-      <div className="max-w-md mx-auto space-y-4">
-        <Card className="space-y-4 text-center">
-          <div className="mx-auto w-12 h-12 rounded-full border-2 border-ink bg-emerald-50 flex items-center justify-center shadow-chip">
-            <Check className="w-6 h-6 text-emerald-700" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-foreground tabular-nums">{money}</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              {[saved.categoryName, saved.description].filter(Boolean).join(" · ")}
-            </p>
-            <p className="text-xs text-muted-foreground mt-0.5 first-letter:uppercase">
-              {format(parseISO(saved.date), "EEEE d 'de' MMMM", { locale: es })}
-            </p>
-          </div>
-          <div className="flex gap-2 justify-center pt-1">
-            {/* Deshacer es lo que hace seguro un flujo de un toque. Sin esto el
-                precio de equivocarse es abrir otra pantalla y buscar la fila. */}
-            <Button type="button" variant="outline" onClick={handleUndo} disabled={undoing}>
-              <Undo2 className="w-4 h-4" />
-              {undoing ? "Deshaciendo..." : "Deshacer"}
-            </Button>
-            <Button type="button" onClick={handleAgain}>Registrar otro</Button>
-          </div>
-          {error && <p className="text-xs text-destructive">{error}</p>}
-        </Card>
+      <div className="max-w-md mx-auto animate-fade-in">
+        <div className="px-1.5">
+          <p className="inline-flex items-center gap-1.5 text-[15px] font-medium text-[#3B2FB3]">
+            <Check className="w-[18px] h-[18px]" strokeWidth={2.5} /> Gasto guardado
+          </p>
+          <p className="mt-3 text-[44px] font-medium leading-[1.1] tracking-[-0.04em] tabular-nums text-foreground break-words">{money}</p>
+          {what && <p className="mt-1.5 text-[19px] font-semibold leading-snug tracking-[-0.01em] text-foreground">{what}</p>}
+          <p className="mt-1 text-[15px] text-muted-foreground first-letter:uppercase">
+            {format(parseISO(saved.date), "EEEE d 'de' MMMM", { locale: es })}
+          </p>
+        </div>
+        <div className="mt-6 flex items-center gap-2">
+          {/* Deshacer es lo que hace seguro un flujo de un toque. Sin esto el
+              precio de equivocarse es abrir otra pantalla y buscar la fila. */}
+          <Button type="button" variant="outline" onClick={handleUndo} disabled={undoing} className="h-[52px] text-[15px] px-5">
+            <Undo2 className="w-4 h-4" />
+            {undoing ? "Deshaciendo…" : "Deshacer"}
+          </Button>
+          <Button type="button" onClick={handleAgain} className="flex-1 h-[52px] text-[15.5px]">Registrar otro</Button>
+        </div>
+        {error && <p role="alert" className="mt-3 text-sm text-rose-800 bg-rose-50 rounded-xl px-3 py-2">{error}</p>}
         <button type="button" onClick={() => router.push("/expenses")}
-          className="w-full text-center text-xs text-muted-foreground hover:text-foreground py-2">
+          className="mt-2 w-full min-h-[44px] text-center text-sm font-medium text-muted-foreground hover:text-foreground">
           Ver todos los egresos
         </button>
       </div>
@@ -327,93 +328,88 @@ function RegistrarForm() {
     : format(parseISO(expenseDate), "d 'de' MMMM", { locale: es });
 
   return (
-    <div className="max-w-md mx-auto">
-      <h1 className="text-lg font-semibold text-foreground mb-3">Registrar gasto</h1>
-      <Card>
-        {sharedNote && (
-          <p className="mb-4 text-[11px] text-muted-foreground bg-accent/50 rounded-lg px-3 py-2">
-            {sharedNote}
-          </p>
-        )}
+    <div className="max-w-md mx-auto space-y-3.5">
+      <h1 className="text-[26px] md:text-3xl font-display font-medium tracking-[-0.035em] text-foreground">Registrar gasto</h1>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* 1. Monto. Grande y con el foco puesto: es la respuesta que la
-              persona ya tiene y el resto de la pantalla puede esperar. */}
-          <div>
-            <FieldLabel>Monto</FieldLabel>
-            <input
-              ref={amountRef}
-              type="text" inputMode="decimal" pattern="[0-9.,]*"
-              placeholder="0,00"
-              aria-label="Monto"
-              className={`${FIELD} text-3xl font-bold text-center py-3 tabular-nums`}
-              value={amount}
-              onChange={e => setAmount(e.target.value)}
-              required
+      {sharedNote && (
+        <p className="text-sm leading-snug text-foreground bg-accent border border-[#CFC9E4] rounded-[22px] px-3.5 py-2.5">
+          {sharedNote}
+        </p>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* 1. Monto. Grande y con el foco puesto: es la respuesta que la
+            persona ya tiene y el resto de la pantalla puede esperar. La moneda
+            va al lado porque es del gasto entero, no un sufijo del campo. */}
+        <div>
+          <AmountField
+            inputRef={amountRef}
+            label="Monto"
+            currency={currency}
+            toggle={<CurrencyToggle className="w-[132px]" value={currency} onChange={setCurrency} />}
+            placeholder="0,00"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            required
+          />
+        </div>
+
+        {/* 2. Categoría. */}
+        <div>
+          <FieldLabel hint={currency === "USD" ? "(opcional)" : undefined}>Categoría</FieldLabel>
+          <div className="mt-1.5">
+            <CategoryChips
+              value={categoryId}
+              onChange={setCategoryId}
+              categories={categories}
+              recentIds={recentIds}
+              suggestedId={suggestion?.category_id ?? null}
+              suggestedFrom={suggestion?.matched_description ?? null}
+              onCreateNew={() => setShowCatForm(true)}
+              loading={catsLoading}
             />
           </div>
+          {currency === "USD" && !categoryId && (
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Sin categoría va a «Consumo en dólares».
+            </p>
+          )}
+        </div>
 
-          {/* 2. Moneda: es del gasto entero, por eso va arriba y no como
-              sufijo de un campo. */}
-          <CurrencyToggle value={currency} onChange={setCurrency} />
+        {/* 3. Fecha: colapsada, porque la respuesta es hoy casi siempre. */}
+        <div>
+          <FieldLabel>Fecha</FieldLabel>
+          {showDate ? (
+            <DateField required value={expenseDate} onChange={v => setExpenseDate(v || todayISO())} />
+          ) : (
+            <button type="button" onClick={() => setShowDate(true)}
+              className="min-h-[44px] flex items-center gap-2 text-[15px] font-medium text-foreground">
+              <CalendarDays className="w-4 h-4 text-muted-foreground" />
+              <span>{dateLabel}</span>
+              <span className="text-sm font-normal text-muted-foreground underline underline-offset-2">cambiar</span>
+            </button>
+          )}
+        </div>
 
-          {/* 3. Categoría. */}
-          <div>
-            <FieldLabel hint={currency === "USD" ? "(opcional)" : undefined}>Categoría</FieldLabel>
-            <div className="mt-1.5">
-              <CategoryChips
-                value={categoryId}
-                onChange={setCategoryId}
-                categories={categories}
-                recentIds={recentIds}
-                suggestedId={suggestion?.category_id ?? null}
-                suggestedFrom={suggestion?.matched_description ?? null}
-                onCreateNew={() => setShowCatForm(true)}
-                loading={catsLoading}
-              />
-            </div>
-            {currency === "USD" && !categoryId && (
-              <p className="text-[11px] text-muted-foreground mt-1.5">
-                Sin categoría va a «Consumo en dólares».
-              </p>
-            )}
-          </div>
+        {/* 4. Descripción: opcional, y lo que alimenta la sugerencia. */}
+        <div>
+          <FieldLabel hint="(opcional)">Descripción</FieldLabel>
+          <input
+            className={FIELD}
+            placeholder="Dónde fue"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            onBlur={e => askSuggestion(e.target.value)}
+            maxLength={255}
+          />
+        </div>
 
-          {/* 4. Fecha: colapsada, porque la respuesta es hoy casi siempre. */}
-          <div>
-            <FieldLabel>Fecha</FieldLabel>
-            {showDate ? (
-              <DateField required value={expenseDate} onChange={v => setExpenseDate(v || todayISO())} />
-            ) : (
-              <button type="button" onClick={() => setShowDate(true)}
-                className="mt-1 flex items-center gap-2 text-sm text-foreground hover:text-primary">
-                <CalendarDays className="w-4 h-4 text-muted-foreground" />
-                <span>{dateLabel}</span>
-                <span className="text-xs text-muted-foreground underline">cambiar</span>
-              </button>
-            )}
-          </div>
+        {error && <p role="alert" className="text-sm text-rose-800 bg-rose-50 rounded-xl px-3 py-2">{error}</p>}
 
-          {/* 5. Descripción: opcional, y lo que alimenta la sugerencia. */}
-          <div>
-            <FieldLabel hint="(opcional)">Descripción</FieldLabel>
-            <input
-              className={FIELD}
-              placeholder="Dónde fue"
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              onBlur={e => askSuggestion(e.target.value)}
-              maxLength={255}
-            />
-          </div>
-
-          {error && <p className="text-xs text-destructive">{error}</p>}
-
-          <Button type="submit" className="w-full py-3" disabled={saving}>
-            {saving ? "Guardando..." : "Guardar gasto"}
-          </Button>
-        </form>
-      </Card>
+        <Button type="submit" className="w-full h-[52px] text-[15.5px]" disabled={saving}>
+          {saving ? "Guardando…" : "Guardar gasto"}
+        </Button>
+      </form>
 
       {showCatForm && (
         <NewCategoryModal

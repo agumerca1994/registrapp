@@ -6,12 +6,13 @@ import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import WhatsAppVerifyForm from "@/components/WhatsAppVerifyForm";
-import { AtSign, MessageCircle } from "lucide-react";
+import { AtSign } from "lucide-react";
 import { FIELD, FormGrid, SegmentedToggle } from "@/components/ui/form";
 import { features } from "@/lib/features";
 import { suggestAlias } from "@/lib/alias";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ToodLogo } from "@/components/brand/ToodLogo";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -83,54 +84,55 @@ export default function OnboardingPage() {
     router.replace("/dashboard");
   };
 
+  const shell = (title: string, children: React.ReactNode) => (
+    <div className="min-h-screen bg-background flex flex-col justify-center"
+      style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
+      <main className="w-full max-w-md mx-auto px-4 py-8">
+        <ToodLogo className="h-8 w-auto text-primary ml-1.5" title="tood" />
+        <h1 className="mt-4 mb-4 ml-1.5 text-[28px] font-display font-medium leading-tight tracking-[-0.035em] text-foreground">{title}</h1>
+        {children}
+      </main>
+    </div>
+  );
+
   if (step === "whatsapp") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Card variant="hero" className="w-full max-w-md flex flex-col gap-6 p-10">
-          <div className="flex items-center gap-2">
-            <MessageCircle className="w-6 h-6 text-emerald-600" />
-            <h1 className="text-2xl font-display font-bold text-foreground">Vinculá tu WhatsApp</h1>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Falta un paso: vincular tu número de WhatsApp. Por ahí te llegan los recordatorios de pago, y podés cargar movimientos mandando un mensaje.
-          </p>
-          <WhatsAppVerifyForm onVerified={handleWhatsAppVerified} onSkip={handleWhatsAppVerified} />
-        </Card>
-      </div>
-    );
+    return shell("Vinculá tu WhatsApp", (
+      <Card className="rounded-[28px] flex flex-col gap-4">
+        <p className="text-sm leading-snug text-muted-foreground">
+          Falta un paso: vincular tu número de WhatsApp. Por ahí te llegan los recordatorios de pago, y podés cargar movimientos mandando un mensaje.
+        </p>
+        <WhatsAppVerifyForm onVerified={handleWhatsAppVerified} onSkip={handleWhatsAppVerified} />
+      </Card>
+    ));
   }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <Card variant="hero" className="w-full max-w-md flex flex-col gap-6 p-10">
-        <h1 className="text-2xl font-display font-bold text-foreground">Configurar cuenta</h1>
-
-        <div className="flex gap-2">
-          <button
-            onClick={() => setMode("create")}
-            className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors border-2 ${mode === "create" ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent"}`}
-          >
-            {features.businessSignup ? "Crear nueva" : "Crear hogar nuevo"}
-          </button>
-          <button
-            onClick={() => setMode("join")}
-            className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors border-2 ${mode === "join" ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent"}`}
-          >
-            {features.businessSignup ? "Unirme con un código" : "Unirme a un hogar"}
-          </button>
-        </div>
+  return shell("Configurar cuenta", (
+      <Card className="rounded-[28px] flex flex-col gap-4">
+        <SegmentedToggle
+          ariaLabel="Crear o unirme"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: "create", label: features.businessSignup ? "Crear nueva" : "Crear hogar nuevo" },
+            { value: "join", label: features.businessSignup ? "Unirme con un código" : "Unirme a un hogar" },
+          ]}
+        />
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {mode === "create" && features.businessSignup && (
-            <SegmentedToggle
-              ariaLabel="Para qué es la cuenta"
-              value={kind}
-              onChange={setKind}
-              options={[
-                { value: "household", label: "Mi hogar" },
-                { value: "business", label: "Mi negocio" },
-              ]}
-            />
+            <div>
+              {/* El bot nombra este campo tal cual cuando explica cómo crear un negocio. */}
+              <p className="text-xs font-medium text-muted-foreground mb-1">Para qué es la cuenta</p>
+              <SegmentedToggle
+                ariaLabel="Para qué es la cuenta"
+                value={kind}
+                onChange={setKind}
+                options={[
+                  { value: "household", label: "Mi hogar" },
+                  { value: "business", label: "Mi negocio" },
+                ]}
+              />
+            </div>
           )}
           <FormGrid>
             <div>
@@ -148,7 +150,7 @@ export default function OnboardingPage() {
           <div>
             <label className="text-xs font-medium text-muted-foreground">Alias</label>
             <div className="relative">
-              <AtSign className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <AtSign className="w-4 h-4 text-muted-foreground absolute left-3 top-[calc(50%+2px)] -translate-y-1/2 pointer-events-none" />
               <input
                 className={`${FIELD} pl-9`}
                 value={alias}
@@ -194,13 +196,12 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {error && <p className="text-destructive text-sm">{error}</p>}
+          {error && <p role="alert" className="text-sm text-rose-800 bg-rose-50 rounded-xl px-3 py-2">{error}</p>}
 
-          <Button type="submit" disabled={loading}>
+          <Button type="submit" disabled={loading} className="h-[52px] text-[15.5px]">
             {loading ? "Configurando…" : mode === "create" ? (business ? "Crear negocio" : "Crear hogar") : "Unirme"}
           </Button>
         </form>
       </Card>
-    </div>
-  );
+  ));
 }

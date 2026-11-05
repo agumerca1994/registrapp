@@ -1,26 +1,24 @@
 "use client";
 
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
-/** El selector de día de Ventas: la misma píldora que el selector de mes. */
-export function DayPill({ label, onPrev, onNext, prevDisabled, nextDisabled }: {
+/** El selector de día de Ventas. Va sobre el bloque violeta, así que es de vidrio. */
+export function DayPill({ label, onPrev, onNext, prevDisabled, nextDisabled, ...rest }: {
   label: string;
   onPrev: () => void;
   onNext: () => void;
   prevDisabled?: boolean;
   nextDisabled?: boolean;
-}) {
+} & React.HTMLAttributes<HTMLDivElement>) {
+  const arrow = "w-9 h-9 rounded-full flex items-center justify-center text-white active:scale-[0.95] transition-transform duration-100 disabled:opacity-30";
   return (
-    <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
-      <CalendarDays className="w-4 h-4 text-primary shrink-0" />
-      <button onClick={onPrev} aria-label="Día anterior" disabled={prevDisabled}
-        className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors disabled:opacity-30">
-        <ChevronLeft className="w-4 h-4" />
+    <div {...rest} className="inline-flex items-center rounded-full bg-white/15 border border-white/25 backdrop-blur-lg p-0.5">
+      <button onClick={onPrev} aria-label="Día anterior" disabled={prevDisabled} className={arrow}>
+        <ChevronLeft className="w-[18px] h-[18px]" />
       </button>
-      <span className="text-sm font-bold text-foreground px-0.5 min-w-[100px] text-center first-letter:uppercase">{label}</span>
-      <button onClick={onNext} aria-label="Día siguiente" disabled={nextDisabled}
-        className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors disabled:opacity-30">
-        <ChevronRight className="w-4 h-4" />
+      <span className="text-sm font-semibold text-white px-0.5 min-w-[84px] text-center whitespace-nowrap first-letter:uppercase">{label}</span>
+      <button onClick={onNext} aria-label="Día siguiente" disabled={nextDisabled} className={arrow}>
+        <ChevronRight className="w-[18px] h-[18px]" />
       </button>
     </div>
   );

@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { CheckCircle, Users, AlertCircle, Loader2 } from "lucide-react";
+import { format, parseISO } from "date-fns";
+import { es } from "date-fns/locale";
+import { CheckCircle, Loader2 } from "lucide-react";
 import api from "@/lib/api";
 import { formatARS, formatUSD, getErrorMessage } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { ToodLogo } from "@/components/brand/ToodLogo";
 import { Card } from "@/components/ui/card";
-import { Chip } from "@/components/ui/chip";
-import { Button } from "@/components/ui/button";
 
 interface InviteInfo {
   shared_expense_id: number;
@@ -20,6 +21,20 @@ interface InviteInfo {
   creator_name: string;
   cuotas_count: number;
   cuotas_total_amount: number | null;
+}
+
+const PRIMARY = "w-full h-[52px] rounded-full bg-ink text-background font-semibold text-[15.5px] inline-flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform duration-100";
+const SECONDARY = "w-full h-[52px] rounded-full border border-border bg-card font-semibold text-[15px] text-foreground active:scale-[0.98] transition-transform duration-100";
+
+function Page({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+      <div className="max-w-sm w-full space-y-4">
+        <ToodLogo className="h-8 w-auto text-primary mx-auto" />
+        {children}
+      </div>
+    </div>
+  );
 }
 
 export default function InvitePage() {
@@ -69,119 +84,100 @@ export default function InvitePage() {
 
   if (loadError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <Card variant="hero" className="max-w-sm w-full text-center space-y-4">
-          <AlertCircle className="w-10 h-10 text-destructive mx-auto" />
-          <p className="font-semibold text-foreground">Invitación no disponible</p>
-          <p className="text-sm text-muted-foreground">{loadError}</p>
-          <Button onClick={() => router.push("/")} className="w-full">
-            Ir al inicio
-          </Button>
+      <Page>
+        <Card className="space-y-3 animate-fade-in">
+          <h1 className="text-[22px] font-medium tracking-[-0.03em] text-foreground">Invitación no disponible</h1>
+          <p className="text-[15px] text-muted-foreground">{loadError}</p>
+          <button type="button" onClick={() => router.push("/")} className={PRIMARY}>Ir al inicio</button>
         </Card>
-      </div>
+      </Page>
     );
   }
 
   if (claimed) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <Card variant="hero" className="max-w-sm w-full text-center space-y-4">
-          <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto" />
-          <p className="font-semibold text-foreground">Invitación aceptada</p>
-          <p className="text-sm text-muted-foreground">Te llevamos a Compartidos…</p>
+      <Page>
+        <Card className="space-y-2 animate-fade-in">
+          <h1 className="text-[22px] font-medium tracking-[-0.03em] text-foreground">Invitación aceptada</h1>
+          <p className="text-[15px] text-muted-foreground">Te llevamos a Compartidos…</p>
         </Card>
-      </div>
+      </Page>
     );
   }
 
+  const money = (n: number) => (info?.currency === "USD" ? formatUSD(n) : formatARS(n));
+  const plan = !!info && info.cuotas_count > 1;
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="max-w-sm w-full space-y-4">
-        <div className="text-center">
-          <Users className="w-10 h-10 text-primary mx-auto mb-2" />
-          <h1 className="text-xl font-display font-bold text-foreground">Gasto compartido</h1>
-          <p className="text-sm text-muted-foreground mt-1">Te invitaron a compartir un gasto</p>
+    <Page>
+      {info && (
+        <Card className="animate-fade-in">
+          <p className="font-marca text-xs text-muted-foreground">
+            {format(parseISO(info.expense_date), "EEE d MMM yyyy", { locale: es }).replace(/\./g, "")}
+          </p>
+          <h1 className="mt-2.5 text-sm text-[#4A4658]">
+            {info.creator_name} te invitó a compartir un gasto
+          </h1>
+          <p className="mt-1 text-[19px] font-semibold leading-snug tracking-[-0.01em] text-foreground">{info.title}</p>
+
+          <p className="mt-3 text-sm text-[#4A4658]">{plan ? "Tu parte por cuota" : "Tu parte"}</p>
+          <p className="font-medium text-[44px] leading-[1.1] tracking-[-0.04em] tabular-nums break-words text-foreground">
+            {money(info.split_amount)}
+          </p>
+
+          <div className="mt-3 border-t border-border">
+            <div className="flex items-baseline justify-between gap-4 py-2.5 text-[15px]">
+              <span className="text-[#4A4658]">{plan ? "Monto por cuota" : "Total del gasto"}</span>
+              <span className="font-medium tabular-nums text-foreground">{money(info.total_amount)}</span>
+            </div>
+          </div>
+
+          {plan && info.cuotas_total_amount !== null && (
+            <p className="mt-1 rounded-2xl bg-accent border border-[#CFC9E4] px-3.5 py-2.5 text-sm text-foreground">
+              Se van a compartir las <strong className="font-semibold">{info.cuotas_count} cuotas</strong> de esta compra, una por mes.
+              Tu parte total sumando todas las cuotas es <strong className="font-semibold tabular-nums">{money(info.cuotas_total_amount)}</strong>.
+            </p>
+          )}
+        </Card>
+      )}
+
+      {claimError && (
+        <p role="alert" className="text-sm text-destructive bg-destructive/10 rounded-2xl px-3.5 py-2.5 text-center">{claimError}</p>
+      )}
+
+      {appUser ? (
+        <div className="space-y-2">
+          <button type="button" onClick={handleClaim} disabled={claiming} className={PRIMARY}>
+            {claiming ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+            {claiming ? "Aceptando…" : plan ? `Aceptar las ${info?.cuotas_count} cuotas` : "Aceptar y agregar a mis gastos"}
+          </button>
+          <p className="text-sm text-center text-muted-foreground">
+            Sesión iniciada como <span className="font-medium text-foreground">{appUser.display_name || appUser.email}</span>
+          </p>
         </div>
-
-        {info && (
-          <Card variant="hero" className="space-y-4">
-            <div>
-              <p className="text-xs text-muted-foreground mb-0.5">Descripción</p>
-              <p className="font-semibold text-foreground">
-                {info.title}
-                {info.cuotas_count > 1 && (
-                  <Chip tone="violet" className="ml-2 align-middle">
-                    {info.cuotas_count} cuotas
-                  </Chip>
-                )}
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">{info.cuotas_count > 1 ? "Monto por cuota" : "Total del gasto"}</p>
-                <p className="font-semibold text-foreground">{info.currency === "USD" ? formatUSD(info.total_amount) : formatARS(info.total_amount)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">{info.cuotas_count > 1 ? "Tu parte por cuota" : "Tu parte"}</p>
-                <p className="font-bold text-lg text-primary">{info.currency === "USD" ? formatUSD(info.split_amount) : formatARS(info.split_amount)}</p>
-              </div>
-            </div>
-            {info.cuotas_count > 1 && info.cuotas_total_amount !== null && (
-              <div className="bg-accent rounded-lg px-3 py-2">
-                <p className="text-xs text-primary">
-                  Se van a compartir las <strong>{info.cuotas_count} cuotas</strong> de esta compra, una por mes.
-                  Tu parte total sumando todas las cuotas es <strong>{info.currency === "USD" ? formatUSD(info.cuotas_total_amount) : formatARS(info.cuotas_total_amount)}</strong>.
-                </p>
-              </div>
-            )}
-            <div>
-              <p className="text-xs text-muted-foreground mb-0.5">Creado por</p>
-              <p className="text-sm text-foreground">{info.creator_name}</p>
-            </div>
-          </Card>
-        )}
-
-        {claimError && (
-          <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2 text-center">{claimError}</p>
-        )}
-
-        {appUser ? (
-          <div className="space-y-2">
-            <Button onClick={handleClaim} disabled={claiming} className="w-full">
-              {claiming ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-              {claiming ? "Aceptando…" : info && info.cuotas_count > 1 ? `Aceptar las ${info.cuotas_count} cuotas` : "Aceptar y agregar a mis gastos"}
-            </Button>
-            <p className="text-xs text-center text-muted-foreground">
-              Sesión iniciada como <strong>{appUser.display_name || appUser.email}</strong>
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <p className="text-sm text-center text-muted-foreground">
-              Iniciá sesión para aceptar este gasto compartido
-            </p>
-            <Button
-              onClick={() => {
-                localStorage.setItem("pendingInviteToken", token);
-                router.push("/login");
-              }}
-              className="w-full"
-            >
-              Iniciar sesión
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                localStorage.setItem("pendingInviteToken", token);
-                router.push("/login");
-              }}
-              className="w-full"
-            >
-              Crear cuenta nueva
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-[15px] text-center text-muted-foreground">
+            Iniciá sesión para aceptar este gasto compartido
+          </p>
+          <button type="button" className={PRIMARY}
+            onClick={() => {
+              localStorage.setItem("pendingInviteToken", token);
+              router.push("/login");
+            }}
+          >
+            Iniciar sesión
+          </button>
+          <button type="button" className={SECONDARY}
+            onClick={() => {
+              localStorage.setItem("pendingInviteToken", token);
+              router.push("/login");
+            }}
+          >
+            Crear cuenta nueva
+          </button>
+        </div>
+      )}
+    </Page>
   );
 }

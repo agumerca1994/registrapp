@@ -1,8 +1,8 @@
 "use client";
 
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Pencil, Trash2, MoreVertical } from "lucide-react";
 import { BankLogo } from "@/components/ui/bank-logo";
+import { ledgerAmount } from "@/components/movimientos/Ledger";
+import { RowMenu, shortDate } from "@/components/tarjetas/parts";
 
 interface CardData {
   id: number;
@@ -12,71 +12,56 @@ interface CardData {
   last_4_digits?: string;
 }
 
-// Full-width row, stacked one below the other — styled like a card
-// (border-ink + shadow-hero) rather than a plain table row. Bank shown as
-// a small icon/initials badge (see BankLogo). Number + titular move to a
-// second line under the name on narrow screens instead of being hidden,
-// same pattern used for the income/expenses list rows.
+/** Lo próximo que vence de esta tarjeta, si se sabe. Pesos y dólares por separado. */
+export interface CardNextDue {
+  date: string;
+  estimated: boolean;
+  ars: number;
+  usd: number;
+}
+
+// Una fila de la lista de tarjetas, sobre el papel y con líneas finas, como todas
+// las listas. A la derecha, lo que se viene a mirar: cuánto vence y cuándo.
 export function CreditCardVisual({
   card,
+  next,
   onClick,
   onEdit,
   onDelete,
 }: {
   card: CardData;
+  next?: CardNextDue;
   onClick: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  // Una tarjeta llamada igual que su banco no dice dos veces lo mismo.
+  const detail = [
+    card.alias !== card.bank ? card.bank : null,
+    card.last_4_digits ? `•••• ${card.last_4_digits}` : null,
+    card.titular,
+  ].filter(Boolean).join(" · ");
+
   return (
-    <div
-      className="relative rounded-2xl border-2 border-ink shadow-hero bg-card overflow-hidden cursor-pointer transition-transform hover:-translate-y-0.5 p-3 sm:p-4 flex items-center gap-3 sm:gap-4"
-      onClick={onClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter") onClick(); }}
-    >
-      <BankLogo bankName={card.bank} size={40} className="shrink-0" />
-
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-foreground truncate">{card.bank}</p>
-        <p className="text-xs text-muted-foreground truncate">{card.alias}</p>
-        <div className="sm:hidden mt-0.5">
-          <p className="text-xs font-mono font-medium text-foreground">•••• {card.last_4_digits || "••••"}</p>
-          <p className="text-xs text-muted-foreground truncate">{card.titular || "Sin titular"}</p>
-        </div>
-      </div>
-
-      <div className="hidden sm:block shrink-0 text-right">
-        <p className="text-sm font-mono font-semibold tracking-wider text-foreground">•••• {card.last_4_digits || "••••"}</p>
-        <p className="text-xs font-medium text-muted-foreground uppercase truncate max-w-[160px]">{card.titular || "Sin titular"}</p>
-      </div>
-
-      <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
-            <button className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors outline-none" title="Más acciones" aria-label="Más acciones">
-              <MoreVertical className="w-4 h-4" />
-            </button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content align="end" sideOffset={4} className="bg-card border rounded-xl shadow-lg p-1 w-40 z-50">
-              <DropdownMenu.Item asChild>
-                <button onClick={onEdit}
-                  className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full text-left outline-none cursor-pointer">
-                  <Pencil className="w-4 h-4 text-muted-foreground" /> Editar
-                </button>
-              </DropdownMenu.Item>
-              <DropdownMenu.Item asChild>
-                <button onClick={onDelete}
-                  className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-destructive hover:bg-destructive/10 w-full text-left outline-none cursor-pointer">
-                  <Trash2 className="w-4 h-4" /> Eliminar
-                </button>
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
-      </div>
+    <div className="flex items-center gap-1 border-b border-border last:border-b-0">
+      <button type="button" data-no-press onClick={onClick}
+        className="flex-1 min-w-0 min-h-[72px] py-2 flex items-center gap-3 text-left active:opacity-60 transition-opacity">
+        <BankLogo bankName={card.bank} size={44} className="shrink-0 border border-border" />
+        <span className="flex-1 min-w-0">
+          <span className="block font-semibold text-[15.5px] text-foreground truncate">{card.alias}</span>
+          {detail && <span className="block text-sm text-muted-foreground truncate">{detail}</span>}
+        </span>
+        {next && (
+          <span className="shrink-0 text-right">
+            {next.ars > 0 && <span className="block font-medium text-base tabular-nums text-foreground">{ledgerAmount(next.ars)}</span>}
+            {next.usd > 0 && <span className="block font-medium text-base tabular-nums text-foreground">{ledgerAmount(next.usd, "USD")}</span>}
+            <span className="block font-marca text-xs text-muted-foreground">
+              {next.estimated ? "estimado " : "vence "}{shortDate(next.date)}
+            </span>
+          </span>
+        )}
+      </button>
+      <RowMenu label={`Más acciones de ${card.alias}`} onEdit={onEdit} onDelete={onDelete} />
     </div>
   );
 }

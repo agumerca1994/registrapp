@@ -42,6 +42,8 @@ test("las instrucciones del Atajo se muestran sólo en iPhone", async ({ browser
   });
   const onPhone = await iphone.newPage();
   await onPhone.goto("/settings");
+  // Configuración es una lista de filas: cada sección abre su hoja.
+  await onPhone.getByRole("button", { name: /Compartir un comprobante desde el iPhone/ }).click();
   await expect(
     onPhone.getByRole("heading", { name: /Compartir un comprobante desde el iPhone/ })
   ).toBeVisible();
@@ -68,6 +70,7 @@ test("el archivo del atajo se descarga firmado", async ({ browser }) => {
   });
   const page = await iphone.newPage();
   await page.goto("/settings");
+  await page.getByRole("button", { name: /Compartir un comprobante desde el iPhone/ }).click();
   await expect(page.getByRole("link", { name: "Descargar el atajo", exact: true })).toBeVisible();
 
   await expect(page.getByRole("link", { name: /Descargar el atajo «preguntar»/ })).toBeVisible();

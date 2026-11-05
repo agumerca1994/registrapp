@@ -1,27 +1,35 @@
 "use client";
 
+import { SheetSwitch } from "@/components/movimientos/FormSheet";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import api from "@/lib/api";
 import { PushNotificationsSection } from "@/components/PushNotificationsSection";
 import { ProfileSection } from "@/components/ProfileSection";
 import { AccountClosureSection } from "@/components/account/AccountClosureSection";
 import { formatARS, getErrorMessage, formatPhone } from "@/lib/utils";
-import { Copy, Check, MessageCircle, CheckCircle2, Unlink, UserPlus, Trash2 } from "lucide-react";
+import { BookOpen, Check, CheckCircle2, Copy, DollarSign, Home, MessageCircle, Store, UserPlus } from "lucide-react";
 import { COUNTRIES } from "@/lib/countries";
 import WhatsAppVerifyForm from "@/components/WhatsAppVerifyForm";
 import McpConnectorSection from "@/components/McpConnectorSection";
+import { useReaccion } from "@/components/brand/ToodReaccion";
+import { MotionList } from "@/components/ui/motion-list";
 import { IosShortcutSection } from "@/components/IosShortcutSection";
 import { features } from "@/lib/features";
 import { resetAllTours } from "@/components/ProductTour";
 import { BUSINESS_TOUR_IDS } from "@/components/business/tours";
 import { isBusiness, isEmployee, roleLabel, terms } from "@/lib/account";
 import { WHATS_NEW_KEY } from "@/components/WhatsNewCarousel";
-import { Card } from "@/components/ui/card";
+import { ChoiceChips } from "@/components/ui/choice-chips";
 import { FIELD, SelectField } from "@/components/ui/form";
 import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
+import { FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions } from "@/components/movimientos/FormSheet";
+import {
+  ConfirmInline, SettingsGroup, SettingsRow, SHEET_BLOCK, SHEET_TEXT,
+} from "@/components/settings/SettingsParts";
 
 interface Member {
   id: number;
@@ -32,7 +40,7 @@ interface Member {
 }
 
 
-const APP_TOUR_IDS = ["dashboard-intro", "income-intro", "expenses-intro", ...BUSINESS_TOUR_IDS];
+const APP_TOUR_IDS = ["dashboard-intro", "income-intro", "expenses-intro", "shared-intro", ...BUSINESS_TOUR_IDS];
 
 function buildHouseholdInviteMessage(name: string, code: string, appUrl: string, business = false): string {
   // El paso 3 nombra el botón tal como se ve en /onboarding, que cambia con
@@ -68,6 +76,9 @@ const FX_RATE_TYPES = [
 ];
 
 function CurrencySettingsSection() {
+  const reaccionar = useReaccion();
+  useAmountsHidden();  // la última cotización pasa por formatARS
+  const [open, setOpen] = useState(false);
   const [rateType, setRateType] = useState<string | null>(null);
   const [rate, setRate] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
@@ -83,6 +94,7 @@ function CurrencySettingsSection() {
   }, []);
 
   const save = async (value: string) => {
+    if (saving || value === rateType) return;
     const previous = rateType;
     setRateType(value);
     setSaving(true);
@@ -92,6 +104,7 @@ function CurrencySettingsSection() {
       );
       setRate(res.data.rate !== null ? Number(res.data.rate) : null);
       setError(null);
+      reaccionar("guardado", "Cotización guardada");
     } catch (e) {
       setRateType(previous);
       setError(getErrorMessage(e));
@@ -100,36 +113,39 @@ function CurrencySettingsSection() {
     }
   };
 
+  const label = FX_RATE_TYPES.find(t => t.value === rateType)?.label;
+
   return (
-    <Card className="p-6 space-y-4">
-      <h3 className="font-semibold text-foreground">Cotización del dólar</h3>
-      <p className="text-sm text-muted-foreground">
-        Con cuál se valúa tu tenencia en dólares.
-      </p>
-      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
-        {FX_RATE_TYPES.map(t => (
-          <button key={t.value} type="button" disabled={saving || rateType === null}
-            onClick={() => save(t.value)}
-            className={`shrink-0 px-3 py-1.5 text-sm rounded-full border-2 font-medium transition-colors disabled:opacity-50 ${rateType === t.value ? "border-ink bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-accent"}`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-      {rate !== null && (
-        <p className="text-sm text-muted-foreground">
-          Última cotización: <strong className="text-foreground">{formatARS(rate)}</strong>
-        </p>
+    <>
+      <SettingsRow icon={DollarSign} title="Cotización del dólar" hint={label ? `Tus dólares se valúan al ${label}` : "Con cuál se valúan tus dólares"}
+        onClick={() => setOpen(true)} />
+      {open && (
+        <FormSheet title="Cotización del dólar" onClose={() => setOpen(false)}>
+          <div className={`${FORM_SHEET_BODY} !pb-4`}>
+            <p className={`${SHEET_TEXT} px-1.5`}>Con cuál se valúa tu tenencia en dólares.</p>
+            {rateType === null
+              ? <p className={`${SHEET_TEXT} px-1.5`}>Cargando…</p>
+              : <ChoiceChips wrap ariaLabel="Cotización del dólar" value={rateType} onChange={save} options={FX_RATE_TYPES} />}
+            {rate !== null && (
+              <p className={`${SHEET_TEXT} px-1.5`}>
+                Última cotización: <strong className="text-foreground tabular-nums">{formatARS(rate)}</strong>
+              </p>
+            )}
+            {error && <p role="alert" className="text-sm text-rose-800 bg-rose-50 rounded-xl px-3 py-2">{error}</p>}
+          </div>
+        </FormSheet>
       )}
-      {error && <p className="text-sm text-rose-600">{error}</p>}
-    </Card>
+    </>
   );
 }
 
+// No confundir con el código de "Tu hogar": esto invita a alguien a crear su
+// propia cuenta, el código lo suma a la tuya.
 function InviteFriendSection() {
   const { appUser } = useAuth();
+  const [open, setOpen] = useState(false);
   // Sin mail: la app no manda correos, así que ofrecer "Email" acá era la
   // única puerta que quedaba a un canal que no existe en ningún otro lado.
-  const [method, setMethod] = useState<"none" | "whatsapp">("none");
   const [prefix, setPrefix] = useState("54");
   const [localPhone, setLocalPhone] = useState("");
 
@@ -141,56 +157,52 @@ function InviteFriendSection() {
 
   const buildMessage = () => buildFriendInviteMessage(name, appUrl);
 
-  const sendWhatsApp = () => {
+  const sendWhatsApp = (e: React.FormEvent) => {
+    e.preventDefault();
     if (!localPhone.trim()) return;
     window.open("https://wa.me/" + fullPhone + "?text=" + encodeURIComponent(buildMessage()), "_blank");
   };
 
   return (
-    <Card className="p-6 space-y-4">
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <UserPlus className="w-5 h-5 text-primary" />
-          <h3 className="font-semibold text-foreground">Invitar amigo</h3>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Invitá a un amigo a sumarse a tood.
-        </p>
-      </div>
-      <div className="flex gap-2">
-        <button onClick={() => setMethod(method === "whatsapp" ? "none" : "whatsapp")}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-full text-sm border-2 border-transparent text-muted-foreground hover:bg-accent aria-pressed:bg-emerald-50 aria-pressed:border-emerald-300 aria-pressed:text-emerald-700 transition-colors"
-          aria-pressed={method === "whatsapp"}
-        >
-          <MessageCircle className="w-4 h-4" /> WhatsApp
-        </button>
-      </div>
-      {method === "whatsapp" && (
-        <div className="space-y-3">
-          <div className="flex gap-2">
-            <SelectField className="w-32 shrink-0" value={prefix}
-              onChange={v => { setPrefix(v); setLocalPhone(""); }}
-              options={COUNTRIES.map(c => ({ value: c.prefix, label: `${c.flag} +${c.prefix}` }))} />
-            <input type="tel" value={localPhone}
-              onChange={e => setLocalPhone(e.target.value.replace(/[^0-9 ]/g, ""))}
-              placeholder={country.placeholder} inputMode="numeric"
-              className={`${FIELD} flex-1 mt-0`} />
-          </div>
-          <Button onClick={sendWhatsApp} disabled={!localPhone.trim()}>
-            Mandar invitación
-          </Button>
-          <p className="text-xs text-muted-foreground">Para Argentina: sin 0 inicial ni 15.</p>
-        </div>
+    <>
+      <SettingsRow icon={UserPlus} title="Invitar amigo" hint="Que se haga su propia cuenta en tood" onClick={() => setOpen(true)} />
+      {open && (
+        <FormSheet title="Invitar amigo" onClose={() => setOpen(false)}>
+          <form onSubmit={sendWhatsApp} className={FORM_SHEET_FORM}>
+            <div className={FORM_SHEET_BODY}>
+              <p className={`${SHEET_TEXT} px-1.5`}>
+                Invitá a un amigo a sumarse a tood. Se abre WhatsApp con el mensaje listo, y arma su propia cuenta:
+                no ve tus datos.
+              </p>
+              <div>
+                <div className="flex items-start gap-2">
+                  <SelectField className="w-[7.5rem] shrink-0" value={prefix}
+                    onChange={v => { setPrefix(v); setLocalPhone(""); }}
+                    options={COUNTRIES.map(c => ({ value: c.prefix, label: `${c.flag} +${c.prefix}` }))} />
+                  <input type="tel" value={localPhone} aria-label="Número de tu amigo"
+                    onChange={e => setLocalPhone(e.target.value.replace(/[^0-9 ]/g, ""))}
+                    placeholder={country.placeholder} inputMode="numeric"
+                    className={`${FIELD} flex-1`} />
+                </div>
+                <p className="mt-1.5 px-1.5 text-xs text-[#4A4658]">Para Argentina: sin 0 inicial ni 15.</p>
+              </div>
+            </div>
+            <FormSheetActions onCancel={() => setOpen(false)} saving={false} disabled={!localPhone.trim()} label="Mandar invitación" />
+          </form>
+        </FormSheet>
       )}
-    </Card>
+    </>
   );
 }
 
 function WhatsAppSection() {
+  const reaccionar = useReaccion();
   const { appUser, refreshUser } = useAuth();
+  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [savingPref, setSavingPref] = useState(false);
+  const [confirmUnlink, setConfirmUnlink] = useState(false);
 
   // El aviso del sistema (push) es la base y no se apaga desde acá: no depende
   // de tener un número vinculado ni de un servicio externo. Esto gobierna sólo
@@ -210,21 +222,18 @@ function WhatsAppSection() {
   const isLinked = !!appUser?.whatsapp_phone;
 
   // `/settings#whatsapp` (el "Vincular WhatsApp" de las novedades) tiene que
-  // aterrizar acá. El salto nativo al ancla no alcanza: ScrollToTop corre
-  // después, en el layout, y devuelve #main-content arriba de todo.
+  // aterrizar acá, con la hoja abierta: es lo que se venía a hacer.
   useEffect(() => {
-    if (window.location.hash !== "#whatsapp") return;
-    const t = window.setTimeout(() => {
-      document.getElementById("whatsapp")?.scrollIntoView({ block: "start" });
-    }, 100);
-    return () => window.clearTimeout(t);
+    if (window.location.hash === "#whatsapp") setOpen(true);
   }, []);
 
   const unlink = async () => {
     setLoading(true); setError("");
     try {
       await api.delete("/auth/me/whatsapp");
+      setConfirmUnlink(false);
       await refreshUser();
+      reaccionar("borrado", "WhatsApp desvinculado");
     } catch (e: unknown) {
       setError(getErrorMessage(e, "No se pudo desvincular el número"));
     } finally {
@@ -233,68 +242,66 @@ function WhatsAppSection() {
   };
 
   return (
-    <Card id="whatsapp" className="p-6 space-y-4 scroll-mt-20 md:scroll-mt-8">
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <MessageCircle className="w-5 h-5 text-emerald-600" />
-          <h3 className="font-semibold text-foreground">WhatsApp</h3>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Mandale un mensaje al bot para cargar un gasto, por ejemplo:{" "}
-          <span className="font-mono bg-muted px-1 rounded">15000 supermercado</span>
-        </p>
-      </div>
+    <>
+      <SettingsRow id="whatsapp" icon={MessageCircle} title="WhatsApp"
+        hint={isLinked ? `Vinculado: ${formatPhone(appUser.whatsapp_phone ?? "")}` : "Sin vincular"}
+        onClick={() => setOpen(true)} />
+      {open && (
+        <FormSheet title="WhatsApp" onClose={() => setOpen(false)}>
+          <div className={`${FORM_SHEET_BODY} !pb-4`}>
+            <p className={`${SHEET_TEXT} px-1.5`}>
+              {isEmployee(appUser) ? "Mandale un mensaje al bot para cargar una venta, por ejemplo: " : "Mandale un mensaje al bot para cargar un gasto, por ejemplo: "}
+              <span className="font-marca text-xs bg-ink/[0.06] rounded px-1 py-0.5 text-foreground whitespace-nowrap">
+                {isEmployee(appUser) ? "vendí 3 empanadas" : "15000 supermercado"}
+              </span>
+            </p>
 
-      {isLinked ? (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span className="text-sm text-foreground">Vinculado: <span className="font-medium">{formatPhone(appUser.whatsapp_phone ?? "")}</span></span>
+            {isLinked ? (
+              <>
+                <div className={`${SHEET_BLOCK} flex items-center gap-2`}>
+                  <CheckCircle2 className="w-[18px] h-[18px] text-[#3B2FB3] shrink-0" />
+                  <span className="text-[15px] text-foreground min-w-0">Vinculado: <span className="font-semibold">{formatPhone(appUser.whatsapp_phone ?? "")}</span></span>
+                </div>
+                <SheetSwitch title="Usar WhatsApp para los avisos" checked={!!appUser?.whatsapp_notifications}
+                  disabled={savingPref} onChange={toggleWaNotifs}>
+                  <span className="block mt-0.5 text-sm leading-snug text-[#4A4658]">
+                    Para avisarle por WhatsApp a quien le compartís un gasto, y para
+                    que te avisen a vos. El aviso dentro de la app va igual: esto es
+                    un canal extra.
+                  </span>
+                  {/* La consecuencia que no se ve: a quien no tiene la app,
+                      WhatsApp es su único canal. Decirlo acá y no cuando ya pasó. */}
+                  <span className="block mt-1.5 text-sm leading-snug font-medium text-foreground">
+                    Si lo apagás, a quien invites y no tenga la app no le va a llegar
+                    nada.
+                  </span>
+                </SheetSwitch>
+
+                {confirmUnlink ? (
+                  <ConfirmInline question="¿Desvincular este número? El bot deja de reconocerte." confirmLabel="Sí, desvincular"
+                    busy={loading} onConfirm={unlink} onCancel={() => setConfirmUnlink(false)} />
+                ) : (
+                  <button type="button" onClick={() => setConfirmUnlink(true)}
+                    className="min-h-[44px] px-1.5 text-[15px] font-semibold text-destructive active:scale-[0.98] transition-transform duration-100">
+                    Desvincular
+                  </button>
+                )}
+                {error && <p role="alert" className="text-sm text-rose-800 bg-rose-50 rounded-xl px-3 py-2">{error}</p>}
+              </>
+            ) : (
+              <WhatsAppVerifyForm onVerified={async () => { await refreshUser(); reaccionar("guardado", "WhatsApp vinculado"); }} />
+            )}
           </div>
-          <label className="flex items-start gap-3 p-3 rounded-xl border-2 border-ink bg-accent/30 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={!!appUser?.whatsapp_notifications}
-              onChange={toggleWaNotifs}
-              disabled={savingPref}
-              className="mt-0.5 w-4 h-4 accent-primary shrink-0"
-            />
-            <span className="min-w-0">
-              <span className="block text-sm font-medium text-foreground">
-                Usar WhatsApp para los avisos
-              </span>
-              <span className="block text-xs text-muted-foreground">
-                Para avisarle por WhatsApp a quien le compartís un gasto, y para
-                que te avisen a vos. El aviso dentro de la app va igual: esto es
-                un canal extra.
-              </span>
-              {/* La consecuencia que no se ve: a quien no tiene la app,
-                  WhatsApp es su único canal. Decirlo acá y no cuando ya pasó. */}
-              <span className="block text-xs text-amber-700 mt-1">
-                Si lo apagás, a quien invites y no tenga la app no le va a llegar
-                nada.
-              </span>
-            </span>
-          </label>
-
-          <button
-            onClick={unlink}
-            disabled={loading}
-            className="flex items-center gap-1.5 text-sm text-destructive hover:opacity-80 disabled:opacity-50"
-          >
-            <Unlink className="w-3.5 h-3.5" />
-            Desvincular
-          </button>
-          {error && <p className="text-xs text-destructive">{error}</p>}
-        </div>
-      ) : (
-        <WhatsAppVerifyForm onVerified={async () => { await refreshUser(); }} />
+        </FormSheet>
       )}
-    </Card>
+    </>
   );
 }
 
+const memberCount = (n: number) => (n === 1 ? "sólo vos" : `${n} personas`);
+
 export default function SettingsPage() {
+  const reaccionar = useReaccion();
   const { appUser, clearUser } = useAuth();
   const router = useRouter();
   // Un negocio no tiene divisas, gastos compartidos (los avisos de hoy son de
@@ -303,24 +310,40 @@ export default function SettingsPage() {
   const employee = isEmployee(appUser);
   const t = terms(appUser);
   const [members, setMembers] = useState<Member[]>([]);
+  const [membersState, setMembersState] = useState<"loading" | "ok" | "error">("loading");
+  const [spaceOpen, setSpaceOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [confirmKickId, setConfirmKickId] = useState<number | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Un empleado no ve el organigrama (el backend se lo niega con 403).
-  const loadMembers = () => { if (!employee) api.get("/auth/members").then(r => setMembers(r.data)); };
+  const loadMembers = () => {
+    if (employee) return;
+    api.get("/auth/members")
+      .then(r => { setMembers(r.data); setMembersState("ok"); })
+      .catch(() => setMembersState("error"));
+  };
   useEffect(loadMembers, [employee]);  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const setRole = async (memberId: number, role: "member" | "employee") => {
+  const runAction = async (action: () => Promise<void>) => {
     setActionLoading(true);
+    setActionError(null);
     try {
-      await api.patch(`/auth/members/${memberId}/role`, { role });
-      loadMembers();
+      await action();
+    } catch (e) {
+      setActionError(getErrorMessage(e));
     } finally {
       setActionLoading(false);
     }
   };
+
+  const setRole = (memberId: number, role: "member" | "employee") => runAction(async () => {
+    await api.patch(`/auth/members/${memberId}/role`, { role });
+    reaccionar("guardado", role === "member" ? "Ahora es socio" : "Ahora es empleado");
+    loadMembers();
+  });
 
   const copyId = () => {
     navigator.clipboard.writeText(appUser?.tenant_code ?? String(appUser?.tenant_id));
@@ -336,162 +359,160 @@ export default function SettingsPage() {
     window.open("https://wa.me/?text=" + encodeURIComponent(message), "_blank");
   };
 
-  const kickMember = async (memberId: number) => {
-    setActionLoading(true);
-    try {
-      await api.delete("/auth/members/" + memberId);
-      setConfirmKickId(null);
-      loadMembers();
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  const kickMember = (memberId: number) => runAction(async () => {
+    await api.delete("/auth/members/" + memberId);
+    setConfirmKickId(null);
+    reaccionar("borrado", `Salió del ${t.space}`);
+    loadMembers();
+  });
 
-  const leaveHousehold = async () => {
-    setActionLoading(true);
-    try {
-      await api.post("/auth/me/leave-household");
-      clearUser();
-      router.replace("/onboarding");
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  const leaveHousehold = () => runAction(async () => {
+    await api.post("/auth/me/leave-household");
+    clearUser();
+    router.replace("/onboarding");
+  });
+
+  const spaceHint = [appUser?.tenant_name, membersState === "ok" ? memberCount(members.length) : null].filter(Boolean).join(" · ");
 
   return (
-    <div className="max-w-3xl space-y-8">
-      <h2 className="text-2xl font-display font-bold text-foreground">{"Configuración"}</h2>
+    <div className="space-y-5 md:space-y-6">
+      <h1 className="text-[26px] md:text-3xl font-display font-medium tracking-[-0.035em] text-foreground">Configuración</h1>
 
       <ProfileSection />
 
-      {!business && <InviteFriendSection />}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-5 items-start [&>*]:min-w-0">
+        {!employee && (
+          <SettingsGroup title={business ? "Tu gente" : "Sumar gente"}>
+            <SettingsRow icon={business ? Store : Home} title={t.YourSpace} hint={spaceHint} onClick={() => setSpaceOpen(true)} />
+            {!business && <InviteFriendSection />}
+          </SettingsGroup>
+        )}
 
-      {!employee && (
-      <Card className="p-6 space-y-4">
-        <h3 className="font-semibold text-foreground">{t.YourSpace}</h3>
-        <p className="text-sm text-muted-foreground">
-          {business
-            ? "Quien se suma con este código entra como empleado: carga ventas y stock, sin ver los números del negocio. Desde acá lo podés hacer socio."
-            : "Sumá miembros a tu hogar compartiendo este código."}
-        </p>
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex-1 min-w-[140px] bg-muted border rounded-lg px-4 py-3">
-            <p className="text-xs text-muted-foreground mb-1">{t.spaceCode}</p>
-            <p className="text-2xl font-bold text-primary tracking-widest">{appUser?.tenant_code ?? appUser?.tenant_id}</p>
-          </div>
-          <div className="flex gap-2 shrink-0">
-            <Button variant="outline" onClick={copyId}>
-              {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-              {copied ? "Copiado" : "Copiar"}
-            </Button>
-            <Button variant="outline" onClick={shareHouseholdCodeByWhatsApp} className="text-emerald-700">
-              <MessageCircle className="w-4 h-4" />
-              WhatsApp
-            </Button>
-          </div>
-        </div>
-        <div className="pt-2 border-t">
-          <h4 className="text-sm font-semibold text-foreground mb-1">Miembros</h4>
-        <div className="divide-y">
-          {members.map(m => (
-            <div key={m.id} className="flex items-center justify-between py-3 gap-3">
-              <div className="min-w-0 flex-1">
-                {/* `truncate`: un mail largo como nombre no corta en espacios y se
-                    metía debajo de las acciones de la derecha. */}
-                <p className="text-sm font-medium text-foreground truncate">
-                  {m.display_name || m.email}
-                  {m.id === appUser?.id && <span className="ml-2 text-xs text-muted-foreground">(vos)</span>}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">{m.email}</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {business && appUser?.role === "admin" && m.role !== "admin" && (
-                  <button
-                    onClick={() => setRole(m.id, m.role === "employee" ? "member" : "employee")}
-                    disabled={actionLoading}
-                    className="text-xs text-primary font-medium hover:underline disabled:opacity-50">
-                    {m.role === "employee" ? "Hacer socio" : "Pasar a empleado"}
-                  </button>
-                )}
-                <Chip tone="neutral">
-                  {roleLabel(appUser, m.role)}
-                </Chip>
-                {appUser?.role === "admin" && m.id !== appUser?.id && (
-                  confirmKickId === m.id ? (
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => kickMember(m.id)} disabled={actionLoading}
-                        className="text-xs bg-destructive text-destructive-foreground px-2 py-1 rounded disabled:opacity-50">
-                        {actionLoading ? "..." : "Confirmar"}
-                      </button>
-                      <button onClick={() => setConfirmKickId(null)}
-                        className="text-xs border px-2 py-1 rounded text-muted-foreground hover:bg-accent">
-                        Cancelar
-                      </button>
-                    </div>
-                  ) : (
-                    <button onClick={() => setConfirmKickId(m.id)}
-                      className="text-destructive/60 hover:text-destructive transition-colors" title={`Eliminar del ${t.space}`}>
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )
-                )}
-                {m.id === appUser?.id && members.length > 1 && (
-                  confirmLeave ? (
-                    <div className="flex items-center gap-1">
-                      <button onClick={leaveHousehold} disabled={actionLoading}
-                        className="text-xs bg-destructive text-destructive-foreground px-2 py-1 rounded disabled:opacity-50">
-                        {actionLoading ? "..." : "Confirmar"}
-                      </button>
-                      <button onClick={() => setConfirmLeave(false)}
-                        className="text-xs border px-2 py-1 rounded text-muted-foreground hover:bg-accent">
-                        Cancelar
-                      </button>
-                    </div>
-                  ) : (
-                    <button onClick={() => setConfirmLeave(true)}
-                      className="text-xs text-destructive hover:opacity-80 border border-destructive/30 px-2 py-1 rounded">
-                      Salir
-                    </button>
-                  )
-                )}
+        <SettingsGroup title="WhatsApp y avisos">
+          {!business && <PushNotificationsSection />}
+          <WhatsAppSection />
+          {/* En pausa detrás de un flag: ver lib/features.ts. */}
+          {features.iosShortcut && <IosShortcutSection />}
+        </SettingsGroup>
+
+        {/* El conector lee todo el negocio: justo lo que un empleado no ve. */}
+        {!employee && (
+          <SettingsGroup title="Asistente de IA">
+            <McpConnectorSection />
+          </SettingsGroup>
+        )}
+
+        <SettingsGroup title="Preferencias">
+          {!business && <CurrencySettingsSection />}
+          <SettingsRow icon={BookOpen} title="Reiniciar guía" hint="Vuelven las explicaciones y las novedades"
+            onClick={() => {
+              resetAllTours(APP_TOUR_IDS);
+              // Las novedades también vuelven a verse.
+              try { localStorage.removeItem(WHATS_NEW_KEY); } catch { /* storage bloqueado */ }
+              window.location.href = "/dashboard";
+            }} />
+        </SettingsGroup>
+
+        <SettingsGroup title="Tu cuenta">
+          {/* Un empleado no ve la lista de miembros, así que no sabe si queda alguien más. */}
+          <AccountClosureSection othersRemain={employee ? null : members.length > 1} />
+        </SettingsGroup>
+      </div>
+
+      {spaceOpen && !employee && (
+        <FormSheet title={t.YourSpace} onClose={() => { setSpaceOpen(false); setConfirmKickId(null); setConfirmLeave(false); setActionError(null); }}>
+          <div className={`${FORM_SHEET_BODY} !pb-4`}>
+            <p className={`${SHEET_TEXT} px-1.5`}>
+              {business
+                ? "Quien se suma con este código entra como empleado: carga ventas y stock, sin ver los números del negocio. Desde acá lo podés hacer socio."
+                : "Sumá miembros a tu hogar compartiendo este código."}
+            </p>
+            <div className={SHEET_BLOCK}>
+              <p className="text-xs text-[#4A4658]">{t.spaceCode}</p>
+              <p className="mt-0.5 font-marca text-[26px] text-[#3B2FB3] tracking-[0.12em]">{appUser?.tenant_code ?? appUser?.tenant_id}</p>
+              <div className="mt-2.5 grid grid-cols-2 gap-2">
+                <Button variant="outline" onClick={copyId} className="h-11">
+                  {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  {copied ? "Copiado" : "Copiar"}
+                </Button>
+                <Button variant="outline" onClick={shareHouseholdCodeByWhatsApp} className="h-11">
+                  <MessageCircle className="w-4 h-4" />
+                  WhatsApp
+                </Button>
               </div>
             </div>
-          ))}
-        </div>
-        </div>
-      </Card>
+
+            <div>
+              <h4 className="px-1.5 text-[15px] font-medium text-[#4A4658]">Miembros</h4>
+              {membersState === "loading" && <p className={`${SHEET_TEXT} px-1.5 py-2`}>Cargando…</p>}
+              {membersState === "error" && (
+                <div className="px-1.5 py-2">
+                  <p className={SHEET_TEXT}>No se pudo cargar la lista.</p>
+                  <button type="button" onClick={loadMembers} className="min-h-[44px] text-[15px] font-semibold text-foreground underline underline-offset-2">Reintentar</button>
+                </div>
+              )}
+              <MotionList className="divide-y divide-ink/[0.08]">
+                {members.map(m => {
+                  const canChangeRole = business && appUser?.role === "admin" && m.role !== "admin";
+                  const canKick = appUser?.role === "admin" && m.id !== appUser?.id;
+                  const canLeave = m.id === appUser?.id && members.length > 1;
+                  return (
+                    <div key={m.id} className="px-1.5 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="min-w-0 flex-1">
+                          {/* `truncate`: un mail largo como nombre no corta en espacios y se
+                              metía debajo de lo de la derecha. */}
+                          <p className="text-[15px] font-semibold text-foreground truncate">
+                            {m.display_name || m.email}
+                            {m.id === appUser?.id && <span className="ml-1.5 font-normal text-[#4A4658]">(vos)</span>}
+                          </p>
+                          {m.display_name && <p className="text-sm text-[#4A4658] truncate">{m.email}</p>}
+                        </div>
+                        <Chip tone="neutral" className="shrink-0">{roleLabel(appUser, m.role)}</Chip>
+                      </div>
+                      {(canChangeRole || canKick || canLeave) && (
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-4 -mb-1.5">
+                          {canChangeRole && (
+                            <button type="button" onClick={() => setRole(m.id, m.role === "employee" ? "member" : "employee")} disabled={actionLoading}
+                              className="min-h-[44px] text-sm font-semibold text-[#3B2FB3] disabled:opacity-50">
+                              {m.role === "employee" ? "Hacer socio" : "Pasar a empleado"}
+                            </button>
+                          )}
+                          {canKick && confirmKickId !== m.id && (
+                            <button type="button" onClick={() => setConfirmKickId(m.id)}
+                              className="min-h-[44px] text-sm font-semibold text-destructive">
+                              {`Eliminar del ${t.space}`}
+                            </button>
+                          )}
+                          {canLeave && !confirmLeave && (
+                            <button type="button" onClick={() => setConfirmLeave(true)}
+                              className="min-h-[44px] text-sm font-semibold text-destructive">
+                              Salir
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {canKick && confirmKickId === m.id && (
+                        <div className="mt-2 mb-1">
+                          <ConfirmInline question={`¿Sacar a ${m.display_name || m.email} del ${t.space}?`} confirmLabel="Sí, sacar"
+                            busy={actionLoading} onConfirm={() => kickMember(m.id)} onCancel={() => setConfirmKickId(null)} />
+                        </div>
+                      )}
+                      {canLeave && confirmLeave && (
+                        <div className="mt-2 mb-1">
+                          <ConfirmInline question={`¿Salir de ${t.yourSpace}?`} confirmLabel="Sí, salir"
+                            busy={actionLoading} onConfirm={leaveHousehold} onCancel={() => setConfirmLeave(false)} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </MotionList>
+            </div>
+            {actionError && <p role="alert" className="text-sm text-rose-800 bg-rose-50 rounded-xl px-3 py-2">{actionError}</p>}
+          </div>
+        </FormSheet>
       )}
-
-      {!business && <PushNotificationsSection />}
-
-      <WhatsAppSection />
-
-      {/* En pausa detrás de un flag: ver lib/features.ts. */}
-      {features.iosShortcut && <IosShortcutSection />}
-
-      {/* El conector lee todo el negocio: justo lo que un empleado no ve. */}
-      {!employee && <McpConnectorSection />}
-
-      {!business && <CurrencySettingsSection />}
-
-      <Card className="p-6 space-y-2">
-        <h3 className="font-semibold text-foreground">Guía de la app</h3>
-        <p className="text-sm text-muted-foreground">Vuelven a aparecer las explicaciones de cada pantalla y las novedades.</p>
-        <Button
-          variant="outline"
-          onClick={() => {
-            resetAllTours(APP_TOUR_IDS);
-            // Las novedades también vuelven a verse.
-            try { localStorage.removeItem(WHATS_NEW_KEY); } catch { /* storage bloqueado */ }
-            window.location.href = "/dashboard";
-          }}
-        >
-          Reiniciar guía
-        </Button>
-      </Card>
-
-      {/* Un empleado no ve la lista de miembros, así que no sabe si queda alguien más. */}
-      <AccountClosureSection othersRemain={employee ? null : members.length > 1} />
     </div>
   );
 }

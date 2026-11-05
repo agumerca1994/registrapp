@@ -1,21 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { format, parseISO } from "date-fns";
+import { es } from "date-fns/locale";
 import { ToodLogo } from "@/components/brand/ToodLogo";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePendingShared } from "@/contexts/PendingSharedContext";
 import { usePendingStatements } from "@/contexts/PendingStatementsContext";
+import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
-import { cn } from "@/lib/utils";
+import api from "@/lib/api";
+import { cn, formatUSD } from "@/lib/utils";
 import {
-  LayoutDashboard, TrendingUp, TrendingDown, BarChart3,
+  LayoutDashboard, TrendingDown, BarChart3, ArrowDownUp, Plus,
   Home, LogOut, Settings, MoreHorizontal, Users2, CreditCard, CalendarDays,
   CircleUserRound, ArrowLeftRight, Contact, ShoppingBag, Package,
 } from "lucide-react";
 import { isBusiness, isEmployee } from "@/lib/account";
+import { AddSheet } from "@/components/layout/AddSheet";
 import pkg from "../../package.json";
 
 interface NavItem {
@@ -25,14 +30,14 @@ interface NavItem {
   short?: string;
   icon: React.ElementType;
   tour?: string;
+  // Otras rutas que también marcan este ítem como activo.
+  also?: string[];
 }
 
-// El del hogar no se toca: orden, labels y `data-tour` son los que esperan la
-// guía del dashboard y los baselines visuales.
+// Los `data-tour` son los que espera la guía de Inicio.
 const nav: NavItem[] = [
   { href: "/dashboard", label: "Inicio", icon: LayoutDashboard, tour: "nav-dashboard" },
-  { href: "/income", label: "Ingresos", icon: TrendingUp, tour: "nav-income" },
-  { href: "/expenses", label: "Egresos", icon: TrendingDown, tour: "nav-expenses" },
+  { href: "/expenses", label: "Movimientos", icon: ArrowDownUp, tour: "nav-movimientos", also: ["/income"] },
   { href: "/divisas", label: "Divisas", icon: ArrowLeftRight, tour: "nav-divisas" },
   { href: "/shared", label: "Gastos compartidos", icon: Users2, tour: "nav-shared" },
   { href: "/tarjetas", label: "Tarjetas", icon: CreditCard, tour: "nav-tarjetas" },
@@ -42,9 +47,9 @@ const nav: NavItem[] = [
   { href: "/settings", label: "Configuración", icon: Settings },
 ];
 
-// Bottom tab bar (mobile only) surfaces these 4 directly; everything else in
-// `nav` lives behind "Más". Order/membership confirmed with the user.
-const MOBILE_TAB_HREFS = ["/dashboard", "/income", "/expenses", "/tarjetas"];
+// Bottom tab bar (mobile only) surfaces these directly, con el + en el medio;
+// everything else in `nav` lives behind "Más".
+const MOBILE_TAB_HREFS = ["/dashboard", "/expenses", "/tarjetas"];
 
 // Un negocio ve sólo lo que tiene sentido en un comercio: sin divisas,
 // hipoteca, compartidos ni macro (las rutas, en lib/account.ts). En la tab bar
@@ -88,9 +93,9 @@ function useNav() {
 // Activo también en las subrutas (/tarjetas/resumenes, /tarjetas/3/12): una
 // pantalla que cuelga de una sección no puede dejar la navegación sin nada
 // marcado. El "/" final evita que /income marque algo como /incomes.
-function isNavActive(pathname: string | null, href: string): boolean {
+function isNavActive(pathname: string | null, href: string, also: string[] = []): boolean {
   if (!pathname) return false;
-  return pathname === href || pathname.startsWith(href + "/");
+  return [href, ...also].some((h) => pathname === h || pathname.startsWith(h + "/"));
 }
 
 // Ámbar y no rojo: es lo que la app ya usa para "pendiente" (el chip de
@@ -140,12 +145,12 @@ function Avatar({ photoURL, className }: { photoURL?: string | null; className?:
         alt=""
         referrerPolicy="no-referrer"
         onError={() => setErrored(true)}
-        className={cn("rounded-full border-2 border-ink object-cover shrink-0", className)}
+        className={cn("rounded-full object-cover shrink-0", className)}
       />
     );
   }
   return (
-    <div className={cn("rounded-full border-2 border-ink bg-accent text-primary flex items-center justify-center shrink-0", className)}>
+    <div className={cn("rounded-full bg-accent text-primary flex items-center justify-center shrink-0", className)}>
       <CircleUserRound className="w-[65%] h-[65%]" />
     </div>
   );
@@ -179,7 +184,7 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {items.map(({ href, label, icon: Icon, tour }) => (
+        {items.map(({ href, label, icon: Icon, tour, also }) => (
           <Link
             key={href}
             href={href}
@@ -187,8 +192,8 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
             data-tour={tour}
             className={cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-              isNavActive(pathname, href)
-                ? "bg-primary text-primary-foreground"
+              isNavActive(pathname, href, also)
+                ? "bg-accent text-[#3B2FB3] font-semibold"
                 : "text-muted-foreground hover:bg-accent"
             )}
           >
@@ -235,55 +240,112 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
+// Lo que dice cada tarjeta de "Más" si no hay un dato mejor.
+const MORE_HINTS: Record<string, string> = {
+  "/divisas": "Tus dólares",
+  "/shared": "Dividir gastos",
+  "/calendario": "Vencimientos",
+  "/mortgage": "Tu crédito",
+  "/macro": "Dólar e inflación",
+  "/settings": "Cuenta y avisos",
+  "/proveedores": "A quién le pagás",
+  "/tarjetas": "Resúmenes y cuotas",
+};
+
+interface MoreToday {
+  usd_holding: string;
+  usd_rate: string | null;
+  usd_rate_type: string;
+  upcoming: { kind: string; date: string; detail: string | null }[];
+}
+
+/**
+ * "Más": cada sección dice algo de lo tuyo, así hay un motivo para entrar. Pide
+ * el dato recién al abrirse. Si falla, cada tarjeta queda con su texto fijo.
+ */
 function MoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  useAmountsHidden();  // repinta la hoja al ocultar/mostrar montos
   const pathname = usePathname();
   const { appUser, firebaseUser, logout } = useAuth();
   const pendingHrefs = usePendingHrefs();
+  const { count: sharedCount } = usePendingShared();
   const { moreItems } = useNav();
+  const [today, setToday] = useState<MoreToday | null>(null);
+  const household = !isBusiness(appUser);
+
+  useEffect(() => {
+    if (!open || !household) return;
+    api.get<MoreToday>("/dashboard/today").then(({ data }) => setToday(data)).catch(() => {});
+  }, [open, household]);
+
+  const hint = (href: string): string => {
+    if (href === "/shared" && sharedCount > 0) return `${sharedCount} para resolver`;
+    if (today) {
+      if (href === "/divisas" && Number(today.usd_holding) > 0) return `${formatUSD(today.usd_holding).replace(/,00$/, "")} guardados`;
+      if (href === "/calendario" && today.upcoming[0]) return `Próximo: ${format(parseISO(today.upcoming[0].date), "d MMM", { locale: es }).replace(".", "")}`;
+      if (href === "/mortgage") {
+        const cuota = today.upcoming.find(i => i.kind === "mortgage")?.detail;
+        if (cuota) return cuota;
+      }
+      // Dato público, no de la cuenta: no se oculta con los montos.
+      if (href === "/macro" && today.usd_rate) {
+        return `Dólar ${today.usd_rate_type} $ ${Math.round(Number(today.usd_rate)).toLocaleString("es-AR")}`;
+      }
+    }
+    return MORE_HINTS[href] ?? "";
+  };
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="md:hidden fixed inset-0 z-50 bg-black/40" />
+        <Dialog.Overlay className="md:hidden fixed inset-0 z-50 bg-ink/30 animate-fade-in" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card rounded-t-2xl border-t max-h-[80vh] overflow-y-auto pb-[env(safe-area-inset-bottom)]"
+          className="md:hidden fixed left-2.5 right-2.5 z-50 max-h-[85vh] overflow-y-auto rounded-[34px] border border-white/70 bg-card/80 backdrop-blur-2xl backdrop-saturate-150 shadow-flota px-3 pt-2.5 pb-3 animate-sheet-in"
+          style={{ bottom: "calc(0.625rem + env(safe-area-inset-bottom))" }}
         >
+          <div className="w-10 h-1 rounded-full bg-ink/20 mx-auto mb-3" />
           <Dialog.Title className="sr-only">Más opciones</Dialog.Title>
-          <div className="flex justify-center pt-2.5 pb-1">
-            <div className="w-10 h-1 rounded-full bg-border" />
-          </div>
-          <div className="p-4 pt-2 space-y-1">
-            {moreItems.map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => onOpenChange(false)}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                  isNavActive(pathname, href)
-                    ? "bg-primary text-primary-foreground"
-                    : "text-foreground hover:bg-accent"
-                )}
-              >
-                <Icon className="w-4 h-4" />
-                <span className="flex-1 min-w-0">{label}</span>
-                {pendingHrefs.has(href) && <NavDot />}
-              </Link>
-            ))}
 
-            <div className="mt-2 pt-3 border-t flex items-center gap-3 px-1">
-              <Avatar photoURL={firebaseUser?.photoURL} className="w-9 h-9" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">{appUser?.email}</p>
-                <p className="text-xs text-muted-foreground">
-                  Versión {pkg.version}{BUILD_DATE && ` · ${BUILD_DATE}`}
-                </p>
-              </div>
+          <div className="grid grid-cols-2 gap-2">
+            {moreItems.map(({ href, label, short, icon: Icon }) => {
+              const active = isNavActive(pathname, href);
+              const pending = pendingHrefs.has(href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => onOpenChange(false)}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "relative min-h-[104px] rounded-[22px] p-3 flex flex-col justify-between gap-2 border transition-transform duration-100 active:scale-[0.97] last:odd:col-span-2",
+                    active ? "bg-accent border-[#CFC9E4]" : "bg-white/70 border-white/80"
+                  )}
+                >
+                  <span className="flex items-start justify-between">
+                    <span className="w-[38px] h-[38px] rounded-full bg-accent text-[#3B2FB3] flex items-center justify-center">
+                      <Icon className="w-[19px] h-[19px]" strokeWidth={1.8} />
+                    </span>
+                    {pending && <NavDot className="mt-1 mr-1" />}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block font-semibold text-[15px] leading-tight text-foreground truncate">{short ?? label}</span>
+                    <span className={cn("block mt-0.5 text-[13px] truncate", pending ? "font-medium text-amber-800" : "text-[#4A4658]")}>{hint(href)}</span>
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+
+          <div className="mt-2 flex items-center gap-2.5 pl-2 pr-1 pt-1">
+            <Avatar photoURL={firebaseUser?.photoURL} className="w-9 h-9" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">{appUser?.email}</p>
+              <p className="text-xs text-[#4A4658]">Versión {pkg.version}{BUILD_DATE && ` · ${BUILD_DATE}`}</p>
             </div>
             <button
               onClick={() => { onOpenChange(false); logout(); }}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 w-full transition-colors mt-1"
+              className="shrink-0 min-h-[44px] inline-flex items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-destructive active:scale-[0.97] transition-transform duration-100"
             >
               <LogOut className="w-4 h-4" />
               Cerrar sesión
@@ -297,11 +359,36 @@ function MoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bo
 
 export default function Sidebar() {
   const [moreOpen, setMoreOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const pathname = usePathname();
   const { appUser } = useAuth();
   const pendingHrefs = usePendingHrefs();
   const { mobileTabs, moreItems } = useNav();
   const isMoreActive = moreItems.some((item) => isNavActive(pathname, item.href));
+  // Un negocio tiene cuatro pestañas y su propio + en cada pantalla; un hogar, tres y el + en el medio.
+  const household = !isBusiness(appUser);
+  const tabLink = ({ href, label, short, icon: Icon, tour, also }: NavItem) => {
+    const active = isNavActive(pathname, href, also);
+    return (
+      <Link
+        key={href}
+        href={href}
+        data-tour={tour}
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          "flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 text-[11.5px] font-medium transition-colors rounded-full my-1.5",
+          active ? "text-[#3B2FB3] font-semibold bg-white" : "text-[#3F3B4B]"
+        )}
+      >
+        {/* Mismo criterio que el de "Más": el puntito sobre el icono. */}
+        <span className="relative">
+          <Icon className="w-[22px] h-[22px]" strokeWidth={1.8} />
+          {pendingHrefs.has(href) && <NavDot className="absolute -top-0.5 -right-1" />}
+        </span>
+        {short ?? label}
+      </Link>
+    );
+  };
 
   return (
     <>
@@ -310,52 +397,45 @@ export default function Sidebar() {
         <NavContent />
       </aside>
 
-      {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-card border-b flex flex-col justify-center px-4 h-16">
-        <ToodLogo className="h-5 w-auto text-primary self-start" title="tood" />
-        <span className="text-xs text-muted-foreground leading-tight truncate">
-          {greeting(appUser?.display_name, appUser?.email)}
-        </span>
-      </div>
+      {/* Mobile top bar. Inicio no la lleva: su encabezado es el bloque violeta. */}
+      {pathname !== "/dashboard" && (
+        <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-background/80 backdrop-blur-lg border-b flex flex-col justify-center px-4 h-16">
+          <ToodLogo className="h-5 w-auto text-primary self-start" title="tood" />
+          <span className="text-xs text-muted-foreground leading-tight truncate">
+            {greeting(appUser?.display_name, appUser?.email)}
+          </span>
+        </div>
+      )}
 
-      {/* Mobile bottom tab bar — floating, matching the hero-card treatment
-          (thick border + hard shadow) instead of a flat edge-to-edge strip. */}
+      {/* Barra flotante de vidrio: lo que pasa por debajo se ve desenfocado.
+          Sin soporte de backdrop-filter queda casi opaca, para que se siga leyendo. */}
       <nav
-        className="md:hidden fixed left-3 right-3 z-40 bg-card border-[2.5px] border-ink rounded-2xl shadow-hero flex items-stretch h-[68px] px-1"
+        className="md:hidden fixed left-3 right-3 z-40 bg-card/95 supports-[backdrop-filter]:bg-card/70 backdrop-blur-lg backdrop-saturate-150 border border-border/90 rounded-full shadow-flota flex items-stretch h-[70px] px-1.5"
         style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
       >
-        {mobileTabs.map(({ href, label, short, icon: Icon, tour }) => {
-          const active = isNavActive(pathname, href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              data-tour={tour}
-              className={cn(
-                "flex-1 flex flex-col items-center justify-center gap-1 text-xs font-medium transition-colors rounded-xl m-1",
-                active ? "text-primary bg-accent" : "text-muted-foreground"
-              )}
-            >
-              {/* Mismo criterio que el de "Más": el puntito sobre el icono. */}
-              <span className="relative">
-                <Icon className="w-5 h-5" />
-                {pendingHrefs.has(href) && <NavDot className="absolute -top-0.5 -right-1" />}
-              </span>
-              {short ?? label}
-            </Link>
-          );
-        })}
+        {(household ? mobileTabs.slice(0, 2) : mobileTabs).map(tabLink)}
+        {household && (
+          <button
+            onClick={() => setAddOpen(true)}
+            aria-label="Agregar"
+            data-tour="nav-add"
+            className="shrink-0 self-center mx-0.5 w-14 h-14 rounded-full bg-ink text-background flex items-center justify-center active:scale-[0.95] transition-transform duration-100"
+          >
+            <Plus className="w-6 h-6" strokeWidth={2.2} />
+          </button>
+        )}
+        {household && mobileTabs.slice(2).map(tabLink)}
         <button
           onClick={() => setMoreOpen(true)}
           className={cn(
-            "flex-1 flex flex-col items-center justify-center gap-1 text-xs font-medium transition-colors rounded-xl m-1",
-            isMoreActive ? "text-primary bg-accent" : "text-muted-foreground"
+            "flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 text-[11.5px] font-medium transition-colors rounded-full my-1.5",
+            isMoreActive ? "text-[#3B2FB3] font-semibold bg-white" : "text-[#3F3B4B]"
           )}
         >
           {/* El puntito sobre el icono, no al lado del texto: en la tab bar el
               icono es lo que se mira, y colgarlo del texto descentra el tab. */}
           <span className="relative">
-            <MoreHorizontal className="w-5 h-5" />
+            <MoreHorizontal className="w-[22px] h-[22px]" strokeWidth={1.8} />
             {moreItems.some((item) => pendingHrefs.has(item.href)) && (
               <NavDot className="absolute -top-0.5 -right-1" />
             )}
@@ -365,6 +445,7 @@ export default function Sidebar() {
       </nav>
 
       <MoreSheet open={moreOpen} onOpenChange={setMoreOpen} />
+      {household && <AddSheet open={addOpen} onOpenChange={setAddOpen} />}
     </>
   );
 }

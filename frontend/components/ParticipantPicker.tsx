@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AtSign, Mail, Phone, Search, Smartphone, UserPlus, Users2, X } from "lucide-react";
-import { Card as UiCard } from "@/components/ui/card";
+import { AtSign, Mail, Phone, Search, Smartphone, UserPlus, Users2 } from "lucide-react";
+import { FORM_SHEET_BODY, FormSheet } from "@/components/movimientos/FormSheet";
 import { Chip } from "@/components/ui/chip";
-import { Button } from "@/components/ui/button";
 import { FIELD } from "@/components/ui/form";
 import api from "@/lib/api";
 import { foldText, normalizePhoneNumber } from "@/lib/utils";
@@ -54,14 +53,14 @@ function Row({ icon, title, subtitle, badge, onClick }: {
     <button
       type="button"
       onClick={onClick}
-      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left hover:bg-accent transition-colors"
+      className="w-full min-h-[56px] flex items-center gap-3 px-2 py-2 rounded-2xl text-left md:hover:bg-white/70 active:scale-[0.98] transition-[transform,background-color] duration-100"
     >
-      <span className="w-8 h-8 rounded-full bg-accent flex items-center justify-center shrink-0 text-muted-foreground">
+      <span className="w-10 h-10 rounded-full bg-accent flex items-center justify-center shrink-0 text-[#3B2FB3]">
         {icon}
       </span>
       <span className="flex-1 min-w-0">
-        <span className="block text-sm font-medium text-foreground truncate">{title}</span>
-        {subtitle && <span className="block text-xs text-muted-foreground truncate">{subtitle}</span>}
+        <span className="block text-[15.5px] font-semibold text-foreground truncate">{title}</span>
+        {subtitle && <span className="block text-sm text-muted-foreground truncate">{subtitle}</span>}
       </span>
       {badge}
     </button>
@@ -70,7 +69,7 @@ function Row({ icon, title, subtitle, badge, onClick }: {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60 px-3 pt-3 pb-1">
+    <p className="text-sm text-muted-foreground px-2 pt-2.5 pb-0.5">
       {children}
     </p>
   );
@@ -154,7 +153,8 @@ export function ParticipantPicker({
     const asContact = isContactish(t);
     setInviting({ name: asContact ? "" : t, contact: asContact ? t : "" });
     setInviteError("");
-    setTimeout(() => (asContact ? nameRef : contactRef).current?.focus(), 60);
+    // Sin término no falta "el otro campo": se arranca por el nombre.
+    setTimeout(() => (asContact || !t ? nameRef : contactRef).current?.focus(), 60);
   }, []);
 
   const needle = foldText(term);
@@ -212,105 +212,101 @@ export function ParticipantPicker({
 
   if (!open) return null;
 
+  // `stacked`: se abre arriba del formulario que lo pidió. Quien lo usa lo pone como
+  // hermano de su hoja, nunca adentro (ver FormSheet).
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Elegir con quién compartir"
-    >
-      <UiCard
-        className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-0 overflow-hidden flex flex-col max-h-[85vh]"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 p-4 pb-3 border-b">
-          <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-          <input
-            ref={inputRef}
-            className="flex-1 min-w-0 bg-transparent border-none outline-none text-sm text-foreground placeholder:text-muted-foreground/50"
-            placeholder="Nombre, alias, mail o teléfono"
-            value={q}
-            onChange={e => setQ(e.target.value)}
-            autoCapitalize="none"
-            autoCorrect="off"
-          />
-          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1 shrink-0">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {inviting !== null ? (
-          <div className="p-4 space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Si ya tiene cuenta con ese mail o teléfono, el gasto le aparece
-              directo en su app.
+    <FormSheet stacked title="Elegir con quién compartir" onClose={onClose}>
+      {inviting !== null ? (
+        <div className={`${FORM_SHEET_BODY} pb-3.5`}>
+          <p className="px-1.5 text-sm text-[#4A4658]">
+            Si ya tiene cuenta con ese mail o teléfono, el gasto le aparece
+            directo en su app.
+          </p>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Nombre</label>
+            <input
+              ref={nameRef}
+              aria-label="Nombre"
+              className={FIELD}
+              placeholder="Cómo lo querés ver en el gasto"
+              value={inviting.name}
+              onChange={e => { setInviteError(""); setInviting(v => v && { ...v, name: e.target.value }); }}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Mail o teléfono</label>
+            <input
+              ref={contactRef}
+              aria-label="Mail o teléfono"
+              className={FIELD}
+              placeholder="ana@mail.com o +54 9 11 1234 5678"
+              value={inviting.contact}
+              onChange={e => { setInviteError(""); setInviting(v => v && { ...v, contact: e.target.value }); }}
+              autoCapitalize="none"
+              autoCorrect="off"
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); confirmInvite(); } }}
+            />
+          </div>
+          {/* La app no manda mails. Decirlo acá y no después: si el que
+              comparte cree que salió un correo, no le pasa el link y la otra
+              persona no se entera nunca. */}
+          {inviting.contact.includes("@") && (
+            <p className="text-sm text-foreground bg-accent border border-[#CFC9E4] rounded-2xl px-3.5 py-2.5">
+              Por mail no se envía nada automáticamente. Después de crear el
+              gasto vas a poder copiar el link de invitación y pasárselo vos.
             </p>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Nombre</label>
+          )}
+          {!inviting.contact.includes("@") && isContactish(inviting.contact) && (
+            <p className="text-sm text-foreground bg-accent border border-[#CFC9E4] rounded-2xl px-3.5 py-2.5">
+              Si no tiene cuenta, le llega una invitación por WhatsApp.
+            </p>
+          )}
+
+          {inviteError && (
+            <p role="alert" className="text-sm text-destructive bg-destructive/10 rounded-2xl px-3.5 py-2.5">
+              {inviteError}
+            </p>
+          )}
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setInviting(null)}
+              className="h-[52px] px-4 rounded-full font-semibold text-[15px] text-foreground active:scale-[0.98] transition-transform duration-100">
+              Volver
+            </button>
+            <button type="button" onClick={confirmInvite}
+              className="flex-1 h-[52px] rounded-full bg-ink text-background font-semibold text-[15.5px] active:scale-[0.98] transition-transform duration-100">
+              Agregar
+            </button>
+          </div>
+          {/* Salida para el caso "no tiene ni va a tener la app": se anota
+              igual, sólo que sin avisarle a nadie. */}
+          {allowGuest && inviting.name.trim() && (
+            <button
+              type="button"
+              onClick={() => pick({ kind: "guest", member_name: inviting.name.trim() })}
+              className="w-full min-h-[44px] text-sm font-medium text-muted-foreground hover:text-foreground"
+            >
+              Agregar sin cuenta, sólo para anotar tu parte
+            </button>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="shrink-0 px-3.5 pb-2">
+            <div className="flex items-center gap-2 rounded-full bg-white/70 border border-white/80 px-3.5 min-h-[46px] focus-within:border-primary/50 transition-colors">
+              <Search className="w-4 h-4 text-muted-foreground shrink-0" />
               <input
-                ref={nameRef}
-                className={FIELD}
-                placeholder="Cómo lo querés ver en el gasto"
-                value={inviting.name}
-                onChange={e => setInviting(v => v && { ...v, name: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Mail o teléfono</label>
-              <input
-                ref={contactRef}
-                className={FIELD}
-                placeholder="ana@mail.com o +54 9 11 1234 5678"
-                value={inviting.contact}
-                onChange={e => setInviting(v => v && { ...v, contact: e.target.value })}
+                ref={inputRef}
+                className="flex-1 min-w-0 bg-transparent border-none outline-none text-sm text-foreground placeholder:text-muted-foreground"
+                placeholder="Nombre, alias, mail o teléfono"
+                aria-label="Nombre, alias, mail o teléfono"
+                value={q}
+                onChange={e => setQ(e.target.value)}
                 autoCapitalize="none"
                 autoCorrect="off"
-                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); confirmInvite(); } }}
               />
             </div>
-            {/* La app no manda mails. Decirlo acá y no después: si el que
-                comparte cree que salió un correo, no le pasa el link y la otra
-                persona no se entera nunca. */}
-            {inviting.contact.includes("@") && (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                Por mail no se envía nada automáticamente. Después de crear el
-                gasto vas a poder copiar el link de invitación y pasárselo vos.
-              </p>
-            )}
-            {!inviting.contact.includes("@") && isContactish(inviting.contact) && (
-              <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                Si no tiene cuenta, le llega una invitación por WhatsApp.
-              </p>
-            )}
-
-            {inviteError && (
-              <p className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
-                {inviteError}
-              </p>
-            )}
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" className="flex-1" onClick={() => setInviting(null)}>
-                Volver
-              </Button>
-              <Button type="button" className="flex-1" onClick={confirmInvite}>
-                Agregar
-              </Button>
-            </div>
-            {/* Salida para el caso "no tiene ni va a tener la app": se anota
-                igual, sólo que sin avisarle a nadie. */}
-            {allowGuest && inviting.name.trim() && (
-              <button
-                type="button"
-                onClick={() => pick({ kind: "guest", member_name: inviting.name.trim() })}
-                className="w-full text-xs text-muted-foreground hover:text-foreground"
-              >
-                Agregar sin cuenta, sólo para anotar tu parte
-              </button>
-            )}
           </div>
-        ) : (
-        <div className="overflow-y-auto flex-1 p-1">
+          <div className="flex-1 min-h-0 overflow-y-auto px-1.5 pb-3">
           {visibleMembers.length > 0 && (
             <>
               <SectionLabel>De tu hogar</SectionLabel>
@@ -334,7 +330,7 @@ export function ParticipantPicker({
                   icon={c.contact_email && !c.contact_phone ? <Mail className="w-4 h-4" /> : <Phone className="w-4 h-4" />}
                   title={c.display_name}
                   subtitle={c.contact_phone || c.contact_email || undefined}
-                  badge={c.contact_user_id ? <Chip tone="emerald">En la app</Chip> : undefined}
+                  badge={c.contact_user_id ? <Chip tone="violet">En la app</Chip> : undefined}
                   onClick={() => pick(
                     c.contact_user_id
                       ? { kind: "user", user_id: c.contact_user_id, member_name: c.display_name, alias: null }
@@ -354,7 +350,7 @@ export function ParticipantPicker({
                   icon={<AtSign className="w-4 h-4" />}
                   title={lookup.display_name || "Usuario de tood"}
                   subtitle={lookup.alias ? `@${lookup.alias}` : undefined}
-                  badge={<Chip tone="emerald">Ya usa tood</Chip>}
+                  badge={<Chip tone="violet">Ya usa tood</Chip>}
                   onClick={() => pick({ kind: "user", user_id: lookup.id, member_name: lookup.display_name || "Usuario", alias: lookup.alias })}
                 />
               )}
@@ -371,9 +367,9 @@ export function ParticipantPicker({
             </>
           )}
 
-          {searching && <p className="text-xs text-muted-foreground px-3 py-2">Buscando…</p>}
+          {searching && <p className="text-sm text-muted-foreground px-2 py-2">Buscando…</p>}
           {dirDown && (
-            <p className="text-xs text-muted-foreground px-3 py-2">
+            <p className="text-sm text-muted-foreground px-2 py-2">
               No se pudo buscar en tood ahora. Podés invitarlo igual.
             </p>
           )}
@@ -422,9 +418,9 @@ export function ParticipantPicker({
               />
             </>
           )}
-        </div>
-        )}
-      </UiCard>
-    </div>
+          </div>
+        </>
+      )}
+    </FormSheet>
   );
 }

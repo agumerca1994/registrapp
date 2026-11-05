@@ -1,24 +1,48 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
   isSameMonth, isSameDay, isToday, format, addMonths, subMonths, parseISO,
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Plus, X, Trash2, Bell, CreditCard as CardIcon } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
+import type { Step } from "react-joyride";
 
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
-import { formatARS, cn, getErrorMessage } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
-import { FIELD, DateField } from "@/components/ui/form";
-import { Button } from "@/components/ui/button";
-import BusinessTour from "@/components/business/BusinessTour";
-import { CALENDAR_INTRO_STEPS } from "@/components/business/tours";
+import { DateField, FIELD } from "@/components/ui/form";
+import { MonthPill } from "@/components/dashboard/MonthPill";
+import { useReaccion } from "@/components/brand/ToodReaccion";
+import { MotionList } from "@/components/ui/motion-list";
+import { FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions } from "@/components/movimientos/FormSheet";
+import { ledgerAmount } from "@/components/movimientos/Ledger";
+import { useNuevo } from "@/lib/nuevo";
+import ProductTour from "@/components/ProductTour";
 
 const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+const CALENDAR_TOUR_STEPS: Step[] = [
+  {
+    target: "[data-tour='cal-grid']",
+    title: "Tu mes de un vistazo",
+    content: "Cada día marca lo que pasa: un círculo vacío es el cierre de un resumen, uno negro el vencimiento y uno violeta un recordatorio.",
+  },
+  {
+    target: "[data-tour='cal-day']",
+    title: "El día que elegiste",
+    content: "Tocá un día en el calendario y acá ves qué cierra, qué vence y cuánto. Tocá una tarjeta para ir a su resumen.",
+  },
+  {
+    target: "[data-tour='cal-add']",
+    title: "Agregá un recordatorio",
+    content: "Para que no se te pase un pago. Si vinculaste tu WhatsApp en Configuración, ese día te llega un mensaje.",
+  },
+];
 
 interface StatementCal {
   id: number;
@@ -30,6 +54,7 @@ interface StatementCal {
   due_date: string | null;
   status: string;
   total: number;
+  total_usd?: number;
 }
 
 interface Reminder {
@@ -45,7 +70,22 @@ interface DayEvent {
   kind: "closing" | "due" | "reminder";
   label: string;
   amount?: number;
+  amountUsd?: number;
+  href?: string;
   reminder?: Reminder;
+}
+
+/** La misma marca en la grilla, en la leyenda y en el detalle del día. Sin rojo: rojo es error. */
+function EventDot({ kind, inverted = false }: { kind: DayEvent["kind"]; inverted?: boolean }) {
+  return (
+    <span aria-hidden="true" className={cn(
+      "block w-1.5 h-1.5 rounded-full shrink-0",
+      // Hueco: el color sale del texto del día, así se ve también sobre el seleccionado.
+      kind === "closing" && (inverted ? "text-background" : "text-foreground") + " shadow-[inset_0_0_0_1.25px_currentColor]",
+      kind === "due" && (inverted ? "bg-background" : "bg-ink"),
+      kind === "reminder" && (inverted ? "bg-[#B9B2FF]" : "bg-primary"),
+    )} />
+  );
 }
 
 function AddReminderModal({
@@ -74,34 +114,66 @@ function AddReminderModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-foreground">Nuevo recordatorio</h3>
-          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-3">
+    <FormSheet title="Nuevo recordatorio" onClose={onClose}>
+      <form onSubmit={handleSubmit} className={FORM_SHEET_FORM}>
+        <div className={FORM_SHEET_BODY}>
           <div>
             <label className="text-xs font-medium text-muted-foreground">Texto</label>
-            <input required className={FIELD} placeholder="ej: Pagar tarjeta Visa"
+            <input required autoFocus className={FIELD} placeholder="ej: Pagar tarjeta Visa" aria-label="Texto"
               value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground">Fecha</label>
             <DateField required value={dateStr} onChange={setDateStr} />
           </div>
-          <p className="text-xs text-muted-foreground/70">
+          <p className="px-1.5 text-sm leading-snug text-[#4A4658]">
             Ese día te llega un WhatsApp, si vinculaste tu número en Configuración.
           </p>
-          {error && <p className="text-xs text-destructive">{error}</p>}
-          <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? "Guardando…" : "Guardar recordatorio"}
-            </Button>
-          </div>
-        </form>
-      </Card>
+          {error && <p role="alert" className="px-1.5 text-sm text-destructive">{error}</p>}
+        </div>
+        <FormSheetActions onCancel={onClose} saving={saving} label="Guardar recordatorio" />
+      </form>
+    </FormSheet>
+  );
+}
+
+/** Borrar un recordatorio pregunta ahí mismo, en su propia fila. */
+function ReminderRow({ event, onDelete }: { event: DayEvent; onDelete: (id: number) => Promise<string | null> }) {
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState("");
+  const remove = async () => {
+    const failed = await onDelete(event.reminder!.id);
+    if (failed) { setError(failed); setConfirming(false); }
+  };
+  if (confirming) {
+    return (
+      <div role="alert" className="py-2.5">
+        <p className="text-[15px] font-medium text-foreground">¿Eliminar «{event.label}»?</p>
+        <div className="mt-2 flex items-center gap-2">
+          <button autoFocus onClick={() => setConfirming(false)}
+            className="h-11 px-4 rounded-full bg-ink/[0.06] text-sm font-semibold text-foreground active:scale-[0.97] transition-transform duration-100">
+            No, dejarlo
+          </button>
+          <button onClick={remove}
+            className="h-11 px-4 rounded-full bg-destructive text-destructive-foreground text-sm font-semibold active:scale-[0.97] transition-transform duration-100">
+            Sí, eliminar
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="min-h-[56px] flex items-center gap-3 py-1.5">
+      <EventDot kind="reminder" />
+      <span className="flex-1 min-w-0">
+        <span className="block font-semibold text-[15.5px] text-foreground truncate">{event.label}</span>
+        <span className="block text-sm text-muted-foreground">{error || "Recordatorio"}</span>
+      </span>
+      <button onClick={() => { setError(""); setConfirming(true); }}
+        title="Eliminar recordatorio" aria-label="Eliminar recordatorio"
+        className="w-11 h-11 -mr-2 shrink-0 rounded-full flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors">
+        <Trash2 className="w-[18px] h-[18px]" />
+      </button>
     </div>
   );
 }
@@ -119,59 +191,65 @@ function DayDetail({
   events: DayEvent[];
   isCurrent: boolean;
   onAddReminder: () => void;
-  onDeleteReminder: (id: number) => Promise<void>;
+  onDeleteReminder: (id: number) => Promise<string | null>;
 }) {
   return (
-    <Card className="p-4 md:p-5 space-y-3" data-tour="cal-day">
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 className="font-semibold text-foreground first-letter:uppercase">
+    <section className="px-2" data-tour="cal-day">
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <h2 className="text-[22px] font-medium tracking-[-0.03em] text-foreground first-letter:uppercase">
           {format(date, "EEEE d 'de' MMMM", { locale: es })}
-        </h3>
-        {isCurrent && <Chip tone="neutral">Hoy</Chip>}
+        </h2>
+        {isCurrent && <Chip tone="violet" className="shrink-0">Hoy</Chip>}
       </div>
 
+      {/* De un día a otro funde: agregar o borrar un recordatorio mueve sólo esa fila. */}
+      <MotionList key={format(date, "yyyy-MM-dd")} className="animate-page-in">
       {events.length === 0 ? (
-        <p className="text-sm text-muted-foreground/70">
+        <p className="py-2 text-[15px] text-muted-foreground">
           {isCurrent ? "Hoy no vence ni cierra nada, y no tenés recordatorios." : "Ese día no vence ni cierra nada, y no hay recordatorios."}
         </p>
       ) : (
-        <div className="space-y-2">
-          {events.map((ev, i) => (
-            <div key={i} className={cn(
-              "flex items-center gap-2 rounded-lg px-3 py-2 text-sm",
-              ev.kind === "closing" ? "bg-orange-50 text-orange-700" :
-              ev.kind === "due" ? "bg-rose-50 text-rose-700" :
-              "bg-accent text-primary"
-            )}>
-              {ev.kind === "reminder" ? <Bell className="w-4 h-4 shrink-0" /> : <CardIcon className="w-4 h-4 shrink-0" />}
-              <span className="flex-1 min-w-0 truncate">{ev.label}</span>
-              {ev.amount !== undefined && <span className="font-medium shrink-0">{formatARS(ev.amount)}</span>}
-              {ev.kind === "reminder" && ev.reminder && (
-                <button onClick={() => onDeleteReminder(ev.reminder!.id)}
-                  title="Eliminar recordatorio" aria-label="Eliminar recordatorio"
-                  className="text-primary/50 hover:text-destructive shrink-0">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+        <MotionList className="divide-y divide-border">
+          {events.map((ev, i) => ev.kind === "reminder" ? (
+            <ReminderRow key={ev.reminder!.id} event={ev} onDelete={onDeleteReminder} />
+          ) : (
+            <Link key={i} href={ev.href!} className="min-h-[56px] flex items-center gap-3 py-1.5 active:opacity-60 transition-opacity">
+              <EventDot kind={ev.kind} />
+              <span className="flex-1 min-w-0">
+                <span className="block font-semibold text-[15.5px] text-foreground truncate">{ev.label}</span>
+                <span className="block text-sm text-muted-foreground">{ev.kind === "due" ? "Vencimiento" : "Cierre"}</span>
+              </span>
+              {(Number(ev.amount) > 0 || Number(ev.amountUsd) > 0) && (
+                <span className="font-medium text-base tabular-nums text-foreground shrink-0 text-right">
+                  {Number(ev.amount) > 0 && <span className="block">{ledgerAmount(ev.amount!)}</span>}
+                  {Number(ev.amountUsd) > 0 && <span className="block">{ledgerAmount(ev.amountUsd!, "USD")}</span>}
+                </span>
               )}
-            </div>
+            </Link>
           ))}
-        </div>
+        </MotionList>
       )}
+      </MotionList>
 
       <button data-tour="cal-add" onClick={onAddReminder}
-        className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-border rounded-lg py-2.5 text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors">
-        <Plus className="w-4 h-4" /> Agregar recordatorio
+        className="mt-3 w-full min-h-[56px] flex items-center justify-between gap-3 rounded-full border border-border bg-card pl-5 pr-2 text-[15.5px] font-semibold text-foreground active:scale-[0.99] transition-transform duration-100">
+        Agregar recordatorio
+        <span className="w-10 h-10 rounded-full bg-ink text-background flex items-center justify-center shrink-0">
+          <Plus className="w-[18px] h-[18px]" />
+        </span>
       </button>
-    </Card>
+    </section>
   );
 }
 
 export default function CalendarioPage() {
   useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
+  const reaccionar = useReaccion();
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [statements, setStatements] = useState<StatementCal[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   // Starts on today: the day the user is standing on is the one they came to
   // check, and leaving the panel empty until they click somewhere hides it.
   const [selectedDay, setSelectedDay] = useState<Date>(() => new Date());
@@ -187,6 +265,7 @@ export default function CalendarioPage() {
     ]);
     setStatements(stRes.status === "fulfilled" ? stRes.value.data : []);
     setReminders(remRes.status === "fulfilled" ? remRes.value.data : []);
+    setFailed(stRes.status === "rejected" || remRes.status === "rejected");
     setLoading(false);
   }, [month]);
 
@@ -203,6 +282,8 @@ export default function CalendarioPage() {
     });
   }, [month]);
 
+  useNuevo(() => setShowAddReminder(true), "nuevo");
+
   const gridStart = startOfWeek(startOfMonth(month), { weekStartsOn: 1 });
   const gridEnd = endOfWeek(endOfMonth(month), { weekStartsOn: 1 });
   const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
@@ -210,11 +291,12 @@ export default function CalendarioPage() {
   function eventsForDay(day: Date): DayEvent[] {
     const events: DayEvent[] = [];
     for (const s of statements) {
+      const href = `/tarjetas/${s.card_id}/${s.id}`;
       if (s.closing_date && isSameDay(parseISO(s.closing_date), day)) {
-        events.push({ kind: "closing", label: `Cierre ${s.card_alias}`, amount: s.total });
+        events.push({ kind: "closing", label: s.card_alias, amount: s.total, amountUsd: s.total_usd, href });
       }
       if (s.due_date && isSameDay(parseISO(s.due_date), day)) {
-        events.push({ kind: "due", label: `Vencimiento ${s.card_alias}`, amount: s.total });
+        events.push({ kind: "due", label: s.card_alias, amount: s.total, amountUsd: s.total_usd, href });
       }
     }
     for (const r of reminders) {
@@ -230,84 +312,92 @@ export default function CalendarioPage() {
     setShowAddReminder(false);
     // Stay on the day it was added to: the reminder shows up in the panel
     // underneath, which is the confirmation that it landed.
-    setSelectedDay(parseISO(dateStr));
-    await load();
+    const saved = parseISO(dateStr);
+    setSelectedDay(saved);
+    // Otro mes: el calendario va hasta ahí, y ése vuelve a cargar lo suyo.
+    if (isSameMonth(saved, month)) await load();
+    else setMonth(startOfMonth(saved));
+    reaccionar("guardado", "Recordatorio guardado");
   }
 
-  async function handleDeleteReminder(id: number) {
-    if (!confirm("¿Eliminar este recordatorio?")) return;
+  async function handleDeleteReminder(id: number): Promise<string | null> {
     try {
       await api.delete(`/reminders/${id}`);
       await load();
+      reaccionar("borrado", "Recordatorio eliminado");
+      return null;
     } catch (e) {
-      alert(getErrorMessage(e, "No se pudo eliminar el recordatorio. Probá de nuevo."));
+      reaccionar("error", "No se pudo eliminar");
+      return getErrorMessage(e, "No se pudo eliminar. Probá de nuevo.");
     }
   }
 
   const selectedEvents = eventsForDay(selectedDay);
+  const pillLabel = format(month, "MMM yyyy", { locale: es }).replace(".", "");
 
   return (
-    <div className="space-y-4 md:space-y-6">
-      <BusinessTour tourId="calendar-intro" steps={CALENDAR_INTRO_STEPS} />
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg md:text-2xl font-display font-bold text-foreground">Calendario de pagos</h1>
+    <div className="space-y-4 md:space-y-6 pb-4">
+      <ProductTour tourId="calendar-intro" steps={CALENDAR_TOUR_STEPS} />
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-[26px] md:text-3xl font-display font-medium tracking-[-0.035em] text-foreground">Calendario</h1>
+        <MonthPill compact label={pillLabel}
+          onPrev={() => setMonth(subMonths(month, 1))}
+          onNext={() => setMonth(addMonths(month, 1))} />
       </div>
 
-      <Card variant="hero" className="p-3 md:p-4" data-tour="cal-grid">
-        <div className="flex items-center justify-between mb-3">
-          <button onClick={() => setMonth(subMonths(month, 1))} aria-label="Mes anterior" className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <p className="font-semibold text-foreground capitalize">{format(month, "MMMM yyyy", { locale: es })}</p>
-          <button onClick={() => setMonth(addMonths(month, 1))} aria-label="Mes siguiente" className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">
-            <ChevronRight className="w-5 h-5" />
-          </button>
+      {failed && (
+        <div role="alert" className="rounded-[22px] border border-rose-200 bg-rose-50 px-4 py-3 text-[15px] text-rose-900">
+          <p>No pudimos traer todo lo de este mes, así que puede faltar algo.</p>
+          <button onClick={load} className="mt-1 font-semibold underline">Probar de nuevo</button>
         </div>
+      )}
 
-        <div className="grid grid-cols-7 gap-1 mb-1">
+      <Card className="p-2.5 md:p-4" data-tour="cal-grid">
+        <div className="grid grid-cols-7 gap-0.5 mb-0.5">
           {WEEKDAYS.map((d) => (
-            <div key={d} className="text-center text-xs font-medium text-muted-foreground/70 py-1">{d}</div>
+            <div key={d} className="text-center font-marca text-xs text-muted-foreground py-1">{d}</div>
           ))}
         </div>
 
-        <div className={cn("grid grid-cols-7 gap-1", loading && "opacity-50")}>
+        <div className={cn("grid grid-cols-7 gap-0.5", loading && "opacity-50")}>
           {days.map((day) => {
             const events = eventsForDay(day);
             const inMonth = isSameMonth(day, month);
+            const selected = isSameDay(day, selectedDay);
             return (
               <button
                 key={day.toISOString()}
                 onClick={() => setSelectedDay(day)}
+                aria-label={format(day, "d 'de' MMMM", { locale: es }) + (events.length ? `, ${events.length} ${events.length === 1 ? "evento" : "eventos"}` : "")}
+                aria-pressed={selected}
                 className={cn(
-                  "h-10 sm:h-11 rounded-lg p-1 flex flex-col items-center justify-start text-xs border-2 transition-colors",
-                  inMonth ? "bg-card hover:bg-accent" : "bg-muted text-muted-foreground/40",
+                  "h-11 rounded-2xl pt-1 flex flex-col items-center justify-start transition-colors active:scale-[0.97]",
                   // Selected wins over today: today is where you start, the
                   // selection is where you're looking.
-                  isSameDay(day, selectedDay) ? "border-ink bg-accent"
-                    : isToday(day) ? "border-primary" : "border-transparent"
+                  selected ? "bg-ink text-background"
+                    : inMonth ? "text-foreground hover:bg-accent/60" : "text-muted-foreground/40",
+                  !selected && isToday(day) && "bg-accent"
                 )}
               >
-                <span className={cn("mb-0.5", isToday(day) && "font-bold text-primary")}>{format(day, "d")}</span>
+                <span className={cn("text-[15px] leading-5 tabular-nums", isToday(day) && "font-semibold", !selected && isToday(day) && "text-[#3B2FB3]")}>
+                  {format(day, "d")}
+                </span>
                 {events.length > 0 && (
-                  <div className="flex flex-wrap gap-0.5 justify-center">
+                  <span className="mt-1 flex gap-0.5 justify-center">
                     {events.slice(0, 4).map((ev, i) => (
-                      <span key={i} className={cn(
-                        "w-1.5 h-1.5 rounded-full",
-                        ev.kind === "closing" ? "bg-orange-400" :
-                        ev.kind === "due" ? "bg-rose-400" : "bg-primary"
-                      )} />
+                      <EventDot key={i} kind={ev.kind} inverted={selected} />
                     ))}
-                  </div>
+                  </span>
                 )}
               </button>
             );
           })}
         </div>
 
-        <div className="flex items-center gap-4 mt-4 pt-3 border-t text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-orange-400" /> Cierre</span>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-400" /> Vencimiento</span>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-primary" /> Recordatorio</span>
+        <div className="flex items-center gap-4 mt-2.5 pt-2.5 px-1.5 border-t border-border text-[13px] text-muted-foreground">
+          <span className="flex items-center gap-1.5"><EventDot kind="closing" /> Cierre</span>
+          <span className="flex items-center gap-1.5"><EventDot kind="due" /> Vencimiento</span>
+          <span className="flex items-center gap-1.5"><EventDot kind="reminder" /> Recordatorio</span>
         </div>
       </Card>
 

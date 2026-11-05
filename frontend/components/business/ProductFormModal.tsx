@@ -1,14 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
 import api from "@/lib/api";
 import { getErrorMessage, parseAmount } from "@/lib/utils";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import ProductTour from "@/components/ProductTour";
 import { PRODUCT_FORM_STEPS } from "@/components/business/tours";
-import { FIELD, FormGrid, SegmentedToggle } from "@/components/ui/form";
+import { FIELD, FieldLabel, SegmentedToggle } from "@/components/ui/form";
+import { AmountField, FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions } from "@/components/movimientos/FormSheet";
 import type { Product } from "@/lib/sales";
 
 type Kind = Product["kind"];
@@ -61,70 +59,59 @@ export function ProductFormModal({ product, onSaved, onClose }: {
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 space-y-4 max-h-[92vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-foreground">{editing ? "Editar producto" : "Nuevo producto"}</h3>
-          <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
-        </div>
-        <form onSubmit={e => { e.preventDefault(); save(); }} className="space-y-4">
-          <ProductTour tourId="product-form" steps={PRODUCT_FORM_STEPS} />
-          <SegmentedToggle<Kind>
-            ariaLabel="Tipo de producto"
-            value={kind}
-            onChange={setKind}
-            options={[
-              { value: "elaborado", label: "Elaborado" },
-              { value: "reventa", label: "Reventa" },
-            ]}
-          />
-          <p className="text-xs text-muted-foreground -mt-2">
-            {kind === "elaborado"
-              ? "Lo produce el negocio. La materia prima se carga como gasto."
-              : "Se compra hecho y se vende igual: entra al stock con la compra."}
-          </p>
-          <FormGrid>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground" data-tour="product-name">Nombre</label>
-              <input className={FIELD} autoFocus={!editing} required maxLength={120}
+    <>
+      <ProductTour tourId="product-form" steps={PRODUCT_FORM_STEPS} />
+      <FormSheet title={editing ? "Editar producto" : "Nuevo producto"} onClose={onClose}>
+        <form onSubmit={e => { e.preventDefault(); save(); }} className={FORM_SHEET_FORM}>
+          <div className={FORM_SHEET_BODY}>
+            <div data-tour="product-price">
+              <AmountField label="Precio" hint="(opcional)" currency="ARS" placeholder="1.500"
+                value={price} onChange={e => setPrice(e.target.value)} />
+            </div>
+            <div data-tour="product-name">
+              <FieldLabel>Nombre</FieldLabel>
+              <input className={FIELD} autoFocus={!editing} required maxLength={120} aria-label="Nombre"
                 placeholder={kind === "elaborado" ? "Empanada de carne" : "Coca-Cola 1,5 L"}
                 value={name} onChange={e => setName(e.target.value)} />
             </div>
+            <div data-tour="product-kind">
+              <SegmentedToggle<Kind>
+                ariaLabel="Tipo de producto"
+                value={kind}
+                onChange={setKind}
+                options={[
+                  { value: "elaborado", label: "Elaborado" },
+                  { value: "reventa", label: "Reventa" },
+                ]}
+              />
+              <p className="mt-1.5 px-1.5 text-sm leading-snug text-[#4A4658]">
+                {kind === "elaborado"
+                  ? "Lo produce el negocio. La materia prima se carga como gasto."
+                  : "Se compra hecho y se vende igual: entra al stock con la compra."}
+              </p>
+            </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Precio (opcional)</label>
-              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD} aria-label="Precio" data-tour="product-price"
-                placeholder="1.500" value={price} onChange={e => setPrice(e.target.value)} />
+              <FieldLabel>Se vende por</FieldLabel>
+              <SegmentedToggle<Unit>
+                className="mt-1"
+                ariaLabel="Unidad"
+                value={unit}
+                onChange={setUnit}
+                options={(Object.keys(UNIT_LABELS) as Unit[]).map(u => ({ value: u, label: UNIT_LABELS[u] }))}
+              />
             </div>
-          </FormGrid>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Se vende por</label>
-            <SegmentedToggle<Unit>
-              ariaLabel="Unidad"
-              value={unit}
-              onChange={setUnit}
-              options={(Object.keys(UNIT_LABELS) as Unit[]).map(u => ({ value: u, label: UNIT_LABELS[u] }))}
-            />
-          </div>
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
-
-          <div className="flex items-center gap-2 pt-1">
             {editing && (
-              <Button type="button" variant="ghost" disabled={saving} className="text-muted-foreground mr-auto"
-                onClick={() => save({ is_active: !product!.is_active })}>
+              <button type="button" disabled={saving} onClick={() => save({ is_active: !product!.is_active })}
+                className="min-h-[44px] px-1.5 font-semibold text-[15px] text-muted-foreground disabled:opacity-50">
                 {product!.is_active ? "Archivar" : "Restaurar"}
-              </Button>
+              </button>
             )}
-            <div className="flex gap-2 ml-auto">
-              <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-              <Button type="submit" disabled={saving || !name.trim()} data-tour="product-save">
-                {saving ? "Guardando..." : editing ? "Guardar" : "Crear"}
-              </Button>
-            </div>
           </div>
+          {error && <p role="alert" className="mx-3.5 mb-1 text-sm text-destructive">{error}</p>}
+          <FormSheetActions onCancel={onClose} saving={saving} disabled={!name.trim()} data-tour="product-save"
+            label={editing ? "Guardar" : "Crear"} />
         </form>
-      </Card>
-    </div>
+      </FormSheet>
+    </>
   );
 }

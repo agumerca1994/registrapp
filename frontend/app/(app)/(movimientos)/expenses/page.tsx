@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { MonthPill } from "@/components/dashboard/MonthPill";
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
-import { formatARS, formatDate, formatUSD } from "@/lib/utils";
-import { Trash2, Pencil, X, ChevronRight, CreditCard, ExternalLink, CalendarDays, ChevronLeft, Search, SlidersHorizontal, MoreVertical } from "lucide-react";
+import { formatARS, formatUSD } from "@/lib/utils";
+import { X, ChevronRight, ListChecks, Search, SlidersHorizontal, MoreVertical } from "lucide-react";
 import {
   FilterBar, FilterRow, FilterPanel, SortChip, FilterChip, PillSelect,
   PillDateRange, ClearFilters, CollapsibleSearch,
@@ -15,26 +16,47 @@ import {
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { PrivacyMenuItem } from "@/components/ui/privacy-toggle";
 import ProductTour from "@/components/ProductTour";
+import { MovimientosTabs } from "@/components/MovimientosTabs";
+import { BreakdownStrip } from "@/components/movimientos/BreakdownStrip";
+import { EntrySheet, SheetActions, SheetLink, SheetRow } from "@/components/movimientos/EntrySheet";
+import { LedgerRow, LedgerTotal, SelectionBar, ledgerAmount } from "@/components/movimientos/Ledger";
+import { useMovimientos } from "@/components/movimientos/MovimientosContext";
+import { useNuevo } from "@/lib/nuevo";
 import type { Step } from "react-joyride";
 import { Card } from "@/components/ui/card";
 import { Fab } from "@/components/ui/fab";
 import ExpenseFormModal, { type ExpenseSaved } from "@/components/expense/ExpenseFormModal";
 import { draftFromParams, newDraft, type ExpenseDraft } from "@/components/expense/submit";
-import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { isBusiness } from "@/lib/account";
 import type { Payee } from "@/components/business/types";
 import BusinessTour from "@/components/business/BusinessTour";
 import { LoadedByTag, useLoadedBy } from "@/components/LoadedBy";
 import { useReaccion } from "@/components/brand/ToodReaccion";
+import { MotionList } from "@/components/ui/motion-list";
 import { EXPENSES_BUSINESS_INTRO_STEPS } from "@/components/business/tours";
 
 const EXPENSES_TOUR_STEPS: Step[] = [
   {
-    target: "[data-tour='expenses-add']",
-    content: "Con este botón cargás un egreso: en efectivo, con tarjeta o compartido.",
-    placement: "bottom",
-    skipBeacon: true,
+    target: "[data-tour='month-card']",
+    title: "Cómo viene el mes",
+    content: "Lo que te queda en pesos y en dólares. En Ver detalle están las cuentas.",
+  },
+  {
+    target: "[data-tour='expenses-breakdown']",
+    title: "¿En qué se fue la plata?",
+    content: "Tocá una categoría y la lista de abajo muestra sólo sus gastos. Los que no entran se ven deslizando.",
+  },
+  {
+    target: "[data-tour='expenses-list']",
+    title: "Lo que salió este mes",
+    content: "Una compra con tarjeta aparece el mes en que se paga, con la fecha en que la hiciste. Tocá una fila para ver el detalle o editarla.",
+  },
+  {
+    // En el celular es el + de la barra; en la compu, el botón flotante.
+    target: "[data-tour='nav-add'], [data-tour='expenses-add']",
+    title: "Cargá un gasto",
+    content: "En efectivo, con tarjeta o compartido, con el mismo formulario.",
   },
 ];
 
@@ -61,7 +83,7 @@ const SORT_LABELS: Record<SortKey, string> = {
 // creating what you're missing shouldn't cost you the form you already began.
 
 function EntryDetailModal({
-  entry, payeeName, loadedBy, onEdit, onDelete, onViewStatement, onClose,
+  entry, payeeName, loadedBy, onEdit, onDelete, onViewStatement, onViewMortgage, onClose,
 }: {
   entry: ExpenseEntry;
   payeeName?: string;
@@ -69,84 +91,30 @@ function EntryDetailModal({
   onEdit: () => void;
   onDelete: () => void;
   onViewStatement: () => void;
+  onViewMortgage: () => void;
   onClose: () => void;
 }) {
   const isCreditCard = entry.payment_method === "tarjeta_credito";
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: entry.category.color || "#6366f1" }} />
-            <h3 className="font-semibold text-foreground">{entry.description || entry.category.name}</h3>
-          </div>
-          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
-        </div>
-        <div className="divide-y text-sm">
-          <div className="flex justify-between py-2">
-            <span className="text-muted-foreground">Fecha</span>
-            <span className="font-medium">{formatDate(entry.expense_date)}</span>
-          </div>
-          <div className="flex justify-between py-2">
-            <span className="text-muted-foreground">Categoría</span>
-            <span className="font-medium">{entry.category.name}</span>
-          </div>
-          {payeeName && (
-            <div className="flex justify-between py-2 gap-4">
-              <span className="text-muted-foreground shrink-0">Pagado a</span>
-              <span className="font-medium text-right">{payeeName}</span>
-            </div>
-          )}
-          {entry.description && entry.description !== entry.category.name && (
-            <div className="flex justify-between py-2 gap-4">
-              <span className="text-muted-foreground shrink-0">Descripción</span>
-              <span className="font-medium text-right">{entry.description}</span>
-            </div>
-          )}
-          <div className="flex justify-between py-2">
-            <span className="font-medium text-foreground">Monto</span>
-            <span className="font-bold text-rose-600 text-base">{entry.currency === "USD" ? formatUSD(entry.amount) : formatARS(entry.amount)}</span>
-          </div>
-          {isCreditCard && (
-            <div className="flex justify-between py-2">
-              <span className="text-muted-foreground">Tarjeta</span>
-              <span className="flex items-center gap-1 font-medium text-primary">
-                <CreditCard className="w-3.5 h-3.5" />{entry.entity}
-              </span>
-            </div>
-          )}
-          {entry.notes && (
-            <div className="flex justify-between py-2 gap-4">
-              <span className="text-muted-foreground shrink-0">Notas</span>
-              <span className="font-medium text-right">{entry.notes}</span>
-            </div>
-          )}
-          {loadedBy && (
-            <div className="flex justify-between py-2 gap-4">
-              <span className="text-muted-foreground shrink-0">Lo cargó</span>
-              <span className="font-medium text-right">{loadedBy}</span>
-            </div>
-          )}
-        </div>
-        {isCreditCard ? (
-          <div className="pt-1">
-            <p className="text-xs text-muted-foreground mb-2 text-center">Este gasto es de tarjeta: se edita o se elimina desde su resumen.</p>
-            <Button onClick={onViewStatement} className="w-full">
-              <ExternalLink className="w-4 h-4" /> Ver en resumen
-            </Button>
-          </div>
-        ) : (
-          <div className="flex gap-2 pt-1">
-            <Button variant="destructive" onClick={onDelete} className="flex-1">
-              <Trash2 className="w-4 h-4" /> Eliminar
-            </Button>
-            <Button onClick={onEdit} className="flex-1">
-              <Pencil className="w-4 h-4" /> Editar
-            </Button>
-          </div>
-        )}
-      </Card>
-    </div>
+    <EntrySheet
+      date={entry.expense_date}
+      title={entry.description || entry.category.name}
+      badge={{ label: entry.category.name, color: entry.category.color || "#6366f1" }}
+      amount={entry.currency === "USD" ? formatUSD(entry.amount) : formatARS(entry.amount)}
+      onClose={onClose}
+      footer={isCreditCard ? (
+        <SheetLink note="Es de tarjeta: se edita o se elimina desde su resumen." label="Ver en resumen" onClick={onViewStatement} />
+      ) : entry.source === "mortgage" ? (
+        <SheetLink note="Es una cuota de la hipoteca: las registra la app y no se eliminan." label="Ver hipoteca" onClick={onViewMortgage} />
+      ) : (
+        <SheetActions noun="egreso" onEdit={onEdit} onDelete={onDelete} />
+      )}
+    >
+      {isCreditCard && <SheetRow label="Tarjeta">{entry.entity}</SheetRow>}
+      {payeeName && <SheetRow label="Pagado a">{payeeName}</SheetRow>}
+      {entry.notes && <SheetRow label="Notas">{entry.notes}</SheetRow>}
+      {loadedBy && <SheetRow label="Lo cargó">{loadedBy}</SheetRow>}
+    </EntrySheet>
   );
 }
 
@@ -170,12 +138,19 @@ export default function ExpensesPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [detailEntry, setDetailEntry] = useState<ExpenseEntry | null>(null);
 
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const prev = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
-  const next = () => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
-  const periodLabel = format(new Date(year, month - 1, 1), "MMMM yyyy", { locale: es });
+  const { year, month, prev, next, periodLabel, summary, refresh: refreshMonth, setSearching } = useMovimientos();
+  // Lo comprado este mes que todavía no salió: la tabla cuenta por fecha de pago,
+  // y sin esto una compra con tarjeta recién cargada no se ve por ningún lado.
+  const [later, setLater] = useState<ExpenseEntry[]>([]);
+  // Qué muestra la lista ya cargada. Cambia junto con las filas, no al tocar el mes: la
+  // lista de otro mes funde entera en vez de sacar y meter todas sus filas una por una.
+  const [listKey, setListKey] = useState("");
+  const [laterOpen, setLaterOpen] = useState(false);
+  // La categoría tocada en el desglose. Mira adentro del mes, a diferencia de los
+  // filtros de abajo, que salen a buscar en todo el historial.
+  const [pickedCategory, setPickedCategory] = useState<string | null>(null);
+  // Los casilleros aparecen recién cuando se quiere borrar varios: en cada fila, siempre, son ruido.
+  const [selecting, setSelecting] = useState(false);
 
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -201,8 +176,14 @@ export default function ExpensesPage() {
   // history: a search that only looks inside the month currently on screen
   // would miss what the user is looking for and give no hint that it did.
   const filtering = !!debouncedSearch || panelFilterActive;
+  useEffect(() => { setSearching(filtering); return () => setSearching(false); }, [filtering, setSearching]);
+  // Un mes nuevo tiene otras categorías.
+  useEffect(() => { setPickedCategory(null); }, [year, month]);
 
   const load = async () => {
+    // Un negocio sigue viendo su libro por fecha de compra: no tiene la tarjeta
+    // del mes arriba con la que tenga que coincidir.
+    const monthView = !filtering && !business;
     // No chip active → the endpoint's own default ordering.
     const ordering = { sort: sort ?? "date", order: sort ? order : "desc" };
     const params = filtering
@@ -216,14 +197,19 @@ export default function ExpensesPage() {
           date_to: dateTo || undefined,
           ...ordering,
         }
-      : { year, month, ...ordering };
-    const [e, c] = await Promise.all([
-      api.get("/expenses/entries", { params }),
+      : { year, month, ...(monthView ? { basis: "payment" } : {}), ...ordering };
+    const [e, c, bought] = await Promise.all([
+      api.get<ExpenseEntry[]>("/expenses/entries", { params }),
       api.get("/expenses/categories"),
+      monthView ? api.get<ExpenseEntry[]>("/expenses/entries", { params: { year, month, ...ordering } }) : null,
     ]);
     setEntries(e.data);
+    setListKey(filtering ? "busqueda" : `${year}-${month}`);
     setCategories(c.data);
+    const paying = new Set(e.data.map(x => x.id));
+    setLater(bought ? bought.data.filter(x => !paying.has(x.id)) : []);
     setSelected(new Set());
+    if (monthView) refreshMonth();
   };
 
   useEffect(() => { load(); },
@@ -273,6 +259,7 @@ export default function ExpensesPage() {
 
   const openCreate = (initial?: ExpenseDraft) => { setFormKey(k => k + 1); setFormState({ mode: "create", initial }); };
   const openEdit = (entry: ExpenseEntry) => { setFormKey(k => k + 1); setFormState({ mode: "edit", entry }); };
+  useNuevo(() => openCreate());
   const closeForm = () => setFormState(null);
 
   const handleSaved = async (result: ExpenseSaved) => {
@@ -282,11 +269,13 @@ export default function ExpensesPage() {
     // Un egreso simple se ve en la lista; los de tarjeta y los compartidos
     // además tienen otra casa, y el aviso dice dónde quedaron.
     setNotice(result.kind === "simple" ? null : result);
+    // Se paga más adelante: abierto, para que se vea que quedó cargada.
+    if (result.kind === "card") setLaterOpen(true);
     await load();
   };
 
+  // La confirmación la pide la ficha, ahí mismo (SheetActions).
   const handleDelete = async (id: number) => {
-    if (!confirm("¿Eliminar este egreso?")) return;
     try {
       await api.delete(`/expenses/entries/${id}`);
     } catch {
@@ -310,11 +299,17 @@ export default function ExpensesPage() {
     }
   };
 
-  const selectableEntries = entries.filter(e => e.payment_method !== "tarjeta_credito");
+  const shown = pickedCategory ? entries.filter(e => e.category.name === pickedCategory) : entries;
+  const selectableEntries = shown.filter(e => e.payment_method !== "tarjeta_credito" && e.source !== "mortgage");
+
+  const pickCategory = (name: string | null) => {
+    setPickedCategory(name);
+    setSelected(new Set());
+  };
 
   const toggleSelect = (id: number) => {
     const entry = entries.find(e => e.id === id);
-    if (entry?.payment_method === "tarjeta_credito") return;
+    if (entry?.payment_method === "tarjeta_credito" || entry?.source === "mortgage") return;
     setSelected(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   };
 
@@ -335,34 +330,59 @@ export default function ExpensesPage() {
   };
 
   const allSelected = selectableEntries.length > 0 && selected.size === selectableEntries.length;
-  const someSelected = selected.size > 0 && !allSelected;
+
+  // Ordenada por fecha, el día se escribe una sola vez. Ordenada por otra cosa,
+  // cada fila lleva el suyo: los días ya no quedan seguidos.
+  const byDate = !sort || sort === "date";
+  const renderRows = (rows: ExpenseEntry[], canSelect = true) => rows.map((entry, i) => {
+    const card = entry.payment_method === "tarjeta_credito";
+    // La fecha de una compra con tarjeta puede ser de otro mes: es la de la compra.
+    const detail = [entry.description ? entry.category.name : null, card ? entry.entity : null, payeeName(entry.payee_id)]
+      .filter(Boolean).join(" · ");
+    return (
+      <LedgerRow key={entry.id}
+        date={entry.expense_date}
+        showDate={!byDate || i === 0 || rows[i - 1].expense_date !== entry.expense_date}
+        title={entry.description || entry.category.name}
+        sub={<>
+          <span className="flex items-center gap-1.5 min-w-0">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.category.color || "#6366f1" }} />
+            <span className="truncate">{detail || entry.category.name}</span>
+          </span>
+          <LoadedByTag name={loadedBy.nameOf(loaderId(entry))} />
+        </>}
+        amount={ledgerAmount(entry.amount, entry.currency)}
+        onOpen={() => setDetailEntry(entry)}
+        selecting={selecting && canSelect}
+        selectable={!card}
+        selected={selected.has(entry.id)}
+        onToggle={() => toggleSelect(entry.id)}
+      />
+    );
+  });
+  const stopSelecting = () => { setSelecting(false); setSelected(new Set()); };
+  const laterArs = later.filter(e => e.currency !== "USD").reduce((s, e) => s + Number(e.amount), 0);
+  const laterUsd = later.filter(e => e.currency === "USD").reduce((s, e) => s + Number(e.amount), 0);
 
   return (
     <div className="space-y-4 md:space-y-6">
       {!business && <ProductTour tourId="expenses-intro" steps={EXPENSES_TOUR_STEPS} />}
       <BusinessTour tourId="expenses-business-intro" steps={EXPENSES_BUSINESS_INTRO_STEPS} />
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Egresos</h2>
+        {business
+          ? <h1 className="text-[26px] md:text-3xl font-display font-medium tracking-[-0.035em] text-foreground">Egresos</h1>
+          : <MovimientosTabs title="Egresos" />}
         <div className="flex items-center gap-1 shrink-0">
           {filtering ? (
-            <div className="inline-flex items-center gap-2 rounded-full border-2 border-ink bg-card shadow-chip px-3 py-1.5">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5">
               <Search className="w-4 h-4 text-primary shrink-0" />
               <span className="text-sm font-bold text-foreground">
                 {entries.length} resultado{entries.length !== 1 ? "s" : ""}
                 <span className="hidden sm:inline"> en todo el historial</span>
               </span>
             </div>
-          ) : (
-            <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
-              <CalendarDays className="w-4 h-4 text-primary shrink-0" />
-              <button onClick={prev} aria-label="Mes anterior" className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
-              <button onClick={next} aria-label="Mes siguiente" className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+          ) : business && (
+            <MonthPill compact label={format(new Date(year, month - 1, 1), "MMM yyyy", { locale: es }).replace(".", "")} onPrev={prev} onNext={next} />
           )}
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
@@ -373,9 +393,15 @@ export default function ExpensesPage() {
           </DropdownMenu.Trigger>
           <DropdownMenu.Portal>
             <DropdownMenu.Content align="end" sideOffset={4}
-              className="bg-card border rounded-xl shadow-lg p-1 w-44 z-50">
+              className="rounded-[22px] border border-white/70 bg-card/90 backdrop-blur-2xl backdrop-saturate-150 shadow-flota p-1.5 animate-fade-in w-44 z-50">
               <DropdownMenu.Item asChild>
                 <PrivacyMenuItem />
+              </DropdownMenu.Item>
+              <DropdownMenu.Item asChild>
+                <button onClick={() => setSelecting(true)}
+                  className="flex items-center justify-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full outline-none cursor-pointer">
+                  <ListChecks className="w-4 h-4 text-muted-foreground" /> Seleccionar varios
+                </button>
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
@@ -434,6 +460,23 @@ export default function ExpensesPage() {
         </Card>
       )}
 
+      {!business && !filtering && summary && summary.expenses_by_category.length > 0 && (
+        <div data-tour="expenses-breakdown">
+          <BreakdownStrip
+            title="¿En qué se fue la plata?"
+            picked={pickedCategory}
+            onPick={pickCategory}
+            rows={summary.expenses_by_category.map(cat => ({
+              key: cat.category_name, label: cat.category_name, color: cat.color,
+              total: Number(cat.total), total_usd: Number(cat.total_usd), ars_equivalent: Number(cat.ars_equivalent),
+            }))}
+            footnote={Number(summary.total_expenses_usd) > 0 && summary.usd_rate
+              ? `Los porcentajes valúan los dólares a ${formatARS(summary.usd_rate)} (${summary.usd_rate_type}).`
+              : null}
+          />
+        </div>
+      )}
+
       {/* Same bar as /tarjetas and /ingresos — see components/ui/filters.tsx.
           One box searches description, category, card alias and notes: a row
           shows `description || category`, so any of them is what the user
@@ -489,98 +532,50 @@ export default function ExpensesPage() {
         )}
       </FilterBar></div>
 
-      <Card className="p-0 md:p-0 divide-y">
-        {entries.length > 0 && (
-          <div className="flex items-center gap-3 px-3 md:px-5 py-2 bg-muted rounded-t-2xl">
-            <input
-              type="checkbox"
-              checked={allSelected}
-              ref={el => { if (el) el.indeterminate = someSelected; }}
-              onChange={toggleAll}
-              className="w-4 h-4 rounded cursor-pointer"
-            />
-            {selected.size > 0 ? (
-              <div className="flex items-center gap-3 flex-1">
-                <span className="text-sm text-muted-foreground">{selected.size} seleccionado{selected.size !== 1 ? "s" : ""}</span>
-                <button
-                  onClick={handleBulkDelete}
-                  disabled={bulkDeleting}
-                  className="flex items-center gap-1 text-sm text-destructive hover:opacity-80 disabled:opacity-50"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  {bulkDeleting ? "Eliminando..." : "Eliminar seleccionados"}
-                </button>
-              </div>
-            ) : (
-              <span className="text-xs text-muted-foreground">Seleccionar todos</span>
-            )}
-          </div>
+      <MotionList as="section" key={listKey} data-tour="expenses-list" className="px-2 space-y-1 animate-page-in">
+        {selecting && (
+          <SelectionBar count={selected.size} allSelected={allSelected} deleting={bulkDeleting}
+            onToggleAll={toggleAll} onDelete={handleBulkDelete} onCancel={stopSelecting} />
         )}
-
-        {entries.length === 0 ? (
-          <p className="p-6 text-muted-foreground text-sm">
+        {shown.length === 0 ? (
+          <p className="py-6 text-muted-foreground text-[15px]">
             {filtering
               ? "Ningún egreso coincide con la búsqueda."
-              : `No hay egresos registrados en ${periodLabel}.`}
+              : business
+                ? `No hay egresos registrados en ${periodLabel}.`
+                : `En ${periodLabel} no salió plata todavía.`}
           </p>
-        ) : entries.map(entry => (
-          <div key={entry.id} className="flex items-center gap-2 px-3 md:px-4 py-3">
-            {entry.payment_method === "tarjeta_credito" ? (
-                <div className="w-4 h-4 shrink-0" />
-              ) : (
-                <input
-                  type="checkbox"
-                  checked={selected.has(entry.id)}
-                  onChange={() => toggleSelect(entry.id)}
-                  className="w-4 h-4 rounded cursor-pointer shrink-0"
-                />
-              )}
-            <button
-              className="flex-1 flex items-center gap-2 min-w-0 text-left hover:opacity-80 active:opacity-60"
-              onClick={() => setDetailEntry(entry)}
-            >
-              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.category.color || "#6366f1" }} />
-              <div className="flex-1 min-w-0">
-                <span className="block text-sm font-medium text-foreground truncate">
-                  {entry.description || entry.category.name}
-                </span>
-                {/* Only while searching, and only when the title is the
-                    description: a hit on the category is otherwise invisible
-                    and the row looks unrelated to what was typed. */}
-                {filtering && entry.description && (
-                  <span className="block text-xs text-muted-foreground truncate">{entry.category.name}</span>
-                )}
-                {payeeName(entry.payee_id) && (
-                  <span className="block text-xs text-muted-foreground truncate">{payeeName(entry.payee_id)}</span>
-                )}
-                {entry.payment_method === "tarjeta_credito" && (
-                  <span className="inline-flex items-center gap-1 text-xs text-primary font-medium">
-                    <CreditCard className="w-3 h-3" />{entry.entity}
-                  </span>
-                )}
-                <LoadedByTag name={loadedBy.nameOf(loaderId(entry))} />
-                <span className="block sm:hidden text-xs text-muted-foreground">{formatDate(entry.expense_date)}</span>
-              </div>
-              <span className="hidden sm:block w-[10ch] shrink-0 text-xs text-muted-foreground text-right truncate">{formatDate(entry.expense_date)}</span>
-              <span className="w-[18ch] shrink-0 text-sm font-semibold text-rose-600 text-right truncate">{entry.currency === "USD" ? formatUSD(entry.amount) : formatARS(entry.amount)}</span>
-              <ChevronRight className="w-4 h-4 text-muted-foreground/50 shrink-0" />
-            </button>
-          </div>
-        ))}
-        {entries.length > 0 && (() => {
-          const arsTotal = entries.filter(e => e.currency !== "USD").reduce((s, e) => s + Number(e.amount), 0);
-          const usdTotal = entries.filter(e => e.currency === "USD").reduce((s, e) => s + Number(e.amount), 0);
-          return (
-            <div className="flex items-center justify-between px-4 py-3 bg-muted border-t rounded-b-2xl flex-wrap gap-1">
-              <span className="text-sm font-medium text-foreground">Total</span>
-              <div className="flex flex-col items-end gap-0.5">
-                {arsTotal > 0 && <span className="text-base font-bold text-rose-600">{formatARS(arsTotal)}</span>}
-                {usdTotal > 0 && <span className="text-sm font-bold text-emerald-600">{formatUSD(usdTotal)}</span>}
-              </div>
-            </div>
-          );
-        })()}
-      </Card>
+        ) : (
+          <MotionList>{renderRows(shown)}</MotionList>
+        )}
+        {shown.length > 0 && (
+          <LedgerTotal
+            label={pickedCategory ? `Total de ${pickedCategory}` : "Total"}
+            ars={shown.filter(e => e.currency !== "USD").reduce((s, e) => s + Number(e.amount), 0)}
+            usd={shown.filter(e => e.currency === "USD").reduce((s, e) => s + Number(e.amount), 0)}
+          />
+        )}
+      </MotionList>
+
+      {!filtering && !pickedCategory && later.length > 0 && (
+        <MotionList as="section" key={`later-${listKey}`} className="rounded-3xl bg-accent border border-[#CFC9E4] p-2.5 animate-page-in">
+          <button type="button" onClick={() => setLaterOpen(v => !v)} aria-expanded={laterOpen}
+            className="w-full flex items-center gap-3 px-2 py-1.5 text-left">
+            <span className="flex-1 min-w-0">
+              <span className="block font-semibold text-[15.5px] text-foreground">Comprado en {periodLabel.split(" ")[0]}, se paga después</span>
+              <span className="block text-sm text-[#3F3B4B]">
+                {later.length} {later.length === 1 ? "compra" : "compras"} con tarjeta. No cuenta todavía en este mes.
+              </span>
+            </span>
+            <span className="font-medium tabular-nums shrink-0 text-right">
+              {laterArs > 0 && <span className="block">{ledgerAmount(laterArs)}</span>}
+              {laterUsd > 0 && <span className="block">{ledgerAmount(laterUsd, "USD")}</span>}
+            </span>
+            <ChevronRight className={`w-4 h-4 text-[#3F3B4B] shrink-0 transition-transform ${laterOpen ? "rotate-90" : ""}`} />
+          </button>
+          {laterOpen && <MotionList className="mt-2 rounded-2xl bg-white px-3">{renderRows(later, false)}</MotionList>}
+        </MotionList>
+      )}
 
       <Fab label="Registrar egreso" data-tour="expenses-add" onClick={() => openCreate()} />
 
@@ -592,6 +587,7 @@ export default function ExpensesPage() {
           onEdit={() => { setDetailEntry(null); openEdit(detailEntry); }}
           onDelete={() => handleDelete(detailEntry.id)}
           onViewStatement={() => handleViewStatement(detailEntry.id)}
+          onViewMortgage={() => router.push("/mortgage")}
           onClose={() => setDetailEntry(null)}
         />
       )}

@@ -122,7 +122,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <ScrollToTop />
       <ErrorReporter />
-      <main id="main-content" className="flex-1 p-4 md:p-8 overflow-auto pt-20 pb-28 md:pt-8 md:pb-8">
+      {/* Inicio no tiene barra arriba: su bloque violeta llega hasta el borde. El relleno de abajo deja bajar la última fila de una lista hasta salir de atrás de la barra y del +, que en un negocio también flota en el celular. */}
+      <main id="main-content" className={`flex-1 min-w-0 p-4 md:p-8 overflow-auto ${isBusiness(appUser) ? "pb-44" : "pb-28"} md:pt-8 md:pb-24 ${pathname === "/dashboard" ? "pt-0" : "pt-20"}`}>
         {children}
       </main>
     </div>

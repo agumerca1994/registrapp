@@ -2,6 +2,7 @@
 
 import { UserPlus, X } from "lucide-react";
 import { FIELD, SegmentedToggle } from "@/components/ui/form";
+import { MotionList } from "@/components/ui/motion-list";
 import { cn, formatARS, formatUSD } from "@/lib/utils";
 import { remainder } from "@/lib/split";
 import { installmentCount, isInstallment, rowAmounts, shareBase, type ExpenseDraft, type SplitRow } from "./submit";
@@ -57,7 +58,7 @@ export default function SplitSection({ draft, set, onPick }: {
         {cuotas >= 2 && <> por cuota · se comparten las {cuotas} cuotas</>}
       </p>
 
-      <ul className="space-y-2">
+      <MotionList as="ul" className="space-y-2">
         {draft.rows.map((r, idx) => (
           <li key={idx} className="flex items-center gap-2">
             <button type="button" disabled={r.type === "self"} onClick={() => onPick(idx)}
@@ -81,7 +82,7 @@ export default function SplitSection({ draft, set, onPick }: {
             ) : <span className="w-6 shrink-0" />}
           </li>
         ))}
-      </ul>
+      </MotionList>
 
       <button type="button" onClick={() => onPick(null)}
         className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">

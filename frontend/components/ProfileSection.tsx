@@ -1,30 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { AtSign, Check, Copy, MoreVertical, Pencil, User as UserIcon, X } from "lucide-react";
+import { AtSign, Check, Copy, Pencil } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { Chip } from "@/components/ui/chip";
-import { Button } from "@/components/ui/button";
+import { useReaccion } from "@/components/brand/ToodReaccion";
 import { FIELD, FormGrid } from "@/components/ui/form";
+import { FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions } from "@/components/movimientos/FormSheet";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/utils";
 import { suggestAlias } from "@/lib/alias";
 import { useAuth } from "@/contexts/AuthContext";
-import { isBusiness, terms } from "@/lib/account";
+import { isBusiness, roleLabel, terms } from "@/lib/account";
 
 /**
  * Tus datos: nombre, apellido, alias y el nombre del hogar.
  *
- * La tarjeta sólo muestra; editar abre un modal. Un formulario siempre abierto
- * en una pantalla que es casi toda formularios invita a tocar campos sin
- * querer, y estos tres se usan en lugares donde un cambio se nota: el alias es
- * por el que te encuentran, y el nombre es el que queda escrito en cada gasto
- * compartido.
+ * La tarjeta sólo muestra; editar abre una hoja. Un formulario siempre abierto
+ * invita a tocar campos sin querer, y estos tres se usan en lugares donde un
+ * cambio se nota: el alias es por el que te encuentran, y el nombre es el que
+ * queda escrito en cada gasto compartido.
  */
 
 // El nombre del hogar es del hogar, no tuyo: lo cambia un admin y lo ve todo el
-// mundo. Por eso va en el mismo modal pero por un endpoint aparte.
+// mundo. Por eso va en la misma hoja pero por un endpoint aparte.
 function EditProfileModal({ onClose }: { onClose: () => void }) {
   const { appUser, refreshUser } = useAuth();
   const isAdmin = appUser?.role === "admin";
@@ -35,8 +33,10 @@ function EditProfileModal({ onClose }: { onClose: () => void }) {
   const [tenantName, setTenantName] = useState(appUser?.tenant_name || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const reaccionar = useReaccion();
 
-  const save = async () => {
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
     setSaving(true); setError("");
     try {
       await api.patch("/auth/me", {
@@ -48,98 +48,75 @@ function EditProfileModal({ onClose }: { onClose: () => void }) {
         await api.patch("/auth/tenant", { name: tenantName.trim() });
       }
       await refreshUser();
+      reaccionar("guardado", "Datos guardados");
       onClose();
-    } catch (e: unknown) {
+    } catch (err: unknown) {
       // El backend distingue 409 (alias tomado) de 400 (inválido) justamente
       // para que acá se lean distinto: sólo el primero se arregla probando otro.
-      setError(getErrorMessage(e, "No se pudo guardar"));
+      setError(getErrorMessage(err, "No se pudo guardar"));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Editar tus datos"
-    >
-      <Card
-        className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2">
-          <h3 className="font-semibold text-foreground flex-1">Editar tus datos</h3>
-          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <FormSheet title="Editar tus datos" onClose={onClose}>
+      <form onSubmit={save} className={FORM_SHEET_FORM}>
+        <div className={FORM_SHEET_BODY}>
+          <FormGrid>
+            <div>
+              <label htmlFor="profile-first" className="text-xs font-medium text-muted-foreground">Nombre</label>
+              <input id="profile-first" className={FIELD} value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="Agustín" />
+            </div>
+            <div>
+              <label htmlFor="profile-last" className="text-xs font-medium text-muted-foreground">Apellido</label>
+              <input id="profile-last" className={FIELD} value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Mercadal" />
+            </div>
+          </FormGrid>
 
-        <FormGrid>
           <div>
-            <label className="text-xs font-medium text-muted-foreground">Nombre</label>
-            <input className={FIELD} value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="Agustín" />
+            <label htmlFor="profile-alias" className="text-xs font-medium text-muted-foreground">Alias</label>
+            <div className="relative">
+              <AtSign className="w-4 h-4 text-muted-foreground absolute left-3 top-[calc(50%+2px)] -translate-y-1/2 pointer-events-none" />
+              <input
+                id="profile-alias"
+                className={`${FIELD} pl-9`}
+                value={alias}
+                onChange={e => setAlias(e.target.value.toLowerCase())}
+                placeholder={suggestAlias(firstName, lastName) || "tu.alias"}
+                maxLength={30}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+            </div>
+            <p className="text-xs text-[#4A4658] mt-1">Con esto te encuentran para compartirte un gasto.</p>
           </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Apellido</label>
-            <input className={FIELD} value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Mercadal" />
-          </div>
-        </FormGrid>
 
-        <div>
-          <label className="text-xs font-medium text-muted-foreground">Alias</label>
-          <div className="relative">
-            <AtSign className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <div>
+            <label htmlFor="profile-tenant" className="text-xs font-medium text-muted-foreground">Nombre del {terms(appUser).space}</label>
             <input
-              className={`${FIELD} pl-9`}
-              value={alias}
-              onChange={e => setAlias(e.target.value.toLowerCase())}
-              placeholder={suggestAlias(firstName, lastName) || "tu.alias"}
-              maxLength={30}
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
+              id="profile-tenant"
+              className={`${FIELD} disabled:opacity-60`}
+              value={tenantName}
+              onChange={e => setTenantName(e.target.value)}
+              placeholder={isAdmin
+                ? (isBusiness(appUser) ? "Ej: Rotisería Don Pepe" : "Ej: Casa García")
+                : "Sólo un administrador puede cambiarlo"}
+              disabled={!isAdmin}
             />
+            {!isAdmin && (
+              <p className="text-xs text-[#4A4658] mt-1">
+                Sólo un administrador del {terms(appUser).space} puede cambiarlo.
+              </p>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Con esto te encuentran para compartirte un gasto.
-          </p>
-        </div>
 
-        <div>
-          <label className="text-xs font-medium text-muted-foreground">Nombre del {terms(appUser).space}</label>
-          <input
-            className={FIELD}
-            value={tenantName}
-            onChange={e => setTenantName(e.target.value)}
-            placeholder={isAdmin
-              ? (isBusiness(appUser) ? "Ej: Rotisería Don Pepe" : "Ej: Casa García")
-              : "Sólo un administrador puede cambiarlo"}
-            disabled={!isAdmin}
-          />
-          {!isAdmin && (
-            <p className="text-xs text-muted-foreground mt-1">
-              Sólo un administrador del {terms(appUser).space} puede cambiarlo.
-            </p>
-          )}
+          {error && <p role="alert" className="text-sm text-rose-800 bg-rose-50 rounded-xl px-3 py-2">{error}</p>}
         </div>
-
-        {error && (
-          <p className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
-            {error}
-          </p>
-        )}
-
-        <div className="flex gap-2">
-          <Button variant="outline" className="flex-1" onClick={onClose}>Cancelar</Button>
-          <Button className="flex-1" onClick={save} disabled={saving}>
-            {saving ? "Guardando…" : "Guardar"}
-          </Button>
-        </div>
-      </Card>
-    </div>
+        <FormSheetActions onCancel={onClose} saving={saving} label="Guardar" />
+      </form>
+    </FormSheet>
   );
 }
 
@@ -157,57 +134,34 @@ export function ProfileSection() {
   };
 
   return (
-    <Card className="p-6 space-y-4">
-      <div className="flex items-center gap-2">
-        <UserIcon className="w-5 h-5 text-primary shrink-0" />
-        <h3 className="font-semibold text-foreground flex-1 min-w-0">Tus datos</h3>
-        {/* El mismo menú de ⋮ que usan las tarjetas y los resúmenes, en vez de
-            un enlace propio de esta pantalla. */}
-        <div className="shrink-0">
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger asChild>
-              <button className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors outline-none" title="Más acciones">
-                <MoreVertical className="w-4 h-4" />
-              </button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content align="end" sideOffset={4} className="bg-card border rounded-xl shadow-lg p-1 w-44 z-50">
-                <DropdownMenu.Item asChild>
-                  <button onClick={() => setEditing(true)}
-                    className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full text-left outline-none cursor-pointer">
-                    <Pencil className="w-4 h-4 text-muted-foreground" /> Editar tus datos
-                  </button>
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
+    <Card className="p-4 md:p-5">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[22px] font-medium leading-tight tracking-[-0.03em] text-foreground truncate">
+            {appUser.display_name || "Sin nombre"}
+          </p>
+          <p className="mt-0.5 text-sm text-muted-foreground truncate">{appUser.email}</p>
+          <p className="text-sm text-muted-foreground">Rol: {roleLabel(appUser, appUser.role ?? "")}</p>
         </div>
+        <button type="button" onClick={() => setEditing(true)} aria-label="Editar tus datos" title="Editar tus datos"
+          className="w-11 h-11 shrink-0 -mt-1 -mr-1 rounded-full bg-ink/[0.05] text-foreground flex items-center justify-center active:scale-[0.95] transition-transform duration-100">
+          <Pencil className="w-[18px] h-[18px]" strokeWidth={1.8} />
+        </button>
       </div>
 
-      {/* Chips en su propia fila, pegados al borde izquierdo: es lo que dicen
-          de qué está hecha la card, no en qué estado está. */}
-      <div className="flex flex-wrap gap-1.5">
-        <Chip tone="neutral">
-          {appUser.display_name || "Sin nombre"}
-        </Chip>
-        {appUser.alias ? (
-          <Chip tone="violet" className="pr-2">
-            @{appUser.alias}
-            <button
-              onClick={copy}
-              aria-label={copied ? "Alias copiado" : "Copiar alias"}
-              title={copied ? "Copiado" : "Copiar al portapapeles"}
-              className="ml-1 -mr-0.5 p-0.5 rounded hover:bg-primary/15 transition-colors"
-            >
-              {copied
-                ? <Check className="w-3.5 h-3.5 text-emerald-600" />
-                : <Copy className="w-3.5 h-3.5" />}
-            </button>
-          </Chip>
-        ) : (
-          <Chip tone="neutral" locked>Sin alias</Chip>
-        )}
-      </div>
+      {appUser.alias ? (
+        <button type="button" onClick={copy}
+          aria-label={copied ? "Alias copiado" : "Copiar alias"} title={copied ? "Copiado" : "Copiar al portapapeles"}
+          className="mt-3 min-h-[40px] inline-flex items-center gap-2 max-w-full rounded-full bg-accent border border-[#CFC9E4] px-3.5 text-sm font-semibold text-[#3B2FB3] active:scale-[0.97] transition-transform duration-100">
+          <span className="truncate">@{appUser.alias}</span>
+          {copied ? <Check className="w-4 h-4 shrink-0" /> : <Copy className="w-4 h-4 shrink-0" />}
+        </button>
+      ) : (
+        <button type="button" onClick={() => setEditing(true)}
+          className="mt-3 min-h-[40px] inline-flex items-center rounded-full border border-dashed border-muted-foreground/50 px-3.5 text-sm font-semibold text-muted-foreground active:scale-[0.97] transition-transform duration-100">
+          Elegí un alias
+        </button>
+      )}
 
       {editing && <EditProfileModal onClose={() => setEditing(false)} />}
     </Card>

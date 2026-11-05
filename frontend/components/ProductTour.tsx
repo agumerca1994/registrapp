@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
-import type { EventData, Step } from "react-joyride";
+import type { EventData, Step, TooltipRenderProps } from "react-joyride";
 
 const Joyride = dynamic(() => import("react-joyride").then((mod) => mod.Joyride), { ssr: false });
 
@@ -61,10 +61,21 @@ function radiusOf(el: Element): number {
   return Math.min(raw, Math.min(rect.width, rect.height) / 2);
 }
 
-function shapeFor(step: Step): Step {
+const isVisible = (el: Element) => {
+  const rect = el.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+};
+
+// El destino real de un paso. Un mismo `data-tour` puede estar dos veces (la barra
+// lateral y la de abajo) y sólo una se ve según la pantalla. Devuelve null si el
+// elemento existe pero en esta pantalla no se ve, y ese paso se saltea: ilumina
+// nada, si no. Si todavía no existe, se deja el selector para que Joyride lo espere.
+function shapeFor(step: Step): Step | null {
   if (typeof step.target !== "string") return step;
-  const el = document.querySelector(step.target);
-  if (!el) return step;
+  const all = Array.from(document.querySelectorAll(step.target));
+  if (all.length === 0) return step;
+  const el = all.find(isVisible);
+  if (!el) return null;
   let radius = radiusOf(el);
   // Un envoltorio sin bordes propios (un div alrededor de una tarjeta) toma la
   // forma de su único hijo, que es lo que se ve.
@@ -73,9 +84,49 @@ function shapeFor(step: Step): Step {
   // concéntrico, su radio crece lo mismo (salvo en un rectángulo recto).
   return {
     ...step,
+    target: el as HTMLElement,
+    // Lo que flota (las barras, el +) no se alcanza desplazando la página.
+    isFixed: !!el.closest(".fixed"),
     spotlightPadding: SPOTLIGHT_PADDING,
-    spotlightRadius: radius > 0 ? radius + SPOTLIGHT_PADDING : 0,
+    // Un bloque sin borde redondeado igual se ilumina redondeado: un recorte de
+    // esquinas rectas es lo único recto en toda la pantalla.
+    spotlightRadius: radius > 0 ? radius + SPOTLIGHT_PADDING : 20,
   };
+}
+
+/**
+ * El globo de la guía. Propio y no el de la librería: el título dice de qué se
+ * trata el paso, y los botones son los mismos del resto de la app.
+ */
+function TourTooltip({ step, index, size, isLastStep, tooltipProps, primaryProps, backProps, skipProps }: TooltipRenderProps) {
+  return (
+    <div {...tooltipProps}
+      className="w-[min(340px,calc(100vw-1.5rem))] rounded-[26px] border border-white/70 bg-card shadow-flota p-4 text-left animate-fade-in">
+      <div className="flex items-center justify-between gap-3">
+        {step.title
+          ? <h2 className="text-[19px] font-medium leading-tight tracking-[-0.025em] text-foreground">{step.title}</h2>
+          : <span />}
+        <span className="font-marca text-xs text-muted-foreground shrink-0">{index + 1} de {size}</span>
+      </div>
+      <div className="mt-1.5 text-[15px] leading-snug text-[#3F3B4B]">{step.content}</div>
+      {/* El avance se ve de un vistazo: la barra se llena con cada paso. */}
+      <div aria-hidden="true" className="mt-3 h-1 rounded-full bg-ink/[0.08] overflow-hidden">
+        <div className="h-full rounded-full bg-primary transition-[width] duration-200" style={{ width: `${((index + 1) / size) * 100}%` }} />
+      </div>
+      <div className="mt-3 flex items-center gap-1.5">
+        {!isLastStep && (
+          <button {...skipProps} className="h-11 pr-3 text-sm font-semibold text-muted-foreground">Saltar</button>
+        )}
+        <span className="flex-1" />
+        {index > 0 && (
+          <button {...backProps} className="h-11 px-4 rounded-full bg-ink/[0.06] text-sm font-semibold text-foreground active:scale-[0.97] transition-transform duration-100">Atrás</button>
+        )}
+        <button {...primaryProps} className="h-11 px-5 rounded-full bg-ink text-background text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card active:scale-[0.97] transition-transform duration-100">
+          {isLastStep ? "Listo" : "Siguiente"}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function ProductTour({ tourId, steps, requireDesktop }: {
@@ -98,7 +149,10 @@ export default function ProductTour({ tourId, steps, requireDesktop }: {
   }, [tourId, requireDesktop]);
 
   // Se mide cuando arranca: recién ahí los destinos están en pantalla.
-  const shapedSteps = useMemo(() => (run ? steps.map(shapeFor) : steps), [run, steps]);
+  const shapedSteps = useMemo(
+    () => (run ? steps.map(shapeFor).filter((s): s is Step => s !== null) : steps),
+    [run, steps],
+  );
 
   // Publicar el estado real, no la intención: `run` ya incorpora la clave de
   // localStorage y el chequeo de viewport.
@@ -115,7 +169,8 @@ export default function ProductTour({ tourId, steps, requireDesktop }: {
     }
   };
 
-  if (!run) return null;
+  // Ningún paso se ve en esta pantalla: no arranca, y queda sin marcar como vista.
+  if (!run || shapedSteps.length === 0) return null;
 
   return (
     <Joyride
@@ -124,37 +179,24 @@ export default function ProductTour({ tourId, steps, requireDesktop }: {
       continuous
       scrollToFirstStep
       onEvent={handleEvent}
+      tooltipComponent={TourTooltip}
       locale={{
-        back: "Atrás", close: "Cerrar", last: "Finalizar", next: "Siguiente",
+        back: "Atrás", close: "Cerrar", last: "Listo", next: "Siguiente",
         nextWithProgress: "Siguiente ({current} de {total})", skip: "Saltar",
       }}
       options={{
-        buttons: ["back", "close", "primary", "skip"],
-        showProgress: true,
+        buttons: ["back", "primary", "skip"],
+        skipBeacon: true,
         primaryColor: "hsl(var(--primary))",
         textColor: "hsl(var(--foreground))",
         backgroundColor: "hsl(var(--card))",
         arrowColor: "hsl(var(--card))",
-        overlayColor: "rgba(30, 26, 46, 0.5)",
+        arrowBase: 18,
+        arrowSize: 9,
+        overlayColor: "rgba(28, 27, 37, 0.5)",
+        // Lo que se ilumina no puede quedar debajo de la barra de abajo o de la de arriba.
+        scrollOffset: 110,
         zIndex: 10000,
-      }}
-      styles={{
-        tooltip: { borderRadius: 16, fontSize: 14 },
-        tooltipContent: { padding: "8px 0", textAlign: "left" },
-        buttonPrimary: {
-          borderRadius: 9999,
-          border: "2px solid #1E1A2E",
-          boxShadow: "3px 3px 0 0 #1E1A2E",
-          padding: "8px 16px",
-        },
-        buttonBack: {
-          borderRadius: 9999,
-          border: "2px solid transparent",
-          color: "hsl(var(--muted-foreground))",
-        },
-        buttonSkip: {
-          color: "hsl(var(--muted-foreground))",
-        },
       }}
     />
   );

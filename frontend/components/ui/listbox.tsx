@@ -17,7 +17,7 @@ import { Check, ChevronDown } from "lucide-react";
  * in as `triggerClassName`.
  */
 
-export const PANEL = "rounded-2xl border-2 border-ink bg-card shadow-hero";
+export const PANEL = "rounded-[22px] border border-white/70 bg-card/95 backdrop-blur-xl shadow-flota animate-fade-in";
 
 /**
  * Anchors a portalled panel to a trigger. Measured after render rather than

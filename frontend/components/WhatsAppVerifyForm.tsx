@@ -4,7 +4,11 @@ import { useState } from "react";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/utils";
 import { COUNTRIES } from "@/lib/countries";
-import { Listbox } from "@/components/ui/listbox";
+import { FIELD, SelectField } from "@/components/ui/form";
+import { Button } from "@/components/ui/button";
+
+const SUBMIT = "w-full h-[52px] text-[15.5px]";
+const LINK = "min-h-[44px] text-sm text-[#4A4658] underline-offset-2 hover:underline disabled:opacity-50";
 
 export default function WhatsAppVerifyForm({ onVerified, onSkip }: {
   onVerified: () => void | Promise<void>;
@@ -62,77 +66,69 @@ export default function WhatsAppVerifyForm({ onVerified, onSkip }: {
     }
   };
 
+  const errorLine = error && <p role="alert" className="text-sm text-rose-800 bg-rose-50 rounded-xl px-3 py-2">{error}</p>;
+  const skipLink = onSkip && (
+    <button type="button" onClick={skipForNow} disabled={skipping} className={`block ${LINK}`}>
+      {skipping ? "Un momento…" : "No recibí un código, verificar más tarde"}
+    </button>
+  );
+
   if (phase === "idle") {
     return (
       <div className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Vinculá tu número para empezar.
-        </p>
-        <div className="flex gap-2">
-          <Listbox
+        <p className={`text-sm text-[#4A4658] ${onSkip ? "" : "px-1.5"}`}>Vinculá tu número para empezar.</p>
+        <div className="flex items-start gap-2">
+          <SelectField
             value={prefix}
             onChange={v => { setPrefix(v); setLocalPhone(""); }}
             options={COUNTRIES.map(c => ({ value: c.prefix, label: `${c.flag} +${c.prefix}` }))}
-            className="shrink-0"
-            triggerClassName="border rounded-lg px-2 py-2 text-sm bg-white flex items-center gap-1 whitespace-nowrap"
+            className="w-[7.5rem] shrink-0"
           />
           <input
             type="tel"
             value={localPhone}
             onChange={e => setLocalPhone(e.target.value.replace(/[^\d\s]/g, ""))}
             placeholder={country.placeholder}
+            aria-label="Tu número de WhatsApp"
             inputMode="numeric"
-            className="flex-1 border rounded-lg px-3 py-2 text-sm min-w-0"
+            className={`${FIELD} flex-1`}
           />
-          <button
-            onClick={sendCode}
-            disabled={loading || !localPhone.trim()}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50 shrink-0"
-          >
-            {loading ? "Enviando…" : "Enviar código"}
-          </button>
         </div>
-        {error && <p className="text-xs text-red-600">{error}</p>}
-        {onSkip && (
-          <button onClick={skipForNow} disabled={skipping} className="text-xs text-muted-foreground hover:underline disabled:opacity-50">
-            {skipping ? "Un momento..." : "No recibí un código, verificar más tarde"}
-          </button>
-        )}
+        <Button type="button" onClick={sendCode} disabled={loading || !localPhone.trim()} className={SUBMIT}>
+          {loading ? "Enviando…" : "Enviar código"}
+        </Button>
+        {errorLine}
+        {skipLink}
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-gray-700">
-        Te enviamos un código de 6 dígitos al <span className="font-medium">+{fullPhone}</span> por WhatsApp.
+      <p className={`text-sm text-[#4A4658] ${onSkip ? "" : "px-1.5"}`}>
+        Te enviamos un código de 6 dígitos al <span className="font-semibold text-foreground">+{fullPhone}</span> por WhatsApp.
       </p>
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={code}
-          onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-          placeholder="123456"
-          maxLength={6}
-          className="w-32 border rounded-lg px-3 py-2 text-sm text-center tracking-widest font-mono"
-        />
-        <button
-          onClick={verifyCode}
-          disabled={loading || code.length < 6}
-          className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50"
-        >
-          {loading ? "Verificando..." : "Verificar"}
+      <input
+        type="text"
+        value={code}
+        onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+        placeholder="123456"
+        aria-label="Código de 6 dígitos"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        maxLength={6}
+        className={`${FIELD} text-center tracking-[0.3em] tabular-nums`}
+      />
+      <Button type="button" onClick={verifyCode} disabled={loading || code.length < 6} className={SUBMIT}>
+        {loading ? "Verificando…" : "Verificar"}
+      </Button>
+      {errorLine}
+      <div>
+        <button type="button" onClick={() => { setPhase("idle"); setCode(""); setError(""); }} className={`block ${LINK}`}>
+          Cambiar número
         </button>
+        {skipLink}
       </div>
-      <button onClick={() => { setPhase("idle"); setCode(""); setError(""); }} className="text-xs text-muted-foreground hover:underline">
-        ← Cambiar número
-      </button>
-      {error && <p className="text-xs text-red-600">{error}</p>}
-      {onSkip && (
-        <button onClick={skipForNow} disabled={skipping} className="block text-xs text-muted-foreground hover:underline disabled:opacity-50">
-          {skipping ? "Un momento..." : "No recibí un código, verificar más tarde"}
-        </button>
-      )}
     </div>
   );
 }

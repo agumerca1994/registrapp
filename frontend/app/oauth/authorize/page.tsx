@@ -35,7 +35,7 @@ function isLoopback(host: string) {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <Card variant="hero" className="w-full max-w-md p-6 space-y-5">{children}</Card>
+      <Card className="w-full max-w-md !p-5 rounded-[28px] space-y-4">{children}</Card>
     </div>
   );
 }
@@ -80,9 +80,9 @@ function AuthorizeInner() {
   if (loadError) {
     return (
       <Shell>
-        <div className="flex items-center gap-2 text-destructive">
-          <AlertCircle className="w-5 h-5" />
-          <h1 className="font-semibold">No se puede continuar</h1>
+        <div className="flex items-center gap-2 text-foreground">
+          <AlertCircle className="w-5 h-5 text-destructive shrink-0" />
+          <h1 className="text-[22px] font-medium tracking-[-0.03em]">No se puede continuar</h1>
         </div>
         <p className="text-sm text-muted-foreground">{loadError}</p>
       </Shell>
@@ -102,7 +102,7 @@ function AuthorizeInner() {
   const header = (
     <div className="text-center">
       <AvatarConIA className="w-full max-w-[320px] mx-auto h-auto" surface="bg-card" />
-      <h1 className="font-display font-bold text-lg text-foreground break-words">
+      <h1 className="font-display text-[22px] font-medium leading-tight tracking-[-0.03em] text-foreground break-words">
         {info.client_name}
       </h1>
       <p className="text-sm text-muted-foreground">quiere conectarse a tood</p>
@@ -116,7 +116,7 @@ function AuthorizeInner() {
         <p className="text-sm text-muted-foreground">
           Iniciá sesión con Google para decidir si le das acceso a tu cuenta.
         </p>
-        <Button onClick={loginWithGoogle} className="w-full">
+        <Button onClick={loginWithGoogle} className="w-full h-[52px] text-[15.5px]">
           Continuar con Google
         </Button>
       </Shell>
@@ -130,7 +130,7 @@ function AuthorizeInner() {
         <p className="text-sm text-muted-foreground">
           Antes de conectar una app necesitás crear tu cuenta en tood, o unirte a una con un código.
         </p>
-        <Button asChild className="w-full">
+        <Button asChild className="w-full h-[52px] text-[15.5px]">
           <a href="/onboarding">Crear mi cuenta</a>
         </Button>
       </Shell>
@@ -143,7 +143,7 @@ function AuthorizeInner() {
 
       <div className="space-y-3">
         <div className="flex items-start gap-2">
-          <Eye className="w-4 h-4 mt-0.5 text-emerald-700 shrink-0" />
+          <Eye className="w-4 h-4 mt-0.5 text-[#3B2FB3] shrink-0" />
           <p className="text-sm text-foreground">
             {isBusiness(appUser) ? (
               <><strong>Lectura:</strong> ventas, gastos, stock, proveedores y tarjetas de tu
@@ -155,7 +155,7 @@ function AuthorizeInner() {
           </p>
         </div>
         <div className="flex items-start gap-2">
-          <Pencil className="w-4 h-4 mt-0.5 text-primary shrink-0" />
+          <Pencil className="w-4 h-4 mt-0.5 text-[#3B2FB3] shrink-0" />
           <p className="text-sm text-foreground">
             {isBusiness(appUser) ? (
               <><strong>Escritura:</strong> ventas, cierre del día, stock, productos, gastos y
@@ -170,7 +170,7 @@ function AuthorizeInner() {
         </div>
       </div>
 
-      <div className="text-xs text-muted-foreground space-y-1 border-t pt-3">
+      <div className="text-sm text-muted-foreground space-y-1 border-t border-border pt-3">
         <p>
           Conectado como <strong className="text-foreground">{appUser.email}</strong>
         </p>
@@ -178,12 +178,12 @@ function AuthorizeInner() {
           {isLoopback(info.redirect_host) ? (
             "Al terminar volvés a la app que abriste en esta compu."
           ) : (
-            <>Al terminar volvés a <span className="font-mono">{info.redirect_host}</span></>
+            <>Al terminar volvés a <span className="font-marca text-xs">{info.redirect_host}</span></>
           )}
         </p>
         <div className="flex flex-wrap gap-1 pt-1">
           {info.scopes.map(s => (
-            <Chip key={s} tone="emerald">
+            <Chip key={s} tone="violet">
               {s === "registrapp:read" ? connectorScopeLabel() : s}
             </Chip>
           ))}
@@ -193,10 +193,10 @@ function AuthorizeInner() {
       {actionError && <p className="text-sm text-destructive">{actionError}</p>}
 
       <div className="flex gap-2">
-        <Button onClick={() => decide("consent")} disabled={busy} className="flex-1">
+        <Button onClick={() => decide("consent")} disabled={busy} className="flex-1 h-[52px] text-[15.5px]">
           {busy ? "Autorizando…" : "Autorizar"}
         </Button>
-        <Button variant="outline" onClick={() => decide("deny")} disabled={busy} className="flex-1">
+        <Button variant="outline" onClick={() => decide("deny")} disabled={busy} className="flex-1 h-[52px] text-[15.5px]">
           Cancelar
         </Button>
       </div>

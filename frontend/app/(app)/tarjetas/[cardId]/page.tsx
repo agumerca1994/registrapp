@@ -1,78 +1,33 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { getErrorMessage } from "@/lib/utils";
-import { Plus, ChevronLeft, ChevronRight, X } from "lucide-react";
-import { Card as UiCard } from "@/components/ui/card";
+import { Plus, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { FIELD, FormGrid, SelectField, DateField } from "@/components/ui/form";
-import { StatementPaper } from "@/components/StatementPaper";
+import { DateField, FieldLabel, FormGrid, MonthField } from "@/components/ui/form";
+import { CurrentStatement, StatementPaper, type StatementData } from "@/components/StatementPaper";
 import { BankLogo } from "@/components/ui/bank-logo";
 import { features } from "@/lib/features";
 import { UploadStatementButton } from "@/components/UploadStatementButton";
+import { useReaccion } from "@/components/brand/ToodReaccion";
+import { MotionList } from "@/components/ui/motion-list";
+import { FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions } from "@/components/movimientos/FormSheet";
+import { DeleteChoiceSheet, ErrorNote, SubHeader } from "@/components/tarjetas/parts";
 
 const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
 interface Card { id: number; bank: string; alias: string; last_4_digits?: string; }
-interface StatementItem {
-  id: number; description: string; item_date: string; item_type: string;
-  amount: number; installment_count?: number; installment_number?: number;
-  category: { id: number; name: string; color?: string };
-}
-interface Statement {
-  id: number; card_id: number; year: number; month: number;
-  closing_date?: string; due_date?: string; total: number; items: StatementItem[];
-  due_date_effective?: string; due_date_is_estimated?: boolean;
-}
-type DeleteMode = "keep" | "delete";
-
-function DeleteStatementModal({ statement, onConfirm, onClose }: {
-  statement: Statement; onConfirm: (mode: DeleteMode) => Promise<void>; onClose: () => void;
-}) {
-  const [mode, setMode] = useState<DeleteMode>("keep");
-  const [deleting, setDeleting] = useState(false);
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <UiCard className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-foreground">Eliminar resumen</h3>
-          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          ¿Qué pasa con los gastos del resumen de <strong>{MONTH_NAMES[statement.month - 1]} {statement.year}</strong>?
-        </p>
-        <div className="space-y-2">
-          <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-accent">
-            <input type="radio" name="mode" value="keep" checked={mode === "keep"} onChange={() => setMode("keep")} className="mt-0.5" />
-            <div><p className="text-sm font-medium text-foreground">Mantener los gastos</p><p className="text-xs text-muted-foreground">Siguen en Egresos, ya sin el resumen.</p></div>
-          </label>
-          <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-accent">
-            <input type="radio" name="mode" value="delete" checked={mode === "delete"} onChange={() => setMode("delete")} className="mt-0.5" />
-            <div><p className="text-sm font-medium text-foreground">Eliminar los gastos</p><p className="text-xs text-muted-foreground">Se borran de Egresos todos los gastos de este resumen.</p></div>
-          </label>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onClose} className="flex-1">Cancelar</Button>
-          <Button variant="destructive" onClick={async () => { setDeleting(true); await onConfirm(mode); setDeleting(false); }}
-            disabled={deleting} className="flex-1">
-            {deleting ? "Eliminando..." : "Eliminar resumen"}
-          </Button>
-        </div>
-      </UiCard>
-    </div>
-  );
-}
+type Statement = StatementData;
 
 function NewStatementModal({ onSave, onClose }: {
   onSave: (year: number, month: number, closingDate: string, dueDate: string) => Promise<void>;
   onClose: () => void;
 }) {
   const now = new Date();
-  const [year, setYear] = useState(String(now.getFullYear()));
-  const [month, setMonth] = useState(String(now.getMonth() + 1));
+  const [period, setPeriod] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
   const [closingDate, setClosingDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [saving, setSaving] = useState(false);
@@ -83,50 +38,37 @@ function NewStatementModal({ onSave, onClose }: {
     setError("");
     setSaving(true);
     try {
-      await onSave(parseInt(year), parseInt(month), closingDate, dueDate);
+      const [year, month] = period.split("-").map(Number);
+      await onSave(year, month, closingDate, dueDate);
     } catch (err: unknown) {
       setError(getErrorMessage(err, "No se pudo crear el resumen"));
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <UiCard className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-foreground">Crear resumen</h3>
-          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-3">
+    <FormSheet title="Crear resumen" onClose={onClose}>
+      <form onSubmit={handleSubmit} className={FORM_SHEET_FORM}>
+        <div className={FORM_SHEET_BODY}>
+          <div>
+            <FieldLabel>Mes del resumen</FieldLabel>
+            <MonthField required value={period} onChange={setPeriod} />
+          </div>
           <FormGrid>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Mes</label>
-              <SelectField value={month} onChange={setMonth}
-                options={MONTH_NAMES.map((m, i) => ({ value: String(i + 1), label: m }))} />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Año</label>
-              <input type="number" className={FIELD} value={year} onChange={(e) => setYear(e.target.value)} required />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Fecha de cierre</label>
+              <FieldLabel hint="(opcional)">Cierre</FieldLabel>
               <DateField value={closingDate} onChange={setClosingDate} />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Fecha de vencimiento</label>
+              <FieldLabel hint="(opcional)">Vencimiento</FieldLabel>
               <DateField value={dueDate} onChange={setDueDate} />
             </div>
           </FormGrid>
-          {error && <p className="text-xs text-destructive">{error}</p>}
-          <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? "Creando..." : "Crear resumen"}
-            </Button>
-          </div>
-        </form>
-      </UiCard>
-    </div>
+          {error && <ErrorNote>{error}</ErrorNote>}
+        </div>
+        <FormSheetActions onCancel={onClose} saving={saving} label="Crear resumen" />
+      </form>
+    </FormSheet>
   );
 }
 
@@ -148,40 +90,51 @@ function EditStatementModal({ statement, onSave, onClose }: {
       await onSave(closingDate, dueDate);
     } catch (err: unknown) {
       setError(getErrorMessage(err, "No se pudieron guardar las fechas del resumen"));
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <UiCard className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-foreground">
-            Editar {MONTH_NAMES[statement.month - 1]} {statement.year}
-          </h3>
-          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-3">
+    <FormSheet title={`Fechas de ${MONTH_NAMES[statement.month - 1].toLowerCase()} ${statement.year}`} onClose={onClose}>
+      <form onSubmit={handleSubmit} className={FORM_SHEET_FORM}>
+        <div className={FORM_SHEET_BODY}>
           <FormGrid>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Fecha de cierre</label>
+              <FieldLabel hint="(opcional)">Cierre</FieldLabel>
               <DateField value={closingDate} onChange={setClosingDate} />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Fecha de vencimiento</label>
+              <FieldLabel hint="(opcional)">Vencimiento</FieldLabel>
               <DateField value={dueDate} onChange={setDueDate} />
             </div>
           </FormGrid>
-          {error && <p className="text-xs text-destructive">{error}</p>}
-          <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? "Guardando..." : "Guardar"}
-            </Button>
-          </div>
-        </form>
-      </UiCard>
-    </div>
+          {/* Vaciar el vencimiento real no deja el resumen sin fecha: vuelve a la estimación. */}
+          {!dueDate && statement.due_date_effective && (
+            <p className="px-1 text-xs leading-snug text-muted-foreground">
+              Sin vencimiento cargado, se estima con el día de vencimiento de la tarjeta.
+            </p>
+          )}
+          {error && <ErrorNote>{error}</ErrorNote>}
+        </div>
+        <FormSheetActions onCancel={onClose} saving={saving} label="Guardar" />
+      </form>
+    </FormSheet>
+  );
+}
+
+/** Punteada, como todo lo que todavía no es un hecho: esos resúmenes son compromisos, no papeles que mandó el banco. */
+function GroupToggle({ label, count, open, onToggle }: { label: string; count: number; open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className="w-full min-h-[52px] rounded-2xl border border-dashed border-border px-3.5 flex items-center gap-2.5 text-left active:scale-[0.99] transition-transform duration-100"
+    >
+      <ChevronRight className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${open ? "rotate-90" : ""}`} />
+      <span className="text-[15px] font-medium text-foreground">{label}</span>
+      <span className="font-marca text-xs text-muted-foreground">({count})</span>
+    </button>
   );
 }
 
@@ -189,9 +142,11 @@ export default function CardDetailPage() {
   useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const params = useParams();
   const router = useRouter();
+  const reaccionar = useReaccion();
   const cardId = Number(params.cardId);
   const [card, setCard] = useState<Card | null>(null);
   const [statements, setStatements] = useState<Statement[]>([]);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "failed" | "missing">("loading");
   const [showNewStmt, setShowNewStmt] = useState(false);
   const [deleteStmt, setDeleteStmt] = useState<Statement | null>(null);
   const [editStmt, setEditStmt] = useState<Statement | null>(null);
@@ -199,17 +154,22 @@ export default function CardDetailPage() {
   // null = untouched, so the default can follow the data (see below).
   const [pastOpen, setPastOpen] = useState<boolean | null>(null);
 
-  const load = async () => {
-    const [cardRes, stmtRes] = await Promise.all([
-      api.get("/credit-cards"),
-      api.get(`/credit-cards/${cardId}/statements`),
-    ]);
-    const found = (cardRes.data as Card[]).find((c) => c.id === cardId);
-    setCard(found || null);
-    setStatements(stmtRes.data);
-  };
+  const load = useCallback(async () => {
+    try {
+      const [cardRes, stmtRes] = await Promise.all([
+        api.get("/credit-cards"),
+        api.get(`/credit-cards/${cardId}/statements`),
+      ]);
+      const found = (cardRes.data as Card[]).find((c) => c.id === cardId);
+      setCard(found || null);
+      setStatements(stmtRes.data);
+      setLoadState(found ? "ready" : "missing");
+    } catch {
+      setLoadState("failed");
+    }
+  }, [cardId]);
 
-  useEffect(() => { load(); }, [cardId]);
+  useEffect(() => { load(); }, [load]);
 
   const handleCreateStatement = async (year: number, month: number, closingDate: string, dueDate: string) => {
     await api.post(`/credit-cards/${cardId}/statements`, {
@@ -217,13 +177,15 @@ export default function CardDetailPage() {
       closing_date: closingDate || null,
       due_date: dueDate || null,
     });
+    reaccionar("guardado", "Resumen creado");
     setShowNewStmt(false);
     await load();
   };
 
-  const handleDeleteStatement = async (mode: DeleteMode) => {
+  const handleDeleteStatement = async (keepExpenses: boolean) => {
     if (!deleteStmt) return;
-    await api.delete(`/credit-cards/statements/${deleteStmt.id}?keep_expenses=${mode === "keep"}`);
+    await api.delete(`/credit-cards/statements/${deleteStmt.id}?keep_expenses=${keepExpenses}`);
+    reaccionar("borrado", "Resumen eliminado");
     setDeleteStmt(null);
     await load();
   };
@@ -234,6 +196,7 @@ export default function CardDetailPage() {
       closing_date: closingDate || null,
       due_date: dueDate || null,
     });
+    reaccionar("guardado", "Fechas guardadas");
     setEditStmt(null);
     await load();
   };
@@ -258,91 +221,83 @@ export default function CardDetailPage() {
   // default in exactly that case; an explicit toggle always wins.
   const showPast = pastOpen ?? currentStatements.length === 0;
 
-  if (!card) return <div className="p-6 text-sm text-muted-foreground">Cargando...</div>;
+  if (loadState === "loading") {
+    return (
+      <div className="space-y-4" aria-busy="true">
+        <div className="h-11 w-48 rounded-2xl bg-ink/[0.06] animate-pulse" />
+        <div className="h-[132px] rounded-3xl bg-ink/[0.06] animate-pulse" />
+        <span className="sr-only">Cargando la tarjeta</span>
+      </div>
+    );
+  }
+
+  if (loadState !== "ready" || !card) {
+    return (
+      <div className="px-2 py-6">
+        <p className="text-[19px] font-medium tracking-[-0.02em] text-foreground">
+          {loadState === "missing" ? "Esta tarjeta ya no está." : "No pudimos traer esta tarjeta."}
+        </p>
+        <p className="mt-1 text-[15px] text-muted-foreground">
+          {loadState === "missing" ? "Puede que la hayan eliminado." : "Tus datos están bien. Fijate si tenés conexión y probá de nuevo."}
+        </p>
+        <div className="mt-3 flex gap-2">
+          {loadState === "failed" && <Button className="h-11" onClick={() => { setLoadState("loading"); load(); }}>Probar de nuevo</Button>}
+          <Button variant="outline" className="h-11" onClick={() => router.push("/tarjetas")}>Ir a Tarjetas</Button>
+        </div>
+      </div>
+    );
+  }
+
+  const paperProps = (stmt: Statement) => ({
+    statement: stmt,
+    onClick: () => router.push(`/tarjetas/${cardId}/${stmt.id}`),
+    onEdit: () => setEditStmt(stmt),
+    onDelete: () => setDeleteStmt(stmt),
+  });
+
+  const detail = [card.alias !== card.bank ? card.bank : null, card.last_4_digits ? `•••• ${card.last_4_digits}` : null]
+    .filter(Boolean).join(" · ");
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <div className="sticky top-0 z-10 bg-background pt-2 pb-3 -mx-4 px-4 md:-mx-8 md:px-8 flex items-center gap-3">
-        <button onClick={() => router.push("/tarjetas")} aria-label="Volver a Tarjetas" className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">
-          <ChevronLeft className="w-5 h-5" />
-        </button>
-        <BankLogo bankName={card.bank} size={36} className="shrink-0" />
-        <div className="flex-1 min-w-0">
-          <h2 className="text-xl md:text-2xl font-display font-bold text-foreground truncate">{card.alias}</h2>
-          <p className="text-sm text-muted-foreground">{card.bank}{card.last_4_digits ? ` •••• ${card.last_4_digits}` : ""}</p>
-        </div>
+      <SubHeader title={card.alias} sub={detail || undefined} backLabel="Volver a Tarjetas" backHref="/tarjetas"
+        leading={<BankLogo bankName={card.bank} size={40} className="shrink-0 border border-border" />}>
         {features.reconcile && <UploadStatementButton cardId={card.id} />}
-        <Button onClick={() => setShowNewStmt(true)} className="shrink-0">
-          <Plus className="w-4 h-4 shrink-0" />
+        <Button onClick={() => setShowNewStmt(true)} aria-label="Crear resumen" className="w-11 h-11 p-0 sm:w-auto sm:px-4">
+          <Plus className="w-[18px] h-[18px] shrink-0" />
           <span className="hidden sm:inline">Crear resumen</span>
         </Button>
-      </div>
+      </SubHeader>
 
       {statements.length === 0 ? (
-        <UiCard className="p-8 text-center text-muted-foreground">
-          <p className="text-sm">Esta tarjeta todavía no tiene resúmenes.</p>
-          <p className="text-xs mt-1">Creá el primero con el botón +.</p>
-        </UiCard>
+        <div className="px-2 py-6 text-center">
+          <p className="text-[19px] font-medium tracking-[-0.02em] text-foreground">Esta tarjeta todavía no tiene resúmenes.</p>
+          <p className="mt-1 text-[15px] text-muted-foreground">Se crean solos cuando cargás un gasto con esta tarjeta. También podés crear uno a mano.</p>
+          <Button className="mt-4 h-11" onClick={() => setShowNewStmt(true)}>Crear resumen</Button>
+        </div>
       ) : (
-        <div className="space-y-3">
+        <MotionList className="space-y-3">
           {futureStatements.length > 0 && (
             <>
-              {/* Dashed, like every not-yet-confirmed thing in the app (the
-                  `locked` Chip, the estimated due date): these statements are
-                  commitments, not documents the bank has sent. */}
-              <button
-                type="button"
-                onClick={() => setShowFuture((v) => !v)}
-                aria-expanded={showFuture}
-                className="w-full rounded-2xl border border-dashed border-border bg-card/60 p-3 sm:p-4 flex items-center gap-2.5 text-left transition-colors hover:bg-accent/40"
-              >
-                <ChevronRight className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${showFuture ? "rotate-90" : ""}`} />
-                <span className="text-sm font-medium text-foreground">Próximos resúmenes</span>
-                <span className="text-sm text-muted-foreground">({futureStatements.length})</span>
-              </button>
-              {showFuture && futureStatements.map((stmt) => (
-                <StatementPaper
-                  key={stmt.id}
-                  statement={stmt}
-                  onClick={() => router.push(`/tarjetas/${cardId}/${stmt.id}`)}
-                  onEdit={() => setEditStmt(stmt)}
-                  onDelete={() => setDeleteStmt(stmt)}
-                />
-              ))}
+              <GroupToggle label="Próximos resúmenes" count={futureStatements.length} open={showFuture} onToggle={() => setShowFuture((v) => !v)} />
+              {showFuture && (
+                <MotionList className="px-2">
+                  {futureStatements.map((stmt) => <StatementPaper key={stmt.id} {...paperProps(stmt)} />)}
+                </MotionList>
+              )}
             </>
           )}
 
-          {currentStatements.map((stmt) => (
-            <StatementPaper
-              key={stmt.id}
-              statement={stmt}
-              onClick={() => router.push(`/tarjetas/${cardId}/${stmt.id}`)}
-              onEdit={() => setEditStmt(stmt)}
-              onDelete={() => setDeleteStmt(stmt)}
-            />
-          ))}
+          {currentStatements.map((stmt) => <CurrentStatement key={stmt.id} {...paperProps(stmt)} />)}
 
           {pastStatements.length > 0 && (
             <>
-              <button
-                type="button"
-                onClick={() => setPastOpen(!showPast)}
-                aria-expanded={showPast}
-                className="w-full rounded-2xl border border-dashed border-border bg-card/60 p-3 sm:p-4 flex items-center gap-2.5 text-left transition-colors hover:bg-accent/40"
-              >
-                <ChevronRight className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${showPast ? "rotate-90" : ""}`} />
-                <span className="text-sm font-medium text-foreground">Resúmenes anteriores</span>
-                <span className="text-sm text-muted-foreground">({pastStatements.length})</span>
-              </button>
-              {showPast && pastStatements.map((stmt) => (
-                <StatementPaper
-                  key={stmt.id}
-                  statement={stmt}
-                  onClick={() => router.push(`/tarjetas/${cardId}/${stmt.id}`)}
-                  onEdit={() => setEditStmt(stmt)}
-                  onDelete={() => setDeleteStmt(stmt)}
-                />
-              ))}
+              <GroupToggle label="Resúmenes anteriores" count={pastStatements.length} open={showPast} onToggle={() => setPastOpen(!showPast)} />
+              {showPast && (
+                <MotionList className="px-2">
+                  {pastStatements.map((stmt) => <StatementPaper key={stmt.id} {...paperProps(stmt)} />)}
+                </MotionList>
+              )}
             </>
           )}
 
@@ -352,15 +307,25 @@ export default function CardDetailPage() {
           {(showPast || pastStatements.length === 0) && (
             <div className="flex items-center gap-3 pt-2">
               <div className="flex-1 border-t border-dashed border-border" />
-              <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wide shrink-0">Fin del historial</p>
+              <p className="font-marca text-xs text-muted-foreground shrink-0">Fin del historial</p>
               <div className="flex-1 border-t border-dashed border-border" />
             </div>
           )}
-        </div>
+        </MotionList>
       )}
 
       {showNewStmt && <NewStatementModal onSave={handleCreateStatement} onClose={() => setShowNewStmt(false)} />}
-      {deleteStmt && <DeleteStatementModal statement={deleteStmt} onConfirm={handleDeleteStatement} onClose={() => setDeleteStmt(null)} />}
+      {deleteStmt && (
+        <DeleteChoiceSheet
+          title="Eliminar resumen"
+          intro={<>¿Qué pasa con los gastos del resumen de <strong className="font-semibold">{MONTH_NAMES[deleteStmt.month - 1].toLowerCase()} {deleteStmt.year}</strong>?</>}
+          keep="Siguen en Egresos, ya sin el resumen."
+          remove="Se borran de Egresos todos los gastos de este resumen."
+          confirmLabel="Eliminar resumen"
+          onConfirm={handleDeleteStatement}
+          onClose={() => setDeleteStmt(null)}
+        />
+      )}
       {editStmt && <EditStatementModal statement={editStmt} onSave={handleUpdateStatement} onClose={() => setEditStmt(null)} />}
     </div>
   );

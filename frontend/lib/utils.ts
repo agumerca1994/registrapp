@@ -54,8 +54,18 @@ export function formatARS(amount: number | string): string {
   }).format(Number(amount));
 }
 
+/** Sin centavos: para Inicio, donde el número se mira de un vistazo. El detalle sigue con `formatARS`. */
+export function formatARSRound(amount: number | string): string {
+  if (amountsHidden) return `$ ${MASK}`;
+  return new Intl.NumberFormat("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    maximumFractionDigits: 0,
+  }).format(Number(amount));
+}
+
 export function formatPct(value: number | string): string {
-  return `${Number(value).toFixed(2)}%`;
+  return `${Number(value).toFixed(2).replace(".", ",")}%`;
 }
 
 export function formatDate(isoDate: string): string {
@@ -125,7 +135,7 @@ export function normalizePhoneNumber(rawPhone: string, availablePrefixes: string
 
 // Curated, visually-distinct palette for new expense categories — brand
 // violet first, then a spread of hues that stay legible on light bg.
-const CATEGORY_COLOR_PALETTE = [
+export const CATEGORY_COLOR_PALETTE = [
   "#5B4FE9", "#10b981", "#f59e0b", "#f43f5e", "#0ea5e9",
   "#14b8a6", "#f97316", "#ec4899", "#8b5cf6", "#64748b",
   "#22c55e", "#eab308", "#ef4444", "#06b6d4", "#a855f7", "#84cc16",

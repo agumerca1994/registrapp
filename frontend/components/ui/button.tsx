@@ -3,21 +3,18 @@ import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
-// Primary/outline buttons keep the small hard shadow + pill shape per the v3
-// hierarchy ("things you press stay 3D"). `ghost` opts out for low-emphasis
-// inline actions (e.g. an edit/delete icon in a flat list row) where the
-// sticker treatment would be too heavy for every row.
+// La acción principal es oscura: el violeta queda para la marca y los datos.
+// Lo que se aprieta se siente al tocarlo (se achica un poco), sin sombra.
+// `ghost` is for low-emphasis inline actions (e.g. an edit/delete icon in a
+// flat list row).
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-1.5 rounded-full text-sm font-medium transition-transform disabled:opacity-50 disabled:pointer-events-none",
+  "inline-flex items-center justify-center gap-1.5 rounded-full text-sm font-semibold transition-transform duration-100 active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none",
   {
     variants: {
       variant: {
-        primary:
-          "border-2 border-ink bg-primary text-primary-foreground px-4 py-2 shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
-        outline:
-          "border-2 border-ink bg-white text-foreground px-4 py-2 shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
-        destructive:
-          "border-2 border-ink bg-destructive text-destructive-foreground px-4 py-2 shadow-chip active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
+        primary: "bg-ink text-background px-4 py-2.5",
+        outline: "border border-border bg-card text-foreground px-4 py-2.5",
+        destructive: "bg-destructive text-destructive-foreground px-4 py-2.5",
         ghost: "px-2 py-1.5 text-muted-foreground hover:bg-accent hover:text-foreground",
       },
     },

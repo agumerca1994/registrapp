@@ -133,7 +133,7 @@ export default function LoginPage() {
              Google (pierde el estado del flujo y Firebase muere en una
              pantalla blanca que no es nuestra). El aviso va ANTES del botón
              porque después ya no hay dónde avisar. */
-          <div className="mt-10 w-full rounded-xl border-2 border-white/40 bg-white/10 px-4 py-3 text-left text-sm leading-snug">
+          <div className="mt-10 w-full rounded-[22px] border border-white/25 bg-white/15 px-4 py-3 text-left text-sm leading-snug">
             <p className="font-semibold">Estás en el navegador de otra app</p>
             <p className="mt-1 text-white/85">
               Acá el ingreso con Google no funciona.{" "}

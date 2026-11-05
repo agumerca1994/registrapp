@@ -1,28 +1,30 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
+import { ChevronDown, ListX, MoreVertical, Wallet } from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
-import { formatARS, formatDate, formatUSD, getErrorMessage, parseAmount } from "@/lib/utils";
-import {
-  ArrowLeftRight, CalendarDays, ChevronLeft, ChevronRight,
-  Pencil, Trash2, Wallet, MoreVertical, X,
-} from "lucide-react";
+import { formatARS, formatARSRound, formatUSD, getErrorMessage, parseAmount } from "@/lib/utils";
+import { useCountUp } from "@/components/ui/count-up";
 import { Card } from "@/components/ui/card";
-import { LoadedByTag, useLoadedBy } from "@/components/LoadedBy";
+import { ChoiceChips } from "@/components/ui/choice-chips";
 import { Fab } from "@/components/ui/fab";
-import { FIELD, FormGrid, SelectField, DateField } from "@/components/ui/form";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import {
-  SummaryCard, SummaryHeader, SummarySection, SummaryGrid, SummaryCell,
-  SummaryFigure, ChainRow, SummaryTotal,
-} from "@/components/ui/summary-card";
-import { Button } from "@/components/ui/button";
+import { ScrollRow } from "@/components/ui/scroll-row";
+import { DateField, FIELD, SegmentedToggle, SelectField } from "@/components/ui/form";
+import { PrivacyMenuItem } from "@/components/ui/privacy-toggle";
+import { MonthPill } from "@/components/dashboard/MonthPill";
+import { LoadedByTag, useLoadedBy } from "@/components/LoadedBy";
+import { useReaccion } from "@/components/brand/ToodReaccion";
+import { MotionList } from "@/components/ui/motion-list";
+import { BLOCK, GLASS } from "@/components/ui/glass";
+import { EntrySheet, SheetActions, SheetRow } from "@/components/movimientos/EntrySheet";
+import { AmountField, FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions } from "@/components/movimientos/FormSheet";
+import { LedgerRow, ledgerAmount } from "@/components/movimientos/Ledger";
+import { useNuevo } from "@/lib/nuevo";
 import { ARGENTINE_BANKS } from "@/lib/banks";
-
-const INPUT = FIELD;
 
 // Same vocabulary as the shared-expense settlement conversion (backend
 // RATE_TYPES). "personalizado" isn't offered as a household valuation setting —
@@ -109,44 +111,131 @@ const EMPTY_FORM = {
   adjustSign: "+" as "+" | "-",
 };
 
-function StatTile({ label, value, hint, tone = "neutral" }: {
-  label: string; value: string; hint?: string; tone?: "neutral" | "emerald" | "rose";
-}) {
-  const toneClass =
-    tone === "emerald" ? "text-emerald-600" : tone === "rose" ? "text-rose-600" : "text-foreground";
+// El bloque de color de la pantalla, como el de Inicio: la tenencia es su cifra.
+
+// Un monto en un campo se ve como se escribe acá: "4.069.000,00". El backend manda "4069000.00".
+const amountText = (n: number | string) =>
+  Number(n).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const LABEL = "text-xs font-medium text-muted-foreground";
+
+// "al blue de $ 1.570", pero "al MEP de $ 1.581".
+const rateName = (type: string) => {
+  const label = RATE_TYPE_LABELS[type] ?? type;
+  return label.length > 3 ? label.toLowerCase() : label;
+};
+
+const signed = (amount: number) => `${amount >= 0 ? "+" : "−"}${ledgerAmount(Math.abs(amount), "USD")}`;
+
+/** La tenencia: el número entero se lee primero, y los centavos sólo si los hay. */
+function HoldingFigure({ amount }: { amount: number }) {
+  const counted = useCountUp(amount);
+  const text = ledgerAmount(counted, "USD");
+  const comma = text.lastIndexOf(",");
   return (
-    <div className="p-3 md:p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`text-sm md:text-base font-bold break-words ${toneClass}`}>{value}</p>
-      {hint && <p className="text-[11px] text-muted-foreground mt-0.5">{hint}</p>}
+    <p className="font-medium leading-[1.08] tracking-[-0.045em] tabular-nums text-[clamp(2.5rem,13vw,3.5rem)]">
+      {comma >= 0 ? text.slice(0, comma) : text}
+      {comma >= 0 && <span className="text-[0.55em] tracking-[-0.02em] text-white/80">{text.slice(comma)}</span>}
+    </p>
+  );
+}
+
+function DetailRow({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className={`flex items-baseline justify-between gap-4 py-2 text-[15px] ${strong ? "font-semibold" : ""}`}>
+      <span className="min-w-0">{label}</span>
+      <span className="tabular-nums text-right shrink-0">{value}</span>
     </div>
+  );
+}
+
+/**
+ * El flujo del mes, aparte de la tenencia: una es cuánto hay, el otro qué pasó en
+ * estos 30 días. Lo que dio cero no se muestra, y si no pasó nada no hay bloque.
+ */
+function MonthFlow({ summary, holding, monthName }: { summary: Summary; holding: number; monthName: string }) {
+  const bought = Number(summary.bought_usd);
+  const sold = Number(summary.sold_usd);
+  const spent = Number(summary.spent_usd);
+  const adjusted = Number(summary.adjustments_usd);
+  const net = Number(summary.net_usd);
+  const start = Number(summary.holding_start);
+  const items = [
+    bought !== 0 && {
+      label: "Compré", value: ledgerAmount(bought, "USD"),
+      hint: Number(summary.bought_ars) > 0 ? `con ${formatARSRound(summary.bought_ars)}` : undefined,
+    },
+    sold !== 0 && {
+      label: "Vendí", value: ledgerAmount(sold, "USD"),
+      hint: Number(summary.sold_ars) > 0 ? `por ${formatARSRound(summary.sold_ars)}` : undefined,
+    },
+    spent !== 0 && { label: "Pagué", value: ledgerAmount(spent, "USD"), hint: "resúmenes vencidos y contado" },
+    adjusted !== 0 && { label: "Ajusté", value: signed(adjusted), hint: undefined },
+  ].filter(Boolean) as { label: string; value: string; hint?: string }[];
+  if (items.length === 0) return null;
+
+  // Con un solo movimiento, el neto repite la fila de al lado. El "de X a Y" va sólo
+  // si cierra: el neto toma el mes entero y la tenencia frena en hoy, y tampoco
+  // cuenta lo cobrado en dólares. Dos cifras que no cierran se leen como un error.
+  if (items.length > 1) {
+    const closes = Math.abs(start + net - holding) < 0.005;
+    items.push({
+      label: "Neto del mes", value: signed(net),
+      hint: closes ? `de ${ledgerAmount(start, "USD")} a ${ledgerAmount(holding, "USD")}` : undefined,
+    });
+  }
+
+  return (
+    <Card className="px-0 py-3.5 md:px-0 md:py-4">
+      <h2 className="px-4 md:px-5 mb-2 text-[15px] font-medium text-muted-foreground first-letter:uppercase">En {monthName}</h2>
+      {/* Altura fija: una grilla crecía con cada movimiento y mandaba la lista abajo. */}
+      <ScrollRow gap="gap-2" className="px-4 md:px-5">
+        {items.map(item => (
+          <div key={item.label} className="shrink-0 min-h-[52px] rounded-2xl border border-border bg-background/60 px-3 py-1.5">
+            <p className="text-xs text-muted-foreground">{item.label}</p>
+            <p className="text-[15px] font-semibold tabular-nums text-foreground whitespace-nowrap">{item.value}</p>
+            {item.hint && <p className="text-xs text-muted-foreground whitespace-nowrap">{item.hint}</p>}
+          </div>
+        ))}
+      </ScrollRow>
+    </Card>
   );
 }
 
 export default function DivisasPage() {
   useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
   const loadedBy = useLoadedBy();
+  const reaccionar = useReaccion();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
 
   const [summary, setSummary] = useState<Summary | null>(null);
   const [ops, setOps] = useState<Operation[]>([]);
+  // De qué mes son las operaciones ya cargadas: la lista de otro mes funde entera.
+  const [opsKey, setOpsKey] = useState("");
   const [rates, setRates] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [viewing, setViewing] = useState<Operation | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
 
   // Which of the three linked amount fields the user typed last, so we only
   // ever recompute the other one instead of fighting their input.
   const lastEdited = useRef<"usd" | "rate" | "ars">("usd");
 
-  const periodLabel = format(new Date(year, month - 1), "MMMM yyyy", { locale: es });
+  const monthDate = new Date(year, month - 1);
+  const periodLabel = format(monthDate, "MMMM yyyy", { locale: es });
+  const monthName = format(monthDate, "MMMM", { locale: es });
+  const pillLabel = format(monthDate, "MMM yyyy", { locale: es }).replace(".", "");
   const hasInitial = ops.some(o => o.op_type === "initial");
+  const isPast = year < today.getFullYear() || (year === today.getFullYear() && month < today.getMonth() + 1);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -157,9 +246,10 @@ export default function DivisasPage() {
       ]);
       setSummary(s.data);
       setOps(o.data);
+      setOpsKey(`${year}-${month}`);
       setError(null);
     } catch (e) {
-      setError(getErrorMessage(e, "No se pudieron cargar los dólares de este mes. Probá recargar la página."));
+      setError(getErrorMessage(e, "No se pudieron cargar los dólares de este mes."));
     } finally {
       setLoading(false);
     }
@@ -210,38 +300,44 @@ export default function DivisasPage() {
     const ars = parseAmount(next.ars);
 
     if (changed === "usd") {
-      next.ars = usd > 0 ? (usd * rate).toFixed(2) : "";
+      next.ars = usd > 0 ? amountText(usd * rate) : "";
     } else if (changed === "ars") {
-      next.usd = ars > 0 ? (ars / rate).toFixed(2) : "";
+      next.usd = ars > 0 ? amountText(ars / rate) : "";
     } else {
       // Quote changed — recompute whichever amount the user didn't type last,
       // so their own number is never overwritten.
-      if (lastEdited.current === "ars" && ars > 0) next.usd = (ars / rate).toFixed(2);
-      else if (usd > 0) next.ars = (usd * rate).toFixed(2);
+      if (lastEdited.current === "ars" && ars > 0) next.usd = amountText(ars / rate);
+      else if (usd > 0) next.ars = amountText(usd * rate);
     }
     return next;
   };
 
   const openNew = (opType: OpType) => {
     setEditId(null);
+    setFormError(null);
     setForm({
       ...EMPTY_FORM,
       op_type: opType,
-      operation_date: new Date().toISOString().slice(0, 10),
-      rate: rates.blue ? String(rates.blue) : "",
+      // La fecha de acá, no la de UTC: a la noche ya sería mañana.
+      operation_date: format(new Date(), "yyyy-MM-dd"),
+      rate: rates.blue ? amountText(rates.blue) : "",
     });
     setShowForm(true);
   };
 
+  useNuevo(() => openNew("buy"), "nuevo");
+
   const openEdit = (op: Operation) => {
     const amount = Number(op.foreign_amount);
+    setViewing(null);
     setEditId(op.id);
+    setFormError(null);
     setForm({
       op_type: op.op_type,
       operation_date: op.operation_date,
-      usd: String(Math.abs(amount)),
-      rate: op.rate ? String(Number(op.rate)) : "",
-      ars: op.ars_amount ? String(Number(op.ars_amount)) : "",
+      usd: amountText(Math.abs(amount)),
+      rate: op.rate ? amountText(op.rate) : "",
+      ars: op.ars_amount ? amountText(op.ars_amount) : "",
       rate_type: op.rate_type || "blue",
       entity: op.entity || "",
       // An entity that isn't on the bank list came from the free-text field.
@@ -253,12 +349,12 @@ export default function DivisasPage() {
     setShowForm(true);
   };
 
-  const closeForm = () => { setShowForm(false); setEditId(null); setForm(EMPTY_FORM); };
+  const closeForm = () => { setShowForm(false); setEditId(null); setForm(EMPTY_FORM); setFormError(null); };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const usd = parseAmount(form.usd);
-    if (!usd) { setError("Ingresá el monto en dólares."); return; }
+    if (!usd) { setFormError("Ingresá el monto en dólares."); return; }
 
     // The API takes a signed amount: positive means currency came in.
     let foreign = Math.abs(usd);
@@ -274,7 +370,7 @@ export default function DivisasPage() {
     };
     if (hasArsLeg) {
       const ars = parseAmount(form.ars);
-      if (!ars) { setError("Ingresá el monto en pesos."); return; }
+      if (!ars) { setFormError("Ingresá el monto en pesos."); return; }
       payload.ars_amount = ars;
       const rate = parseAmount(form.rate);
       if (rate) payload.rate = rate;
@@ -282,338 +378,365 @@ export default function DivisasPage() {
     }
 
     setSaving(true);
+    setFormError(null);
     try {
       if (editId) await api.patch(`/currency/operations/${editId}`, payload);
       else await api.post("/currency/operations", { ...payload, currency: "USD" });
+      const saved = form.op_type === "adjustment" ? "Ajuste guardado" : `${OP_LABELS[form.op_type]} guardada`;
       closeForm();
       await load();
-      setError(null);
+      reaccionar("guardado", saved);
     } catch (err) {
-      setError(getErrorMessage(err, "No se pudo guardar la operación. Probá de nuevo."));
+      setFormError(getErrorMessage(err, "No se pudo guardar la operación. Probá de nuevo."));
+      reaccionar("error", "No se pudo guardar");
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (op: Operation) => {
-    if (!confirm(`¿Eliminar esta operación de ${formatUSD(Math.abs(Number(op.foreign_amount)))}?`)) return;
+    setViewing(null);
     try {
       await api.delete(`/currency/operations/${op.id}`);
       await load();
+      reaccionar("borrado", "Operación eliminada");
     } catch (err) {
       setError(getErrorMessage(err, "No se pudo eliminar la operación. Probá de nuevo."));
+      reaccionar("error", "No se pudo eliminar");
     }
   };
 
-  const [showDetail, setShowDetail] = useState(false);
-
   const holding = Number(summary?.holding ?? 0);
   const valuation = summary?.valuation_ars != null ? Number(summary.valuation_ars) : null;
+  const canDetail = !!summary && hasInitial;
+  // Sin tenencia inicial ni operaciones no hay nada que contar: un "U$D 0" enorme no dice nada.
+  const nothingYet = !loading && !error && !hasInitial && ops.length === 0 && holding === 0;
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Divisas</h2>
-        <div className="flex items-center gap-1 shrink-0">
-          <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
-            <CalendarDays className="w-4 h-4 text-primary shrink-0" />
-            <button onClick={prev} aria-label="Mes anterior" className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
-            <button onClick={next} aria-label="Mes siguiente" className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-          {/* Declaring the opening balance happens once in the life of the
-              household, so it stays out of the way behind the ⋮ — but only
-              while there isn't one, since a second is rejected anyway. */}
-          {!hasInitial && !loading && (
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <button title="Más acciones"
-                  className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors outline-none">
-                  <MoreVertical className="w-5 h-5" />
-                </button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content align="end" sideOffset={4}
-                  className="bg-card border rounded-xl shadow-lg p-1 w-48 z-50">
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-[26px] md:text-3xl font-display font-medium tracking-[-0.035em] text-foreground">Divisas</h1>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <MonthPill compact label={pillLabel} onPrev={prev} onNext={next} />
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button title="Más acciones" aria-label="Más acciones"
+                className="w-11 h-11 -mr-2 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors outline-none">
+                <MoreVertical className="w-5 h-5" />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content align="end" sideOffset={4}
+                className="rounded-[22px] border border-white/70 bg-card/90 backdrop-blur-2xl backdrop-saturate-150 shadow-flota p-1.5 animate-fade-in w-48 z-50">
+                <DropdownMenu.Item asChild>
+                  <PrivacyMenuItem />
+                </DropdownMenu.Item>
+                {/* Declaring the opening balance happens once in the life of the
+                    household, so it stays out of the way behind the ⋮ — but only
+                    while there isn't one, since a second is rejected anyway. */}
+                {!hasInitial && !loading && (
                   <DropdownMenu.Item asChild>
                     <button onClick={() => openNew("initial")}
                       className="flex items-center justify-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full outline-none cursor-pointer">
                       <Wallet className="w-4 h-4 text-muted-foreground" /> Tenencia inicial
                     </button>
                   </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
-          )}
+                )}
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-          {error}
+        <div role="alert" className="rounded-[22px] border border-rose-200 bg-rose-50 px-4 py-3 text-[15px] text-rose-900">
+          <p>{error}</p>
+          <button onClick={load} className="mt-1 font-semibold underline">Probar de nuevo</button>
         </div>
       )}
 
-      {loading ? (
-        <Card variant="hero" className="h-36 animate-pulse" />
-      ) : (
+      {loading && !summary ? (
+        <div aria-busy="true" className={`${BLOCK} h-[168px] animate-pulse`}>
+          <span className="sr-only">Cargando tus dólares</span>
+        </div>
+      ) : summary && (
         <>
-          {/* Hero — the stock, in the same shape as the dashboard's:
-              see components/ui/summary-card.tsx. It carries across months:
-              dollars bought in one month to pay the next month's card
-              statement stay on the books. */}
-          <SummaryCard>
-            <SummaryHeader title="Tenencia en dólares"
-              open={showDetail}
-              onToggle={summary && hasInitial ? () => setShowDetail(v => !v) : undefined} />
-            <SummarySection label="Estado actual" />
-
-            <SummaryGrid cols={1}>
-              <SummaryCell figure>
-                <SummaryFigure
-                  value={formatUSD(holding)}
-                  sub={valuation === null ? undefined : (
-                    <>
-                      ≈ {formatARS(valuation)}
-                      <span className="text-muted-foreground/70">
-                        {" "}· {RATE_TYPE_LABELS[summary!.rate_type] ?? summary!.rate_type} {formatARS(Number(summary!.rate))}
-                      </span>
-                    </>
-                  )}
-                />
-              </SummaryCell>
-
-              {/* The month tiles below only cover the selected month, but the
-                  holding accumulates since start_date — without this chain the
-                  total is impossible to reconcile from the screen. */}
-              {showDetail && summary && hasInitial && (
-                <SummaryCell className="border-t border-border/60">
-                  <p className="text-xs text-muted-foreground pb-1">
-                    Desde tu tenencia inicial del {formatDate(summary.start_date!)}
-                  </p>
-                  <ChainRow label="Tenencia inicial" value={formatUSD(Number(summary.initial))} />
-                  {Number(summary.total_bought) !== 0 && (
-                    <ChainRow label="Comprado" sign="+" value={formatUSD(Number(summary.total_bought))} />
-                  )}
-                  {Number(summary.total_earned) !== 0 && (
-                    <ChainRow label="Ingresado en USD" sign="+" value={formatUSD(Number(summary.total_earned))} />
-                  )}
-                  {Number(summary.total_sold) !== 0 && (
-                    <ChainRow label="Vendido" sign="−" value={formatUSD(Number(summary.total_sold))} />
-                  )}
-                  {Number(summary.total_spent) !== 0 && (
-                    <ChainRow label="Pagado en USD" sign="−" value={formatUSD(Number(summary.total_spent))} />
-                  )}
-                  {Number(summary.total_adjustments) !== 0 && (
-                    <ChainRow label="Ajustes"
-                      sign={Number(summary.total_adjustments) >= 0 ? "+" : "−"}
-                      value={formatUSD(Math.abs(Number(summary.total_adjustments)))} />
-                  )}
-                </SummaryCell>
-              )}
-            </SummaryGrid>
-
-            {showDetail && summary && hasInitial && (
-              <SummaryTotal label="Tengo" items={[formatUSD(holding)]} />
-            )}
-
-            {/* What the bank will actually debit — gross, including the share
-                of shared expenses that belongs to other participants. The
-                shortfall is a cash-timing warning, not a net-worth one: the
-                holding above already assumes participants reimburse. */}
-            {summary && Number(summary.pending_usd) > 0 && (() => {
-              const total = Number(summary.pending_usd);
-              const own = Number(summary.pending_own_usd);
-              const others = Number(summary.pending_others_usd);
-              const shortfall = total - holding;
-              return (
-                <div className="m-4 md:m-6 mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs">
-                  <p className="font-semibold text-amber-900">
-                    Vence {summary.next_due_date ? `el ${formatDate(summary.next_due_date)}` : "próximamente"}: {formatUSD(total)}
-                  </p>
-                  {others > 0 && (
-                    <div className="mt-1.5 space-y-0.5 text-amber-800">
-                      <p className="flex justify-between gap-4">
-                        <span>tuyo</span>
-                        <span className="tabular-nums">{formatUSD(own)}</span>
-                      </p>
-                      <p className="flex justify-between gap-4">
-                        <span>de participantes</span>
-                        <span className="tabular-nums">{formatUSD(others)}</span>
-                      </p>
-                    </div>
-                  )}
-                  <p className={`mt-1.5 pt-1.5 border-t border-amber-200 font-semibold ${shortfall > 0 ? "text-rose-700" : "text-emerald-700"}`}>
-                    {shortfall > 0
-                      ? `Faltan ${formatUSD(shortfall)} si nadie te transfirió todavía`
-                      : `Te alcanza: te quedarían ${formatUSD(-shortfall)} en la cuenta`}
-                  </p>
-                  {others > 0 && (
-                    <p className="mt-1 text-[11px] text-amber-700/90">
-                      Tuyo una vez liquidado: {formatUSD(holding - own)}. El banco debita
-                      el total y los participantes te reintegran su parte.
-                    </p>
-                  )}
-                </div>
-              );
-            })()}
-            {!hasInitial && (
-              <p className="m-4 md:m-6 mt-4 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                Cargá tu <strong>tenencia inicial</strong> para que este número refleje los dólares
-                que ya tenías antes de empezar a registrar.
+          {/* El stock, no el flujo: los dólares comprados un mes para pagar el
+              resumen del siguiente siguen acá hasta que salen. */}
+          {!nothingYet && <section className={BLOCK}>
+            <div className="px-2.5">
+              <p className="text-[16.5px] font-medium">
+                {isPast ? `Tenías al cierre de ${monthName}` : "Tenés hoy"}
               </p>
+              <HoldingFigure amount={holding} />
+              {valuation !== null && holding !== 0 && (
+                <p className="mt-1.5 text-[15.5px] leading-snug">
+                  Son {formatARSRound(valuation)} al {rateName(summary.rate_type)} de {formatARSRound(Number(summary.rate))}
+                </p>
+              )}
+            </div>
+
+            {/* The month rows only cover the selected month, but the holding
+                accumulates since start_date — without this chain the total is
+                impossible to reconcile from the screen. */}
+            {canDetail && (
+              <MotionList className={`mt-3.5 ${GLASS}`}>
+                <button onClick={() => setShowDetail(v => !v)} aria-expanded={showDetail}
+                  className="w-full min-h-[46px] px-4 flex items-center justify-between gap-3 text-[15px] font-medium">
+                  {showDetail ? "Ver menos" : "Ver detalle"}
+                  <ChevronDown className={`w-[18px] h-[18px] transition-transform ${showDetail ? "rotate-180" : ""}`} />
+                </button>
+                {showDetail && (
+                  <div className="px-4 pb-2 divide-y divide-white/[0.18] border-t border-white/[0.18]">
+                    <DetailRow label={`Tenencia inicial, ${format(parseISO(summary.start_date!), "d MMM yyyy", { locale: es }).replace(".", "")}`}
+                      value={formatUSD(Number(summary.initial))} />
+                    {Number(summary.total_bought) !== 0 && (
+                      <DetailRow label="Comprado" value={`+${formatUSD(Number(summary.total_bought))}`} />
+                    )}
+                    {Number(summary.total_earned) !== 0 && (
+                      <DetailRow label="Cobrado en dólares" value={`+${formatUSD(Number(summary.total_earned))}`} />
+                    )}
+                    {Number(summary.total_sold) !== 0 && (
+                      <DetailRow label="Vendido" value={`−${formatUSD(Number(summary.total_sold))}`} />
+                    )}
+                    {Number(summary.total_spent) !== 0 && (
+                      <DetailRow label="Pagado en dólares" value={`−${formatUSD(Number(summary.total_spent))}`} />
+                    )}
+                    {Number(summary.total_adjustments) !== 0 && (
+                      <DetailRow label="Ajustes"
+                        value={`${Number(summary.total_adjustments) >= 0 ? "+" : "−"}${formatUSD(Math.abs(Number(summary.total_adjustments)))}`} />
+                    )}
+                    <DetailRow strong label="Tengo" value={formatUSD(holding)} />
+                  </div>
+                )}
+              </MotionList>
             )}
-          </SummaryCard>
+          </section>}
 
-
-          {/* Flow — what happened inside the selected month. */}
-          {summary && (
-            <Card className="p-0 md:p-0">
-              <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0">
-                <StatTile
-                  label="Compré" tone="emerald"
-                  value={formatUSD(Number(summary.bought_usd))}
-                  hint={Number(summary.bought_ars) > 0 ? `con ${formatARS(Number(summary.bought_ars))}` : undefined}
-                />
-                <StatTile
-                  label="Vendí" tone="rose"
-                  value={formatUSD(Number(summary.sold_usd))}
-                  hint={Number(summary.sold_ars) > 0 ? `por ${formatARS(Number(summary.sold_ars))}` : undefined}
-                />
-                <StatTile
-                  label="Pagué" tone="rose"
-                  value={formatUSD(Number(summary.spent_usd))}
-                  hint="resúmenes vencidos + contado"
-                />
-                <StatTile
-                  label="Neto del mes"
-                  tone={Number(summary.net_usd) >= 0 ? "emerald" : "rose"}
-                  value={`${Number(summary.net_usd) >= 0 ? "+" : "−"}${formatUSD(Math.abs(Number(summary.net_usd)))}`}
-                  hint={`de ${formatUSD(Number(summary.holding_start))} a ${formatUSD(holding)}`}
-                />
-              </div>
-            </Card>
+          {!hasInitial && !loading && (
+            <section className="rounded-3xl p-4 bg-accent border border-[#CFC9E4]">
+              <p className="text-[15.5px] font-semibold text-foreground">¿Ya tenías dólares?</p>
+              <p className="mt-0.5 text-[15px] leading-snug text-[#4A4658]">
+                {nothingYet
+                  ? "Cargá tu tenencia inicial: lo que tenías antes de empezar a registrar. Desde ahí se cuenta todo."
+                  : "Cargá tu tenencia inicial para que este número refleje lo que tenías antes de empezar a registrar."}
+              </p>
+              <button onClick={() => openNew("initial")}
+                className="mt-3 h-11 px-5 rounded-full bg-ink text-background text-sm font-semibold active:scale-[0.97] transition-transform duration-100">
+                Cargar tenencia inicial
+              </button>
+            </section>
           )}
+
+          {/* What the bank will actually debit — gross, including the share
+              of shared expenses that belongs to other participants. The
+              shortfall is a cash-timing warning, not a net-worth one: the
+              holding above already assumes participants reimburse. */}
+          {Number(summary.pending_usd) > 0 && (() => {
+            const total = Number(summary.pending_usd);
+            const own = Number(summary.pending_own_usd);
+            const others = Number(summary.pending_others_usd);
+            const shortfall = total - holding;
+            return (
+              <section className="rounded-3xl p-4 bg-accent border border-[#CFC9E4] text-[15px]">
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="font-semibold text-foreground">
+                    Vence {summary.next_due_date
+                      ? `el ${format(parseISO(summary.next_due_date), "d 'de' MMMM", { locale: es })}`
+                      : "próximamente"}
+                  </p>
+                  <p className="text-lg font-medium tabular-nums text-foreground shrink-0">{ledgerAmount(total, "USD")}</p>
+                </div>
+                <p className="mt-0.5 text-[#3B2FB3] font-medium">
+                  {shortfall > 0
+                    ? `Faltan ${ledgerAmount(shortfall, "USD")} si nadie te transfirió todavía`
+                    : `Te alcanza: te quedarían ${ledgerAmount(-shortfall, "USD")} en la cuenta`}
+                </p>
+                {others > 0 && (
+                  <p className="mt-1.5 text-sm leading-snug text-[#4A4658]">
+                    {ledgerAmount(own, "USD")} son tuyos y {ledgerAmount(others, "USD")} de participantes. El banco debita
+                    el total y ellos te reintegran su parte: una vez liquidado te quedan {ledgerAmount(holding - own, "USD")}.
+                  </p>
+                )}
+              </section>
+            );
+          })()}
+
+          <MonthFlow summary={summary} holding={holding} monthName={monthName} />
         </>
       )}
 
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={closeForm}>
-          <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg p-5 max-h-[92vh] overflow-y-auto"
-            onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-foreground">
-              {editId ? "Editar operación" : "Nueva operación"}
-            </h3>
-            <button type="button" onClick={closeForm} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
+      {!(error && ops.length === 0) && <section className="px-2">
+        <h2 className="mb-1 text-[22px] font-medium tracking-[-0.03em] text-foreground">Operaciones</h2>
+        <MotionList key={opsKey} className="animate-page-in">
+        {!loading && !error && ops.length === 0 ? (
+          <div className="py-4 text-[15px] text-muted-foreground">
+            <ListX className="w-7 h-7 mb-2 text-muted-foreground/50" strokeWidth={1.6} aria-hidden="true" />
+            No hay operaciones en {periodLabel}. Cuando compres o vendas dólares, cargalo con el +.
           </div>
-          <form onSubmit={handleSubmit} className="space-y-3">
+        ) : (
+          <MotionList>
+            {ops.map((op, i) => {
+              const amount = Number(op.foreign_amount);
+              const pesos = op.ars_amount != null ? formatARSRound(op.ars_amount) : null;
+              const who = loadedBy.nameOf(op.user_id);
+              const line = [op.entity, pesos && (op.op_type === "buy" ? `con ${pesos}` : `por ${pesos}`), op.notes].filter(Boolean).join(" · ");
+              return (
+                <LedgerRow key={op.id}
+                  date={op.operation_date}
+                  showDate={i === 0 || ops[i - 1].operation_date !== op.operation_date}
+                  title={OP_LABELS[op.op_type]}
+                  sub={(line || who) ? <>
+                    {line && <span className="block truncate">{line}</span>}
+                    <LoadedByTag name={who} />
+                  </> : undefined}
+                  amount={signed(amount)}
+                  positive={amount > 0}
+                  onOpen={() => setViewing(op)}
+                />
+              );
+            })}
+          </MotionList>
+        )}
+        </MotionList>
+      </section>}
 
-            <div className="flex gap-2">
-              {(["buy", "sell", "adjustment"] as const).map(t => (
-                <button key={t} type="button"
-                  onClick={() => setForm(p => ({ ...p, op_type: t }))}
-                  disabled={form.op_type === "initial"}
-                  className={`flex-1 py-1.5 text-xs rounded-full border-2 font-medium transition-colors disabled:opacity-40 ${form.op_type === t ? "border-ink bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-accent"}`}>
-                  {OP_LABELS[t]}
-                </button>
-              ))}
-            </div>
+      <Fab label="Nueva operación" onClick={() => openNew("buy")} />
 
-            {form.op_type === "initial" && (
-              <p className="text-xs text-primary bg-accent border border-border rounded-lg px-3 py-2">
-                Los dólares que ya tenías a esta fecha. Los consumos en USD
-                <strong> anteriores</strong> a ella no se descuentan: ya están reflejados en este número.
-              </p>
-            )}
-            {form.op_type === "buy" && (
-              <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                No es un egreso: los pesos no se gastan, cambian de moneda. No entra en tus
-                categorías de gastos, pero sí descuenta de los pesos disponibles del mes.
-              </p>
-            )}
+      {viewing && (
+        <EntrySheet
+          date={viewing.operation_date}
+          title={OP_LABELS[viewing.op_type]}
+          amount={`${Number(viewing.foreign_amount) >= 0 ? "+" : "−"}${formatUSD(Math.abs(Number(viewing.foreign_amount)))}`}
+          positive={Number(viewing.foreign_amount) > 0}
+          onClose={() => setViewing(null)}
+          footer={<SheetActions noun="movimiento" onEdit={() => openEdit(viewing)} onDelete={() => handleDelete(viewing)} />}
+        >
+          {viewing.ars_amount != null && (
+            <SheetRow label={viewing.op_type === "buy" ? "Pesos que pagué" : "Pesos que recibí"}>
+              <span className="tabular-nums">{formatARS(viewing.ars_amount)}</span>
+            </SheetRow>
+          )}
+          {viewing.rate != null && (
+            <SheetRow label="Cotización">
+              <span className="tabular-nums">
+                {viewing.rate_type && RATE_TYPE_LABELS[viewing.rate_type] ? `${RATE_TYPE_LABELS[viewing.rate_type]} ` : ""}{formatARS(viewing.rate)}
+              </span>
+            </SheetRow>
+          )}
+          {viewing.entity && <SheetRow label="Entidad">{viewing.entity}</SheetRow>}
+          {viewing.notes && <SheetRow label="Notas">{viewing.notes}</SheetRow>}
+          {loadedBy.nameOf(viewing.user_id) && <SheetRow label="Lo cargó">{loadedBy.nameOf(viewing.user_id)}</SheetRow>}
+        </EntrySheet>
+      )}
 
-            <FormGrid>
+      {showForm && (
+        <FormSheet
+          title={form.op_type === "initial" ? "Tenencia inicial" : editId ? "Editar operación" : "Nueva operación"}
+          onClose={closeForm}
+        >
+          <form onSubmit={handleSubmit} className={FORM_SHEET_FORM}>
+            <div className={FORM_SHEET_BODY}>
+              {form.op_type !== "initial" && (
+                <SegmentedToggle
+                  ariaLabel="Tipo de operación"
+                  value={form.op_type as "buy" | "sell" | "adjustment"}
+                  onChange={t => setForm(p => ({ ...p, op_type: t }))}
+                  options={(["buy", "sell", "adjustment"] as const).map(t => ({ value: t, label: OP_LABELS[t] }))}
+                />
+              )}
+
+              <AmountField
+                label={form.op_type === "buy" ? "Dólares que compré"
+                  : form.op_type === "sell" ? "Dólares que vendí"
+                  : form.op_type === "initial" ? "Dólares que tenías"
+                  : "Dólares"}
+                currency="USD"
+                toggle={form.op_type === "adjustment" ? (
+                  <SegmentedToggle
+                    ariaLabel="Sentido del ajuste" className="w-[132px]"
+                    value={form.adjustSign}
+                    onChange={v => setForm(p => ({ ...p, adjustSign: v }))}
+                    options={[{ value: "+", label: "Suma" }, { value: "-", label: "Resta" }]}
+                  />
+                ) : undefined}
+                value={form.usd}
+                onChange={e => setForm(p => syncAmounts({ ...p, usd: e.target.value }, "usd"))}
+                required
+              />
+
+              {form.op_type === "initial" && (
+                <p className="px-1.5 text-sm leading-snug text-[#4A4658]">
+                  Los dólares que ya tenías a esta fecha. Los consumos en dólares anteriores a ella no se
+                  descuentan: ya están reflejados en este número.
+                </p>
+              )}
+              {form.op_type === "buy" && (
+                <p className="px-1.5 text-sm leading-snug text-[#4A4658]">
+                  No es un egreso: los pesos no se gastan, cambian de moneda. No entra en tus categorías
+                  de gastos, pero sí descuenta de los pesos disponibles del mes.
+                </p>
+              )}
+
+              {showConverter && (
+                <>
+                  {Object.values(rates).some(v => v > 0) && (
+                    <ChoiceChips
+                      ariaLabel="Cotización del día"
+                      value={form.rate_type}
+                      onChange={type => setForm(p => syncAmounts({ ...p, rate: amountText(rates[type]), rate_type: type }, "rate"))}
+                      options={Object.entries(rates).filter(([, v]) => v > 0).map(([type, value]) => ({
+                        value: type,
+                        label: `${RATE_TYPE_LABELS[type]} ${Math.round(value).toLocaleString("es-AR")}`,
+                      }))}
+                    />
+                  )}
+                  <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
+                    <div>
+                      <label className={LABEL}>Cotización ($ por U$D)</label>
+                      <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={`${FIELD} tabular-nums`}
+                        aria-label="Cotización"
+                        value={form.rate}
+                        onChange={e => setForm(p => syncAmounts({ ...p, rate: e.target.value, rate_type: "personalizado" }, "rate"))}
+                        required={hasArsLeg} />
+                    </div>
+                    <div>
+                      <label className={LABEL}>
+                        {form.op_type === "buy" ? "Pesos que pagué"
+                          : form.op_type === "sell" ? "Pesos que recibí"
+                          : "Equivalente en pesos"}
+                      </label>
+                      <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={`${FIELD} tabular-nums`}
+                        aria-label="Pesos"
+                        value={form.ars}
+                        onChange={e => setForm(p => syncAmounts({ ...p, ars: e.target.value }, "ars"))}
+                        required={hasArsLeg} />
+                    </div>
+                  </div>
+                  {!hasArsLeg && (
+                    <p className="px-1.5 text-sm leading-snug text-[#4A4658]">
+                      Sólo para calcular los dólares. Un ajuste no mueve pesos, así que no se guarda ni afecta tu balance.
+                    </p>
+                  )}
+                </>
+              )}
+
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Fecha</label>
+                <label className={LABEL}>Fecha</label>
                 <DateField required value={form.operation_date}
                   onChange={v => setForm(p => ({ ...p, operation_date: v }))} />
               </div>
 
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Monto</label>
-                <div className="flex gap-2">
-                  {form.op_type === "adjustment" && (
-                    <SelectField className="w-20 shrink-0" value={form.adjustSign}
-                      onChange={v => setForm(p => ({ ...p, adjustSign: v as "+" | "-" }))}
-                      options={[{ value: "+", label: "+" }, { value: "-", label: "−" }]} />
-                  )}
-                  <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={INPUT}
-                    value={form.usd}
-                    onChange={e => setForm(p => syncAmounts({ ...p, usd: e.target.value }, "usd"))}
-                    required />
-                </div>
-              </div>
-
-              {showConverter && (
-                <>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Cotización ($ por U$D)</label>
-                    <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={INPUT}
-                      value={form.rate}
-                      onChange={e => setForm(p => syncAmounts({ ...p, rate: e.target.value, rate_type: "personalizado" }, "rate"))}
-                      required={hasArsLeg} />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">
-                      {form.op_type === "buy" ? "Pesos que pagué"
-                        : form.op_type === "sell" ? "Pesos que recibí"
-                        : "Equivalente en pesos"}
-                    </label>
-                    <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={INPUT}
-                      value={form.ars}
-                      onChange={e => setForm(p => syncAmounts({ ...p, ars: e.target.value }, "ars"))}
-                      required={hasArsLeg} />
-                    {!hasArsLeg && (
-                      <p className="text-[11px] text-muted-foreground mt-1">
-                        Solo para calcular los dólares. Un ajuste no mueve pesos, así que no
-                        se guarda ni afecta tu balance.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Full width and on one line: inside the Cotización column
-                      these five wrapped onto three rows. Below `sm` the modal
-                      is a single column, so there they scroll sideways rather
-                      than shrink to unreadable. */}
-                  <div className="sm:col-span-2 flex gap-1 overflow-x-auto no-scrollbar pb-0.5 -mt-1">
-                    {Object.entries(rates).filter(([, v]) => v > 0).map(([type, value]) => (
-                      <button key={type} type="button"
-                        onClick={() => setForm(p => syncAmounts({ ...p, rate: String(value), rate_type: type }, "rate"))}
-                        className={`shrink-0 px-2 py-0.5 text-[11px] rounded-full border transition-colors ${form.rate_type === type ? "border-ink bg-accent text-primary font-medium" : "border-border text-muted-foreground hover:bg-accent"}`}>
-                        {RATE_TYPE_LABELS[type]} {value.toLocaleString("es-AR")}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-
               {hasArsLeg && (
-                <div className="sm:col-span-2">
-                  <label className="text-xs font-medium text-muted-foreground">Entidad (opcional)</label>
-                  <div className="flex gap-2 mt-1 mb-2">
-                    {(["banco", "personalizado"] as const).map(mode => (
-                      <button key={mode} type="button"
-                        onClick={() => setForm(p => ({ ...p, entityMode: mode, entity: "" }))}
-                        className={`px-3 py-1 text-xs rounded-full border-2 font-medium transition-colors ${form.entityMode === mode ? "border-ink bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-accent"}`}>
-                        {mode === "banco" ? "Banco" : "Personalizado"}
-                      </button>
-                    ))}
+                <div>
+                  <div className="flex items-center justify-between gap-3 mb-1">
+                    <label className={LABEL}>Entidad (opcional)</label>
+                    <SegmentedToggle
+                      ariaLabel="Tipo de entidad" className="w-[190px]"
+                      value={form.entityMode}
+                      onChange={mode => setForm(p => ({ ...p, entityMode: mode, entity: "" }))}
+                      options={[{ value: "banco", label: "Banco" }, { value: "personalizado", label: "Personalizado" }]}
+                    />
                   </div>
                   {form.entityMode === "banco" ? (
                     <SelectField value={form.entity}
@@ -621,77 +744,25 @@ export default function DivisasPage() {
                       placeholder="Sin especificar"
                       options={ARGENTINE_BANKS.map(b => ({ value: b.name, label: b.name }))} />
                   ) : (
-                    <input className={INPUT} placeholder="Broker, cueva, persona..."
+                    <input className={FIELD} placeholder="Broker, cueva, persona..." aria-label="Entidad"
                       value={form.entity}
                       onChange={e => setForm(p => ({ ...p, entity: e.target.value }))} />
                   )}
                 </div>
               )}
 
-              <div className="sm:col-span-2">
-                <label className="text-xs font-medium text-muted-foreground">Notas (opcional)</label>
-                <input className={INPUT} value={form.notes}
+              <div>
+                <label className={LABEL}>Notas (opcional)</label>
+                <input className={FIELD} aria-label="Notas" value={form.notes}
                   onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
               </div>
-            </FormGrid>
 
-            <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
-              <Button type="submit" disabled={saving}>{saving ? "Guardando…" : "Guardar operación"}</Button>
+              {formError && <p role="alert" className="px-1.5 text-sm text-destructive">{formError}</p>}
             </div>
+            <FormSheetActions onCancel={closeForm} saving={saving} label="Guardar operación" />
           </form>
-          </Card>
-        </div>
+        </FormSheet>
       )}
-
-      <Fab label="Nueva operación" onClick={() => openNew("buy")} />
-
-      <Card className="p-0 md:p-0 divide-y">
-        {ops.length === 0 && !loading ? (
-          <div className="p-8 text-center">
-            <ArrowLeftRight className="w-8 h-8 mx-auto text-muted-foreground/40" />
-            <p className="mt-2 text-sm text-muted-foreground">
-              No hay operaciones en {periodLabel}.
-            </p>
-          </div>
-        ) : (
-          ops.map(op => {
-            const amount = Number(op.foreign_amount);
-            const isIn = amount > 0;
-            return (
-              <div key={op.id} className="flex items-center gap-3 p-3 md:p-4">
-                <div className={`p-2 rounded-xl shrink-0 ${isIn ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>
-                  {op.op_type === "initial" ? <Wallet className="w-4 h-4" /> : <ArrowLeftRight className="w-4 h-4" />}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground">
-                    {OP_LABELS[op.op_type]}
-                    {op.entity && <span className="text-muted-foreground font-normal"> · {op.entity}</span>}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatDate(op.operation_date)}
-                  </p>
-                  {op.notes && <p className="text-xs text-muted-foreground/80 truncate">{op.notes}</p>}
-                  <LoadedByTag name={loadedBy.nameOf(op.user_id)} />
-                </div>
-                <p className={`text-sm font-bold shrink-0 ${isIn ? "text-emerald-600" : "text-rose-600"}`}>
-                  {isIn ? "+" : "−"}{formatUSD(Math.abs(amount))}
-                </p>
-                <div className="flex gap-1 shrink-0">
-                  <button onClick={() => openEdit(op)} aria-label="Editar operación"
-                    className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent transition-colors">
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => handleDelete(op)} aria-label="Eliminar operación"
-                    className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-rose-600 transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </Card>
     </div>
   );
 }
