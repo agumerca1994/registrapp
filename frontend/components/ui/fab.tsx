@@ -19,8 +19,8 @@ import { isBusiness } from "@/lib/account";
  *
  * `label` is required: an icon with no text says nothing to a screen reader.
  *
- * On desktop it steps aside while the t reacts to something the user just did (ToodReaccion shows up in this
- * same corner, a bit bigger), and comes back when the t leaves.
+ * It steps aside while the t reacts to something the user just did (ToodReaccion shows up in this same spot), and
+ * comes back when the t leaves.
  */
 export function Fab({ label, onClick, ...rest }: {
   label: string;
@@ -33,7 +33,7 @@ export function Fab({ label, onClick, ...rest }: {
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`${isBusiness(appUser) ? "flex" : "hidden md:flex"} fixed right-4 md:right-8 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] md:bottom-6 z-40 w-14 h-14 rounded-full bg-ink text-background shadow-flota items-center justify-center transition-all duration-300 active:scale-[0.95] ${reacting ? "md:opacity-0 md:scale-50 md:pointer-events-none" : ""}`}
+      className={`${isBusiness(appUser) ? "flex" : "hidden md:flex"} fixed right-4 md:right-8 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] md:bottom-6 z-40 w-14 h-14 rounded-full bg-ink text-background shadow-flota items-center justify-center transition-all duration-300 active:scale-[0.95] ${reacting ? "opacity-0 scale-50 pointer-events-none" : ""}`}
       {...rest}
     >
       <Plus className="w-6 h-6" />
