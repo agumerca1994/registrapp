@@ -78,8 +78,16 @@ else
   warn "falta .deploy.env (ahí vive la URL del webhook)"
 fi
 
+# Cada deploy a producción es una versión: si no, la que se ve en Configuración miente.
+version="$(node -p "require('./frontend/package.json').version")"
+if [ "$(git tag --points-at HEAD | grep -c "^v$version\$")" = "1" ]; then
+  note "versión $version"
+else
+  warn "este commit no es una versión: corré ./scripts/release.sh (patch o minor)"
+fi
+
 echo
-echo "Se va a deployar: $(git rev-parse --short HEAD) — $(git log -1 --pretty=%s)"
+echo "Se va a deployar: v$version, $(git rev-parse --short HEAD) — $(git log -1 --pretty=%s)"
 
 if [ "$problems" -gt 0 ] && [ "$FORCE" != true ]; then
   echo
