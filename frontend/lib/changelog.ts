@@ -11,6 +11,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.1.0-beta.7",
+    date: "2026-11-06",
+    notes: [
+      "En el iPhone, el encabezado ya no tapa los formularios mientras escribís.",
+      "Inversiones y Ahorro vacíos te explican en una frase qué son, y al cargar el primero te guían paso a paso.",
+    ],
+  },
+  {
     version: "1.1.0-beta.6",
     date: "2026-11-06",
     notes: [
