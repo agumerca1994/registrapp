@@ -103,7 +103,8 @@ def valuate(inv: Investment, movements: list[InvestmentMovement], today: date | 
     if how == "cash":
         value = invested if last_val is None else last_val.amount + _net(after)
     elif how == "market":
-        value = invested if last_val is None else last_val.amount + _net(after)
+        # Un rescate puede pasar el último valor (subió desde entonces): sin valor nuevo, vale 0, no negativo.
+        value = max(invested if last_val is None else last_val.amount + _net(after), Decimal(0))
         stale = (today - (value_date or inv.start_date)).days
     elif how == "simple":
         base = (last_val.amount if last_val else Decimal(0)) + _net(after)
@@ -135,9 +136,11 @@ def valuate(inv: Investment, movements: list[InvestmentMovement], today: date | 
 
     value = Decimal(value).quantize(CENTS)
     gain = (value - invested).quantize(CENTS)
+    # Si ya sacaste más de lo que pusiste, el neto no sirve de base: va contra todo lo puesto.
+    base = invested if invested > 0 else sum((m.amount for m in ms if m.kind == "deposit"), Decimal(0))
     return Valuation(
         invested=invested.quantize(CENTS), value=value, gain=gain,
-        gain_pct=round(float(gain / invested * 100), 2) if invested > 0 else None,
+        gain_pct=round(float(gain / base * 100), 2) if base > 0 else None,
         value_date=value_date, calculated=calculated, stale_days=stale,
         matured=matured, value_at_maturity=at_maturity,
     )
@@ -162,7 +165,8 @@ async def add_movement(
     db: AsyncSession, inv: Investment, user_id: int | None,
     kind: str, amount: Decimal, day: date, note: str | None = None,
 ) -> InvestmentMovement:
-    """Sólo flush. Sacar no puede dejar la inversión en negativo."""
+    """Sólo flush. Sacar no puede pasar lo que vale, salvo en lo que cotiza: ahí el valor
+    cargado puede ser viejo, y lo que se rescató es la prueba de que subió."""
     if kind not in MOVEMENT_KINDS:
         raise HTTPException(status_code=400, detail="Ese movimiento no existe.")
     if amount <= 0:
@@ -171,7 +175,7 @@ async def add_movement(
         raise HTTPException(status_code=400, detail="Esta inversión ya se rescató.")
     if day < inv.start_date:
         raise HTTPException(status_code=400, detail="La fecha es anterior al comienzo de la inversión.")
-    if kind == "withdrawal":
+    if kind == "withdrawal" and mode(inv) != "market":
         current = valuate(inv, await movements_of(db, inv.id), max(day, ar_today()))
         if amount > current.value:
             raise HTTPException(status_code=400, detail="No podés sacar más de lo que vale.")

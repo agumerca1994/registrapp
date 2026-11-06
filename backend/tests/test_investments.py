@@ -87,6 +87,22 @@ async def test_renew_carries_the_interest_into_the_new_term(db):
 
 
 @pytest.mark.asyncio
+async def test_a_fund_can_redeem_more_than_was_put_in(db):
+    # Lo rescatado incluye lo que rindió: el último valor cargado no es un techo.
+    inv = await _stored(db, kind="fci", start_date=date(2026, 6, 3))
+    with patch("app.services.investments.ar_today", return_value=date(2026, 11, 6)):
+        await svc.add_movement(db, inv, 1, "deposit", Decimal("3630000"), date(2026, 6, 3))
+        await svc.add_movement(db, inv, 1, "withdrawal", Decimal("3000000"), date(2026, 9, 18))
+        await svc.add_movement(db, inv, 1, "withdrawal", Decimal("650000"), date(2026, 10, 23))
+        before = svc.valuate(inv, await svc.movements_of(db, inv.id), date(2026, 11, 6))
+        await svc.add_movement(db, inv, 1, "valuation", Decimal("97995.57"), date(2026, 11, 6))
+    assert before.value == 0 and before.gain == Decimal("20000.00")
+    v = svc.valuate(inv, await svc.movements_of(db, inv.id), date(2026, 11, 6))
+    assert v.value == Decimal("97995.57") and v.invested == Decimal("-20000.00")
+    assert v.gain == Decimal("117995.57") and v.gain_pct == 3.25
+
+
+@pytest.mark.asyncio
 async def test_cannot_take_more_than_it_is_worth_and_close(db):
     inv = await _stored(db, kind="efectivo")
     with patch("app.services.investments.ar_today", return_value=date(2026, 2, 1)):
