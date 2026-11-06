@@ -1,0 +1,7 @@
+# Copia versionada de /etc/cron.d/docker-builder-prune en el VPS.
+# Cada deploy (producción y beta) deja caché de construcción de Docker que nada
+# limpia: el 2026-11-06 llegó a 22,5 GB y el disco al 99%, con la base de
+# producción en el mismo disco. Se borra la que tiene más de una semana, así los
+# deploys siguientes la siguen aprovechando. Después del backup de las 06:30.
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+0 7 * * * root docker builder prune -f --filter until=168h >>/var/log/docker-builder-prune.log 2>&1
