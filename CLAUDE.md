@@ -434,7 +434,15 @@ La clave única es `(tenant_id, person_key)`, y **`person_key` es el gemelo back
 
 `send_due_reminders()` (called by the `_daily_reminder_check` scheduled job) WhatsApps each reminder due today to its creator via `_send_wa_msg`, then marks it `notified=True` regardless of send outcome (fire-once semantics — failures are logged, not retried). **Only works if that specific user has linked their own WhatsApp number** (`user.whatsapp_phone`) via `/auth/me/link-whatsapp` in Settings; otherwise the reminder still shows on the calendar but silently skips the WhatsApp.
 
+### Qué no se borra (desde 2026-11-05, decisiones del usuario)
+- **Las cuotas de la hipoteca no se borran**: `DELETE /mortgage/{id}` ya no existe, y `DELETE /expenses/entries` da 409 para un espejo de hipoteca o de tarjeta (`services/expenses.assert_deletable`). Editarlas quizá se permita más adelante; hoy tampoco se puede.
+- **Un ítem de tarjeta compartido no se borra** (`services/credit_cards.assert_no_shared_items`, 409), ni suelto ni al borrar su resumen o su tarjeta con `keep_expenses=false`: dejaría el `SharedExpense` y los splits de los demás colgados.
+- **Las categorías no se repiten**: `POST /categories` da 409 si ya hay una con el mismo nombre plegado (`services/expenses.find_category_by_name`), y el bot reutiliza la existente en vez de crear otra. Está pensado pasar a categorías fijas de sistema más las personalizadas, sin diseñar.
+- `StatementOut.total` es sólo pesos y `total_usd` los dólares (`schemas/credit_card.totals_by_currency`): antes se sumaban.
+
 ### Internal diagnostics
+**Los errores del navegador llegan a los logs**: `POST /client-errors` (`routers/client_errors.py`, con usuario, 30 por hora) guarda un `AppLog` con `logger_name="frontend"` y la ruta sin query string. Lo llama `lib/report-error.ts` (deduplica, máximo 5 por carga, filtra ruido) desde `ErrorReporter`, `(app)/error.tsx` y el `TourBoundary` de `ProductTour`. Antes `ErrorReporter` sólo escribía en la consola y un error de la guía no dejaba rastro.
+
 `routers/internal_logs.py` exposes `/internal/*` endpoints gated by a shared-secret header (`x-internal-key` must match the `INTERNAL_LOG_KEY` env var), not user auth — used for ops/debugging, never called from the frontend:
 - `GET /internal/logs`, `GET /internal/logs/summary`, `POST /internal/logs/frontend-error` — read/write `AppLog` rows.
 - `GET /internal/request-timings` — p50/p95 por ruta de tiempo total, base de datos, cantidad de consultas y verificación del token, desde el último arranque (`core/timing.py`, en memoria, 300 muestras por ruta). Agrupa por plantilla de ruta, nunca por URL real. El mismo dato sale en `Server-Timing` para los orígenes de `ALLOWED_ORIGINS`, y se ve en las herramientas del navegador.
