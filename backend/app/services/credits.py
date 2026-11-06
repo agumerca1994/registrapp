@@ -391,6 +391,7 @@ class Summary:
     balance: Decimal | None        # en `currency`
     balance_units: Decimal | None  # UVA
     total_paid: Decimal
+    this_month_paid: Decimal  # lo registrado este mes, en `currency`
     records_count: int
     uva_value: Decimal | None
     uva_date: date | None
@@ -411,6 +412,10 @@ async def summarize(db: AsyncSession, loan: MortgageLoan, today: date | None = N
         last = max((r.cuota_number or cuota_number_for(loan, r.period_date.year, r.period_date.month)) for r in records)
         next_n = max(next_n, last + 1)
     paid = min(next_n - 1, loan.total_cuotas)
+    if loan.method == "manual":
+        # Lo manual no avanza solo: pagado es lo que se cargó, aunque el
+        # calendario ya haya pasado por una cuota que nadie registró.
+        paid = min(len(records), loan.total_cuotas)
     finished = next_n > loan.total_cuotas
 
     next_day = next_amount = next_units = None
@@ -451,6 +456,7 @@ async def summarize(db: AsyncSession, loan: MortgageLoan, today: date | None = N
         balance=q(balance),
         balance_units=q(balance_units, "0.0001"),
         total_paid=sum((r.payment_amount for r in records), Decimal(0)),
+        this_month_paid=this_month.payment_amount if this_month else Decimal(0),
         records_count=len(records),
         uva_value=uva,
         uva_date=uva_day,

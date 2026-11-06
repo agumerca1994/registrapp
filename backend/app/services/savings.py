@@ -19,6 +19,8 @@ from app.models.savings import SavingsContribution, SavingsGoal
 from app.services.clock import ar_today
 
 CURRENCIES = {"ARS", "USD"}
+# La nota del aporte que crea "ya tengo juntado" al dar de alta el objetivo.
+INITIAL_NOTE = "Lo que ya tenía"
 
 
 @dataclass
@@ -55,10 +57,10 @@ async def saved_by_goal(db: AsyncSession, goal_ids: list[int]) -> dict[int, Deci
 async def summarize(db: AsyncSession, goal: SavingsGoal, today: date | None = None) -> GoalSummary:
     today = today or ar_today()
     rows = (await db.execute(
-        select(SavingsContribution.amount, SavingsContribution.contribution_date)
+        select(SavingsContribution.amount, SavingsContribution.contribution_date, SavingsContribution.note)
         .where(SavingsContribution.goal_id == goal.id)
     )).all()
-    saved = sum((Decimal(a) for a, _ in rows), Decimal(0))
+    saved = sum((Decimal(a) for a, _, _ in rows), Decimal(0))
     target = Decimal(goal.target_amount)
     remaining = max(target - saved, Decimal(0))
     achieved = saved >= target
@@ -72,11 +74,15 @@ async def summarize(db: AsyncSession, goal: SavingsGoal, today: date | None = No
             months_left = months_between(today, goal.target_date)
             per_month = (remaining / months_left).quantize(Decimal("0.01"))
 
-    # El ritmo: lo aportado desde el primer aporte, repartido en los meses que pasaron.
+    # El ritmo: lo aportado desde el primer aporte, repartido en los meses que
+    # pasaron. Sin lo que ya estaba juntado al crearlo: eso no es ritmo, y un
+    # objetivo nuevo con U$D 800 "venía aportando U$D 800 por mes".
     pace = eta = None
-    first = min((d for _, d in rows), default=None)
-    if first and saved > 0:
-        pace = (saved / months_between(first, today)).quantize(Decimal("0.01"))
+    paced = [(Decimal(a), d) for a, d, note in rows if note != INITIAL_NOTE]
+    first = min((d for _, d in paced), default=None)
+    paced_total = sum((a for a, _ in paced), Decimal(0))
+    if first and paced_total > 0:
+        pace = (paced_total / months_between(first, today)).quantize(Decimal("0.01"))
         if not achieved and pace > 0:
             ahead = math.ceil(remaining / pace)
             idx = today.year * 12 + today.month - 1 + ahead
@@ -93,7 +99,7 @@ async def summarize(db: AsyncSession, goal: SavingsGoal, today: date | None = No
         pace_per_month=pace,
         eta=eta,
         overdue=overdue,
-        last_contribution=max((d for _, d in rows), default=None),
+        last_contribution=max((d for _, d, _ in rows), default=None),
     )
 
 

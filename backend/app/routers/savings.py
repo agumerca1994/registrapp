@@ -143,7 +143,7 @@ async def create_goal(body: GoalCreate, actor: Actor = Depends(_actor), db: Asyn
     db.add(goal)
     await db.flush()
     if body.initial_amount:
-        await savings.add_contribution(db, goal, actor.user.id, body.initial_amount, ar_today(), "Lo que ya tenía")
+        await savings.add_contribution(db, goal, actor.user.id, body.initial_amount, ar_today(), savings.INITIAL_NOTE)
     await db.commit()
     await db.refresh(goal)
     return _out(await savings.summarize(db, goal))

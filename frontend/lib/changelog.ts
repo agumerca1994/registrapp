@@ -11,6 +11,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.1.0-beta.2",
+    date: "2026-11-06",
+    notes: [
+      "Hipoteca pasó a ser Créditos: además del hipotecario, préstamos personales, prendarios, planes de ahorro y plata que te prestó alguien.",
+      "Si sabés cuánto pagás por mes, alcanza con la cuota y la cantidad de cuotas.",
+      "Ahorro: armá objetivos con fecha y la app te dice cuánto apartar por mes para llegar.",
+    ],
+  },
+  {
     version: "1.1.0-beta.1",
     date: "2026-11-05",
     notes: [
@@ -19,6 +28,13 @@ export const CHANGELOG: Release[] = [
       "Ingresos y egresos ahora están juntos en Movimientos.",
       "Las guías muestran lo que hay en cada pantalla, también en el celular.",
       "Cerrar sesión pasó a Configuración, en Tu cuenta.",
+    ],
+  },
+  {
+    version: "1.0.4",
+    date: "2026-11-06",
+    notes: [
+      "Preparamos la app para Créditos y Ahorro, que llegan pronto.",
     ],
   },
   {

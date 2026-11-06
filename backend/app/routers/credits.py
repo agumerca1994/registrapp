@@ -48,7 +48,7 @@ def _out(s: credits.Summary) -> CreditOut:
         finished=s.finished, paid_this_month=s.paid_this_month,
         next_payment_date=s.next_payment_date, next_amount=s.next_amount,
         next_units=s.next_units, next_is_estimated=s.next_is_estimated,
-        balance=s.balance, balance_units=s.balance_units, total_paid=s.total_paid,
+        balance=s.balance, balance_units=s.balance_units, total_paid=s.total_paid, this_month_paid=s.this_month_paid,
         uva_value=s.uva_value, uva_date=s.uva_date,
     )
 
@@ -125,6 +125,8 @@ async def get_credit(loan_id: int, actor: Actor = Depends(_actor), db: AsyncSess
     for record, paid_on in rows:
         out = CreditPaymentOut.model_validate(record)
         out.paid_on = paid_on
+        if out.cuota_number is None:  # las registradas antes de guardar el número
+            out.cuota_number = credits.cuota_number_for(loan, record.period_date.year, record.period_date.month)
         payments.append(out)
     return CreditDetail(credit=_out(await credits.summarize(db, loan)), payments=payments)
 

@@ -129,6 +129,7 @@ class CreditOut(BaseModel):
     balance: Decimal | None
     balance_units: Decimal | None
     total_paid: Decimal
+    this_month_paid: Decimal
     uva_value: Decimal | None
     uva_date: date | None
 
