@@ -11,6 +11,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.0.3",
+    date: "2026-11-05",
+    notes: [
+      "La hipoteca deja de registrar cuotas cuando llega a la última.",
+      "La cuota se registra con la fecha de la Argentina, no con la del servidor.",
+    ],
+  },
+  {
     version: "1.0.2",
     date: "2026-11-05",
     notes: [
