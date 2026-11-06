@@ -11,6 +11,13 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.0.7",
+    date: "2026-11-06",
+    notes: [
+      "Preparamos los objetivos con una cuota fija por mes, que llega pronto.",
+    ],
+  },
+  {
     version: "1.0.6",
     date: "2026-11-06",
     notes: [
