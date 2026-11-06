@@ -11,6 +11,13 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.1.0-beta.6",
+    date: "2026-11-06",
+    notes: [
+      "Inversiones: en un fondo, acciones o cripto ya podés cargar un rescate mayor a lo que pusiste, porque incluye lo que ganaste.",
+    ],
+  },
+  {
     version: "1.1.0-beta.5",
     date: "2026-11-06",
     notes: [
