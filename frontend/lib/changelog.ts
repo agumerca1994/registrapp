@@ -11,6 +11,13 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.1.0-beta.4",
+    date: "2026-11-06",
+    notes: [
+      "Inicio te muestra tu objetivo de ahorro más cercano y cuánto te toca apartar este mes.",
+    ],
+  },
+  {
     version: "1.1.0-beta.3",
     date: "2026-11-06",
     notes: [
