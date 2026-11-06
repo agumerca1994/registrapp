@@ -10,6 +10,7 @@ no sale es un aviso perdido; una excepción es la operación entera perdida.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import re
@@ -127,6 +128,11 @@ async def download_media_base64(message_key: dict, raw_message: dict | None = No
     2xx a medias o un rechazo sin loguear deja el reporte "no me anda" sin un
     solo rastro. Se manda la key entera y el message crudo porque las
     versiones de Evolution difieren en cuál de los dos exigen.
+
+    Reintenta: cuando Evolution no alcanza el CDN de WhatsApp contesta 400
+    "fetch failed", y es pasajero (2026-11-05: dos fotos y un audio seguidos
+    en un minuto, y antes y después todo anduvo). A la primera ya le
+    pedíamos a la persona que lo mandara de nuevo.
     """
     if not settings.EVOLUTION_API_URL or not settings.EVOLUTION_INSTANCE:
         logger.info("Evolution API not configured, skipping media download")
@@ -134,28 +140,42 @@ async def download_media_base64(message_key: dict, raw_message: dict | None = No
     body: dict = {"message": {"key": message_key}, "convertToMp4": False}
     if raw_message:
         body["message"]["message"] = raw_message
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                f"{settings.EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/{settings.EVOLUTION_INSTANCE}",
-                json=body,
-                headers={"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"},
-            )
+    for attempt, wait in enumerate(MEDIA_RETRY_WAITS):
+        if wait:
+            await asyncio.sleep(wait)
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(
+                    f"{settings.EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/{settings.EVOLUTION_INSTANCE}",
+                    json=body,
+                    headers={"apikey": settings.EVOLUTION_API_KEY, "Content-Type": "application/json"},
+                )
             if resp.status_code >= 400:
                 logger.warning(
-                    "WhatsApp media download failed %s: %s", resp.status_code, resp.text[:300]
+                    "WhatsApp media download failed %s (intento %s): %s",
+                    resp.status_code, attempt + 1, resp.text[:300],
                 )
-                return None
+                # Un 401/404 no se arregla esperando; un 400 de "fetch failed" o un 5xx sí.
+                if resp.status_code in (401, 403, 404):
+                    return None
+                continue
             data = resp.json()
             b64 = data.get("base64") or data.get("media")
             if not b64:
                 logger.warning("WhatsApp media download sin base64 en la respuesta: %s",
                                str(data)[:300])
-                return None
+                continue
+            if attempt:
+                logger.info("WhatsApp media download ok en el intento %s", attempt + 1)
             return base64.b64decode(b64)
-    except Exception as e:
-        logger.warning("WhatsApp media download error: %s", e)
-        return None
+        except Exception as e:
+            logger.warning("WhatsApp media download error (intento %s): %s", attempt + 1, e)
+    return None
+
+
+# Esperas antes de cada intento. Suman ~6 s: con el audio, el sticker de
+# "escuchando" ya salió, así que la espera no se ve como un bot colgado.
+MEDIA_RETRY_WAITS = (0, 2, 4)
 
 
 def fmt_number(amount) -> str:
