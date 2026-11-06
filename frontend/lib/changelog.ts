@@ -11,6 +11,13 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.0.2",
+    date: "2026-11-05",
+    notes: [
+      "Si WhatsApp tarda en entregar una foto, un PDF o un audio, el bot vuelve a intentar antes de pedirte que lo mandes de nuevo.",
+    ],
+  },
+  {
     version: "1.0.1",
     date: "2026-11-05",
     notes: [
