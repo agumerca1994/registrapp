@@ -11,6 +11,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.1.0-beta.8",
+    date: "2026-11-06",
+    notes: [
+      "Ahorro ahora se llama Objetivos.",
+      "Podés juntar con una cuota fija por mes: ese día Inicio te avisa y la cumplís con un toque.",
+    ],
+  },
+  {
     version: "1.1.0-beta.7",
     date: "2026-11-06",
     notes: [
