@@ -11,6 +11,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.1.0-beta.5",
+    date: "2026-11-06",
+    notes: [
+      "Inversiones: cargá tus plazos fijos, cuentas remuneradas, fondos, acciones, cripto o efectivo y mirá cuánto valen hoy y cuánto ganaste.",
+      "Un plazo fijo te avisa cuando vence, para renovarlo o rescatarlo.",
+    ],
+  },
+  {
     version: "1.1.0-beta.4",
     date: "2026-11-06",
     notes: [
