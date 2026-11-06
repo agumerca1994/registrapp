@@ -11,6 +11,13 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.1.0-beta.3",
+    date: "2026-11-06",
+    notes: [
+      "En Créditos, el botón para agregar uno está arriba, como en Ahorro.",
+    ],
+  },
+  {
     version: "1.1.0-beta.2",
     date: "2026-11-06",
     notes: [
