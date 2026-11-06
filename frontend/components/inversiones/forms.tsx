@@ -7,6 +7,8 @@ import { getErrorMessage, parseAmount } from "@/lib/utils";
 import { Chip } from "@/components/ui/chip";
 import { DateField, FIELD, SegmentedToggle } from "@/components/ui/form";
 import { MotionList } from "@/components/ui/motion-list";
+import ProductTour from "@/components/ProductTour";
+import type { Step } from "react-joyride";
 import { AmountField, FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions } from "@/components/movimientos/FormSheet";
 import {
   KIND_OPTIONS, LABEL, OPTION, ago, amountText, isMarket, money, shortDate, simpleAtMaturity, tnaText,
@@ -71,6 +73,30 @@ function TnaField({ id, value, onChange, hint }: { id: string; value: string; on
  * Nueva inversión: primero qué es, después lo mínimo para saber cuánto vale.
  * `first` es la primera de la cuenta: ahí se dice, una vez, que esto no es un gasto.
  */
+const tourStep = (target: string, title: string, content: string): Step => ({
+  target: `[data-tour='${target}']`, title, content, skipBeacon: true,
+});
+
+/** La guía del alta, según el tipo: lo que se pide y para qué. */
+function formTour(kind: Kind): Step[] {
+  const steps = [
+    tourStep("inv-amount", "Cuánto pusiste", "Lo que pusiste al empezar, en pesos o dólares. Contra esto se calcula cuánto ganás."),
+    tourStep("inv-inst", "Dónde está", "El banco, la billetera o el broker. Le da nombre a la inversión."),
+  ];
+  if (kind === "plazo_fijo") {
+    steps.push(
+      tourStep("inv-tna", "La tasa", "La TNA que te dio el banco: con ella se calcula sola lo que vale cada día."),
+      tourStep("inv-maturity", "El vencimiento", "Ese día te aviso, para que lo renueves o lo rescates."),
+    );
+  } else if (kind === "cuenta") {
+    steps.push(tourStep("inv-tna", "La tasa", "La que paga hoy. Lo que rinde se suma solo, todos los días."));
+  } else if (kind !== "efectivo") {
+    steps.push(tourStep("inv-current", "Cuánto vale hoy", "Si lo tenés hace tiempo, lo que figura hoy. Después lo actualizás cuando quieras."));
+  }
+  steps.push(tourStep("inv-save", "Guardar", "Queda en Inversiones. No cambia tus movimientos: invertir no es un gasto."));
+  return steps;
+}
+
 export function InvestmentForm({ initialKind, first, onSaved, onClose }: {
   initialKind?: Kind;
   first: boolean;
@@ -160,6 +186,8 @@ export function InvestmentForm({ initialKind, first, onSaved, onClose }: {
   }
 
   return (
+    <>
+    <ProductTour tourId="inversion-form" steps={formTour(kind)} />
     <FormSheet title="Los datos" onClose={onClose}>
       <MotionList className={STEP}>
         <form onSubmit={submit} className={FORM_SHEET_FORM} noValidate>
@@ -170,6 +198,7 @@ export function InvestmentForm({ initialKind, first, onSaved, onClose }: {
                 Cambiar
               </button>
             </div>
+            <div data-tour="inv-amount">
             <AmountField
               label="¿Cuánto pusiste?"
               currency={currency}
@@ -182,7 +211,8 @@ export function InvestmentForm({ initialKind, first, onSaved, onClose }: {
               autoFocus
               required
             />
-            <div>
+            </div>
+            <div data-tour="inv-inst">
               <label htmlFor="inv-inst" className={LABEL}>{inst.label} <span className="font-normal">(opcional)</span></label>
               <input id="inv-inst" className={FIELD} maxLength={80} placeholder={inst.placeholder}
                 value={institution} onChange={e => setInstitution(e.target.value)} />
@@ -193,7 +223,11 @@ export function InvestmentForm({ initialKind, first, onSaved, onClose }: {
                 value={shownName} onChange={e => { setNameTouched(true); setName(e.target.value); }} />
             </div>
 
-            {needsTna && <TnaField id="inv-tna" value={tna} onChange={setTna} hint={isPf ? "la que te dio el banco" : "la que paga hoy"} />}
+            {needsTna && (
+              <div data-tour="inv-tna">
+                <TnaField id="inv-tna" value={tna} onChange={setTna} hint={isPf ? "la que te dio el banco" : "la que paga hoy"} />
+              </div>
+            )}
 
             <div>
               <span className={LABEL}>{isPf ? "Lo hiciste el" : "¿Desde cuándo lo tenés?"}</span>
@@ -201,7 +235,7 @@ export function InvestmentForm({ initialKind, first, onSaved, onClose }: {
             </div>
 
             {isPf && (
-              <div>
+              <div data-tour="inv-maturity">
                 <span className={LABEL}>Vence el</span>
                 <DateField value={maturity} onChange={v => { setMaturityTouched(true); setMaturity(v); }} required />
                 {start && <MaturityShortcuts from={start} value={maturity} onPick={v => { setMaturityTouched(true); setMaturity(v); }} />}
@@ -209,7 +243,7 @@ export function InvestmentForm({ initialKind, first, onSaved, onClose }: {
             )}
 
             {isMarket(kind) && (
-              <div>
+              <div data-tour="inv-current">
                 <label htmlFor="inv-current" className={LABEL}>¿Cuánto vale hoy? <span className="font-normal">(opcional)</span></label>
                 <input id="inv-current" className={`${FIELD} tabular-nums`} type="text" inputMode="decimal" pattern="[0-9.,]*"
                   placeholder={amount || "0"} value={current} onChange={e => setCurrent(e.target.value)} />
@@ -234,10 +268,11 @@ export function InvestmentForm({ initialKind, first, onSaved, onClose }: {
             )}
             {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           </div>
-          <FormSheetActions onCancel={onClose} saving={saving} label="Guardar" />
+          <FormSheetActions onCancel={onClose} saving={saving} label="Guardar" data-tour="inv-save" />
         </form>
       </MotionList>
     </FormSheet>
+    </>
   );
 }
 

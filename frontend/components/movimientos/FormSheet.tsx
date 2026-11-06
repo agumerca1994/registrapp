@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useExitGhost } from "@/lib/motion";
 
@@ -12,6 +13,11 @@ import { useExitGhost } from "@/lib/motion";
  * `backdrop-filter` hace que un `fixed` se ubique contra la hoja y no contra la
  * pantalla.
  *
+ * Va en un portal sobre `body`, como el combo y el calendario. Adentro de
+ * `#main-content` (que se desplaza) Safari de iOS la dibujaba debajo del
+ * encabezado fijo del celular pese a su z-index, y con el teclado abierto la
+ * hoja subía y quedaba tapada: no se veía lo que se escribía.
+ *
  * El `<form>` va adentro con `FORM_SHEET_FORM`, y sus partes son `FORM_SHEET_BODY`
  * (se desplaza) y `FormSheetActions` (queda siempre a la vista).
  */
@@ -23,7 +29,8 @@ export function FormSheet({ title, onClose, stacked = false, children }: {
   children: React.ReactNode;
 }) {
   const ghost = useExitGhost<HTMLDivElement>();
-  return (
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <div
       ref={ghost}
       className={`fixed inset-0 ${stacked ? "z-[60]" : "z-50"} flex items-end sm:items-center justify-center bg-ink/30 p-2.5 animate-fade-in`}
@@ -44,7 +51,8 @@ export function FormSheet({ title, onClose, stacked = false, children }: {
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

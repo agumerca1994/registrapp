@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronDown, MoreVertical, Plus } from "lucide-react";
+import { ArrowRight, ChevronDown, MoreVertical, Plus, TrendingUp } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import type { Step } from "react-joyride";
 import api from "@/lib/api";
@@ -16,7 +16,7 @@ import { MotionList } from "@/components/ui/motion-list";
 import { PrivacyMenuItem } from "@/components/ui/privacy-toggle";
 import { InvestmentForm } from "@/components/inversiones/forms";
 import {
-  H1, KIND_OPTIONS, MENU_PANEL, TONE, isStale, money, pctText, shortDate, signedMoney, statusLine, subLine,
+  H1, MENU_PANEL, TONE, isStale, money, pctText, shortDate, signedMoney, statusLine, subLine,
   type Currency, type Investment, type InvestmentsResponse, type Kind, type Totals,
 } from "@/components/inversiones/shared";
 
@@ -213,29 +213,18 @@ export default function InversionesPage() {
       {header}
 
       {active.length === 0 ? (
-        <section className="max-w-2xl rounded-[34px] bg-accent border border-[#CFC9E4] px-5 pt-6 pb-5 md:px-7 md:pt-7">
-          <p className="text-[28px] font-medium leading-[1.1] tracking-[-0.035em] text-foreground">
-            {closed.length > 0 ? "No tenés nada invertido ahora" : "¿Dónde tenés la plata?"}
+        // Como el vacío de Créditos: qué es, para qué sirve y un botón. El formulario trae su guía.
+        <section className="px-2 pt-2">
+          <TrendingUp className="w-8 h-8 text-[#3B2FB3]" strokeWidth={1.6} aria-hidden="true" />
+          <p className="mt-3 text-[22px] font-medium leading-tight tracking-[-0.03em] text-foreground">
+            {closed.length > 0 ? "No tenés nada invertido ahora" : "Todavía no cargaste ninguna inversión"}
           </p>
-          <p className="mt-2.5 text-[16px] leading-snug text-[#4A4658]">
-            Cargá el plazo fijo, el fondo o las acciones, y te digo cuánto vale hoy, no sólo cuánto pusiste.
-            El plazo fijo y la cuenta remunerada se calculan solos con la tasa.
+          <p className="mt-1 text-[15.5px] leading-snug text-muted-foreground">
+            Un plazo fijo, un fondo, acciones o dólares: cargalo una vez y mirá cuánto vale hoy, no sólo cuánto pusiste.
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {KIND_OPTIONS.slice(0, 4).map(k => (
-              <button key={k.kind} onClick={() => setCreating(k.kind)}
-                className="min-h-[40px] px-3.5 rounded-full bg-white border border-[#CFC9E4] text-[14.5px] font-medium text-foreground active:scale-[0.97] transition-transform duration-100">
-                {k.label}
-              </button>
-            ))}
-          </div>
-          <button onClick={() => setCreating("")}
-            className="mt-5 w-full sm:w-auto sm:px-10 h-[52px] rounded-full bg-ink text-background font-semibold text-[15.5px] active:scale-[0.98] transition-transform duration-100">
-            Cargar una inversión
+          <button onClick={() => setCreating("")} className="mt-4 h-[52px] px-6 rounded-full bg-ink text-background font-semibold text-[15.5px] active:scale-[0.98] transition-transform duration-100">
+            Cargar inversión
           </button>
-          <p className="mt-3 text-sm leading-snug text-[#4A4658] text-center sm:text-left">
-            Invertir no es un gasto, y lo que rinde no es un ingreso hasta que lo rescatás: no cambia tus movimientos.
-          </p>
         </section>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-start">

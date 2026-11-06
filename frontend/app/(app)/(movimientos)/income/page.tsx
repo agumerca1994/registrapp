@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { format } from "date-fns";
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
@@ -204,7 +205,8 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
 
   const NO_COL = "Ninguna";
 
-  return (
+  // En un portal: adentro de #main-content, iOS la dibujaba debajo del encabezado fijo.
+  return createPortal(
     <div ref={ghost} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-fade-in">
       <Card className="p-0 md:p-0 w-full max-w-2xl max-h-[90vh] flex flex-col animate-sheet-in">
         <div className="flex items-center justify-between px-6 py-4 border-b">
@@ -366,7 +368,8 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
           )}
         </div>
       </Card>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

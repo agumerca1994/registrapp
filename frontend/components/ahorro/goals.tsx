@@ -6,6 +6,8 @@ import { es } from "date-fns/locale";
 import api from "@/lib/api";
 import { getErrorMessage, parseAmount } from "@/lib/utils";
 import { ledgerAmount } from "@/components/movimientos/Ledger";
+import ProductTour from "@/components/ProductTour";
+import type { Step } from "react-joyride";
 import { AmountField, FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions } from "@/components/movimientos/FormSheet";
 import { DateField, FIELD, MonthField, SegmentedToggle } from "@/components/ui/form";
 
@@ -112,6 +114,13 @@ function monthsUntil(ym: string): number {
 const LABEL = "text-xs font-medium text-muted-foreground";
 
 /** Nuevo objetivo, o editar uno. La moneda no cambia después: los aportes ya están en ella. */
+const GOAL_FORM_TOUR: Step[] = [
+  { target: "[data-tour='goal-target']", title: "Cuánto querés juntar", content: "En dólares, salvo que elijas pesos: así la meta no se corre con la inflación.", skipBeacon: true },
+  { target: "[data-tour='goal-name']", title: "Para qué es", content: "Vacaciones, el auto, un colchón: es el nombre del objetivo.", skipBeacon: true },
+  { target: "[data-tour='goal-date']", title: "Para cuándo", content: "Con una fecha te digo cuánto apartar cada mes para llegar.", skipBeacon: true },
+  { target: "[data-tour='goal-save']", title: "Crear", content: "Después vas sumando aportes. Apartar plata no es un gasto: no cambia tus movimientos.", skipBeacon: true },
+];
+
 export function GoalForm({ goal, presetName = "", onSaved, onClose }: {
   goal?: Goal;
   presetName?: string;
@@ -153,9 +162,12 @@ export function GoalForm({ goal, presetName = "", onSaved, onClose }: {
   }
 
   return (
+    <>
+    {!goal && <ProductTour tourId="objetivo-form" steps={GOAL_FORM_TOUR} />}
     <FormSheet title={goal ? "Editar objetivo" : "Nuevo objetivo"} onClose={onClose}>
       <form onSubmit={submit} className={FORM_SHEET_FORM}>
         <div className={FORM_SHEET_BODY}>
+          <div data-tour="goal-target">
           <AmountField
             label="¿Cuánto querés juntar?"
             currency={currency}
@@ -168,12 +180,13 @@ export function GoalForm({ goal, presetName = "", onSaved, onClose }: {
             autoFocus={!goal}
             required
           />
-          <div>
+          </div>
+          <div data-tour="goal-name">
             <label htmlFor="goal-name" className={LABEL}>Para qué es</label>
             <input id="goal-name" className={FIELD} required maxLength={80} placeholder="Vacaciones, el auto, un colchón…"
               value={name} onChange={e => setName(e.target.value)} />
           </div>
-          <div>
+          <div data-tour="goal-date">
             <span className={LABEL}>¿Para cuándo? <span className="font-normal">(opcional)</span></span>
             <MonthField value={month} onChange={setMonth} min={thisMonth()} />
             {month && (
@@ -202,9 +215,10 @@ export function GoalForm({ goal, presetName = "", onSaved, onClose }: {
           )}
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         </div>
-        <FormSheetActions onCancel={onClose} saving={saving} label={goal ? "Guardar" : "Crear objetivo"} />
+        <FormSheetActions onCancel={onClose} saving={saving} label={goal ? "Guardar" : "Crear objetivo"} data-tour="goal-save" />
       </form>
     </FormSheet>
+    </>
   );
 }
 

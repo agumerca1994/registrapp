@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, MoreVertical, Plus } from "lucide-react";
+import { ChevronDown, MoreVertical, PiggyBank, Plus } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import type { Step } from "react-joyride";
 import api from "@/lib/api";
@@ -38,7 +38,6 @@ const TOUR_STEPS: Step[] = [
   },
 ];
 
-const IDEAS = ["Vacaciones", "Fondo de emergencia", "Auto", "Mudanza"];
 
 /** La cifra del bloque: los dólares si hay, si no los pesos. Nunca las dos sumadas. */
 function TotalFigure({ amount, currency }: { amount: number; currency: Currency }) {
@@ -193,25 +192,18 @@ export default function AhorroPage() {
       {header}
 
       {active.length === 0 ? (
-        <section className="max-w-2xl rounded-[34px] bg-accent border border-[#CFC9E4] px-5 pt-6 pb-5 md:px-7 md:pt-7">
-          <p className="text-[28px] font-medium leading-[1.1] tracking-[-0.035em] text-foreground">¿Para qué estás juntando?</p>
-          <p className="mt-2.5 text-[16px] leading-snug text-[#4A4658]">
-            Ponele un monto y una fecha, y te digo cuánto apartar cada mes para llegar. Va en dólares, salvo que elijas pesos:
-            así la meta no se corre con la inflación.
+        // Como el vacío de Créditos: qué es, para qué sirve y un botón. El formulario trae su guía.
+        <section className="px-2 pt-2">
+          <PiggyBank className="w-8 h-8 text-[#3B2FB3]" strokeWidth={1.6} aria-hidden="true" />
+          <p className="mt-3 text-[22px] font-medium leading-tight tracking-[-0.03em] text-foreground">
+            {archived.length > 0 ? "No tenés objetivos abiertos" : "Todavía no tenés objetivos"}
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {IDEAS.map(idea => (
-              <button key={idea} onClick={() => setCreating(idea)}
-                className="min-h-[40px] px-3.5 rounded-full bg-white border border-[#CFC9E4] text-[14.5px] font-medium text-foreground active:scale-[0.97] transition-transform duration-100">
-                {idea}
-              </button>
-            ))}
-          </div>
-          <button onClick={() => setCreating("")}
-            className="mt-5 w-full sm:w-auto sm:px-10 h-[52px] rounded-full bg-ink text-background font-semibold text-[15.5px] active:scale-[0.98] transition-transform duration-100">
+          <p className="mt-1 text-[15.5px] leading-snug text-muted-foreground">
+            Ponele monto y fecha a algo que quieras, y te digo cuánto apartar cada mes para llegar.
+          </p>
+          <button onClick={() => setCreating("")} className="mt-4 h-[52px] px-6 rounded-full bg-ink text-background font-semibold text-[15.5px] active:scale-[0.98] transition-transform duration-100">
             Crear objetivo
           </button>
-          <p className="mt-3 text-sm leading-snug text-[#4A4658] text-center sm:text-left">Apartar plata no es un gasto: no cambia tus movimientos.</p>
         </section>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-start">
