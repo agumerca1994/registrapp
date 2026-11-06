@@ -63,3 +63,14 @@ async def test_deleting_a_contribution_a_withdrawal_used_is_refused(db):
     await savings.add_contribution(db, goal, 1, Decimal("-80"), date(2026, 9, 2), None)
     with pytest.raises(HTTPException):
         await savings.delete_contribution(db, first)
+
+
+@pytest.mark.asyncio
+async def test_what_was_already_saved_is_not_pace(db):
+    goal = await _goal(db)
+    await savings.add_contribution(db, goal, 1, Decimal("800"), date(2026, 11, 1), savings.INITIAL_NOTE)
+    s = await savings.summarize(db, goal, date(2026, 11, 20))
+    assert s.saved == Decimal("800") and s.pace_per_month is None and s.eta is None
+    await savings.add_contribution(db, goal, 1, Decimal("100"), date(2026, 11, 10), None)
+    s = await savings.summarize(db, goal, date(2026, 11, 20))
+    assert s.pace_per_month == Decimal("100.00")

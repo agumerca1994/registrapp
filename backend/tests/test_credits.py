@@ -172,3 +172,17 @@ async def test_manual_payment_can_be_deleted_but_synced_cannot(db):
                                           amount=Decimal("1"), number=2)
     with pytest.raises(Exception):
         await credits.delete_manual_payment(db, synced)
+
+
+@pytest.mark.asyncio
+async def test_manual_counts_what_was_loaded_not_the_calendar(db):
+    user = await _household(db)
+    loan = _loan(method="manual", kind="plan_ahorro", total_cuotas=84, first_payment_date=date(2026, 10, 1))
+    db.add(loan)
+    await db.flush()
+    s = await credits.summarize(db, loan, date(2026, 11, 20))
+    assert s.cuotas_pagadas == 0 and s.pct_completado == 0
+    await credits.record_payment(db, loan, user.id, period=date(2026, 11, 1), pay_day=date(2026, 11, 5),
+                                 amount=Decimal("90000"), number=2, manual=True)
+    s = await credits.summarize(db, loan, date(2026, 11, 20))
+    assert s.cuotas_pagadas == 1 and s.this_month_paid == Decimal("90000")
