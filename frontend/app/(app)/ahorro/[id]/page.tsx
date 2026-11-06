@@ -59,7 +59,15 @@ export default function AhorroGoalPage() {
         return null;
       });
   }, [id]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    // Inicio manda acá con ?aportar=1: el aporte se abre apenas está el objetivo.
+    const aportar = new URLSearchParams(window.location.search).get("aportar") === "1";
+    load().then(goal => {
+      if (!aportar || !goal) return;
+      setMode("in");
+      window.history.replaceState(null, "", window.location.pathname);
+    });
+  }, [load]);
 
   const back = (
     <Link href="/ahorro" className="inline-flex items-center gap-1.5 min-h-[44px] -ml-1 pr-2 text-[15px] font-medium text-muted-foreground hover:text-foreground">

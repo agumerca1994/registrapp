@@ -20,6 +20,7 @@ import { useCountUp } from "@/components/ui/count-up";
 import { Fab } from "@/components/ui/fab";
 import { MotionList } from "@/components/ui/motion-list";
 import ProductTour from "@/components/ProductTour";
+import { GoalsNudge } from "@/components/home/GoalsNudge";
 
 // Muestra lo que hay en esta pantalla, en el orden en que se mira, y en el celular
 // igual que en la compu. Lo que no se ve en una pantalla se saltea (ProductTour).
@@ -520,6 +521,7 @@ export default function HouseholdHome() {
         </div>
         <div className="space-y-4 min-w-0">
           {data.moment === "closing" && <NextMonth t={data} />}
+          <GoalsNudge today={data.today} leftToSpend={Number(data.left_to_spend)} hasIncome={data.moment !== "no_income"} />
           <Week t={data} />
           <MonthLink t={data} />
         </div>

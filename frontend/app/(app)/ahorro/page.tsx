@@ -109,6 +109,12 @@ export default function AhorroPage() {
       .catch(e => setError(getErrorMessage(e, "No pudimos traer tus objetivos.")));
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    // Inicio manda acá con ?nuevo=1 para crear el primer objetivo.
+    if (new URLSearchParams(window.location.search).get("nuevo") !== "1") return;
+    setCreating("");
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
 
   const active = data?.goals.filter(g => !g.archived) ?? [];
   const archived = data?.goals.filter(g => g.archived) ?? [];

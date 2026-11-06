@@ -53,9 +53,9 @@ export const money = (amount: number | string, currency: Currency) => ledgerAmou
 export const monthLabel = (iso: string) => format(parseISO(iso), "MMMM yyyy", { locale: es });
 
 /**
- * El ritmo dice algo recién con más de un mes de aportes. El backend reparte lo
- * juntado en los meses desde el primer aporte, así que un objetivo creado hoy con
- * "ya tengo U$D 800" vendría "a U$D 800 por mes" y llegaría en tres meses.
+ * El ritmo dice algo recién con más de un mes de aportes: con uno solo, "venís
+ * aportando" es ese aporte. (Lo que ya estaba juntado al crear el objetivo el
+ * backend ya no lo cuenta como ritmo.)
  */
 export const hasPace = (g: Goal) =>
   g.pace_per_month !== null && Number(g.pace_per_month) > 0 && Number(g.pace_per_month) < Number(g.saved);
