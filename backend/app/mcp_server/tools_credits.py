@@ -1,5 +1,5 @@
-"""Créditos y objetivos de ahorro, de lectura. Los cálculos son los de la
-pantalla (`services/credits.py`, `services/savings.py`)."""
+"""Créditos, objetivos de ahorro e inversiones, de lectura. Los cálculos son los de la
+pantalla (`services/credits.py`, `services/savings.py`, `services/investments.py`)."""
 from typing import Any
 
 from sqlalchemy import select
@@ -8,8 +8,9 @@ from app.mcp_server.context import current_caller, tool_session
 from app.mcp_server.instance import READ_ONLY, mcp
 from app.mcp_server.serialize import f, guard
 from app.models.mortgage import MortgageLoan
+from app.models.investment import Investment
 from app.models.savings import SavingsGoal
-from app.services import credits, savings
+from app.services import credits, investments, savings
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -91,3 +92,43 @@ async def get_savings_goals() -> dict[str, Any]:
                 "eta": s.eta.isoformat() if s.eta else None,
             })
     return guard({"goals": out})
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def get_investments() -> dict[str, Any]:
+    """Las inversiones del hogar (plazo fijo, cuenta remunerada, FCI, acciones,
+    cripto, efectivo): cuánto se puso, cuánto vale hoy y cuánto ganó o perdió.
+
+    `value` sale de la tasa en un plazo fijo o una cuenta (`calculated`), y del
+    último valor que cargó la persona en lo que cotiza (`value_date`,
+    `stale_days`): puede estar desactualizado, decilo si es viejo. Lo que rinde
+    no es ingreso hasta el rescate, y poner plata no es un gasto. Pesos y
+    dólares van por separado.
+    """
+    async with tool_session() as db:
+        caller = await current_caller(db)
+        rows = (await db.scalars(
+            select(Investment).where(Investment.tenant_id == caller.tenant_id).order_by(Investment.id)
+        )).all()
+        out = []
+        for inv in rows:
+            v = investments.valuate(inv, await investments.movements_of(db, inv.id))
+            out.append({
+                "id": inv.id,
+                "name": inv.name,
+                "kind": inv.kind,
+                "currency": inv.currency,
+                "institution": inv.institution,
+                "tna_pct": f(inv.tna),
+                "maturity_date": inv.maturity_date.isoformat() if inv.maturity_date else None,
+                "closed_at": inv.closed_at.isoformat() if inv.closed_at else None,
+                "invested": f(v.invested),
+                "value": f(v.value),
+                "gain": f(v.gain),
+                "gain_pct": v.gain_pct,
+                "calculated": v.calculated,
+                "value_date": v.value_date.isoformat() if v.value_date else None,
+                "stale_days": v.stale_days,
+                "matured": v.matured,
+            })
+    return guard({"investments": out})

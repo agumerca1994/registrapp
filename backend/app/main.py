@@ -13,7 +13,7 @@ from starlette.routing import Route
 from app.routers import (
     auth, income, expenses, macro, dashboard, mortgage,
     shared_expenses, whatsapp, credit_cards, contacts, reminders, currency,
-    notifications, client_errors, directory, reconcile, credits, savings,
+    notifications, client_errors, directory, reconcile, credits, savings, investments,
 )
 from app.routers.internal_logs import router as internal_logs_router
 from app.routers.business import (
@@ -240,6 +240,7 @@ app.include_router(dashboard.router, dependencies=_deny_employees)
 app.include_router(mortgage.router, dependencies=_deny_employees)
 app.include_router(credits.router, dependencies=_deny_employees)
 app.include_router(savings.router, dependencies=_deny_employees)
+app.include_router(investments.router, dependencies=_deny_employees)
 app.include_router(shared_expenses.public_router)
 app.include_router(shared_expenses.router, dependencies=_deny_employees)
 app.include_router(credit_cards.router, dependencies=_deny_employees)

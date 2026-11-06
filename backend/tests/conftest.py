@@ -60,6 +60,7 @@ from app.models.bot_case import BotCase  # noqa: E402
 from app.models.device_token import DeviceToken  # noqa: E402
 from app.models.mcp_auth import McpAuthCode  # noqa: E402
 from app.models.savings import SavingsContribution, SavingsGoal  # noqa: E402
+from app.models.investment import Investment, InvestmentMovement  # noqa: E402
 from sqlalchemy.dialects.postgresql import JSONB  # noqa: E402
 from sqlalchemy.ext.compiler import compiles  # noqa: E402
 
@@ -123,6 +124,8 @@ _TABLES = [
     McpAuthCode.__table__,
     SavingsGoal.__table__,
     SavingsContribution.__table__,
+    Investment.__table__,
+    InvestmentMovement.__table__,
 ]
 
 
