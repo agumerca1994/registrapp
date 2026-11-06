@@ -42,7 +42,7 @@ export function MonthCard() {
   const isCurrent = year === now.getFullYear() && month === now.getMonth() + 1;
   const monthName = periodLabel.split(" ")[0];
 
-  // La cuota de la hipoteca es un gasto recién cuando se registra. Mientras tanto
+  // Las cuotas de los créditos son un gasto recién cuando se registran. Mientras tanto
   // se descuenta acá, igual que en Inicio (`analytics.today_summary`): si no, las
   // dos pantallas dicen un número distinto para lo mismo. Un mes pasado sin
   // registro ya no va a salir: ahí no se proyecta nada.
@@ -93,7 +93,7 @@ export function MonthCard() {
               <ChainRow label="Egresos" sign="−" value={formatARS(data.total_expenses)} />
               {data.fx_bought_ars > 0 && <ChainRow label="Compré dólares" sign="−" value={formatARS(data.fx_bought_ars)} />}
               {data.fx_sold_ars > 0 && <ChainRow label="Vendí dólares" sign="+" value={formatARS(data.fx_sold_ars)} />}
-              {pendingMortgage > 0 && <ChainRow label="Hipoteca por pagar" sign="−" value={formatARS(pendingMortgage)} />}
+              {pendingMortgage > 0 && <ChainRow label="Cuotas de créditos por pagar" sign="−" value={formatARS(pendingMortgage)} />}
               <ChainRow strong label="Queda" value={formatARS(left)} />
             </div>
             {hasDollars && (

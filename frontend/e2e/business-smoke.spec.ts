@@ -19,14 +19,14 @@ test("negocio: Inicio y navegación son los del negocio", async ({ page }) => {
   await page.goto("/dashboard");
   const sidebar = page.locator("aside nav");
   await expect(sidebar.getByRole("link", { name: "Proveedores y empleados" })).toBeVisible();
-  for (const householdOnly of ["Ingresos", "Divisas", "Gastos compartidos", "Hipoteca", "Variables macro"]) {
+  for (const householdOnly of ["Ingresos", "Divisas", "Gastos compartidos", "Créditos", "Ahorro", "Variables macro"]) {
     await expect(sidebar.getByRole("link", { name: householdOnly })).toHaveCount(0);
   }
   await expect(page.getByText(/^Resultado de /)).toBeVisible();
 });
 
 test("negocio: las pantallas del hogar llevan a Inicio", async ({ page }) => {
-  for (const route of ["/income", "/divisas", "/shared", "/mortgage", "/macro"]) {
+  for (const route of ["/income", "/divisas", "/shared", "/mortgage", "/creditos", "/ahorro", "/macro"]) {
     await page.goto(route);
     await expect(page).toHaveURL(/\/dashboard$/);
   }

@@ -70,7 +70,7 @@ interface ExpenseEntry {
   category: Category;
 }
 
-// La cuota de la hipoteca la genera la sincronización: nadie la cargó.
+// La cuota de un crédito la genera la sincronización: nadie la cargó.
 const loaderId = (entry: ExpenseEntry) => (entry.source === "mortgage" ? null : entry.user_id);
 
 type SortKey = "date" | "category" | "amount";
@@ -105,7 +105,7 @@ function EntryDetailModal({
       footer={isCreditCard ? (
         <SheetLink note="Es de tarjeta: se edita o se elimina desde su resumen." label="Ver en resumen" onClick={onViewStatement} />
       ) : entry.source === "mortgage" ? (
-        <SheetLink note="Es una cuota de la hipoteca: las registra la app y no se eliminan." label="Ver hipoteca" onClick={onViewMortgage} />
+        <SheetLink note="Es la cuota de un crédito: la registra la app y se maneja desde Créditos." label="Ver créditos" onClick={onViewMortgage} />
       ) : (
         <SheetActions noun="egreso" onEdit={onEdit} onDelete={onDelete} />
       )}
@@ -587,7 +587,7 @@ export default function ExpensesPage() {
           onEdit={() => { setDetailEntry(null); openEdit(detailEntry); }}
           onDelete={() => handleDelete(detailEntry.id)}
           onViewStatement={() => handleViewStatement(detailEntry.id)}
-          onViewMortgage={() => router.push("/mortgage")}
+          onViewMortgage={() => router.push("/creditos")}
           onClose={() => setDetailEntry(null)}
         />
       )}

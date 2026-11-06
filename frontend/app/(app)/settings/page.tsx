@@ -44,7 +44,7 @@ interface Member {
 }
 
 
-const APP_TOUR_IDS = ["dashboard-intro", "income-intro", "expenses-intro", "shared-intro", ...BUSINESS_TOUR_IDS];
+const APP_TOUR_IDS = ["dashboard-intro", "income-intro", "expenses-intro", "shared-intro", "creditos-intro", "ahorro-intro", ...BUSINESS_TOUR_IDS];
 
 function buildHouseholdInviteMessage(name: string, code: string, appUrl: string, business = false): string {
   // El paso 3 nombra el botón tal como se ve en /onboarding, que cambia con

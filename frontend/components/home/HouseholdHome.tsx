@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { ArrowRight, CalendarDays, Eye, EyeOff, FileUp, Home, Users2 } from "lucide-react";
+import { ArrowRight, CalendarDays, Eye, EyeOff, FileUp, Landmark, Users2 } from "lucide-react";
 import type { Step } from "react-joyride";
 import api from "@/lib/api";
 import { features } from "@/lib/features";
@@ -42,7 +42,7 @@ const tourSteps = (hasPeriods: boolean): Step[] => [
   {
     target: "[data-tour='home-next']",
     title: "Lo que viene",
-    content: "Los vencimientos de tus tarjetas, la hipoteca y tus recordatorios, antes de que lleguen.",
+    content: "Los vencimientos de tus tarjetas, tus créditos y tus recordatorios, antes de que lleguen.",
   },
   {
     target: "[data-tour='nav-movimientos']",
@@ -110,7 +110,7 @@ function headline(t: Today): { label: string; amount: number; lines: string[] } 
   if (t.moment === "no_income") {
     const soon = t.upcoming.filter(i => i.amount && differenceInCalendarDays(parseISO(i.date), parseISO(t.today)) <= 10);
     if (Number(t.next_10_days) > 0) {
-      const names = soon.slice(0, 2).map(i => `${i.kind === "mortgage" ? "la hipoteca" : i.title} el ${format(parseISO(i.date), "d")}`);
+      const names = soon.slice(0, 2).map(i => `${i.kind === "mortgage" ? `la cuota de ${i.title}` : i.title} el ${format(parseISO(i.date), "d")}`);
       const list = capitalize(names.join(" y ")) + (soon.length > 2 ? ` y ${soon.length - 2} más.` : ".");
       return { label: "En los próximos 10 días salen", amount: Number(t.next_10_days), lines: [list, dollars].filter(Boolean) as string[] };
     }
@@ -180,7 +180,7 @@ function Figure({ amount, className = "" }: { amount: number; className?: string
 function Shortcuts() {
   const third = features.reconcile
     ? { href: "/tarjetas/resumenes", label: "Resumen", icon: FileUp }
-    : { href: "/mortgage", label: "Hipoteca", icon: Home };
+    : { href: "/creditos", label: "Créditos", icon: Landmark };
   const items = [{ href: "/shared", label: "Compartir", icon: Users2 }, third, { href: "/calendario", label: "Calendario", icon: CalendarDays }];
   const circle = "w-[58px] h-[58px] rounded-full bg-white/15 border border-white/25 flex items-center justify-center";
   const link = "flex flex-col items-center gap-[7px] text-[13.5px] font-medium active:scale-[0.97] transition-transform duration-100";
@@ -289,7 +289,7 @@ function upcomingDetail(item: Upcoming, today: string): string {
   return `Vence en ${days} días`;
 }
 
-const UPCOMING_HREF = { card: "/tarjetas", mortgage: "/mortgage", reminder: "/calendario" };
+const UPCOMING_HREF = { card: "/tarjetas", mortgage: "/creditos", reminder: "/calendario" };
 
 function WhatsNext({ t }: { t: Today }) {
   return (
@@ -353,7 +353,7 @@ function NextMonth({ t }: { t: Today }) {
     <Card className="p-[18px]">
       <h2 className="text-[15px] font-medium text-muted-foreground">{capitalize(monthName(t.today, 1))} ya tiene comprometidos</h2>
       <p className="mt-1 text-[34px] font-medium leading-tight tracking-[-0.035em] tabular-nums">{formatARSRound(t.next_month_committed)}</p>
-      <p className="mt-0.5 text-sm text-muted-foreground">Las tarjetas y la hipoteca, hasta ahora.</p>
+      <p className="mt-0.5 text-sm text-muted-foreground">Las tarjetas y las cuotas de tus créditos, hasta ahora.</p>
     </Card>
   );
 }

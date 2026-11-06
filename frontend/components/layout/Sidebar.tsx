@@ -15,7 +15,7 @@ import api from "@/lib/api";
 import { cn, formatUSD } from "@/lib/utils";
 import {
   LayoutDashboard, TrendingDown, BarChart3, ArrowDownUp, Plus,
-  Home, Settings, MoreHorizontal, Users2, CreditCard, CalendarDays,
+  Landmark, PiggyBank, Settings, MoreHorizontal, Users2, CreditCard, CalendarDays,
   ArrowLeftRight, Contact, ShoppingBag, Package,
 } from "lucide-react";
 import { isBusiness, isEmployee } from "@/lib/account";
@@ -38,10 +38,11 @@ const nav: NavItem[] = [
   { href: "/dashboard", label: "Inicio", icon: LayoutDashboard, tour: "nav-dashboard" },
   { href: "/expenses", label: "Movimientos", icon: ArrowDownUp, tour: "nav-movimientos", also: ["/income"] },
   { href: "/divisas", label: "Divisas", icon: ArrowLeftRight, tour: "nav-divisas" },
+  { href: "/ahorro", label: "Ahorro", icon: PiggyBank },
   { href: "/shared", label: "Gastos compartidos", icon: Users2, tour: "nav-shared" },
   { href: "/tarjetas", label: "Tarjetas", icon: CreditCard, tour: "nav-tarjetas" },
   { href: "/calendario", label: "Calendario de pagos", icon: CalendarDays, tour: "nav-calendario" },
-  { href: "/mortgage", label: "Hipoteca", icon: Home },
+  { href: "/creditos", label: "Créditos", icon: Landmark, also: ["/mortgage"] },
   { href: "/macro", label: "Variables macro", icon: BarChart3 },
   { href: "/settings", label: "Configuración", icon: Settings },
 ];
@@ -51,7 +52,7 @@ const nav: NavItem[] = [
 const MOBILE_TAB_HREFS = ["/dashboard", "/expenses", "/tarjetas"];
 
 // Un negocio ve sólo lo que tiene sentido en un comercio: sin divisas,
-// hipoteca, compartidos ni macro (las rutas, en lib/account.ts). En la tab bar
+// créditos, ahorro, compartidos ni macro (las rutas, en lib/account.ts). En la tab bar
 // va lo de todos los días: vender, gastar y los productos.
 const BUSINESS_NAV: NavItem[] = [
   { href: "/dashboard", label: "Inicio", icon: LayoutDashboard },
@@ -186,7 +187,8 @@ const MORE_HINTS: Record<string, string> = {
   "/divisas": "Tus dólares",
   "/shared": "Dividir gastos",
   "/calendario": "Vencimientos",
-  "/mortgage": "Tu crédito",
+  "/ahorro": "Tus objetivos",
+  "/creditos": "Préstamos y cuotas",
   "/macro": "Dólar e inflación",
   "/settings": "Cuenta y avisos",
   "/proveedores": "A quién le pagás",
@@ -224,7 +226,7 @@ function MoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bo
     if (today) {
       if (href === "/divisas" && Number(today.usd_holding) > 0) return `${formatUSD(today.usd_holding).replace(/,00$/, "")} guardados`;
       if (href === "/calendario" && today.upcoming[0]) return `Próximo: ${format(parseISO(today.upcoming[0].date), "d MMM", { locale: es }).replace(".", "")}`;
-      if (href === "/mortgage") {
+      if (href === "/creditos") {
         const cuota = today.upcoming.find(i => i.kind === "mortgage")?.detail;
         if (cuota) return cuota;
       }
