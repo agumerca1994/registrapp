@@ -17,9 +17,9 @@ import { BLOCK, GLASS } from "@/components/ui/glass";
 import { EntrySheet, SheetRow } from "@/components/movimientos/EntrySheet";
 import { LedgerRow, ledgerAmount } from "@/components/movimientos/Ledger";
 import { CreditForm } from "@/components/creditos/CreditForm";
-import { CreditView, LoadError } from "@/components/creditos/CreditView";
+import { AddCreditButton, CreditView, LoadError } from "@/components/creditos/CreditView";
 import {
-  H1, MENU_ITEM, MENU_PANEL, creditSub, fmtDecimal, fmtShortDate, isCurrentMonth, money, monthName,
+  H1, MENU_PANEL, creditSub, fmtDecimal, fmtShortDate, isCurrentMonth, money, monthName,
   type Credit,
 } from "@/components/creditos/shared";
 
@@ -103,9 +103,9 @@ export default function CreditosPage() {
   useEffect(() => { load(); }, [load]);
 
   const addButton = (
-    <button onClick={() => setAdding(true)} data-tour="creditos-add"
+    <button onClick={() => setAdding(true)}
       className="h-[52px] px-6 rounded-full bg-ink text-background font-semibold text-[15.5px] inline-flex items-center gap-2 active:scale-[0.98] transition-transform duration-100">
-      <Plus className="w-[18px] h-[18px]" /> {credits && credits.length > 0 ? "Agregar otro crédito" : "Agregar crédito"}
+      <Plus className="w-[18px] h-[18px]" /> Agregar crédito
     </button>
   );
 
@@ -186,7 +186,6 @@ export default function CreditosPage() {
         <CreditView key={only.id} id={only.id} initial={only} embedded
           onChanged={load} onDeleted={load} onAdd={() => setAdding(true)}
           tour={(c, hasPayments) => <ProductTour tourId="creditos-intro" steps={singleTour(c, hasPayments)} />} />
-        <div className="px-2">{addButton}</div>
         {extras}
         {form}
       </div>
@@ -196,6 +195,8 @@ export default function CreditosPage() {
   const header = (
     <div className="flex items-center justify-between gap-2">
       <h1 className={H1}>Créditos</h1>
+      <div className="flex items-center gap-0.5 shrink-0">
+      {live.length > 0 && <AddCreditButton onClick={() => setAdding(true)} />}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
           <button title="Más acciones" aria-label="Más acciones"
@@ -206,14 +207,10 @@ export default function CreditosPage() {
         <DropdownMenu.Portal>
           <DropdownMenu.Content align="end" sideOffset={4} className={MENU_PANEL}>
             <DropdownMenu.Item asChild><PrivacyMenuItem /></DropdownMenu.Item>
-            <DropdownMenu.Item asChild>
-              <button onClick={() => setAdding(true)} className={`${MENU_ITEM} text-foreground`}>
-                <Plus className="w-4 h-4 text-muted-foreground" /> Agregar crédito
-              </button>
-            </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
+      </div>
     </div>
   );
 
@@ -328,7 +325,6 @@ export default function CreditosPage() {
         <MotionList data-tour="creditos-list">
           {live.map(c => <CreditRow key={c.id} credit={c} onOpen={() => router.push(`/creditos/${c.id}`)} />)}
         </MotionList>
-        <div className="mt-4">{addButton}</div>
       </section>
 
       {extras}

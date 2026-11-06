@@ -33,6 +33,16 @@ const PAYMENTS_SHOWN = 12;
  * también `/creditos` cuando hay uno solo activo (`embedded`), que se ve como la
  * Hipoteca de antes.
  */
+/** El alta va arriba, al lado del ⋮, igual que "+ Objetivo" en Ahorro. */
+export function AddCreditButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} data-tour="creditos-add"
+      className="h-11 pl-3.5 pr-4 rounded-full bg-ink text-background text-[14.5px] font-semibold inline-flex items-center gap-1.5 active:scale-[0.97] transition-transform duration-100">
+      <Plus className="w-[18px] h-[18px]" /> Crédito
+    </button>
+  );
+}
+
 export function CreditView({ id, initial, embedded = false, onChanged, onDeleted, onAdd, tour }: {
   id: number;
   initial?: Credit;
@@ -158,6 +168,8 @@ export function CreditView({ id, initial, embedded = false, onChanged, onDeleted
         sub={embedded ? c.title : c.title !== c.kind_label ? c.kind_label : undefined}
         embedded={embedded}
         menu={
+          <div className="flex items-center gap-0.5 shrink-0">
+          {onAdd && <AddCreditButton onClick={onAdd} />}
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <button title="Más acciones" aria-label="Más acciones" data-tour="creditos-menu"
@@ -168,13 +180,6 @@ export function CreditView({ id, initial, embedded = false, onChanged, onDeleted
             <DropdownMenu.Portal>
               <DropdownMenu.Content align="end" sideOffset={4} className={MENU_PANEL}>
                 <DropdownMenu.Item asChild><PrivacyMenuItem /></DropdownMenu.Item>
-                {onAdd && (
-                  <DropdownMenu.Item asChild>
-                    <button onClick={onAdd} className={`${MENU_ITEM} text-foreground`}>
-                      <Plus className="w-4 h-4 text-muted-foreground" /> Agregar otro crédito
-                    </button>
-                  </DropdownMenu.Item>
-                )}
                 <DropdownMenu.Item asChild>
                   <button onClick={() => setEditing(true)} className={`${MENU_ITEM} text-foreground`}>
                     <Pencil className="w-4 h-4 text-muted-foreground" /> Editar crédito
@@ -200,6 +205,7 @@ export function CreditView({ id, initial, embedded = false, onChanged, onDeleted
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
+          </div>
         }
       />
 
