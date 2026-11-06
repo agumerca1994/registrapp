@@ -68,6 +68,27 @@ export const CHANGELOG: Release[] = [
     ],
   },
   {
+    version: "1.0.7",
+    date: "2026-11-06",
+    notes: [
+      "Preparamos los objetivos con una cuota fija por mes, que llega pronto.",
+    ],
+  },
+  {
+    version: "1.0.6",
+    date: "2026-11-06",
+    notes: [
+      "Preparamos Inversiones para fondos que rinden: se va a poder rescatar más de lo que pusiste.",
+    ],
+  },
+  {
+    version: "1.0.5",
+    date: "2026-11-06",
+    notes: [
+      "Preparamos la app para Inversiones, que llega pronto.",
+    ],
+  },
+  {
     version: "1.0.4",
     date: "2026-11-06",
     notes: [

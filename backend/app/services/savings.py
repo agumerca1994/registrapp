@@ -36,6 +36,19 @@ class GoalSummary:
     eta: date | None              # a ese ritmo, cuándo se llega
     overdue: bool                 # pasó la fecha y no se llegó
     last_contribution: date | None
+    # La cuota fija: si toca cumplirla este mes, cuánto, y a ese ritmo cuándo se llega.
+    plan_paid_this_month: bool
+    plan_due: bool
+    plan_due_amount: Decimal | None
+    plan_eta: date | None
+
+
+PLAN_NOTE = "Cuota del mes"
+
+
+def add_months_first(day: date, months: int) -> date:
+    idx = day.year * 12 + day.month - 1 + months
+    return date(idx // 12, idx % 12 + 1, 1)
 
 
 def months_between(start: date, end: date) -> int:
@@ -88,6 +101,18 @@ async def summarize(db: AsyncSession, goal: SavingsGoal, today: date | None = No
             idx = today.year * 12 + today.month - 1 + ahead
             eta = date(idx // 12, idx % 12 + 1, 1)
 
+    # La cuota del mes: vence el `plan_day` y se da por cumplida con cualquier aporte del mes.
+    month_start = date(today.year, today.month, 1)
+    paid_month = any(Decimal(a) > 0 and d >= month_start for a, d, _ in rows)
+    plan = Decimal(goal.plan_amount) if goal.plan_amount else None
+    active_plan = plan is not None and not goal.plan_paused and goal.archived_at is None and not achieved
+    plan_due = bool(active_plan and not paid_month and today.day >= (goal.plan_day or 1))
+    plan_due_amount = min(plan, remaining) if active_plan else None
+    plan_eta = None
+    if active_plan and remaining > 0:
+        # Cuántas cuotas faltan, contando la de este mes si todavía no se pagó.
+        plan_eta = add_months_first(today, math.ceil(remaining / plan) - (0 if paid_month else 1))
+
     return GoalSummary(
         goal=goal,
         saved=saved,
@@ -100,6 +125,10 @@ async def summarize(db: AsyncSession, goal: SavingsGoal, today: date | None = No
         eta=eta,
         overdue=overdue,
         last_contribution=max((d for _, d, _ in rows), default=None),
+        plan_paid_this_month=paid_month,
+        plan_due=plan_due,
+        plan_due_amount=plan_due_amount,
+        plan_eta=plan_eta,
     )
 
 

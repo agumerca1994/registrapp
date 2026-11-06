@@ -74,3 +74,25 @@ async def test_what_was_already_saved_is_not_pace(db):
     await savings.add_contribution(db, goal, 1, Decimal("100"), date(2026, 11, 10), None)
     s = await savings.summarize(db, goal, date(2026, 11, 20))
     assert s.pace_per_month == Decimal("100.00")
+
+
+@pytest.mark.asyncio
+async def test_monthly_plan_is_due_from_its_day_until_something_is_put(db):
+    goal = await _goal(db, plan_amount=Decimal("200"), plan_day=10)
+    assert not (await savings.summarize(db, goal, date(2026, 11, 9))).plan_due
+    s = await savings.summarize(db, goal, date(2026, 11, 10))
+    assert s.plan_due and s.plan_due_amount == Decimal("200")
+    assert s.plan_eta == date(2027, 4, 1)  # 1.200 en cuotas de 200: nov a abr
+    await savings.add_contribution(db, goal, 1, Decimal("200"), date(2026, 11, 12), savings.PLAN_NOTE)
+    s = await savings.summarize(db, goal, date(2026, 11, 20))
+    assert not s.plan_due and s.plan_paid_this_month and s.plan_eta == date(2027, 4, 1)
+    goal.plan_paused = True
+    assert (await savings.summarize(db, goal, date(2026, 12, 15))).plan_due_amount is None
+
+
+@pytest.mark.asyncio
+async def test_the_last_monthly_payment_only_covers_what_is_left(db):
+    goal = await _goal(db, plan_amount=Decimal("500"), plan_day=1)
+    await savings.add_contribution(db, goal, 1, Decimal("1000"), date(2026, 10, 1), None)
+    s = await savings.summarize(db, goal, date(2026, 11, 2))
+    assert s.plan_due_amount == Decimal("200")
