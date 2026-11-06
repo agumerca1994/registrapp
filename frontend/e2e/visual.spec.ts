@@ -16,7 +16,7 @@ const ROUTES = [
   "/registrar",
   "/divisas",
   "/creditos",
-  "/ahorro",
+  "/objetivos",
   "/inversiones",
   "/macro",
   "/settings",

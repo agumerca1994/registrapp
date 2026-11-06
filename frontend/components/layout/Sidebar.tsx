@@ -15,7 +15,7 @@ import api from "@/lib/api";
 import { cn, formatUSD } from "@/lib/utils";
 import {
   LayoutDashboard, TrendingDown, BarChart3, ArrowDownUp, Plus,
-  Landmark, PiggyBank, TrendingUp, Settings, MoreHorizontal, Users2, CreditCard, CalendarDays,
+  Landmark, Target, TrendingUp, Settings, MoreHorizontal, Users2, CreditCard, CalendarDays,
   ArrowLeftRight, Contact, ShoppingBag, Package,
 } from "lucide-react";
 import { isBusiness, isEmployee } from "@/lib/account";
@@ -38,7 +38,7 @@ const nav: NavItem[] = [
   { href: "/dashboard", label: "Inicio", icon: LayoutDashboard, tour: "nav-dashboard" },
   { href: "/expenses", label: "Movimientos", icon: ArrowDownUp, tour: "nav-movimientos", also: ["/income"] },
   { href: "/divisas", label: "Divisas", icon: ArrowLeftRight, tour: "nav-divisas" },
-  { href: "/ahorro", label: "Ahorro", icon: PiggyBank },
+  { href: "/objetivos", label: "Objetivos", icon: Target, also: ["/ahorro"] },
   { href: "/inversiones", label: "Inversiones", icon: TrendingUp },
   { href: "/shared", label: "Gastos compartidos", icon: Users2, tour: "nav-shared" },
   { href: "/tarjetas", label: "Tarjetas", icon: CreditCard, tour: "nav-tarjetas" },
@@ -53,7 +53,7 @@ const nav: NavItem[] = [
 const MOBILE_TAB_HREFS = ["/dashboard", "/expenses", "/tarjetas"];
 
 // Un negocio ve sólo lo que tiene sentido en un comercio: sin divisas,
-// créditos, ahorro, inversiones, compartidos ni macro (las rutas, en lib/account.ts). En la tab bar
+// créditos, objetivos, inversiones, compartidos ni macro (las rutas, en lib/account.ts). En la tab bar
 // va lo de todos los días: vender, gastar y los productos.
 const BUSINESS_NAV: NavItem[] = [
   { href: "/dashboard", label: "Inicio", icon: LayoutDashboard },
@@ -188,7 +188,7 @@ const MORE_HINTS: Record<string, string> = {
   "/divisas": "Tus dólares",
   "/shared": "Dividir gastos",
   "/calendario": "Vencimientos",
-  "/ahorro": "Tus objetivos",
+  "/objetivos": "Para qué juntás",
   "/inversiones": "Cuánto vale hoy",
   "/creditos": "Préstamos y cuotas",
   "/macro": "Dólar e inflación",

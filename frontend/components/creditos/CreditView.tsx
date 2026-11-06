@@ -33,7 +33,7 @@ const PAYMENTS_SHOWN = 12;
  * también `/creditos` cuando hay uno solo activo (`embedded`), que se ve como la
  * Hipoteca de antes.
  */
-/** El alta va arriba, al lado del ⋮, igual que "+ Objetivo" en Ahorro. */
+/** El alta va arriba, al lado del ⋮, igual que "+ Objetivo" en Objetivos. */
 export function AddCreditButton({ onClick }: { onClick: () => void }) {
   return (
     <button onClick={onClick} data-tour="creditos-add"
