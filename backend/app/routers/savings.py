@@ -23,6 +23,13 @@ async def _actor(actor: Actor | None = Depends(get_actor)) -> Actor:
     return actor
 
 
+def _check_plan(amount: Decimal | None, day: int | None) -> None:
+    if amount is not None and amount <= 0:
+        raise ValueError("La cuota del mes tiene que ser mayor que cero.")
+    if day is not None and not 1 <= day <= 28:
+        raise ValueError("El día va del 1 al 28.")
+
+
 class GoalCreate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     currency: str = "USD"
@@ -30,9 +37,13 @@ class GoalCreate(BaseModel):
     target_date: date | None = None
     # Lo que ya está juntado al crear el objetivo, como primer aporte.
     initial_amount: Decimal | None = None
+    # Cuota fija mensual (opcional): cuánto y qué día.
+    plan_amount: Decimal | None = None
+    plan_day: int | None = None
 
     @model_validator(mode="after")
     def check(self):
+        _check_plan(self.plan_amount, self.plan_day)
         self.name = self.name.strip()
         if not self.name:
             raise ValueError("Ponele un nombre al objetivo.")
@@ -50,9 +61,13 @@ class GoalUpdate(BaseModel):
     target_amount: Decimal | None = None
     target_date: date | None = None
     archived: bool | None = None
+    plan_amount: Decimal | None = None  # null explícito: pasa a aportes sueltos
+    plan_day: int | None = None
+    plan_paused: bool | None = None
 
     @model_validator(mode="after")
     def check(self):
+        _check_plan(self.plan_amount, self.plan_day)
         if self.target_amount is not None and self.target_amount <= 0:
             raise ValueError("El monto objetivo tiene que ser mayor que cero.")
         return self
@@ -76,6 +91,13 @@ class GoalOut(BaseModel):
     eta: date | None
     overdue: bool
     last_contribution: date | None
+    plan_amount: Decimal | None
+    plan_day: int | None
+    plan_paused: bool
+    plan_paid_this_month: bool
+    plan_due: bool
+    plan_due_amount: Decimal | None
+    plan_eta: date | None
 
 
 class GoalsOut(BaseModel):
@@ -115,6 +137,9 @@ def _out(s: savings.GoalSummary) -> GoalOut:
         months_left=s.months_left, per_month_needed=s.per_month_needed,
         pace_per_month=s.pace_per_month, eta=s.eta, overdue=s.overdue,
         last_contribution=s.last_contribution,
+        plan_amount=g.plan_amount, plan_day=g.plan_day, plan_paused=bool(g.plan_paused),
+        plan_paid_this_month=s.plan_paid_this_month, plan_due=s.plan_due,
+        plan_due_amount=s.plan_due_amount, plan_eta=s.plan_eta,
     )
 
 
@@ -139,6 +164,7 @@ async def create_goal(body: GoalCreate, actor: Actor = Depends(_actor), db: Asyn
     goal = SavingsGoal(
         tenant_id=actor.user.tenant_id, user_id=actor.user.id, name=body.name,
         currency=body.currency, target_amount=body.target_amount, target_date=body.target_date,
+        plan_amount=body.plan_amount, plan_day=(body.plan_day or 1) if body.plan_amount else None,
     )
     db.add(goal)
     await db.flush()
@@ -177,6 +203,16 @@ async def update_goal(
         goal.target_date = data["target_date"]
     if data.get("archived") is not None:
         goal.archived_at = datetime.utcnow() if data["archived"] else None
+    if "plan_amount" in data:
+        goal.plan_amount = data["plan_amount"]
+        if data["plan_amount"] is None:
+            goal.plan_day, goal.plan_paused = None, False
+        elif goal.plan_day is None:
+            goal.plan_day = data.get("plan_day") or 1
+    if data.get("plan_day") is not None and goal.plan_amount is not None:
+        goal.plan_day = data["plan_day"]
+    if data.get("plan_paused") is not None:
+        goal.plan_paused = data["plan_paused"]
     await db.commit()
     await db.refresh(goal)
     return _out(await savings.summarize(db, goal))
@@ -214,3 +250,17 @@ async def delete_contribution(
         raise HTTPException(status_code=404, detail="Aporte no encontrado")
     await savings.delete_contribution(db, row)
     await db.commit()
+
+
+@router.post("/goals/{goal_id}/fulfill", response_model=ContributionOut, status_code=201)
+async def fulfill_plan(goal_id: int, actor: Actor = Depends(_actor), db: AsyncSession = Depends(get_db)):
+    """"Cumplir" desde Inicio: aporta la cuota del mes, hoy, en un toque."""
+    goal = await savings.own_goal(db, goal_id, actor.user.tenant_id)
+    s = await savings.summarize(db, goal)
+    if not s.plan_due_amount:
+        raise HTTPException(status_code=400, detail="Este objetivo no tiene una cuota del mes para cumplir.")
+    if s.plan_paid_this_month:
+        raise HTTPException(status_code=409, detail="Este mes ya aportaste.")
+    row = await savings.add_contribution(db, goal, actor.user.id, s.plan_due_amount, ar_today(), savings.PLAN_NOTE)
+    await db.commit()
+    return ContributionOut.model_validate(row)

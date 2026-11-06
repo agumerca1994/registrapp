@@ -90,6 +90,11 @@ async def get_savings_goals() -> dict[str, Any]:
                 "per_month_needed": f(s.per_month_needed),
                 "pace_per_month": f(s.pace_per_month),
                 "eta": s.eta.isoformat() if s.eta else None,
+                "monthly_plan": {
+                    "amount": f(goal.plan_amount), "day": goal.plan_day, "paused": bool(goal.plan_paused),
+                    "due_now": s.plan_due, "paid_this_month": s.plan_paid_this_month,
+                    "eta": s.plan_eta.isoformat() if s.plan_eta else None,
+                } if goal.plan_amount else None,
             })
     return guard({"goals": out})
 

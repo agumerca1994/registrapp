@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -23,6 +23,11 @@ class SavingsGoal(Base):
     currency: Mapped[str] = mapped_column(String(3), default="USD")
     target_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
     target_date: Mapped[date | None] = mapped_column(Date)
+    # Cómo se junta: sin `plan_amount`, aportes sueltos. Con él, una cuota fija
+    # que vence el `plan_day` de cada mes y que Inicio pide cumplir.
+    plan_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    plan_day: Mapped[int | None] = mapped_column(Integer)
+    plan_paused: Mapped[bool] = mapped_column(Boolean, server_default="false", default=False)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
