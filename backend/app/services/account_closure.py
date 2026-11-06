@@ -56,6 +56,7 @@ from app.models.income import IncomeEntry, IncomeSource, IncomeSourceField
 from app.models.mcp_auth import McpAuthCode, McpToken
 from app.models.mortgage import MortgageLoan
 from app.models.payment_reminder import PaymentReminder
+from app.models.savings import SavingsContribution, SavingsGoal
 from app.models.reconciliation import CaptureRule, ReconciliationAction, ReconciliationSession
 from app.models.shared_expense import SharedExpense, SharedExpenseSplit
 from app.models.tenant import Tenant
@@ -143,6 +144,8 @@ def _tenant_text_columns(tenant_id: int):
         (CurrencyOperation, ("entity", "notes"), CurrencyOperation.tenant_id == tenant_id),
         (MortgageLoan, ("description", "loan_number"), MortgageLoan.tenant_id == tenant_id),
         (PaymentReminder, ("title",), PaymentReminder.tenant_id == tenant_id),
+        (SavingsGoal, ("name",), SavingsGoal.tenant_id == tenant_id),
+        (SavingsContribution, ("note",), SavingsContribution.tenant_id == tenant_id),
         (Payee, ("name", "name_key", "notes"), Payee.tenant_id == tenant_id),
         (Product, ("name", "name_key"), Product.tenant_id == tenant_id),
         (Sale, ("notes",), Sale.tenant_id == tenant_id),

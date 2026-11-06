@@ -18,7 +18,6 @@ Domain rules encoded here (they are load-bearing, not stylistic):
   card-heavy household that ran ~50% high — and made `ars_available` claim
   pesos that were already committed to next month's statement.
 """
-import calendar
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -31,12 +30,13 @@ from app.models.credit_card import CreditCard, CreditCardItem, CreditCardStateme
 from app.models.expense import EXPENSE_SOURCE_MORTGAGE, ExpenseCategory, ExpenseEntry
 from app.models.income import IncomeEntry, IncomeSource
 from app.models.macro_variable import MacroVariable
-from app.models.mortgage import MortgageLoan, MortgageRecord
+from app.models.mortgage import MortgageRecord
 from app.models.payment_reminder import PaymentReminder
 from app.services.currency import (
     RATE_TYPE_COLUMN, cash_out_date, get_fx_ars_flow, get_latest_rate,
     get_tenant_rate_type, get_usd_holding, statement_due_date, with_statement,
 )
+from app.services import credits
 from app.services.clock import ar_today
 from app.services.people import people_of
 
@@ -121,43 +121,18 @@ def add_months(year: int, month: int, delta: int) -> tuple[int, int]:
 async def mortgage_payment_for_month(
     db: AsyncSession, tenant_id: int, start: date, end: date
 ) -> tuple[Decimal | None, bool]:
-    """Recorded mortgage payment for the month, or one projected from the active loan.
+    """Las cuotas de créditos del mes, en pesos: `(monto, es_proyectado)`.
 
-    Returns `(amount, is_projected)`. UVA loans project as `cuota_uva` times the
-    latest known UVA value; fixed-rate loans just repeat `cuota_pesos`.
+    Suma todos los créditos activos (`credits.payments_for_month`). Si alguna
+    cuota del mes falta registrar, devuelve sólo lo que falta y `True`: es lo
+    que la pantalla resta como "por pagar", y lo registrado ya es un egreso.
+    Si están todas, devuelve lo registrado y `False`. El nombre quedó de
+    cuando sólo existía la hipoteca; los campos `mortgage_*` también.
     """
-    record = await db.scalar(
-        select(MortgageRecord).where(
-            MortgageRecord.tenant_id == tenant_id,
-            MortgageRecord.period_date >= start,
-            MortgageRecord.period_date < end,
-        )
-    )
-    if record:
-        return record.payment_amount, False
-
-    active_loan = await db.scalar(
-        select(MortgageLoan).where(
-            MortgageLoan.tenant_id == tenant_id,
-            MortgageLoan.is_active == True,  # noqa: E712 — SQLAlchemy needs the literal
-        ).limit(1)
-    )
-    if not active_loan:
-        return None, False
-
-    if active_loan.loan_type in ("uva_frances", "uva_aleman") and active_loan.cuota_uva:
-        latest_macro = await db.scalar(
-            select(MacroVariable)
-            .where(MacroVariable.uva_value.is_not(None), MacroVariable.period_date <= end)
-            .order_by(MacroVariable.period_date.desc())
-            .limit(1)
-        )
-        if latest_macro and latest_macro.uva_value:
-            return active_loan.cuota_uva * latest_macro.uva_value, True
-    elif active_loan.loan_type == "tasa_fija" and active_loan.cuota_pesos:
-        return active_loan.cuota_pesos, True
-
-    return None, False
+    recorded, projected = await credits.payments_for_month(db, tenant_id, start, end)
+    if projected:
+        return projected, True
+    return (recorded or None), False
 
 
 async def month_summary(
@@ -340,7 +315,7 @@ async def history_series(db: AsyncSession, tenant_id: int) -> list[HistoryPoint]
             func.date_trunc("month", MortgageRecord.period_date).label("p"),
             func.sum(MortgageRecord.payment_amount).label("total"),
         )
-        .where(MortgageRecord.tenant_id == tenant_id)
+        .where(MortgageRecord.tenant_id == tenant_id, MortgageRecord.currency == "ARS")
         .group_by(text("1"))
     )
     for r in rows:
@@ -953,13 +928,7 @@ async def reminders_by_period(
 
 def mortgage_payment_date(year: int, month: int, payment_day: int | None) -> date:
     """The day a loan's cuota falls in a given month."""
-    if payment_day is not None:
-        return date(year, month, min(payment_day, calendar.monthrange(year, month)[1]))
-    # Primer día hábil.
-    d = date(year, month, 1)
-    while d.weekday() >= 5:
-        d += timedelta(days=1)
-    return d
+    return credits.payment_date(year, month, payment_day)
 
 
 class UpcomingItem(BaseModel):
@@ -1038,29 +1007,24 @@ async def _upcoming_items(
         for r in rows
     ]
 
-    loan = await db.scalar(
-        select(MortgageLoan).where(
-            MortgageLoan.tenant_id == tenant_id,
-            MortgageLoan.is_active == True,  # noqa: E712 — SQLAlchemy needs the literal
-        ).limit(1)
-    )
-    if loan:
-        # La cuota del mes si todavía no se registró; si ya está, la del mes que viene.
-        start, end = month_bounds(today.year, today.month)
-        year, month = today.year, today.month
-        amount, projected = await mortgage_payment_for_month(db, tenant_id, start, end)
-        if not projected:
-            year, month = add_months(year, month, 1)
-            amount, _ = await mortgage_payment_for_month(db, tenant_id, *month_bounds(year, month))
-        number = (year - loan.first_payment_date.year) * 12 + month - loan.first_payment_date.month + 1
-        if amount is not None and number <= loan.total_cuotas:
-            items.append(UpcomingItem(
-                kind="mortgage",
-                title="Hipoteca",
-                date=mortgage_payment_date(year, month, loan.payment_day),
-                amount=amount,
-                detail=f"Cuota {number} de {loan.total_cuotas}",
-            ))
+    for loan in await credits.active_loans(db, tenant_id):
+        # La cuota del mes si todavía no se registró; si ya está, la que sigue.
+        summary = await credits.summarize(db, loan, today)
+        if summary.finished or summary.next_payment_date is None:
+            continue
+        if not today <= summary.next_payment_date < until:
+            continue
+        usd = loan.currency == "USD"
+        items.append(UpcomingItem(
+            kind="mortgage",
+            title=summary.title,
+            date=summary.next_payment_date,
+            # Un crédito manual no tiene monto previsible: va como recordatorio.
+            amount=(Decimal(0) if usd else summary.next_amount) if summary.next_amount is not None else None,
+            amount_usd=summary.next_amount if usd and summary.next_amount is not None else Decimal(0),
+            estimated=summary.next_is_estimated,
+            detail=f"Cuota {summary.cuota_numero} de {loan.total_cuotas}",
+        ))
 
     return sorted(items, key=lambda i: i.date)
 

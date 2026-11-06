@@ -755,3 +755,136 @@ async def test_audio_seconds_come_from_the_payload():
 ])
 def test_clean_transcript(heard, expected):
     assert wa_transcribe.clean(heard) == expected
+
+
+# ------------------------------------------ la semana del 03/11, con audios ---
+async def _source(db, name):
+    source = IncomeSource(tenant_id=1, name=name, income_type=IncomeType.other)
+    db.add(source)
+    await db.flush()
+    return source
+
+
+async def _count(db, model):
+    return await db.scalar(select(func.count()).select_from(model))
+
+
+@pytest.mark.parametrize("text", ["Me reintegraron 780 pesos", "780 reintegro", "recibí un reintegro de 780 pesos"])
+async def test_a_refund_is_income_not_expense(db, text):
+    await _cat(db, "Comida")
+    await _source(db, "Reintegros")
+    reply = await _say(db, text)
+    assert reply.startswith("✅ Ingreso de $780 en Reintegros")
+    assert await _count(db, ExpenseEntry) == 0
+
+
+async def test_paying_a_refund_is_still_an_expense(db):
+    await _cat(db, "Varios")
+    assert "$3.000" in await _say(db, "pagué el reintegro 3000")
+    assert await _count(db, IncomeEntry) == 0
+
+
+async def test_correcting_during_the_category_question_is_not_the_answer(db):
+    """Contenía el nombre de una categoría, y se cargaba ahí como gasto."""
+    await _cat(db, "reintegro")
+    await _cat(db, "Comida")
+    await _source(db, "Reintegros")
+    question = await _say(db, "780 en la feria")
+    assert "1. " in question
+    reply = await _say(db, "Está mal, te digo que recibí un reintegro de 780 pesos")
+    assert reply.startswith("✅ Ingreso de $780")
+    assert await _count(db, ExpenseEntry) == 0
+
+
+async def test_esta_mal_alone_cancels_the_open_question(db):
+    await _cat(db, "Comida")
+    await _cat(db, "Hogar")
+    await _say(db, "780 en la feria")
+    assert await _say(db, "Está mal") == "Listo, no lo cargo."
+
+
+@pytest.mark.parametrize("text", ["Me equivoqué, eran 35.000", "eran 35 mil", "no, eran 35 lucas", "perdón, 35000"])
+async def test_fixing_the_amount_of_what_was_just_loaded(db, text):
+    await _cat(db, "Regalos")
+    await _say(db, "35 en regalos")
+    reply = await _say(db, text)
+    assert reply.startswith("✏️")
+    assert await _count(db, ExpenseEntry) == 1
+    assert (await db.scalar(select(ExpenseEntry))).amount == Decimal("35000")
+
+
+async def test_old_expense_is_not_fixed_by_eran(db):
+    await _cat(db, "Regalos")
+    await _say(db, "35 en regalos")
+    rows = (await db.scalars(select(WaMessage))).all()
+    for row in rows:
+        row.created_at = row.created_at - timedelta(days=2)
+    await db.flush()
+    await _say(db, "eran 35 mil")
+    assert (await db.scalars(select(ExpenseEntry).order_by(ExpenseEntry.id))).first().amount == Decimal("35")
+
+
+async def test_description_after_changing_the_suggested_category(db):
+    """Cambiar la categoría cerraba la oferta, y "Fue descartables" no se entendía."""
+    hogar = await _cat(db, "Hogar")
+    await _cat(db, "Comida")
+    await _say(db, "4 lucas en comida")
+    entry = await db.scalar(select(ExpenseEntry))
+    db.add(WaMessage(user_id=1, direction="out", kind="text", pending={"type": "description_offer", "entry_id": entry.id}))
+    await db.commit()
+    assert (await _say(db, "Hogar")).startswith("✏️")
+    reply = await _say(db, "Fue descartables")
+    assert reply.startswith("✏️")
+    await db.refresh(entry)
+    assert entry.category_id == hogar.id
+    assert entry.description == "descartables"
+
+
+async def test_fue_fixes_the_description_when_the_offer_is_gone(db):
+    await _cat(db, "Comida")
+    await _say(db, "4 lucas en comida")
+    await _say(db, "eran 5 lucas")
+    await _say(db, "fue el almuerzo")
+    assert (await db.scalar(select(ExpenseEntry))).description == "el almuerzo"
+
+
+async def test_category_and_description_in_one_message(db):
+    """Así sale de un audio. Antes cambiaba la categoría y se perdía la descripción."""
+    servicios = await _cat(db, "Servicios")
+    await _cat(db, "Varios")
+    await _say(db, "27 lucas en varios")
+    replies = await wa_bot.handle(db, USER, _in("Categoría Servicios, Descripción, Gas"))
+    assert len(replies) == 2
+    entry = await db.scalar(select(ExpenseEntry))
+    assert entry.category_id == servicios.id
+    assert entry.description == "Gas"
+
+
+async def test_description_shortcut(db):
+    await _cat(db, "Varios")
+    await _say(db, "27 lucas en varios")
+    await _say(db, "listo")
+    await _say(db, "descripción gas")
+    assert (await db.scalar(select(ExpenseEntry))).description == "gas"
+
+
+def test_hice_un_gasto_is_code_not_ai():
+    draft = quick_capture.parse_amount_text("Hice un gasto de 10.500 pesos de prueba")
+    assert draft.amount == Decimal("10500")
+    assert draft.term == "prueba"
+
+
+async def test_a_small_amount_by_audio_warns_about_the_lost_mil(db, audio):
+    await _cat(db, "Regalos")
+    audio.said = "Gaste 35 en regalos"
+    reply = (await wa_bot.handle(db, USER, _audio()))[0]
+    assert "*eran 35 mil*" in reply
+
+
+async def test_own_name_also_matches_with_an_extra_given_name(db):
+    db.add(User(id=1, tenant_id=1, firebase_uid="u1", email="a@b.c", display_name="Ana Pérez",
+                first_name="Ana", last_name="Pérez", role=UserRole.admin))
+    await db.flush()
+    assert await wa_bot._is_own_name(db, USER, "ANA MARIA PEREZ")
+    assert not await wa_bot._is_own_name(db, USER, "ANA GOMEZ")
+    assert not await wa_bot._is_own_name(db, USER, "ANA")

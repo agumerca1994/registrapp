@@ -264,7 +264,21 @@ _EDIT_RE = re.compile(
     re.IGNORECASE,
 )
 # El atajo que se ofrece después de cada gasto: "categoría súper".
-_CATEGORY_RE = re.compile(r"^(categor[ií]a|fuente)\s*:?\s+(.+)$", re.IGNORECASE)
+_CATEGORY_RE = re.compile(r"^(categor[ií]a|fuente|descripci[oó]n)\s*[:,]?\s+(.+)$", re.IGNORECASE)
+# Las dos cosas en un mensaje, como salen de un audio: "Categoría Servicios, Descripción, Gas".
+_TWO_FIELDS_RE = re.compile(
+    r"^(categor[ií]a|descripci[oó]n)\s*[:,]?\s+(.+?)[\s,;.]+(categor[ií]a|descripci[oó]n)\s*[:,]?\s+(.+)$",
+    re.IGNORECASE,
+)
+# "Me equivoqué, eran 35.000": corrige lo último que se cargó, no es un gasto nuevo.
+_FIX_RE = re.compile(
+    r"^(?P<sorry>(?:(?:no|perd[oó]n|me\s+equivoqu[eé]|est[aá]\s+mal)[\s,.:;-]+)*)"
+    r"(?:(?P<verb>eran|era|son|fueron|fue)\s+(?:de\s+)?)?(?P<value>.+)$",
+    re.IGNORECASE,
+)
+_AMOUNT_ONLY_RE = re.compile(r"^\$?\s*\d[\d.,]*\s*(?:lucas?|mil|k|palos?)?\s*(?:pesos)?$", re.IGNORECASE)
+_DESCRIPTION_LEAD_RE = re.compile(r"^(?:fue|fueron|era|eran)\s+(?=\S)", re.IGNORECASE)
+FIX_WINDOW = timedelta(minutes=30)
 _UNDO_RE = re.compile(r"^(deshacer|deshace|anular)\b", re.IGNORECASE)
 _INTEREST_RE = re.compile(r"^me\s+interesa\b", re.IGNORECASE)
 _NUMBER_RE = re.compile(r"^\s*([1-9])\s*$")
@@ -742,8 +756,11 @@ async def _handle_pdf(
                 description=hints.note,
             )
             method = "transferencia" if receipt.kind == "transferencia" else None
-            if hints.kind != "expense" and await _is_own_name(db, user, receipt.counterparty):
-                return await _ask_own_transfer(db, user, inbound, draft, method)
+            if await _is_own_name(db, user, receipt.counterparty):
+                # Con un comentario ya dijo qué es: se carga, pero su nombre no es el comercio.
+                if hints.kind != "expense" and not inbound.text.strip():
+                    return await _ask_own_transfer(db, user, inbound, draft, method)
+                draft.term = "Transferencia"
             return await _capture_draft(db, user, inbound, draft, payment_method=method)
 
     # Ni resumen conocido ni comprobante que el código lea (o un PDF escaneado,
@@ -1236,11 +1253,20 @@ async def _handle_audio(db: AsyncSession, user: User, inbound: InboundMessage) -
     return [_with_audio_undo(r) for r in replies]
 
 
+_SMALL_AMOUNT_RE = re.compile(r"^✅ \$(\d{1,2}) ")
+
+
 def _with_audio_undo(reply: str) -> str:
     """Con un audio, cómo deshacer se dice siempre y no sólo en las primeras cargas
     (`_show_hints`): un monto mal oído no da error, y sólo se ve en esta respuesta."""
-    if reply.startswith("✅") and "deshacer" not in reply:
-        return f"{reply}\nSi escuché mal, respondé *deshacer*."
+    if not reply.startswith("✅"):
+        return reply
+    if "deshacer" not in reply:
+        reply = f"{reply}\nSi escuché mal, respondé *deshacer*."
+    # "35 en regalos": nadie gasta $35, lo más probable es que se haya perdido el "mil".
+    small = _SMALL_AMOUNT_RE.match(reply)
+    if small:
+        reply = f"{reply}\n⚠️ Si eran ${small.group(1)}.000, decime *eran {small.group(1)} mil*."
     return reply
 
 
@@ -1336,6 +1362,10 @@ async def _handle_text(db: AsyncSession, user: User, inbound: InboundMessage) ->
 
     if _UNDO_RE.match(text):
         return await _do_undo(db, user, inbound)
+    two = _TWO_FIELDS_RE.match(text)
+    if two and two.group(1)[0].lower() != two.group(3)[0].lower():
+        first = await _do_edit(db, user, inbound, two.group(1).lower(), two.group(2).strip())
+        return first + await _do_edit(db, user, replace(inbound, wa_id=None), two.group(3).lower(), two.group(4).strip())
     edit = _EDIT_RE.match(text)
     if edit:
         return await _do_edit(db, user, inbound, edit.group(1).lower(), edit.group(2).strip())
@@ -1343,6 +1373,9 @@ async def _handle_text(db: AsyncSession, user: User, inbound: InboundMessage) ->
     if short:
         return await _do_edit(db, user, inbound, short.group(1).lower(), short.group(2).strip())
     handled = await _do_quoted_category(db, user, inbound, text)
+    if handled is not None:
+        return handled
+    handled = await _do_quick_fix(db, user, inbound, text)
     if handled is not None:
         return handled
     if _INTEREST_RE.match(text):
@@ -1432,7 +1465,7 @@ async def _do_business(
 # Sólo en un hogar: un negocio no tiene ingresos a mano, sus ventas arman el
 # ingreso de cada día (y `tenants.set_kind` cuenta los ingresos como del hogar).
 
-_CANCEL_WORDS = {"no", "cancelar", "cancela", "dejalo", "dejala", "nada"}
+_CANCEL_WORDS = {"no", "cancelar", "cancela", "dejalo", "dejala", "nada", "esta mal"}
 
 
 async def _do_income(db: AsyncSession, user: User, inbound: InboundMessage) -> list[str] | None:
@@ -1689,7 +1722,11 @@ async def _do_pending_description(
             )
             if ref is not None:
                 row.pending = None
-                return await _recategorize(db, user, inbound, ref, entry, cat.name)
+                replies = await _recategorize(db, user, inbound, ref, entry, cat.name)
+                # Cambiar la categoría no contesta qué fue: lo siguiente sigue siendo la descripción.
+                _remember(db, user.id, "out", "text", pending={"type": "description_offer", "entry_id": entry.id})
+                await db.commit()
+                return replies
 
     row.pending = None
     if entry is None or entry.tenant_id != user.tenant_id:
@@ -1697,7 +1734,7 @@ async def _do_pending_description(
         await db.commit()
         return ["Ese gasto ya no está, no cambié nada."]
     term = entry.description
-    entry.description = inbound.text.strip()[:255]
+    entry.description = _DESCRIPTION_LEAD_RE.sub("", inbound.text.strip())[:255]
     await _learn_description(db, user.tenant_id, term, entry)
     _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
     await db.commit()
@@ -1743,6 +1780,10 @@ async def _do_pending_category_by_name(
     text = (inbound.text or "").strip()
     asked_new = _NEW_CATEGORY_RE.match(text)
     name = asked_new.group(1).strip() if asked_new else text
+    # Antes de buscar: "está mal, te digo que recibí un reintegro de 780" contiene
+    # el nombre de una categoría, y se cargaba ahí el gasto que estaba corrigiendo.
+    if not asked_new and not _looks_like_name(name):
+        return None
     cats = (await db.scalars(
         select(ExpenseCategory).where(ExpenseCategory.tenant_id == user.tenant_id)
     )).all()
@@ -2674,7 +2715,11 @@ async def _is_own_name(db: AsyncSession, user: User, name: str | None) -> bool:
     from app.services.search import fold_text
 
     words = set(fold_text(name or "").split())
-    return len(words) >= 2 and words <= await _holder_tokens(db, user)
+    if len(words) < 2:
+        return False
+    tokens = await _holder_tokens(db, user)
+    # En los dos sentidos: el comprobante puede traer un segundo nombre que la cuenta no tiene.
+    return len(words & tokens) >= 2 and (words <= tokens or tokens <= words)
 
 
 async def _ask_own_transfer(
@@ -2857,6 +2902,38 @@ async def _undo_shared(db: AsyncSession, user: User, inbound: InboundMessage, re
 
 
 # ------------------------------------------------- respuestas con palabras ---
+
+async def _do_quick_fix(
+    db: AsyncSession, user: User, inbound: InboundMessage, text: str
+) -> list[str] | None:
+    """Corregir lo que se acaba de cargar como se le diría a una persona: "me
+    equivoqué, eran 35.000" o "fue descartables". Antes el primero era un gasto
+    nuevo de $35.000 en "Me equivoqué, eran", y el segundo no se entendía. Sólo
+    por un rato: mañana, "eran 35.000" no habla del gasto de hoy."""
+    m = _FIX_RE.match(text)
+    if m is None or not (m.group("sorry") or m.group("verb")):
+        return None
+    value = m.group("value").strip().rstrip(".")
+    is_amount = bool(_AMOUNT_ONLY_RE.match(value))
+    is_description = (
+        m.group("verb") and m.group("verb").lower() in ("fue", "fueron", "era")
+        and not any(ch.isdigit() for ch in value) and len(value.split()) <= 6
+    )
+    if not (is_amount or is_description):
+        return None
+    row = await _open_pending(db, user.id)
+    if row is not None and (row.pending or {}).get("type") in _DRAFT_PENDING:
+        if not is_amount:
+            return None
+        row.pending = None
+        _remember(db, user.id, "in", "text", wa_id=inbound.wa_id, text=inbound.text)
+        await db.commit()
+        return ["Listo, ese no lo cargo. Mandámelo de nuevo con el monto correcto."]
+    ref = await _last_ref(db, user.id, ("expense", "income", "sale", "card_item", "shared"))
+    if ref is None or datetime.now() - ref.created_at > FIX_WINDOW:
+        return None
+    return await _do_edit(db, user, inbound, "monto" if is_amount else "descripción", value)
+
 
 async def _do_cancel_draft(
     db: AsyncSession, user: User, inbound: InboundMessage, text: str

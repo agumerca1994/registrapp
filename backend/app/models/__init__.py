@@ -7,6 +7,7 @@ from app.models.expense import ExpenseCategory, ExpenseEntry
 from app.models.business import Payee, Product, Sale, SaleLine, SalePayment, StockMovement
 from app.models.macro_variable import MacroVariable
 from app.models.mortgage import MortgageRecord
+from app.models.savings import SavingsContribution, SavingsGoal
 from app.models.shared_expense import SharedExpense, SharedExpenseSplit
 from app.models.credit_card import CreditCard, CreditCardStatement, CreditCardItem
 from app.models.contact import TenantContact, SharedContact
@@ -29,7 +30,7 @@ __all__ = [
     "Tenant", "User",
     "IncomeSource", "IncomeEntry", "IncomeSourceField", "IncomeEntryItem",
     "ExpenseCategory", "ExpenseEntry",
-    "MacroVariable", "MortgageRecord",
+    "MacroVariable", "MortgageRecord", "SavingsGoal", "SavingsContribution",
     "SharedExpense", "SharedExpenseSplit",
     "CreditCard", "CreditCardStatement", "CreditCardItem",
     "TenantContact",

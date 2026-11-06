@@ -19,6 +19,7 @@ from app.models.expense import ExpenseCategory, ExpenseEntry
 from app.models.income import IncomeEntry
 from app.models.mortgage import MortgageLoan, MortgageRecord
 from app.models.payment_reminder import PaymentReminder
+from app.models.savings import SavingsGoal
 from app.models.shared_expense import SharedExpense
 from app.models.tenant import TENANT_KIND_BUSINESS, TENANT_KINDS, Tenant
 from app.services.search import fold_text
@@ -28,7 +29,7 @@ from app.services.search import fold_text
 # que nadie tocó.
 TENANT_DATA_MODELS = (
     IncomeEntry, ExpenseEntry, CurrencyOperation, CreditCard, MortgageRecord,
-    SharedExpense, PaymentReminder,
+    SharedExpense, PaymentReminder, SavingsGoal,
 )
 
 # Lo que sólo existe en un hogar. Un negocio no tiene esas pantallas, así que
@@ -39,6 +40,7 @@ HOUSEHOLD_ONLY_DATA = (
     ("divisas", CurrencyOperation),
     ("hipoteca", MortgageLoan),
     ("hipoteca", MortgageRecord),
+    ("ahorro", SavingsGoal),
     ("gastos compartidos", SharedExpense),
 )
 

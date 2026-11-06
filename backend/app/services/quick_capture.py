@@ -58,7 +58,8 @@ _REQUEST_RE = re.compile(
 )
 _LEADING_VERB_RE = re.compile(
     r"^\s*(?:(?:hoy|ayer)\s+)?(?:me\s+)?(?:gast[eé]|gastamos|gasto|egreso|pagu[eé]|pagamos|pago|compr[eé]|compramos|"
-    r"compra|sali[oó]|salieron|abon[eé]|abonamos|puse|pusimos|saqu[eé]|sacamos)\b[\s:,-]*",
+    r"compra|sali[oó]|salieron|abon[eé]|abonamos|puse|pusimos|saqu[eé]|sacamos|"
+    r"(?:hice|hicimos|tuve|tuvimos)\s+un\s+gasto(?:\s+de)?)\b[\s:,-]*",
     re.IGNORECASE,
 )
 _LEADING_FILLER_RE = re.compile(
@@ -176,9 +177,17 @@ def parse_quick_text(text: str, today: date | None = None) -> QuickDraft | None:
     return draft
 
 
+# "Está mal, te digo que recibí…": lo que importa es lo que viene después.
+_RESTATE_RE = re.compile(
+    r"^\s*(?:(?:est[aá]\s+mal|te\s+equivocaste|no\s+es\s+as[ií]|perd[oó]n)[\s,.:;!-]+)?"
+    r"(?:(?:te\s+)?(?:digo|dije)\s+que\s+)?",
+    re.IGNORECASE,
+)
+
+
 def strip_request(text: str) -> str:
     """"Quiero registrar un ingreso de 100000" → "ingreso de 100000"."""
-    return _REQUEST_RE.sub("", text or "", count=1)
+    return _REQUEST_RE.sub("", _RESTATE_RE.sub("", text or "", count=1), count=1)
 
 
 def _valid_date(year: int, month: int, day: int) -> date | None:
