@@ -11,6 +11,13 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.1.0-beta.10",
+    date: "2026-11-07",
+    notes: [
+      "Cada guía aparece una sola vez, aunque la dejes por la mitad. Para verlas de nuevo está Reiniciar guía en Configuración.",
+    ],
+  },
+  {
     version: "1.1.0-beta.9",
     date: "2026-11-06",
     notes: [
