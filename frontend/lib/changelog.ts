@@ -11,6 +11,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.1.0-beta.13",
+    date: "2026-11-07",
+    notes: [
+      "Los bloques violetas de arriba son de vidrio: dejan pasar un poco de luz y tienen brillo en el borde.",
+      "La barra de abajo, el encabezado, las hojas y los avisos son todavía más transparentes.",
+      "En Créditos, el celular ya no muestra el botón de arriba: el + del centro ofrece \"Agregar un crédito\".",
+    ],
+  },
+  {
     version: "1.1.0-beta.12",
     date: "2026-11-07",
     notes: [
