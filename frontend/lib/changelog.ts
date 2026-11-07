@@ -11,6 +11,13 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.1.0-beta.15",
+    date: "2026-11-07",
+    notes: [
+      "El aviso de la t al guardar o borrar es de vidrio, igual que la barra de abajo.",
+    ],
+  },
+  {
     version: "1.1.0-beta.14",
     date: "2026-11-07",
     notes: [
