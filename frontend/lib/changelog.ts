@@ -11,6 +11,13 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.1.0-beta.14",
+    date: "2026-11-07",
+    notes: [
+      "Los bloques violetas de arriba vuelven a su violeta de siempre.",
+    ],
+  },
+  {
     version: "1.1.0-beta.13",
     date: "2026-11-07",
     notes: [
