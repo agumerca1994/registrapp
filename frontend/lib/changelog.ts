@@ -11,6 +11,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.1.0-beta.11",
+    date: "2026-11-07",
+    notes: [
+      "El + del centro ofrece primero lo de la pantalla en la que estás: en Objetivos, \"Nuevo objetivo\"; en Inversiones, \"Nueva inversión\", y así.",
+      "La barra de abajo, el encabezado, los avisos y las hojas son más transparentes: se ve lo que pasa por debajo.",
+    ],
+  },
+  {
     version: "1.1.0-beta.10",
     date: "2026-11-07",
     notes: [
