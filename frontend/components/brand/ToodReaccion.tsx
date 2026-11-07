@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { ToodAvatar, type ToodReaction } from "@/components/brand/ToodAvatar";
-import { GLASS_LIGHT } from "@/components/ui/glass";
+import { GLASS_BAR } from "@/components/ui/glass";
 
 // La t confirma lo que acabás de hacer: guardar, borrar o un error. Sin esto, cargar o eliminar algo no daba
 // ninguna señal de que se hizo.
@@ -68,7 +68,7 @@ function ReaccionVisible({ estado }: { estado: Estado }) {
 
   return (
     <div aria-hidden="true" className="fixed z-[70] pointer-events-none flex justify-center left-3 right-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] md:left-auto md:right-8 md:bottom-6">
-      <div className={`${anim} flex items-center gap-1.5 max-w-full min-h-[64px] pl-2 pr-5 rounded-full ${GLASS_LIGHT} shadow-flota`}>
+      <div className={`${anim} flex items-center gap-1.5 max-w-full min-h-[64px] pl-2 pr-5 rounded-full ${GLASS_BAR} shadow-flota`}>
         <ToodAvatar size={56} reaction={AVATAR[tipo]} reactionKey={key} duration={0} holeColor="hsl(var(--card))" className="shrink-0" />
         <p className="min-w-0 font-medium text-[16px] leading-tight tracking-[-0.01em] text-foreground">{texto}</p>
       </div>

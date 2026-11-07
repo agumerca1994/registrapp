@@ -16,13 +16,12 @@ export const HOME_BLOCK = `!mt-0 ${VIOLET} -mx-4 md:mx-0 rounded-b-[34px] md:rou
 export const HOME_BLOCK_TOP = { paddingTop: "calc(1.25rem + env(safe-area-inset-top))" };
 
 /**
- * El vidrio claro: lo que flota sobre la página (las barras, las hojas, el aviso
- * de la t). Bien translúcido y con el color de abajo saturado, porque sobre el
- * papel crema un vidrio casi opaco se lee como un bloque liso. Sin backdrop-filter queda casi opaco
- * para que se siga leyendo.
+ * El vidrio claro de lo que flota sobre la página: la barra de abajo y el aviso
+ * de la t. Bien translúcido y con el color de abajo saturado, porque sobre el
+ * papel crema un vidrio casi opaco se lee como un bloque liso (pedido del
+ * usuario: "efecto vidrio"). Sin backdrop-filter queda casi opaco para que se
+ * siga leyendo.
  */
-export const GLASS_LIGHT = "border border-white/70 bg-card/95 supports-[backdrop-filter]:bg-card/40 backdrop-blur-xl backdrop-saturate-[1.8]";
-/** La barra de abajo: la más transparente, pedido del usuario. Sólo íconos y una palabra, que se leen igual. */
 export const GLASS_BAR = "border border-white/70 bg-card/95 supports-[backdrop-filter]:bg-card/[0.28] backdrop-blur-xl backdrop-saturate-[1.8]";
 /** El de las hojas: un poco más cubierto, porque adentro se lee y se escribe. */
 export const GLASS_SHEET = "border border-white/70 bg-card/95 supports-[backdrop-filter]:bg-card/60 backdrop-blur-2xl backdrop-saturate-[1.8]";
