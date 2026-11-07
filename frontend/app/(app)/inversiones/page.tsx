@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useNuevo } from "@/lib/nuevo";
 import Link from "next/link";
 import { ArrowRight, ChevronDown, MoreVertical, Plus, TrendingUp } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -123,6 +124,7 @@ export default function InversionesPage() {
   const [error, setError] = useState("");
   // null: cerrado; "": abre en el paso del tipo; un tipo: arranca con ese.
   const [creating, setCreating] = useState<Kind | "" | null>(null);
+  useNuevo(() => setCreating(""), "nuevo");
   const [showClosed, setShowClosed] = useState(false);
 
   const load = useCallback(() => {
@@ -155,9 +157,10 @@ export default function InversionesPage() {
     <div className="flex items-center justify-between gap-2">
       <h1 className={H1}>Inversiones</h1>
       <div className="flex items-center gap-0.5 shrink-0">
+        {/* En el celular el alta va por el + de la barra: acá arriba quedaba tapado por el encabezado. */}
         {active.length > 0 && (
           <button onClick={() => setCreating("")} data-tour="inversiones-add"
-            className="h-11 pl-3.5 pr-4 rounded-full bg-ink text-background text-[14.5px] font-semibold inline-flex items-center gap-1.5 active:scale-[0.97] transition-transform duration-100">
+            className="hidden md:inline-flex h-11 pl-3.5 pr-4 rounded-full bg-ink text-background text-[14.5px] font-semibold items-center gap-1.5 active:scale-[0.97] transition-transform duration-100">
             <Plus className="w-[18px] h-[18px]" /> Inversión
           </button>
         )}

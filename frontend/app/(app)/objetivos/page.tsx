@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useNuevo } from "@/lib/nuevo";
 import Link from "next/link";
 import { ChevronDown, MoreVertical, Target, Plus } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -99,6 +100,7 @@ export default function ObjetivosPage() {
   const [data, setData] = useState<GoalsResponse | null>(null);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState<string | null>(null);
+  useNuevo(() => setCreating(""), "nuevo");
   const [showArchived, setShowArchived] = useState(false);
 
   const load = useCallback(() => {
@@ -130,9 +132,10 @@ export default function ObjetivosPage() {
     <div className="flex items-center justify-between gap-2">
       <h1 className="text-[26px] md:text-3xl font-display font-medium tracking-[-0.035em] text-foreground">Objetivos</h1>
       <div className="flex items-center gap-0.5 shrink-0">
+        {/* En el celular el alta va por el + de la barra: acá arriba quedaba tapado por el encabezado. */}
         {active.length > 0 && (
           <button onClick={() => setCreating("")} data-tour="ahorro-new"
-            className="h-11 pl-3.5 pr-4 rounded-full bg-ink text-background text-[14.5px] font-semibold inline-flex items-center gap-1.5 active:scale-[0.97] transition-transform duration-100">
+            className="hidden md:inline-flex h-11 pl-3.5 pr-4 rounded-full bg-ink text-background text-[14.5px] font-semibold items-center gap-1.5 active:scale-[0.97] transition-transform duration-100">
             <Plus className="w-[18px] h-[18px]" /> Objetivo
           </button>
         )}

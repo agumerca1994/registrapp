@@ -15,6 +15,16 @@ export const BLOCK = `${VIOLET} rounded-[34px] px-3 pt-5 pb-3.5 md:px-5 md:pb-5`
 export const HOME_BLOCK = `!mt-0 ${VIOLET} -mx-4 md:mx-0 rounded-b-[34px] md:rounded-[34px] px-3 pb-5 md:px-5 md:pb-6`;
 export const HOME_BLOCK_TOP = { paddingTop: "calc(1.25rem + env(safe-area-inset-top))" };
 
+/**
+ * El vidrio claro: lo que flota sobre la página (las barras, las hojas, el aviso
+ * de la t). Bien translúcido y con el color de abajo saturado, porque sobre el
+ * papel crema un vidrio casi opaco se lee como un bloque liso. Sin backdrop-filter queda casi opaco
+ * para que se siga leyendo.
+ */
+export const GLASS_LIGHT = "border border-white/70 bg-card/95 supports-[backdrop-filter]:bg-card/55 backdrop-blur-xl backdrop-saturate-[1.8]";
+/** El de las hojas: un poco más cubierto, porque adentro se lee y se escribe. */
+export const GLASS_SHEET = "border border-white/70 bg-card/95 supports-[backdrop-filter]:bg-card/75 backdrop-blur-2xl backdrop-saturate-[1.8]";
+
 /** Lo que va adentro del bloque violeta. */
 export const GLASS = "rounded-3xl bg-white/[0.13] border border-white/[0.22] backdrop-blur-lg";
 

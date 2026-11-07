@@ -2,6 +2,7 @@
 
 import { VIOLET } from "@/components/ui/glass";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNuevo } from "@/lib/nuevo";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Step } from "react-joyride";
@@ -430,6 +431,7 @@ export default function TarjetasPage() {
   const steps = useMemo(() => tourSteps(!!first, pending.length > 0), [first, pending.length]);
 
   const openNew = () => { setEditCard(null); setShowModal(true); };
+  useNuevo(openNew, "nuevo");
 
   // Sobre el violeta, los botones son de vidrio; sobre el papel, los de siempre.
   const actions = (onColor: boolean) => (
@@ -439,8 +441,9 @@ export default function TarjetasPage() {
           <UploadStatementButton href="/tarjetas/resumenes" pulse={pendingStatements > 0} onColor={onColor} />
         </div>
       )}
+      {/* En el celular el alta va por el + de la barra. */}
       <Button data-tour="cards-new" onClick={openNew} aria-label="Nueva tarjeta"
-        className={`w-11 h-11 p-0 sm:w-auto sm:px-4 ${onColor ? "bg-white text-[#2A2178]" : ""}`}>
+        className={`hidden md:inline-flex w-11 h-11 p-0 sm:w-auto sm:px-4 ${onColor ? "bg-white text-[#2A2178]" : ""}`}>
         <Plus className="w-[18px] h-[18px] shrink-0" />
         <span className="hidden sm:inline">Nueva tarjeta</span>
       </Button>

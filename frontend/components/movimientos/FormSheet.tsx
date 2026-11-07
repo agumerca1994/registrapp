@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useExitGhost } from "@/lib/motion";
 import { OverlayLayer, useOverlay } from "@/lib/overlay";
+import { GLASS_SHEET } from "@/components/ui/glass";
 
 /**
  * La hoja de un formulario, con el mismo vidrio de la ficha de un movimiento.
@@ -43,7 +44,7 @@ export function FormSheet({ title, onClose, stacked = false, children }: {
       <div
         role="dialog" aria-modal="true" aria-label={title}
         onClick={e => e.stopPropagation()}
-        className="relative w-full sm:max-w-[460px] max-h-[90vh] flex flex-col rounded-[34px] border border-white/70 bg-card/90 backdrop-blur-2xl backdrop-saturate-150 shadow-flota animate-sheet-in"
+        className={`relative w-full sm:max-w-[460px] max-h-[90vh] flex flex-col rounded-[34px] ${GLASS_SHEET} shadow-flota animate-sheet-in`}
       >
         <div className="flex items-center justify-between gap-3 pl-5 pr-3 pt-3 pb-2 shrink-0">
           <h3 className="text-[22px] font-medium tracking-[-0.03em] text-foreground">{title}</h3>

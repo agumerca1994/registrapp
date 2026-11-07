@@ -8,6 +8,7 @@ import { useTourRunning } from "@/components/ProductTour";
 import { useReaccion } from "@/components/brand/ToodReaccion";
 import { useExitGhost } from "@/lib/motion";
 import { useOverlay } from "@/lib/overlay";
+import { GLASS_SHEET } from "@/components/ui/glass";
 
 // Misma regla que /shared: si el split se saldó en pesos, el número que importa
 // es el convertido, no el original en dólares.
@@ -131,7 +132,7 @@ function PendingSheet({ exp, mySplit, count, index, onPage, onAccept, onReject, 
       aria-label="Gastos compartidos por confirmar"
     >
       <div
-        className="relative w-full sm:max-w-[400px] max-h-[88vh] overflow-y-auto overscroll-contain rounded-[34px] border border-white/70 bg-card/85 backdrop-blur-2xl backdrop-saturate-150 shadow-flota px-3.5 pt-2.5 pb-3.5 animate-sheet-in"
+        className={`relative w-full sm:max-w-[400px] max-h-[88vh] overflow-y-auto overscroll-contain rounded-[34px] ${GLASS_SHEET} shadow-flota px-3.5 pt-2.5 pb-3.5 animate-sheet-in`}
         onClick={e => e.stopPropagation()}
       >
         <div className="sm:hidden w-10 h-1 rounded-full bg-ink/20 mx-auto mb-3" />

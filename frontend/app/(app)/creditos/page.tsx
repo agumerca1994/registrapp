@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useNuevo } from "@/lib/nuevo";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -82,6 +83,7 @@ export default function CreditosPage() {
   const [loose, setLoose] = useState<LooseRecord[]>([]);
   const [failed, setFailed] = useState(false);
   const [adding, setAdding] = useState(false);
+  useNuevo(() => setAdding(true), "nuevo");
   const [showOld, setShowOld] = useState(false);
   const [showLoose, setShowLoose] = useState(false);
   const [viewingLoose, setViewingLoose] = useState<LooseRecord | null>(null);

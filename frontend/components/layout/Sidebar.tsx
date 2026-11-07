@@ -22,6 +22,7 @@ import { isBusiness, isEmployee } from "@/lib/account";
 import { AddSheet } from "@/components/layout/AddSheet";
 import { GoogleAvatar } from "@/components/account/GoogleAvatar";
 import { useOverlay } from "@/lib/overlay";
+import { GLASS_LIGHT, GLASS_SHEET } from "@/components/ui/glass";
 
 interface NavItem {
   href: string;
@@ -248,7 +249,7 @@ function MoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bo
         <Dialog.Overlay className="md:hidden fixed inset-0 z-50 bg-ink/30 animate-fade-in" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="md:hidden fixed left-2.5 right-2.5 z-50 max-h-[85vh] overflow-y-auto overscroll-contain rounded-[34px] border border-white/70 bg-card/80 backdrop-blur-2xl backdrop-saturate-150 shadow-flota px-3 pt-2.5 pb-3 animate-sheet-in"
+          className={`md:hidden fixed left-2.5 right-2.5 z-50 max-h-[85vh] overflow-y-auto overscroll-contain rounded-[34px] ${GLASS_SHEET} shadow-flota px-3 pt-2.5 pb-3 animate-sheet-in`}
           style={{ bottom: "calc(0.625rem + env(safe-area-inset-bottom))" }}
         >
           <div className="w-10 h-1 rounded-full bg-ink/20 mx-auto mb-3" />
@@ -331,7 +332,7 @@ export default function Sidebar() {
 
       {/* Mobile top bar. Inicio no la lleva: su encabezado es el bloque violeta. */}
       {pathname !== "/dashboard" && (
-        <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-background/80 backdrop-blur-lg border-b flex flex-col justify-center px-4 h-16">
+        <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-background/95 supports-[backdrop-filter]:bg-background/55 backdrop-blur-xl backdrop-saturate-[1.8] border-b border-ink/[0.06] flex flex-col justify-center px-4 h-16">
           <ToodLogo className="h-5 w-auto text-primary self-start" title="tood" />
           <span className="text-xs text-muted-foreground leading-tight truncate">
             {greeting(appUser?.display_name, appUser?.email)}
@@ -342,7 +343,7 @@ export default function Sidebar() {
       {/* Barra flotante de vidrio: lo que pasa por debajo se ve desenfocado.
           Sin soporte de backdrop-filter queda casi opaca, para que se siga leyendo. */}
       <nav
-        className="md:hidden fixed left-3 right-3 z-40 bg-card/95 supports-[backdrop-filter]:bg-card/70 backdrop-blur-lg backdrop-saturate-150 border border-border/90 rounded-full shadow-flota flex items-stretch h-[70px] px-1.5"
+        className={`md:hidden fixed left-3 right-3 z-40 ${GLASS_LIGHT} rounded-full shadow-flota flex items-stretch h-[70px] px-1.5`}
         style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
       >
         {(household ? mobileTabs.slice(0, 2) : mobileTabs).map(tabLink)}
