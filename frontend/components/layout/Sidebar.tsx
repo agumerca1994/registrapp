@@ -332,7 +332,7 @@ export default function Sidebar() {
 
       {/* Mobile top bar. Inicio no la lleva: su encabezado es el bloque violeta. */}
       {pathname !== "/dashboard" && (
-        <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-background/95 supports-[backdrop-filter]:bg-background/55 backdrop-blur-xl backdrop-saturate-[1.8] border-b border-ink/[0.06] flex flex-col justify-center px-4 h-16">
+        <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-background/95 supports-[backdrop-filter]:bg-background/40 backdrop-blur-xl backdrop-saturate-[1.8] border-b border-ink/[0.06] flex flex-col justify-center px-4 h-16">
           <ToodLogo className="h-5 w-auto text-primary self-start" title="tood" />
           <span className="text-xs text-muted-foreground leading-tight truncate">
             {greeting(appUser?.display_name, appUser?.email)}

@@ -36,8 +36,9 @@ const PAYMENTS_SHOWN = 12;
 /** El alta va arriba, al lado del ⋮, igual que "+ Objetivo" en Objetivos. */
 export function AddCreditButton({ onClick }: { onClick: () => void }) {
   return (
+    // En el celular el alta va por el + de la barra: acá arriba quedaba tapado por el encabezado.
     <button onClick={onClick} data-tour="creditos-add"
-      className="h-11 pl-3.5 pr-4 rounded-full bg-ink text-background text-[14.5px] font-semibold inline-flex items-center gap-1.5 active:scale-[0.97] transition-transform duration-100">
+      className="hidden md:inline-flex h-11 pl-3.5 pr-4 rounded-full bg-ink text-background text-[14.5px] font-semibold items-center gap-1.5 active:scale-[0.97] transition-transform duration-100">
       <Plus className="w-[18px] h-[18px]" /> Crédito
     </button>
   );
