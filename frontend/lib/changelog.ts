@@ -11,6 +11,13 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.1.0-beta.12",
+    date: "2026-11-07",
+    notes: [
+      "La barra de abajo es todavía más transparente.",
+    ],
+  },
+  {
     version: "1.1.0-beta.11",
     date: "2026-11-07",
     notes: [
