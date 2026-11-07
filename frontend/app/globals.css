@@ -137,8 +137,12 @@
 @keyframes thumb-slide {
   from { transform: translateX(var(--thumb-from)); }
 }
-.animate-sheet-in { animation: sheet-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both; }
-.animate-fade-in { animation: fade-in 180ms ease-out both; }
+/* `backwards` y no `both`: el final es el estado natural, y una animación de
+   opacidad que queda aplicada convierte al fondo oscuro en la raíz del
+   `backdrop-filter` de la hoja. La hoja dejaba de desenfocar y la página se leía
+   a través del vidrio. */
+.animate-sheet-in { animation: sheet-in 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.animate-fade-in { animation: fade-in 180ms ease-out backwards; }
 .animate-sheet-out { animation: sheet-out 180ms ease-in both; }
 .animate-fade-out { animation: fade-out 180ms ease-in both; }
 .animate-page-in { animation: fade-in 160ms ease-out backwards; }

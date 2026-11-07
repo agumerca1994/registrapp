@@ -94,8 +94,9 @@ export default function SaleFormModal({ sale, initial, saleDate, products, onSav
 
   return (
     <>
-      <ProductTour tourId="sale-form" steps={saleFormSteps({ hasProducts: active.length > 0 })} />
       <FormSheet title={editing ? "Editar venta" : "Nueva venta"} onClose={onClose}>
+        {/* Adentro de la hoja: corre en su capa, no en la de la página. */}
+        <ProductTour tourId="sale-form" steps={saleFormSteps({ hasProducts: active.length > 0 })} />
         <form noValidate onSubmit={submit} className={FORM_SHEET_FORM}>
           <div className={FORM_SHEET_BODY}>
             <div data-tour="sale-total">

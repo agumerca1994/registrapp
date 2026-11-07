@@ -5,6 +5,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { ArrowRight } from "lucide-react";
 import { features } from "@/lib/features";
 import { pedirNuevo } from "@/lib/nuevo";
+import { useOverlay } from "@/lib/overlay";
 
 // Lo que se puede cargar, en el orden en que pasa: gastar es lo de todos los días.
 // `form` es la ruta cuyo formulario se abre; si ya estás en ella, se avisa con un evento.
@@ -19,6 +20,8 @@ const SECONDARY: { label: string; href: string; form?: string }[] = [
 export function AddSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const router = useRouter();
   const pathname = usePathname();
+  // Sólo en el celular: en la compu el + no abre esta hoja.
+  useOverlay(open);
 
   const go = (href: string, form?: string) => {
     onOpenChange(false);

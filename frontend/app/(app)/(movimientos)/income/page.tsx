@@ -34,6 +34,7 @@ import { SourceFormModal, SourcesListModal } from "@/components/income/SourceFor
 import { useReaccion } from "@/components/brand/ToodReaccion";
 import { MotionList } from "@/components/ui/motion-list";
 import { useExitGhost } from "@/lib/motion";
+import { useOverlay } from "@/lib/overlay";
 import { LoadedByTag, useLoadedBy } from "@/components/LoadedBy";
 
 const INCOME_TOUR_STEPS: Step[] = [
@@ -140,6 +141,7 @@ interface ImportResult { imported: number; skipped: number; errors: string[]; }
 function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: () => void }) {
   type Step = "upload" | "map" | "importing" | "done";
   const ghost = useExitGhost<HTMLDivElement>();
+  useOverlay();
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<PreviewData | null>(null);

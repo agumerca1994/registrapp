@@ -1,6 +1,7 @@
 "use client";
 
-import { Component, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { Component, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useIsTopLayer } from "@/lib/overlay";
 import { reportError } from "@/lib/report-error";
 import dynamic from "next/dynamic";
 import type { EventData, Step, TooltipRenderProps } from "react-joyride";
@@ -149,32 +150,41 @@ export default function ProductTour({ tourId, steps, requireDesktop }: {
   requireDesktop?: boolean;
 }) {
   const [run, setRun] = useState(false);
+  // Una guía corre sólo en la capa de arriba: la de la página se aparta mientras
+  // hay una hoja abierta encima (si no, ilumina algo que quedó detrás), y la de
+  // un formulario espera a que se cierre lo que lo tape. Al volver sigue en el
+  // mismo paso.
+  const onTop = useIsTopLayer();
+  const stepRef = useRef(0);
 
   useEffect(() => {
+    if (run || !onTop) return;
     if (localStorage.getItem(tourSeenKey(tourId))) return;
     if (requireDesktop && !window.matchMedia("(min-width: 768px)").matches) return;
-    // Una guía a la vez: si otra ya está en pantalla (la de la página mientras
-    // se abre su formulario), ésta no arranca encima. Queda sin ver, así que
-    // aparece la próxima vez que se abra.
+    // Una guía a la vez: si otra ya está en pantalla, ésta no arranca encima.
+    // Queda sin ver, así que aparece la próxima vez que se abra.
     if (runningTours > 0) return;
     setRun(true);
-  }, [tourId, requireDesktop]);
+  }, [tourId, requireDesktop, onTop, run]);
 
-  // Se mide cuando arranca: recién ahí los destinos están en pantalla.
+  const showing = run && onTop;
+
+  // Se mide cada vez que se muestra: recién ahí los destinos están en pantalla.
   const shapedSteps = useMemo(
-    () => (run ? steps.map(shapeFor).filter((s): s is Step => s !== null) : steps),
-    [run, steps],
+    () => (showing ? steps.map(shapeFor).filter((s): s is Step => s !== null) : steps),
+    [showing, steps],
   );
 
-  // Publicar el estado real, no la intención: `run` ya incorpora la clave de
-  // localStorage y el chequeo de viewport.
+  // Publicar lo que se ve, no la intención: una guía en pausa debajo de una hoja
+  // no frena a la del formulario ni a los avisos.
   useEffect(() => {
-    if (!run) return;
+    if (!showing) return;
     publishTourCount(1);
     return () => publishTourCount(-1);
-  }, [run]);
+  }, [showing]);
 
   const handleEvent = (data: EventData) => {
+    if (data.type === "tooltip") stepRef.current = data.index;
     if (data.status === "finished" || data.status === "skipped") {
       localStorage.setItem(tourSeenKey(tourId), "1");
       setRun(false);
@@ -182,13 +192,14 @@ export default function ProductTour({ tourId, steps, requireDesktop }: {
   };
 
   // Ningún paso se ve en esta pantalla: no arranca, y queda sin marcar como vista.
-  if (!run || shapedSteps.length === 0) return null;
+  if (!showing || shapedSteps.length === 0) return null;
 
   return (
     <TourBoundary>
     <Joyride
       steps={shapedSteps}
-      run={run}
+      run
+      initialStepIndex={Math.min(stepRef.current, shapedSteps.length - 1)}
       continuous
       scrollToFirstStep
       onEvent={handleEvent}

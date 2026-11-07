@@ -107,8 +107,9 @@ export default function DailyCloseModal({ summary, title, products = [], onSaved
   const amountInput = `${FIELD} !mt-0 !w-[132px] shrink-0 text-right tabular-nums`;
   return (
     <>
-      <ProductTour tourId="close-form" steps={closeFormSteps({ hasUnits: tracked.length > 0 })} />
       <FormSheet title={title} onClose={onClose}>
+        {/* Adentro de la hoja: corre en su capa, no en la de la página. */}
+        <ProductTour tourId="close-form" steps={closeFormSteps({ hasUnits: tracked.length > 0 })} />
         <form noValidate onSubmit={save} className={FORM_SHEET_FORM}>
           <div className={FORM_SHEET_BODY}>
             {/* El total se ve primero y grande, como el monto de cualquier formulario: acá sale de lo que se cuenta abajo. */}

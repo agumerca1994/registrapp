@@ -187,8 +187,9 @@ export function InvestmentForm({ initialKind, first, onSaved, onClose }: {
 
   return (
     <>
-    <ProductTour tourId="inversion-form" steps={formTour(kind)} />
     <FormSheet title="Los datos" onClose={onClose}>
+      {/* Adentro de la hoja: corre en su capa, no en la de la página. */}
+      <ProductTour tourId="inversion-form" steps={formTour(kind)} />
       <MotionList className={STEP}>
         <form onSubmit={submit} className={FORM_SHEET_FORM} noValidate>
           <div className={FORM_SHEET_BODY}>

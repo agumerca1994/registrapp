@@ -3,6 +3,7 @@
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useExitGhost } from "@/lib/motion";
+import { OverlayLayer, useOverlay } from "@/lib/overlay";
 
 /**
  * La hoja de un formulario, con el mismo vidrio de la ficha de un movimiento.
@@ -29,8 +30,10 @@ export function FormSheet({ title, onClose, stacked = false, children }: {
   children: React.ReactNode;
 }) {
   const ghost = useExitGhost<HTMLDivElement>();
+  const layer = useOverlay(true, stacked);
   if (typeof document === "undefined") return null;
   return createPortal(
+    <OverlayLayer.Provider value={layer}>
     <div
       ref={ghost}
       className={`fixed inset-0 ${stacked ? "z-[60]" : "z-50"} flex items-end sm:items-center justify-center bg-ink/30 p-2.5 animate-fade-in`}
@@ -51,13 +54,14 @@ export function FormSheet({ title, onClose, stacked = false, children }: {
         </div>
         {children}
       </div>
-    </div>,
+    </div>
+    </OverlayLayer.Provider>,
     document.body,
   );
 }
 
 export const FORM_SHEET_FORM = "flex-1 min-h-0 flex flex-col";
-export const FORM_SHEET_BODY = "flex-1 min-h-0 overflow-y-auto px-3.5 pb-3 space-y-3";
+export const FORM_SHEET_BODY = "flex-1 min-h-0 overflow-y-auto overscroll-contain px-3.5 pb-3 space-y-3";
 
 /** Guardar queda siempre a la vista, por largo que sea el formulario. */
 export function FormSheetActions({ onCancel, saving, disabled, label, ...rest }: {

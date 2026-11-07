@@ -21,6 +21,7 @@ import {
 import { isBusiness, isEmployee } from "@/lib/account";
 import { AddSheet } from "@/components/layout/AddSheet";
 import { GoogleAvatar } from "@/components/account/GoogleAvatar";
+import { useOverlay } from "@/lib/overlay";
 
 interface NavItem {
   href: string;
@@ -210,6 +211,7 @@ interface MoreToday {
  */
 function MoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   useAmountsHidden();  // repinta la hoja al ocultar/mostrar montos
+  useOverlay(open);
   const pathname = usePathname();
   const { appUser } = useAuth();
   const pendingHrefs = usePendingHrefs();
@@ -246,7 +248,7 @@ function MoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bo
         <Dialog.Overlay className="md:hidden fixed inset-0 z-50 bg-ink/30 animate-fade-in" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="md:hidden fixed left-2.5 right-2.5 z-50 max-h-[85vh] overflow-y-auto rounded-[34px] border border-white/70 bg-card/80 backdrop-blur-2xl backdrop-saturate-150 shadow-flota px-3 pt-2.5 pb-3 animate-sheet-in"
+          className="md:hidden fixed left-2.5 right-2.5 z-50 max-h-[85vh] overflow-y-auto overscroll-contain rounded-[34px] border border-white/70 bg-card/80 backdrop-blur-2xl backdrop-saturate-150 shadow-flota px-3 pt-2.5 pb-3 animate-sheet-in"
           style={{ bottom: "calc(0.625rem + env(safe-area-inset-bottom))" }}
         >
           <div className="w-10 h-1 rounded-full bg-ink/20 mx-auto mb-3" />

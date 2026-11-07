@@ -60,8 +60,9 @@ export function ProductFormModal({ product, onSaved, onClose }: {
 
   return (
     <>
-      <ProductTour tourId="product-form" steps={PRODUCT_FORM_STEPS} />
       <FormSheet title={editing ? "Editar producto" : "Nuevo producto"} onClose={onClose}>
+        {/* Adentro de la hoja: corre en su capa, no en la de la página. */}
+        <ProductTour tourId="product-form" steps={PRODUCT_FORM_STEPS} />
         <form onSubmit={e => { e.preventDefault(); save(); }} className={FORM_SHEET_FORM}>
           <div className={FORM_SHEET_BODY}>
             <div data-tour="product-price">

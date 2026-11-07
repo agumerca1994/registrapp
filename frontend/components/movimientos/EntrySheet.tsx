@@ -6,6 +6,7 @@ import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { ArrowRight, Pencil, X } from "lucide-react";
 import { useExitGhost } from "@/lib/motion";
+import { OverlayLayer, useOverlay } from "@/lib/overlay";
 
 /** Los centavos más chicos: lo que se lee primero es el número entero. */
 function BigAmount({ text, positive }: { text: string; positive: boolean }) {
@@ -40,7 +41,9 @@ export function EntrySheet({ date, title, badge, amount, positive = false, onClo
   // Un gasto sin descripción se titula con su categoría: repetirla abajo no dice nada.
   const showBadge = badge && badge.label !== title;
   const ghost = useExitGhost<HTMLDivElement>();
+  const layer = useOverlay();
   return (
+    <OverlayLayer.Provider value={layer}>
     <Dialog.Root open onOpenChange={open => { if (!open) onClose(); }}>
       <Dialog.Portal>
         <Dialog.Overlay
@@ -50,7 +53,7 @@ export function EntrySheet({ date, title, badge, amount, positive = false, onClo
         >
           <Dialog.Content
             aria-describedby={undefined}
-            className="relative w-full sm:max-w-[400px] max-h-[88vh] overflow-y-auto rounded-[34px] border border-white/70 bg-card/85 backdrop-blur-2xl backdrop-saturate-150 shadow-flota px-3.5 pt-2.5 pb-3.5 animate-sheet-in outline-none"
+            className="relative w-full sm:max-w-[400px] max-h-[88vh] overflow-y-auto overscroll-contain rounded-[34px] border border-white/70 bg-card/85 backdrop-blur-2xl backdrop-saturate-150 shadow-flota px-3.5 pt-2.5 pb-3.5 animate-sheet-in outline-none"
           >
             <div className="sm:hidden w-10 h-1 rounded-full bg-ink/20 mx-auto mb-3" />
             <Dialog.Close aria-label="Cerrar"
@@ -83,6 +86,7 @@ export function EntrySheet({ date, title, badge, amount, positive = false, onClo
         </Dialog.Overlay>
       </Dialog.Portal>
     </Dialog.Root>
+    </OverlayLayer.Provider>
   );
 }
 

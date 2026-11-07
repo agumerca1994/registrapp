@@ -193,8 +193,9 @@ export function GoalForm({ goal, presetName = "", onSaved, onClose }: {
 
   return (
     <>
-    {!goal && <ProductTour tourId="objetivo-form" steps={GOAL_FORM_TOUR} />}
     <FormSheet title={goal ? "Editar objetivo" : "Nuevo objetivo"} onClose={onClose}>
+      {/* Adentro de la hoja: corre en su capa, no en la de la página. */}
+      {!goal && <ProductTour tourId="objetivo-form" steps={GOAL_FORM_TOUR} />}
       <form onSubmit={submit} className={FORM_SHEET_FORM}>
         <div className={FORM_SHEET_BODY}>
           <div data-tour="goal-target">
