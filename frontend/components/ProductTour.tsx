@@ -183,6 +183,15 @@ export default function ProductTour({ tourId, steps, requireDesktop }: {
     return () => publishTourCount(-1);
   }, [showing]);
 
+  // Una guía se muestra una sola vez: cuenta como vista apenas aparece, no al
+  // tocar "Listo". Si no, irse a mitad de camino (volver atrás, cambiar de
+  // pantalla) la hacía aparecer de nuevo cada vez. Para verla otra vez está
+  // "Reiniciar guía" en Configuración. Mientras siga montada, `run` la mantiene
+  // y vuelve en el mismo paso después de una pausa.
+  useEffect(() => {
+    if (showing && shapedSteps.length > 0) localStorage.setItem(tourSeenKey(tourId), "1");
+  }, [showing, shapedSteps.length, tourId]);
+
   const handleEvent = (data: EventData) => {
     if (data.type === "tooltip") stepRef.current = data.index;
     if (data.status === "finished" || data.status === "skipped") {
