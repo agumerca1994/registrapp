@@ -11,6 +11,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.1.0-beta.9",
+    date: "2026-11-06",
+    notes: [
+      "Con un formulario abierto, la guía de la pantalla espera y sigue en el mismo paso cuando lo cerrás.",
+      "Lo que está detrás de un formulario ya no se mueve cuando deslizás.",
+      "Los formularios vuelven a verse esmerilados: la pantalla de atrás no se lee a través.",
+    ],
+  },
+  {
     version: "1.1.0-beta.8",
     date: "2026-11-06",
     notes: [
