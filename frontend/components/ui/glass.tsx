@@ -22,6 +22,8 @@ export const HOME_BLOCK_TOP = { paddingTop: "calc(1.25rem + env(safe-area-inset-
  * para que se siga leyendo.
  */
 export const GLASS_LIGHT = "border border-white/70 bg-card/95 supports-[backdrop-filter]:bg-card/55 backdrop-blur-xl backdrop-saturate-[1.8]";
+/** La barra de abajo: la más transparente, pedido del usuario. Sólo íconos y una palabra, que se leen igual. */
+export const GLASS_BAR = "border border-white/70 bg-card/95 supports-[backdrop-filter]:bg-card/40 backdrop-blur-xl backdrop-saturate-[1.8]";
 /** El de las hojas: un poco más cubierto, porque adentro se lee y se escribe. */
 export const GLASS_SHEET = "border border-white/70 bg-card/95 supports-[backdrop-filter]:bg-card/75 backdrop-blur-2xl backdrop-saturate-[1.8]";
 

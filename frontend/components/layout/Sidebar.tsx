@@ -22,7 +22,7 @@ import { isBusiness, isEmployee } from "@/lib/account";
 import { AddSheet } from "@/components/layout/AddSheet";
 import { GoogleAvatar } from "@/components/account/GoogleAvatar";
 import { useOverlay } from "@/lib/overlay";
-import { GLASS_LIGHT, GLASS_SHEET } from "@/components/ui/glass";
+import { GLASS_BAR, GLASS_SHEET } from "@/components/ui/glass";
 
 interface NavItem {
   href: string;
@@ -343,7 +343,7 @@ export default function Sidebar() {
       {/* Barra flotante de vidrio: lo que pasa por debajo se ve desenfocado.
           Sin soporte de backdrop-filter queda casi opaca, para que se siga leyendo. */}
       <nav
-        className={`md:hidden fixed left-3 right-3 z-40 ${GLASS_LIGHT} rounded-full shadow-flota flex items-stretch h-[70px] px-1.5`}
+        className={`md:hidden fixed left-3 right-3 z-40 ${GLASS_BAR} rounded-full shadow-flota flex items-stretch h-[70px] px-1.5`}
         style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
       >
         {(household ? mobileTabs.slice(0, 2) : mobileTabs).map(tabLink)}
