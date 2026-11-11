@@ -145,7 +145,7 @@ async def assert_deletable(db: AsyncSession, entry: ExpenseEntry) -> None:
     if link == "tarjeta":
         raise HTTPException(status_code=409, detail="Es de tarjeta: se elimina desde su resumen.")
     if link == "hipoteca":
-        raise HTTPException(status_code=409, detail="Es una cuota de la hipoteca: las cuotas no se eliminan.")
+        raise HTTPException(status_code=409, detail="Es la cuota de un crédito: las cuotas no se eliminan.")
 
 
 async def delete_expense(db: AsyncSession, entry: ExpenseEntry, tenant_id: int) -> None:

@@ -41,7 +41,7 @@ from app.services import expenses as svc
 _LINK_HINT = {
     "tarjeta": "Es un gasto con tarjeta: se corrige desde su resumen (get_card_statement / save_card_item).",
     "compartido": "Es la parte de un gasto compartido: se corrige desde el compartido (update_shared_expense).",
-    "hipoteca": "Es una cuota de la hipoteca, que se sincroniza sola: no se edita a mano.",
+    "hipoteca": "Es la cuota de un crédito, que se anota sola: no se edita a mano.",
 }
 
 
