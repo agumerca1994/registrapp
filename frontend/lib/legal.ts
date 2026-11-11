@@ -12,8 +12,8 @@ export const LEGAL = {
   owner: "Miguel Agustín Mercado",
   cuit: "20-37726925-0",
   email: "consultas@tood.com.ar",
-  updated: "4 de noviembre de 2026",
-  version: "0.5",
+  updated: "11 de noviembre de 2026",
+  version: "0.6",
   draft: true,
 };
 

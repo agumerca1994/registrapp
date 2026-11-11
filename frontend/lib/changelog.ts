@@ -11,122 +11,19 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
-    version: "1.1.0-beta.15",
-    date: "2026-11-07",
-    notes: [
-      "El aviso de la t al guardar o borrar es de vidrio, igual que la barra de abajo.",
-    ],
-  },
-  {
-    version: "1.1.0-beta.14",
-    date: "2026-11-07",
-    notes: [
-      "Los bloques violetas de arriba vuelven a su violeta de siempre.",
-    ],
-  },
-  {
-    version: "1.1.0-beta.13",
-    date: "2026-11-07",
-    notes: [
-      "Los bloques violetas de arriba son de vidrio: dejan pasar un poco de luz y tienen brillo en el borde.",
-      "La barra de abajo, el encabezado, las hojas y los avisos son todavía más transparentes.",
-      "En Créditos, el celular ya no muestra el botón de arriba: el + del centro ofrece \"Agregar un crédito\".",
-    ],
-  },
-  {
-    version: "1.1.0-beta.12",
-    date: "2026-11-07",
-    notes: [
-      "La barra de abajo es todavía más transparente.",
-    ],
-  },
-  {
-    version: "1.1.0-beta.11",
-    date: "2026-11-07",
-    notes: [
-      "El + del centro ofrece primero lo de la pantalla en la que estás: en Objetivos, \"Nuevo objetivo\"; en Inversiones, \"Nueva inversión\", y así.",
-      "La barra de abajo, el encabezado, los avisos y las hojas son más transparentes: se ve lo que pasa por debajo.",
-    ],
-  },
-  {
-    version: "1.1.0-beta.10",
-    date: "2026-11-07",
-    notes: [
-      "Cada guía aparece una sola vez, aunque la dejes por la mitad. Para verlas de nuevo está Reiniciar guía en Configuración.",
-    ],
-  },
-  {
-    version: "1.1.0-beta.9",
-    date: "2026-11-06",
-    notes: [
-      "Con un formulario abierto, la guía de la pantalla espera y sigue en el mismo paso cuando lo cerrás.",
-      "Lo que está detrás de un formulario ya no se mueve cuando deslizás.",
-      "Los formularios vuelven a verse esmerilados: la pantalla de atrás no se lee a través.",
-    ],
-  },
-  {
-    version: "1.1.0-beta.8",
-    date: "2026-11-06",
-    notes: [
-      "Ahorro ahora se llama Objetivos.",
-      "Podés juntar con una cuota fija por mes: ese día Inicio te avisa y la cumplís con un toque.",
-    ],
-  },
-  {
-    version: "1.1.0-beta.7",
-    date: "2026-11-06",
-    notes: [
-      "En el iPhone, el encabezado ya no tapa los formularios mientras escribís.",
-      "Inversiones y Ahorro vacíos te explican en una frase qué son, y al cargar el primero te guían paso a paso.",
-    ],
-  },
-  {
-    version: "1.1.0-beta.6",
-    date: "2026-11-06",
-    notes: [
-      "Inversiones: en un fondo, acciones o cripto ya podés cargar un rescate mayor a lo que pusiste, porque incluye lo que ganaste.",
-    ],
-  },
-  {
-    version: "1.1.0-beta.5",
-    date: "2026-11-06",
-    notes: [
-      "Inversiones: cargá tus plazos fijos, cuentas remuneradas, fondos, acciones, cripto o efectivo y mirá cuánto valen hoy y cuánto ganaste.",
-      "Un plazo fijo te avisa cuando vence, para renovarlo o rescatarlo.",
-    ],
-  },
-  {
-    version: "1.1.0-beta.4",
-    date: "2026-11-06",
-    notes: [
-      "Inicio te muestra tu objetivo de ahorro más cercano y cuánto te toca apartar este mes.",
-    ],
-  },
-  {
-    version: "1.1.0-beta.3",
-    date: "2026-11-06",
-    notes: [
-      "En Créditos, el botón para agregar uno está arriba, como en Ahorro.",
-    ],
-  },
-  {
-    version: "1.1.0-beta.2",
-    date: "2026-11-06",
-    notes: [
-      "Hipoteca pasó a ser Créditos: además del hipotecario, préstamos personales, prendarios, planes de ahorro y plata que te prestó alguien.",
-      "Si sabés cuánto pagás por mes, alcanza con la cuota y la cantidad de cuotas.",
-      "Ahorro: armá objetivos con fecha y la app te dice cuánto apartar por mes para llegar.",
-    ],
-  },
-  {
-    version: "1.1.0-beta.1",
-    date: "2026-11-05",
+    // Las 15 tandas de la beta se resumen acá: quien viene de producción ve qué cambió, no cada prueba.
+    version: "1.1.0",
+    date: "2026-11-11",
     notes: [
       "tood tiene un diseño nuevo en todas las pantallas.",
-      "Inicio te cuenta cómo viene el día, además del mes.",
+      "Inicio te cuenta cuánto te queda para gastar hasta fin de mes y cómo viene el día.",
       "Ingresos y egresos ahora están juntos en Movimientos.",
-      "Las guías muestran lo que hay en cada pantalla, también en el celular.",
-      "Cerrar sesión pasó a Configuración, en Tu cuenta.",
+      "Hipoteca pasó a ser Créditos: además del hipotecario, préstamos personales, prendarios, planes de ahorro y plata que te prestó alguien.",
+      "Objetivos: ponele monto y fecha a algo que quieras, y te dice cuánto apartar por mes. Con una cuota fija, Inicio te avisa el día que toca.",
+      "Inversiones: plazos fijos, cuentas remuneradas, fondos, acciones, cripto o efectivo, con cuánto valen hoy y cuánto ganaste.",
+      "El + del centro ofrece primero lo que se agrega en la pantalla donde estás.",
+      "Las guías esperan a que cierres un formulario y aparecen una sola vez.",
+      "Cerrar sesión y la versión de la app están en Configuración.",
     ],
   },
   {

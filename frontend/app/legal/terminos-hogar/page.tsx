@@ -11,7 +11,7 @@ const SECTIONS = termsSections([
   { id: "que-es", title: "Qué es tood Hogar" },
   { id: "hogar", title: "Un hogar compartido" },
   { id: "compartidos", title: "Gastos compartidos" },
-  { id: "referencia", title: "Dólares, hipoteca y cuotas" },
+  { id: "referencia", title: "Dólares, créditos, inversiones y cuotas" },
 ]);
 const sec = sectionsOf(SECTIONS);
 
@@ -26,7 +26,7 @@ export default function TerminosHogarPage() {
 
       <Section {...sec("que-es")}>
         <p>
-          Una app para llevar las cuentas de tu casa: ingresos, gastos, tarjetas y cuotas, dólares, hipoteca UVA,
+          Una app para llevar las cuentas de tu casa: ingresos, gastos, tarjetas y cuotas, dólares, créditos (hipotecario UVA, personal, prendario, plan de ahorro), objetivos de ahorro, inversiones,
           recordatorios de pago y gastos compartidos con otras personas. Sirve para registrar y ordenar: no mueve
           plata, no hace pagos ni se conecta con tu banco.
         </p>
@@ -52,7 +52,8 @@ export default function TerminosHogarPage() {
       <Section {...sec("referencia")}>
         <List items={[
           "La tenencia de dólares es la que surge de lo que cargaste. No es el saldo de tu cuenta bancaria.",
-          "La cuota de la hipoteca en pesos se calcula con el valor publicado de la UVA. El monto que debitará tu banco puede diferir.",
+          "La cuota de un crédito en UVA se pasa a pesos con el valor publicado de la UVA, y la de uno con tasa se calcula con los datos que cargaste. El monto que debitará tu banco puede diferir.",
+          "Lo que vale una inversión es una estimación: un plazo fijo o una cuenta remunerada se calculan con la tasa que cargaste, y un fondo, una acción o una cripto valen lo último que cargaste. No es una cotización ni el saldo de tu cuenta, y no es una recomendación de inversión.",
           "Las fechas de vencimiento de las tarjetas que no cargaste son estimaciones, y la app las marca como tales.",
           "Cuando subís un resumen de tarjeta, la app propone correcciones y no aplica ninguna sin tu confirmación.",
         ]} />

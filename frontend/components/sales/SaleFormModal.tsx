@@ -203,7 +203,7 @@ export default function SaleFormModal({ sale, initial, saleDate, products, onSav
 
           {error && <p role="alert" className="mx-3.5 mb-1 text-sm text-destructive">{error}</p>}
           <FormSheetActions onCancel={onClose} saving={saving} data-tour="sale-save"
-            label={total > 0 ? `Cobrar ${formatARS(total)}` : "Guardar"} />
+            label={total > 0 ? `Cobrar ${formatARS(total).replace(/,00$/, "")}` : "Guardar"} />
         </form>
       </FormSheet>
     </>

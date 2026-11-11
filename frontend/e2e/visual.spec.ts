@@ -1,10 +1,9 @@
 import { test, expect } from "@playwright/test";
 
-// Visual regression baseline for the v3 redesign (hard-shadow hero cards,
-// violet brand palette, pill buttons/chips). This does NOT compare against
-// the pre-redesign UI — the new look is the intended baseline, established
-// the first time this suite runs with `--update-snapshots`. Its job from
-// here on is catching *accidental* visual regressions in future changes.
+// Visual regression baseline for the 1.1.0 redesign ("vidrio sobre violeta":
+// violet top block, cream paper, glass tab bar and sheets). The baselines
+// were regenerated with `--update-snapshots` when it went to production
+// (2026-11-11); their job is catching *accidental* visual changes from here on.
 //
 // /dashboard and /calendario render the current date/month, so their
 // snapshots will need a refresh (`--update-snapshots`) periodically as time

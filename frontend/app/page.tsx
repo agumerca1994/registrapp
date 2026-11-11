@@ -32,7 +32,7 @@ const VARIANTS = [
   {
     href: "/hogar", icon: HomeIcon, name: "tood Hogar", image: "/hogar/inicio.jpg", phone: "/home/celular-hogar.jpg",
     lead: "Para las cuentas de tu casa. Ves cuánto te queda a fin de mes, en pesos y en dólares, y qué cuotas vienen.",
-    items: ["Sueldos con su detalle", "Tarjetas y cuotas", "Ahorro en dólares", "Hipoteca UVA", "Gastos compartidos con otros"],
+    items: ["Sueldos con su detalle", "Tarjetas y cuotas", "Dólares, objetivos e inversiones", "Créditos e hipoteca UVA", "Gastos compartidos con otros"],
   },
   {
     href: "/negocio", icon: Store, name: "tood Negocio", image: "/negocio/inicio.jpg", phone: "/home/celular-negocio.jpg",
@@ -85,7 +85,7 @@ export default function Home() {
             </h1>
             <p className="mt-5 text-lg text-muted-foreground max-w-xl">
               Con tood podés llevar el registro de cuánta plata te entra por mes y cuánto estás gastando: recibos de
-              sueldo, reintegros, gastos, tarjetas de crédito, gastos compartidos, vencimientos, créditos,{" "}
+              sueldo, reintegros, gastos, tarjetas de crédito, gastos compartidos, vencimientos, créditos, objetivos, inversiones,{" "}
               {/* Gira y queda en "todo": el remate de la lista. */}
               <ToodLogoAnimado variant="queda-todo" title="todo" className="inline-block h-[1.1em] w-auto align-[-0.18em] text-primary" />
             </p>

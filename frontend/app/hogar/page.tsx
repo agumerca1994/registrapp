@@ -3,7 +3,7 @@ import { Phone, Screen } from "@/components/marketing/Frames";
 import Link from "next/link";
 import { appHref } from "@/lib/site";
 import {
-  CreditCard, DollarSign, Download, Home, Play, ReceiptText, TrendingUp, Users,
+  CalendarDays, CreditCard, DollarSign, Download, Landmark, Play, ReceiptText, Target, TrendingUp, Users, Wallet,
 } from "lucide-react";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import SiteHeader from "@/components/marketing/SiteHeader";
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
  */
 
 const FEATURES = [
-  { icon: TrendingUp, title: "Sueldos con su detalle",
+  { icon: Wallet, title: "Sueldos con su detalle",
     text: "Bruto, descuentos y bonos de cada recibo. El neto se calcula solo, y ves por qué un mes cobraste distinto." },
   { icon: ReceiptText, title: "Gastos por categoría",
     text: "Cada gasto con su categoría, y ves en qué se va la plata del mes." },
@@ -33,14 +33,29 @@ const FEATURES = [
     text: "Cuántos dólares tenés y cuánto valen. Comprar dólares no cuenta como gasto: la plata cambia de bolsillo." },
   { icon: Users, title: "Gastos compartidos",
     text: "Dividís un gasto con quien quieras y la app lleva la cuenta de quién le debe a quién." },
-  { icon: Home, title: "Hipoteca UVA",
-    text: "La cuota en UVAs pasada a pesos, cuántas faltan, y cada cuota registrada sola como gasto." },
+  { icon: Landmark, title: "Créditos",
+    text: "Hipotecario UVA, personal, prendario o un plan de ahorro: cuánto pagás por mes, cuántas cuotas faltan, y cada cuota anotada sola como gasto." },
+  { icon: Target, title: "Objetivos",
+    text: "Ponele monto y fecha a algo que quieras y te dice cuánto apartar por mes. Apartar no cuenta como gasto." },
+  { icon: TrendingUp, title: "Inversiones",
+    text: "Plazos fijos, fondos, acciones o cripto: cuánto pusiste, cuánto valen hoy y cuánto ganaste." },
+  { icon: CalendarDays, title: "Vencimientos",
+    text: "Los cierres y vencimientos de tus tarjetas, y recordatorios que te llegan por WhatsApp el día del pago." },
+];
+
+const EXTRAS = [
+  { src: "/hogar/creditos.jpg", title: "Créditos", text: "Cuánto debés, la cuota del mes y cuántas faltan.",
+    alt: "Los créditos del hogar: lo que falta pagar y la cuota del mes" },
+  { src: "/hogar/objetivos.jpg", title: "Objetivos", text: "Cuánto juntaste y cuánto apartar por mes para llegar.",
+    alt: "Los objetivos de ahorro del hogar y cuánto falta para cada uno" },
+  { src: "/hogar/inversiones.jpg", title: "Inversiones", text: "Cuánto valen hoy y cuánto ganaste, en pesos y en dólares.",
+    alt: "Las inversiones del hogar: lo que valen hoy y la ganancia" },
 ];
 
 const STEPS = [
   { title: "Entrá con Google", text: "Creá tu hogar y ponele nombre." },
   { title: "Sumá a tu familia", text: "Con el código del hogar, ven y cargan lo mismo que vos." },
-  { title: "Cargá ingresos y gastos", text: "En Inicio ves cómo cierra el mes." },
+  { title: "Cargá ingresos y gastos", text: "En Inicio ves cuánto te queda para gastar hasta fin de mes." },
 ];
 
 
@@ -124,6 +139,22 @@ export default function HogarPage() {
             <Screen src="/hogar/compartidos.jpg" alt="Los gastos compartidos con una persona y el balance entre los dos" />
             <h3 className="mt-5 font-semibold text-xl">Cuentas claras con cada persona</h3>
             <p className="mt-1.5 text-muted-foreground">Quién le debe a quién, mes por mes.</p>
+          </div>
+        </section>
+
+        <section className="max-w-6xl mx-auto px-4 md:px-8 py-12">
+          <h2 className="font-display font-bold text-3xl tracking-tight">Lo que debés, lo que juntás y lo que invertís</h2>
+          <p className="mt-3 text-lg text-muted-foreground max-w-2xl">
+            Tres pantallas aparte, para que nada de esto se mezcle con los gastos del mes.
+          </p>
+          <div className="mt-8 grid md:grid-cols-3 gap-8">
+            {EXTRAS.map(e => (
+              <div key={e.src} className="min-w-0">
+                <Screen src={e.src} alt={e.alt} />
+                <h3 className="mt-5 font-semibold text-xl">{e.title}</h3>
+                <p className="mt-1.5 text-muted-foreground">{e.text}</p>
+              </div>
+            ))}
           </div>
         </section>
 

@@ -2,8 +2,8 @@ import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
-// Exactly ONE "hero" card per screen (the single most important summary — e.g.
-// the loan summary on Hipoteca). Everything else uses "flat". Screens with no
+// At most ONE "hero" card per screen, and only where there is no violet block
+// on top (`components/ui/glass.tsx`). Everything else uses "flat". Screens with no
 // obvious hero (Gastos compartidos, Tarjetas, Configuración, Variables macro)
 // should use "flat" everywhere and simply have no hero card at all.
 const cardVariants = cva("rounded-3xl bg-card text-card-foreground p-4 md:p-5", {

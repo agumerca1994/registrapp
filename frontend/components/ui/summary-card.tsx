@@ -9,7 +9,9 @@ import { useCountUp } from "@/components/ui/count-up";
 /**
  * The app's summary hero — the one `variant="hero"` card at the top of a
  * screen, answering "where do I stand" before anything else on the page.
- * Established on the dashboard, reused on `/divisas`.
+ * Since the 1.1.0 redesign the top of a screen is the violet block
+ * (`components/ui/glass.tsx`); this card is the month-closing view inside a
+ * screen (`MonthCard` in Movimientos, the business month, `/conciliar/[id]`).
  *
  * Read top to bottom it's always the same three bands:
  *
@@ -26,9 +28,10 @@ import { useCountUp } from "@/components/ui/count-up";
  *   </SummaryCard>
  *
  * The rules behind the shape, each of which was a correction at some point:
- * - **Columns are equal, not content-sized.** A peso figure is three times as
- *   wide as a dollar one; a grid that sizes to content turns two equally
- *   important numbers into a headline and a footnote.
+ * - **Columns are never content-sized.** A peso figure is three times as wide
+ *   as a dollar one; a grid that sizes to content turns two equally important
+ *   numbers into a headline and a footnote. A caller may weight them on
+ *   purpose (`MonthCard` uses 1.35fr / 1fr), but never by content.
  * - **Rows are not forced to match each other.** `auto-rows-fr` across the
  *   whole grid stretched the figures row to the height of the taller chain
  *   row and left a band of dead space under the numbers.

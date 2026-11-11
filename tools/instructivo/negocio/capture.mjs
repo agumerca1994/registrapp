@@ -4,8 +4,14 @@
 //   node tools/instructivo/negocio/capture.mjs
 //   python3 ~/.claude/agents/instructivo-kit/build_deck.py tools/instructivo/negocio/deck.json
 // Ver .claude/instructivo/registrapp.md y el agente instructivo-builder.
+// Salidas, fuera del repo, en /private/tmp/registrapp-instructivo/negocio/:
+// frames.json (lo que lee deck.json) y landing/ (las imágenes de /negocio y la
+// del celular, que se copian a mano a frontend/public/). Con EXPLORE=/ruta,/otra
+// sólo carga los datos y saca esas pantallas en escritorio y celular.
 import { chromium } from "../../../frontend/node_modules/playwright/index.mjs";
 import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 // Las salidas van FUERA del repo: una captura suelta dentro del árbol frena el deploy.
 const WORK = "/private/tmp/registrapp-instructivo/negocio";
@@ -16,9 +22,21 @@ const API = "http://localhost:8000";
 const EMAIL = `laura${Date.now() % 100000}@demo.local`;
 const PASSWORD = "demo-password-123";
 const VIEW = { width: 1280, height: 800 };
-const TOURS = ["dashboard-intro", "income-intro", "expenses-intro", "sales-intro", "sale-form", "close-form",
-  "products-intro", "product-form", "payees-intro", "expense-business", "home-intro", "cards-intro",
-  "calendar-intro", "expenses-business-intro"];
+// Lo que tapa pantallas se lee del código (las guías de cada pantalla y formulario),
+// así una guía nueva no aparece en las capturas porque nadie la sumó acá.
+const FRONT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../frontend");
+function grepSources(dir, re, acc = new Set()) {
+  for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, f.name);
+    if (f.isDirectory()) { if (!["node_modules", ".next", "e2e"].includes(f.name)) grepSources(p, re, acc); }
+    else if (/\.tsx?$/.test(f.name)) for (const m of fs.readFileSync(p, "utf8").matchAll(re)) acc.add(m[1]);
+  }
+  return acc;
+}
+const businessTours = fs.readFileSync(path.join(FRONT, "components/business/tours.ts"), "utf8")
+  .match(/BUSINESS_TOUR_IDS = \[([\s\S]*?)\]/)[1].match(/"([^"]+)"/g).map(s => s.slice(1, -1));
+const TOURS = [...new Set([...grepSources(path.join(FRONT, "app"), /tourId="([^"]+)"/g),
+  ...grepSources(path.join(FRONT, "components"), /tourId="([^"]+)"/g), ...businessTours])];
 
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 // El día de negocio: Argentina, con corte a las 05:00 (igual que la app). A principio
@@ -31,7 +49,7 @@ function referenceDay(real) {
   if (process.env.INSTRUCTIVO_HOY) return process.env.INSTRUCTIVO_HOY;
   const cal = new Date().toLocaleString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" }).slice(0, 10);
   const [y, m, d] = cal.split("-").map(Number);
-  if (d >= 12) return real;
+  if (d >= 8) return real;
   return m === 1 ? `${y - 1}-12-15` : `${y}-${String(m - 1).padStart(2, "0")}-15`;
 }
 const TODAY = referenceDay(arNow.slice(0, 10));
@@ -75,7 +93,8 @@ async function step(page, flow, caption, target) {
   console.log("step", flow, "-", caption);
 }
 
-const browser = await chromium.launch();
+// Con GPU, Playwright dibuja el vidrio (backdrop-filter) también a 2×.
+const browser = await chromium.launch({ args: ["--enable-gpu", "--ignore-gpu-blocklist"] });
 
 // ── Cuenta y datos ────────────────────────────────────────────────────────────
 const ctx = await browser.newContext({ viewport: VIEW, reducedMotion: "reduce",
@@ -176,25 +195,62 @@ await ctx.storageState({ path: `${WORK}/state.json` });
 
 await ctx.clock.setFixedTime(browserNow());
 
+if (process.env.EXPLORE) {
+  const dir = `${WORK}/explore`; fs.mkdirSync(dir, { recursive: true });
+  const mob = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true,
+    hasTouch: true, reducedMotion: "reduce", storageState: `${WORK}/state.json` });
+  await mob.addInitScript((ids) => { for (const id of ids) localStorage.setItem(`tour_seen_${id}`, "1"); }, TOURS);
+  const mp = await mob.newPage();
+  for (const r of process.env.EXPLORE.split(",")) {
+    const n = r.replace(/[^a-z0-9]+/gi, "_");
+    await page.goto(APP + r); await wait(3500); await page.screenshot({ path: `${dir}/d${n}.png`, fullPage: true });
+    await mp.goto(APP + r); await wait(3500); await mp.screenshot({ path: `${dir}/m${n}.png`, scale: "css", fullPage: true });
+  }
+  console.log("explore listo", EMAIL);
+  await browser.close(); process.exit(0);
+}
+
+// Imágenes de la landing (/negocio, la home y la del celular), fuera del repo:
+// se copian a mano a frontend/public/.
+const LAND = `${WORK}/landing`;
+fs.mkdirSync(LAND, { recursive: true });
+const land = (name) => page.screenshot({ path: `${LAND}/${name}.jpg`, type: "jpeg", quality: 84 });
+const dialog = () => page.getByRole("dialog").last();
+
 // ── Pantallas ─────────────────────────────────────────────────────────────────
 await page.goto(APP + "/dashboard");
 await page.getByText("Ventas por medio de pago").first().waitFor({ timeout: 15000 });
+await wait(1200);
 await still(page, "inicio");
-await page.getByRole("button", { name: /Ver detalle/ }).first().click().catch(() => {});
-await still(page, "inicio-detalle");
+await land("inicio");
+
+// La landing del celular: Inicio a 390×844, 2×.
+const mctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true,
+  hasTouch: true, reducedMotion: "reduce", storageState: `${WORK}/state.json`,
+  ...(process.env.INSTRUCTIVO_TZ ? { timezoneId: process.env.INSTRUCTIVO_TZ } : {}) });
+await mctx.addInitScript((ids) => { for (const id of ids) localStorage.setItem(`tour_seen_${id}`, "1"); }, TOURS);
+await mctx.clock.setFixedTime(browserNow());
+const mp = await mctx.newPage();
+await mp.goto(APP + "/dashboard");
+await mp.getByText("Las de hoy").first().waitFor({ timeout: 15000 });
+await wait(1500);
+await mp.screenshot({ path: `${LAND}/celular-negocio.jpg`, type: "jpeg", quality: 84 });
+await mctx.close();
 
 for (const [path, name, ready] of [
-  ["/ventas", "ventas", "Ventas de hoy"],
+  ["/ventas", "ventas", "Las de hoy"],
   ["/productos", "productos", "Empanada de carne"],
   ["/proveedores", "proveedores", "Distribuidora Sur"],
   ["/expenses", "egresos", "Alquiler del local"],
   ["/tarjetas", "tarjetas", "Visa negocio"],
-  ["/calendario", "calendario", "Calendario de pagos"],
-  ["/settings", "configuracion", "Configuración"],
+  ["/calendario", "calendario", "Agregar recordatorio"],
+  ["/settings", "configuracion", "Tu negocio"],
 ]) {
   await page.goto(APP + path);
   await page.getByText(ready).first().waitFor({ timeout: 15000 });
+  await wait(600);
   await still(page, name);
+  if (["ventas", "productos", "egresos"].includes(name)) await land(name);
 }
 
 // El menú de un producto.
@@ -213,66 +269,75 @@ await page.getByText("Empanada de carne").first().waitFor();
 let t = page.getByRole("button", { name: "Nuevo producto" });
 await step(page, "producto", "En Productos, tocá + para crear uno.", t);
 await t.click();
-t = page.getByPlaceholder("Empanada de carne");
+let f = page.getByRole("dialog", { name: "Nuevo producto" });
+t = f.getByPlaceholder("Empanada de carne");
 await step(page, "producto", "Elegí si lo hacés vos (elaborado) o lo comprás para vender (reventa), y escribí el nombre.", t);
 await t.fill("Flan casero");
-t = page.getByLabel("Precio");
+t = f.getByLabel("Precio", { exact: true });
 await step(page, "producto", "Poné el precio de venta.", t);
 await t.fill("3.000");
-t = page.getByRole("button", { name: "Crear" });
+t = f.getByRole("button", { name: "Crear" });
 await step(page, "producto", "Tocá Crear.", t);
 await t.click();
+await f.waitFor({ state: "detached" });
 await page.getByText("Flan casero").first().waitFor();
 await step(page, "producto", "Listo: el producto ya aparece en la lista y en Nueva venta.", null);
 
 // Cargar una venta.
 await page.goto(APP + "/ventas");
-await page.getByText("Ventas de hoy").first().waitFor();
-t = page.getByRole("button", { name: "Nueva venta" });
-await step(page, "venta", "En Ventas, tocá + Nueva venta.", t);
+await page.getByText("Las de hoy").first().waitFor();
+t = page.getByRole("button", { name: "Nueva venta", exact: true });
+await step(page, "venta", "En Ventas, tocá +.", t);
 await t.click();
-t = page.locator("[data-tour='sale-products']").getByRole("button", { name: /Empanada de carne/ });
+f = page.getByRole("dialog", { name: "Nueva venta" });
+t = f.locator("[data-tour='sale-products']").getByRole("button", { name: /Empanada de carne/ });
 await step(page, "venta", "Tocá los productos que vendiste: cada toque suma uno.", t);
 await t.click(); await wait(150); await t.click(); await wait(150); await t.click();
-t = page.locator("[data-tour='sale-products']").getByRole("button", { name: /Coca-Cola/ });
+t = f.locator("[data-tour='sale-products']").getByRole("button", { name: /Coca-Cola/ });
 await step(page, "venta", "Van 3 empanadas. Sumá la gaseosa.", t);
 await t.click();
-t = page.getByRole("radio", { name: "Mercado Pago" }).first();
+t = f.getByRole("radio", { name: "Mercado Pago" }).first();
+await t.scrollIntoViewIfNeeded();
+await wait(600);
+await land("nueva-venta");
 await step(page, "venta", "El total se calcula con los precios. Elegí cómo te pagaron.", t);
 await t.click();
-t = page.getByRole("button", { name: /Cobrar/ });
+t = f.getByRole("button", { name: /Cobrar/ });
 await step(page, "venta", "Tocá Cobrar.", t);
 await t.click();
+await f.waitFor({ state: "detached" });
 await wait(1200);
 await step(page, "venta", "La venta queda en la lista del día y suma al total.", null);
 
 // Una compra que entra al stock.
 await page.goto(APP + "/expenses?nuevo=1");
-t = page.getByLabel("Monto", { exact: true });
+f = page.getByRole("dialog", { name: "Nuevo egreso" });
+t = f.getByLabel("Monto", { exact: true });
 await t.waitFor();
 await step(page, "compra", "En Egresos, tocá + y escribí el monto.", t);
 await t.fill("27.000");
-t = page.locator("[data-tour='expense-payee'] [role='combobox']");
+t = f.locator("[data-tour='expense-payee'] [role='combobox']");
 await step(page, "compra", "Elegí a quién le compraste.", t);
 await t.click();
 t = page.getByRole("option", { name: "Distribuidora Sur" });
 await step(page, "compra", "La categoría habitual del proveedor se completa sola.", t);
 await t.click();
-t = page.getByRole("group", { name: "¿Entra al stock?" }).getByRole("button", { name: "Sí" });
-await step(page, "compra", "Si es mercadería para vender, activá ¿Entra al stock?", t);
+t = f.getByRole("group", { name: "¿Entra al stock?" }).getByRole("button", { name: "Sí" });
+await step(page, "compra", "Si es mercadería para vender, en ¿Entra al stock? tocá Sí.", t);
 await t.click();
-t = page.locator("[data-testid='stock-line'] [role='combobox']").first();
+t = f.locator("[data-testid='stock-line'] [role='combobox']").first();
 await step(page, "compra", "Elegí el producto…", t);
 await t.click();
 t = page.getByRole("option", { name: "Coca-Cola 500 ml" });
 await step(page, "compra", "…en este caso, la gaseosa.", t);
 await t.click();
-t = page.getByLabel("Cantidad que entra");
+t = f.getByLabel("Cantidad que entra");
 await step(page, "compra", "Y cuántas unidades entraron.", t);
 await t.fill("12");
-t = page.getByRole("button", { name: "Guardar" });
-await step(page, "compra", "Tocá Guardar.", t);
+t = f.getByRole("button", { name: "Guardar egreso" });
+await step(page, "compra", "Tocá Guardar egreso.", t);
 await t.click();
+await f.waitFor({ state: "detached" });
 await wait(1500);
 await step(page, "compra", "El gasto queda en Egresos y las 12 gaseosas suman al stock.", null);
 
@@ -282,33 +347,37 @@ await page.getByText("Empanada de carne").first().waitFor();
 t = page.getByRole("button", { name: "Cargar producción" });
 await step(page, "produccion", "En Productos, tocá Cargar producción.", t);
 await t.click();
-t = page.locator("form [role='combobox']").first();
+f = dialog();
+t = f.getByRole("combobox").first();
 await step(page, "produccion", "Elegí el producto.", t);
 await t.click();
 t = page.getByRole("option", { name: "Empanada de pollo" });
 await step(page, "produccion", "Por ejemplo, las empanadas de pollo.", t);
 await t.click();
-t = page.locator("form input[inputmode='decimal']").first();
+t = f.locator("input[inputmode='decimal']").first();
 await step(page, "produccion", "Escribí cuántas hiciste.", t);
 await t.fill("36");
-t = page.getByRole("button", { name: "Guardar" });
+t = f.getByRole("button", { name: "Guardar" });
 await step(page, "produccion", "Tocá Guardar.", t);
 await t.click();
+await f.waitFor({ state: "detached" });
 await wait(1500);
 await step(page, "produccion", "El stock se actualiza al instante.", null);
 
 // Cerrar el día.
 await page.goto(APP + "/ventas");
-await page.getByText("Ventas de hoy").first().waitFor();
+await page.getByText("Las de hoy").first().waitFor();
 t = page.getByRole("button", { name: "Cerrar el día" }).first();
 await step(page, "cierre", "Al final del día, tocá Cerrar el día.", t);
 await t.click();
-t = page.getByLabel("Contado en Efectivo");
+f = dialog();
+t = f.getByLabel("Contado en Efectivo");
 await step(page, "cierre", "Ya viene con lo vendido por cada medio. Corregí con lo que contaste en la caja.", t);
 await t.fill("26.000");
-t = page.locator("form").getByRole("button", { name: "Cerrar el día" });
+t = f.getByRole("button", { name: "Cerrar el día" });
 await step(page, "cierre", "Tocá Cerrar el día.", t);
 await t.click();
+await f.waitFor({ state: "detached" });
 await wait(1500);
 await step(page, "cierre", "El día queda cerrado y suma lo contado. Si falta plata, te lo marca.", null);
 

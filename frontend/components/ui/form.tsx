@@ -17,9 +17,9 @@ export type { SelectOption };
 /**
  * Form fields, in the app's own clothes rather than the browser's.
  *
- * The house style is a 2px ink border — it's what buttons, chips and the hero
- * card are built from — so inputs use it too instead of the hairline default
- * that makes a form look like an unstyled page. Two native controls have to go
+ * Fields carry the same hairline border and radius as the rest of the paper
+ * (`FIELD`), so a form reads as part of the app and not as an unstyled page.
+ * Two native controls have to go
  * entirely, because the part of them that looks generic is the part CSS can't
  * reach:
  *

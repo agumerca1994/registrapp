@@ -2,7 +2,7 @@
   "id": "/",
   "name": "tood",
   "short_name": "tood",
-  "description": "Las cuentas de tu casa y de tu negocio: ingresos, gastos, tarjetas, dólares y ventas.",
+  "description": "Las cuentas de tu casa y de tu negocio: ingresos, gastos, tarjetas, dólares, créditos, objetivos, inversiones y ventas.",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",

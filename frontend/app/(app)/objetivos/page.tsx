@@ -225,7 +225,13 @@ export default function ObjetivosPage() {
               <div className={`mt-4 ${GLASS} px-4 py-3.5`}>
                 <p className="text-[15px]">Próximo: <span className="font-semibold">{next.name}</span></p>
                 <p className="mt-0.5 text-[19px] font-medium leading-snug tracking-[-0.02em]">
-                  Apartá <span className="tabular-nums">{money(next.per_month_needed!, next.currency)}</span> por mes para llegar a {monthLabel(next.target_date!)}.
+                  {/* Con cuota fija manda la cuota, como en su fila y en Inicio: el
+                      reparto hasta la fecha decía otro número para el mismo objetivo. */}
+                  {next.plan_amount && !next.plan_paused ? (
+                    <>Tu cuota es <span className="tabular-nums">{money(next.plan_amount, next.currency)}</span> por mes{next.plan_eta ? <>: llegás en {monthLabel(next.plan_eta)}</> : null}.</>
+                  ) : (
+                    <>Apartá <span className="tabular-nums">{money(next.per_month_needed!, next.currency)}</span> por mes para llegar a {monthLabel(next.target_date!)}.</>
+                  )}
                 </p>
               </div>
             )}
