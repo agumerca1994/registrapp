@@ -2,13 +2,14 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { ToodAvatar, type ToodReaction } from "@/components/brand/ToodAvatar";
+import { GLASS_BAR } from "@/components/ui/glass";
 
 // La t confirma lo que acabás de hacer: guardar, borrar o un error. Sin esto, cargar o eliminar algo no daba
 // ninguna señal de que se hizo.
-//   - En el celular aparece en el medio de la pantalla, con su animación y una línea de texto, y se va sola.
-//   - En la compu aparece abajo a la derecha, mucho más grande que el botón +, y el + se esconde mientras tanto
-//     (Fab lee `useReaccionActiva`). Si la pantalla no tiene +, aparece igual en ese lugar.
-//   - Nunca dentro de una caja ni de un círculo: flota sobre la pantalla, con un desenfoque suave detrás (`Halo`).
+//   - Es una píldora de vidrio, la misma de la barra de abajo y de las hojas, con la t adentro y una línea de texto.
+//   - En el celular sube desde la barra y se apoya justo arriba; en la compu, abajo a la derecha, donde está el +.
+//     El + se esconde mientras tanto (Fab lee `useReaccionActiva`).
+//   - No tapa lo que acabás de hacer: la fila nueva se tiene que poder ver mientras la t confirma.
 // Se usa con `const reaccionar = useReaccion(); reaccionar("guardado", "Egreso guardado")`. El texto va
 // siempre: es lo que lee un lector de pantalla y lo que ve quien tiene el movimiento reducido.
 
@@ -17,7 +18,7 @@ export type Reaccion = "guardado" | "ingreso" | "borrado" | "error";
 const AVATAR: Record<Reaccion, ToodReaction> = { guardado: "gasto", ingreso: "meta", borrado: "pasado", error: "alerta" };
 // Cuánto queda en pantalla: lo que dura la reacción de la t y un respiro.
 const DURA: Record<Reaccion, number> = { guardado: 2300, ingreso: 2800, borrado: 2100, error: 2600 };
-const SALIDA_MS = 250;
+const SALIDA_MS = 220;
 
 type Estado = { tipo: Reaccion; texto: string; key: number; visible: boolean };
 
@@ -60,42 +61,18 @@ function ReaccionVisible({ estado }: { estado: Estado }) {
     return () => cancelAnimationFrame(id);
   }, [key]);
   const on = dentro && visible;
-  const anim = `transition-all duration-300 ease-out ${on ? "opacity-100 scale-100" : "opacity-0 scale-75"}`;
-  const avatar = (size: number) => (
-    <ToodAvatar size={size} reaction={AVATAR[tipo]} reactionKey={key} duration={0} holeColor="#ffffff" />
-  );
+  // Sube con un rebote chico y baja por donde vino, más rápido: la misma dirección de las hojas.
+  const anim = `transition-[opacity,transform] ${on
+    ? "duration-[420ms] ease-[cubic-bezier(0.34,1.4,0.64,1)] opacity-100 translate-y-0 scale-100"
+    : dentro ? "duration-200 ease-in opacity-0 translate-y-4 scale-[0.97]" : "duration-0 opacity-0 translate-y-6 scale-95"}`;
 
   return (
-    <div aria-hidden="true">
-      {/* Celular: en el medio de la pantalla, flotando sobre lo que haya, sin caja. */}
-      <div className="md:hidden fixed inset-0 z-[70] grid place-items-center pointer-events-none px-6">
-        <div className={`${anim} relative flex flex-col items-center gap-3`}>
-          <Halo />
-          <div className="relative translate-x-[5.5%]">{avatar(210)}</div>
-          <p className="relative font-display font-semibold text-xl text-foreground text-center [text-shadow:0_0_6px_hsl(var(--background)),0_0_14px_hsl(var(--background)),0_0_24px_hsl(var(--background))]">{texto}</p>
-        </div>
-      </div>
-      {/* Compu: abajo a la derecha, donde está el botón +, flotando y bastante más grande que él. */}
-      <div className="hidden md:block fixed right-12 bottom-10 z-[45] pointer-events-none">
-        <div className={`${anim} relative origin-bottom-right flex items-end gap-2`}>
-          <Halo />
-          <p className="relative mb-12 font-display font-semibold text-xl text-foreground whitespace-nowrap [text-shadow:0_0_6px_hsl(var(--background)),0_0_14px_hsl(var(--background)),0_0_24px_hsl(var(--background))]">{texto}</p>
-          <div className="relative">{avatar(230)}</div>
-        </div>
+    <div aria-hidden="true" className="fixed z-[70] pointer-events-none flex justify-center left-3 right-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] md:left-auto md:right-8 md:bottom-6">
+      <div className={`${anim} flex items-center gap-1.5 max-w-full min-h-[64px] pl-2 pr-5 rounded-full ${GLASS_BAR} shadow-flota`}>
+        <ToodAvatar size={56} reaction={AVATAR[tipo]} reactionKey={key} duration={0} holeColor="hsl(var(--card))" className="shrink-0" />
+        <p className="min-w-0 font-medium text-[16px] leading-tight tracking-[-0.01em] text-foreground">{texto}</p>
       </div>
     </div>
-  );
-}
-
-/** Detrás de la t y su texto: un vidrio esmerilado casi transparente, que deforma lo de atrás sin taparlo. Es una
- *  elipse que toma la forma del grupo (no un círculo justo alrededor de la t) y cubre también el texto, con los bordes
- *  desvanecidos para que no se lea como una caja. */
-function Halo() {
-  const mask = "radial-gradient(farthest-side, #000 55%, transparent 100%)";
-  return (
-    <span className="absolute -inset-x-28 -inset-y-24 bg-background/10"
-      style={{ maskImage: mask, WebkitMaskImage: mask, backdropFilter: "blur(7px) saturate(1.4)",
-        WebkitBackdropFilter: "blur(7px) saturate(1.4)" }} />
   );
 }
 

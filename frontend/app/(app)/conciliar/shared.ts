@@ -131,14 +131,14 @@ export function periodLabel(year: number | null, month: number | null): string |
   return `${MONTHS[month - 1]} ${year}`;
 }
 
-/** Estado → chip. Ámbar es "te espera algo", rosa "no cierra", nunca un error. */
-export const STATUS_CHIP: Record<SessionStatus, { label: string; tone: "neutral" | "violet" | "emerald" | "amber" | "rose" }> = {
-  ready: { label: "Para revisar", tone: "amber" },
-  needs_choice: { label: "Falta elegir", tone: "amber" },
+/** Estado → chip. Lila es "te espera algo", rosa "no cierra", nunca un error. */
+export const STATUS_CHIP: Record<SessionStatus, { label: string; tone: "neutral" | "violet" | "rose" }> = {
+  ready: { label: "Para revisar", tone: "violet" },
+  needs_choice: { label: "Falta elegir", tone: "violet" },
   needs_ai: { label: "No se pudo leer", tone: "neutral" },
   unexplained: { label: "No cierra", tone: "rose" },
   applied: { label: "En curso", tone: "violet" },
-  closed: { label: "Al día", tone: "emerald" },
+  closed: { label: "Al día", tone: "neutral" },
 };
 
 export const GROUP_LABELS: Record<string, string> = {

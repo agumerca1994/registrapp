@@ -101,6 +101,7 @@ test("proveedor → gasto asignado → Inicio lo muestra", async ({ page, reques
 
     // 4. Inicio: a quién se le pagó.
     await page.goto("/dashboard");
+    await page.getByRole("group", { name: "Desglose del mes" }).getByRole("button", { name: "A quién" }).click();
     await expect(page.getByText(/Proveedores y empleados · /)).toBeVisible();
     await expect(page.getByText(name)).toBeVisible();
   } finally {

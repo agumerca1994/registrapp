@@ -4,15 +4,16 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronDown, Pencil } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
-import { formatARS, formatUSD } from "@/lib/utils";
-import { Card } from "@/components/ui/card";
+import { useReaccion } from "@/components/brand/ToodReaccion";
+import { MotionList } from "@/components/ui/motion-list";
 import { Fab } from "@/components/ui/fab";
+import { ledgerAmount } from "@/components/movimientos/Ledger";
 import ProductTour from "@/components/ProductTour";
 import { PAYEES_INTRO_STEPS } from "@/components/business/tours";
-import { Button } from "@/components/ui/button";
+import { EmptyState, LoadError, SCREEN_TITLE } from "@/components/business/ui";
 import { SegmentedToggle } from "@/components/ui/form";
 import { PayeeFormModal } from "@/components/business/PayeeFormModal";
 import { PAYEE_KIND_LABELS, type Payee } from "@/components/business/types";
@@ -30,6 +31,7 @@ interface Spend { total: number; total_usd: number }
  */
 export default function ProveedoresPage() {
   useAmountsHidden();  // repinta la pantalla al ocultar/mostrar montos
+  const reaccionar = useReaccion();
   const [payees, setPayees] = useState<Payee[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [spend, setSpend] = useState<Record<number, Spend>>({});
@@ -74,108 +76,107 @@ export default function ProveedoresPage() {
   // "Otro" sólo en Todos: no es ni proveedor ni empleado.
   const visible = filter === "todos" ? active : active.filter(p => p.kind === filter);
   const categoryName = (id: number | null) => categories.find(c => c.id === id)?.name;
+  const anyPaid = visible.some(p => spend[p.id]?.total || spend[p.id]?.total_usd);
 
   const close = () => { setEditing(null); setCreating(false); };
-  const onSaved = async () => { close(); await load(); };
+  const onSaved = async (payee: Payee) => {
+    reaccionar("guardado", editing
+      ? (payee.is_active === editing.is_active ? "Cambios guardados" : payee.is_active ? "Restaurado" : "Archivado")
+      : payee.kind === "empleado" ? "Empleado agregado"
+      : payee.kind === "proveedor" ? "Proveedor agregado" : "Agregado a la lista");
+    close();
+    await load();
+  };
 
   return (
-    <div className="space-y-4 md:space-y-6">
-      <ProductTour tourId="payees-intro" steps={PAYEES_INTRO_STEPS} />
-      <div className="space-y-1">
-        <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Proveedores y empleados</h2>
-        <p className="text-sm text-muted-foreground">
-          A quién le paga el negocio. Elegilos al cargar un gasto y vas a ver cuánto se le pagó a cada uno.
+    <div className="space-y-3 md:space-y-5 md:pb-16">
+      {!loading && !loadError && active.length > 0 && <ProductTour tourId="payees-intro" steps={PAYEES_INTRO_STEPS} />}
+      <div>
+        <h1 className={SCREEN_TITLE}>Proveedores y empleados</h1>
+        <p className="mt-0.5 text-[15px] leading-snug text-muted-foreground">
+          Elegilos al cargar un gasto y vas a ver cuánto se le pagó a cada uno.
         </p>
       </div>
 
-      <SegmentedToggle<Filter>
-        ariaLabel="Mostrar"
-        className="max-w-sm"
-        value={filter}
-        onChange={setFilter}
-        options={[
-          { value: "todos", label: "Todos" },
-          { value: "proveedor", label: "Proveedores" },
-          { value: "empleado", label: "Empleados" },
-        ]}
-      />
+      <div data-tour="payees-filter" className="max-w-sm">
+        <SegmentedToggle<Filter>
+          ariaLabel="Mostrar"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: "todos", label: "Todos" },
+            { value: "proveedor", label: "Proveedores" },
+            { value: "empleado", label: "Empleados" },
+          ]}
+        />
+      </div>
 
       {loading ? (
-        <Card className="h-32 animate-pulse" />
+        <div aria-busy="true">
+          {[0, 1, 2].map(i => <div key={i} className="h-[64px] rounded-2xl bg-ink/[0.04] animate-pulse mb-1" />)}
+          <span className="sr-only">Cargando la lista</span>
+        </div>
       ) : loadError ? (
-        <Card className="p-4 md:p-5 space-y-3">
-          <p className="text-sm text-destructive">No se pudo cargar la lista de proveedores y empleados.</p>
-          <Button onClick={retry}>Reintentar</Button>
-        </Card>
+        <LoadError message="No se pudo cargar la lista de proveedores y empleados." onRetry={retry} />
       ) : visible.length === 0 ? (
-        <Card className="p-4 md:p-5 space-y-3">
-          <p className="text-sm text-muted-foreground">
-            {active.length === 0
-              ? "Todavía no cargaste proveedores ni empleados."
-              : filter === "empleado" ? "No hay empleados cargados." : "No hay proveedores cargados."}
-          </p>
-          <Button onClick={() => setCreating(true)}>
-            {filter === "empleado" ? "Agregar empleado" : "Agregar proveedor"}
-          </Button>
-        </Card>
+        <EmptyState
+          text={active.length === 0
+            ? "Todavía no cargaste proveedores ni empleados."
+            : filter === "empleado" ? "No hay empleados cargados." : "No hay proveedores cargados."}
+          action={filter === "empleado" ? "Agregar empleado" : "Agregar proveedor"}
+          onAction={() => setCreating(true)} />
       ) : (
-        <Card className="p-0 divide-y overflow-hidden">
+        <MotionList className="px-2" data-tour="payees-list">
+          {anyPaid && <p className="font-marca text-xs text-muted-foreground text-right pb-0.5">Pagado en {monthLabel}</p>}
           {visible.map(p => {
             const paid = spend[p.id];
             // El tipo va en texto en la segunda línea y no como chip junto al
-            // nombre: en el celular el chip, el monto y el lápiz dejaban el
-            // nombre en "Distrib…". En un filtro ya se sabe qué es cada uno.
+            // nombre: en el celular el chip y el monto dejaban el nombre en
+            // "Distrib…". En un filtro ya se sabe qué es cada uno.
             const detail = [
               filter === "todos" ? PAYEE_KIND_LABELS[p.kind] : null,
               categoryName(p.default_category_id),
               p.notes,
-            ].filter(Boolean).join(" · ");
+            ].filter(Boolean).join(", ");
             return (
-              <div key={p.id} className="flex items-center gap-3 px-4 py-3" data-testid="payee-row">
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-foreground truncate">{p.name}</p>
-                  {detail && <p className="text-xs text-muted-foreground truncate mt-0.5">{detail}</p>}
-                </div>
-                <Link href={`/expenses?payee_id=${p.id}`} title="Ver sus gastos"
-                  className="text-right shrink-0 rounded-lg px-2 py-1 -my-1 hover:bg-accent transition-colors">
-                  <p className="text-sm font-semibold text-foreground tabular-nums">
-                    {paid?.total ? formatARS(paid.total) : "—"}
-                  </p>
-                  {!!paid?.total_usd && <p className="text-xs text-emerald-600 tabular-nums">{formatUSD(paid.total_usd)}</p>}
-                  <p className="text-[11px] text-muted-foreground">en {monthLabel}</p>
-                </Link>
-                <button onClick={() => setEditing(p)} title="Editar"
-                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent shrink-0">
-                  <Pencil className="w-4 h-4" />
+              <div key={p.id} className="min-h-[64px] flex items-stretch gap-2 border-b border-border last:border-b-0" data-testid="payee-row">
+                <button type="button" data-no-press onClick={() => setEditing(p)} title="Editar"
+                  className="flex-1 min-w-0 py-2 text-left active:opacity-60 transition-opacity">
+                  <span className="block font-semibold text-[15.5px] text-foreground truncate">{p.name}</span>
+                  {detail && <span className="block text-sm text-muted-foreground truncate">{detail}</span>}
                 </button>
+                {/* Sin nada pagado en el mes no hay monto que mostrar; sus gastos están en su formulario. */}
+                {!!(paid?.total || paid?.total_usd) && (
+                  <Link href={`/expenses?payee_id=${p.id}`} title="Ver sus gastos"
+                    className="shrink-0 pl-2 flex flex-col items-end justify-center text-right font-medium text-base tabular-nums text-foreground active:opacity-60 transition-opacity">
+                    {!!paid.total && <span>{ledgerAmount(paid.total)}</span>}
+                    {!!paid.total_usd && <span className="text-sm">{ledgerAmount(paid.total_usd, "USD")}</span>}
+                  </Link>
+                )}
               </div>
             );
           })}
-        </Card>
+        </MotionList>
       )}
 
       {archived.length > 0 && (
-        <div className="space-y-2">
-          <button onClick={() => setShowArchived(v => !v)}
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <MotionList className="px-2">
+          <button onClick={() => setShowArchived(v => !v)} aria-expanded={showArchived}
+            className="inline-flex items-center gap-1 min-h-[44px] text-[15px] font-medium text-muted-foreground">
             Archivados ({archived.length})
             <ChevronDown className={`w-4 h-4 transition-transform ${showArchived ? "rotate-180" : ""}`} />
           </button>
-          {showArchived && (
-            <Card className="p-0 divide-y overflow-hidden">
-              {archived.map(p => (
-                <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <p className="text-sm text-muted-foreground truncate flex-1">
-                    {p.name} <span className="text-xs">({PAYEE_KIND_LABELS[p.kind]})</span>
-                  </p>
-                  <button onClick={() => setEditing(p)} className="text-xs text-primary hover:underline shrink-0">
-                    Ver o restaurar
-                  </button>
-                </div>
-              ))}
-            </Card>
-          )}
-        </div>
+          {showArchived && archived.map(p => (
+            <div key={p.id} className="min-h-[52px] flex items-center gap-3 border-b border-border last:border-b-0">
+              <p className="text-[15px] text-muted-foreground truncate flex-1">
+                {p.name}, {PAYEE_KIND_LABELS[p.kind].toLowerCase()}
+              </p>
+              <button onClick={() => setEditing(p)} className="min-h-[44px] text-sm font-semibold text-[#3B2FB3] shrink-0">
+                Ver o restaurar
+              </button>
+            </div>
+          ))}
+        </MotionList>
       )}
 
       <Fab label="Nuevo proveedor o empleado" data-tour="payees-add" onClick={() => setCreating(true)} />

@@ -190,7 +190,7 @@ test("con tarjeta y compartido", async ({ page, request }) => {
     const mine = shared.find(s => s.title === desc);
     expect(mine?.credit_card_item_id).toBeTruthy();
     expect(mine?.splits.map(s => Number(s.amount))).toEqual([7500, 7500]);
-    await expect(page.getByText("$ 7.500,00").first()).toBeVisible();
+    await expect(page.getByText(/^\$\s7\.500(,00)?$/).first()).toBeVisible();
   } finally {
     await cleanup(a, desc, card.id);
   }

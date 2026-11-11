@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useListMotion } from "@/lib/motion";
 
 /**
  * A row of tiles or chips that scrolls sideways instead of wrapping or
@@ -21,6 +22,7 @@ export function ScrollRow({ children, className = "", gap = "gap-3" }: {
   gap?: string;
 }) {
   const box = useRef<HTMLDivElement>(null);
+  const motion = useListMotion<HTMLDivElement>();
   const [overflows, setOverflows] = useState(false);
 
   useEffect(() => {
@@ -37,7 +39,7 @@ export function ScrollRow({ children, className = "", gap = "gap-3" }: {
 
   return (
     <div ref={box} className={`overflow-x-auto no-scrollbar ${className}`}>
-      <div className={`flex ${gap} min-w-full ${overflows ? "animate-scroll-hint" : ""}`}>
+      <div ref={motion} className={`flex ${gap} min-w-full ${overflows ? "animate-scroll-hint" : ""}`}>
         {children}
       </div>
     </div>

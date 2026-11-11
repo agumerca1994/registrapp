@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
 import api from "@/lib/api";
 import { formatARS, getErrorMessage, parseAmount } from "@/lib/utils";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import ProductTour from "@/components/ProductTour";
-import { CLOSE_FORM_STEPS } from "@/components/business/tours";
+import { useReaccion } from "@/components/brand/ToodReaccion";
+import { closeFormSteps } from "@/components/business/tours";
+import { ConfirmDelete } from "@/components/business/ui";
+import { FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions } from "@/components/movimientos/FormSheet";
 import { FIELD } from "@/components/ui/form";
 import { fromCents, toCents } from "@/lib/split";
 import { PAYMENT_METHOD_LABELS, PAYMENT_METHODS, type DaySummary, type PaymentMethod, type Product } from "@/lib/sales";
@@ -49,6 +49,7 @@ export default function DailyCloseModal({ summary, title, products = [], onSaved
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(initialMethods.map(m => [m, fmtInput(summary.close ? counted[m] ?? 0 : ticketed[m] ?? 0)])),
   );
+  const reaccionar = useReaccion();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,6 +84,7 @@ export default function DailyCloseModal({ summary, title, products = [], onSaved
         .map(p => ({ product_id: p.id, qty: parseAmount(units[p.id] || "0") }))
         .filter(u => u.qty > 0);
       await api.put(`/sales/close/${summary.sale_date}`, { counted, units: unitRows });
+      reaccionar("ingreso", "Cierre guardado");
       await onSaved();
     } catch (err) {
       setError(getErrorMessage(err, "No se pudo guardar el cierre."));
@@ -91,10 +93,10 @@ export default function DailyCloseModal({ summary, title, products = [], onSaved
   };
 
   const remove = async () => {
-    if (!confirm("¿Borrar el cierre? El día va a volver a sumar sólo las ventas cargadas.")) return;
     setSaving(true);
     try {
       await api.delete(`/sales/close/${summary.sale_date}`);
+      reaccionar("borrado", "Cierre borrado");
       await onSaved();
     } catch (err) {
       setError(getErrorMessage(err, "No se pudo borrar el cierre."));
@@ -102,94 +104,90 @@ export default function DailyCloseModal({ summary, title, products = [], onSaved
     }
   };
 
+  const amountInput = `${FIELD} !mt-0 !w-[132px] shrink-0 text-right tabular-nums`;
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 max-h-[92vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-1">
-          <h3 className="font-semibold text-foreground first-letter:uppercase">{title}</h3>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        <p className="text-xs text-muted-foreground mb-4">
-          Contá lo que hay por cada medio. El día va a sumar lo contado.
-        </p>
-
-        <form noValidate onSubmit={save} className="space-y-3">
-          <ProductTour tourId="close-form" steps={CLOSE_FORM_STEPS} />
-          {methods.map(m => {
-            const sold = ticketed[m] ?? 0;
-            const got = parseAmount(values[m] || "0");
-            const diff = fromCents(toCents(got) - toCents(sold));
-            return (
-              <div key={m} data-testid="close-row" data-tour="close-counted">
-                <div className="flex items-baseline justify-between gap-2">
-                  <label className="text-xs font-medium text-muted-foreground">{PAYMENT_METHOD_LABELS[m]}</label>
-                  <span className="text-[11px] text-muted-foreground tabular-nums">vendido {formatARS(sold)}</span>
-                </div>
-                <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
-                  aria-label={`Contado en ${PAYMENT_METHOD_LABELS[m]}`} placeholder="0"
-                  value={values[m] ?? ""} onChange={e => { setError(null); setValues(v => ({ ...v, [m]: e.target.value })); }} />
-                {diff !== 0 && (
-                  <p className={`text-[11px] mt-1 tabular-nums ${diff < 0 ? "text-rose-700" : "text-muted-foreground"}`}>
-                    {diff > 0 ? `${formatARS(diff)} sin ticket` : `Falta ${formatARS(-diff)}`}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-
-          {hidden.length > 0 && (
-            <div className="flex flex-wrap gap-2 text-xs">
-              {hidden.map(m => (
-                <button key={m} type="button" className="text-primary font-medium hover:underline"
-                  onClick={() => { setMethods(ms => PAYMENT_METHODS.filter(x => ms.includes(x) || x === m)); setValues(v => ({ ...v, [m]: "" })); }}>
-                  + {PAYMENT_METHOD_LABELS[m]}
-                </button>
-              ))}
+    <>
+      <FormSheet title={title} onClose={onClose}>
+        {/* Adentro de la hoja: corre en su capa, no en la de la página. */}
+        <ProductTour tourId="close-form" steps={closeFormSteps({ hasUnits: tracked.length > 0 })} />
+        <form noValidate onSubmit={save} className={FORM_SHEET_FORM}>
+          <div className={FORM_SHEET_BODY}>
+            {/* El total se ve primero y grande, como el monto de cualquier formulario: acá sale de lo que se cuenta abajo. */}
+            <div className="rounded-[22px] bg-white/70 border border-white/80 pl-4 pr-3 pt-2.5 pb-3">
+              <p className="text-sm text-[#4A4658]">Total contado</p>
+              <p className="tabular-nums text-[38px] font-medium leading-tight tracking-[-0.03em] text-foreground">{formatARS(totalCounted)}</p>
+              <p className="mt-0.5 text-sm leading-snug text-[#4A4658]">Contá lo que hay por cada medio. El día va a sumar lo contado.</p>
             </div>
-          )}
 
-          {tracked.length > 0 && (
-            <div className="border-t pt-3 space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Unidades que salieron en el día (para el stock)</p>
-              {tracked.map(p => (
-                <div key={p.id} className="flex items-center gap-3" data-testid="close-unit">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-foreground truncate">{p.name}</p>
-                    {!!soldUnits[p.id] && (
-                      <p className="text-[11px] text-muted-foreground">en ventas: {soldUnits[p.id].toLocaleString("es-AR")}</p>
+            <div className="rounded-[22px] bg-white/70 border border-white/80 px-3.5 divide-y divide-ink/[0.08]" data-tour="close-counted">
+              {methods.map(m => {
+                const sold = ticketed[m] ?? 0;
+                const got = parseAmount(values[m] || "0");
+                const diff = fromCents(toCents(got) - toCents(sold));
+                return (
+                  <div key={m} className="py-2.5" data-testid="close-row">
+                    <div className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[15px] font-semibold text-foreground truncate">{PAYMENT_METHOD_LABELS[m]}</p>
+                        {sold > 0 && <p className="text-[13px] text-muted-foreground tabular-nums">Vendido {formatARS(sold)}</p>}
+                      </div>
+                      <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={amountInput}
+                        aria-label={`Contado en ${PAYMENT_METHOD_LABELS[m]}`} placeholder="0"
+                        value={values[m] ?? ""} onChange={e => { setError(null); setValues(v => ({ ...v, [m]: e.target.value })); }} />
+                    </div>
+                    {diff !== 0 && (
+                      <p className={`mt-1 text-[13px] text-right tabular-nums ${diff < 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                        {diff > 0 ? `${formatARS(diff)} sin ticket` : `Falta ${formatARS(-diff)}`}
+                      </p>
                     )}
                   </div>
-                  <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={`${FIELD} mt-0 w-24`}
-                    aria-label={`Unidades de ${p.name}`} placeholder="0"
-                    value={units[p.id] ?? ""} onChange={e => setUnits(u => ({ ...u, [p.id]: e.target.value }))} />
-                </div>
-              ))}
+                );
+              })}
             </div>
-          )}
 
-          <div className="flex items-baseline justify-between border-t pt-3">
-            <span className="text-sm font-semibold text-foreground">Total contado</span>
-            <span className="text-base font-bold tabular-nums">{formatARS(totalCounted)}</span>
-          </div>
-
-          {error && <p role="alert" className="text-xs text-rose-700 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
-
-          <div className="flex items-center gap-2 pt-1">
-            {summary.close && (
-              <Button type="button" variant="ghost" className="text-destructive mr-auto" disabled={saving} onClick={remove}>
-                Borrar cierre
-              </Button>
+            {hidden.length > 0 && (
+              <div className="flex flex-wrap gap-x-3 px-1.5">
+                {hidden.map(m => (
+                  <button key={m} type="button" className="min-h-[44px] text-[15px] font-semibold text-[#3B2FB3]"
+                    onClick={() => { setMethods(ms => PAYMENT_METHODS.filter(x => ms.includes(x) || x === m)); setValues(v => ({ ...v, [m]: "" })); }}>
+                    + {PAYMENT_METHOD_LABELS[m]}
+                  </button>
+                ))}
+              </div>
             )}
-            <div className="flex gap-2 ml-auto">
-              <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-              <Button type="submit" disabled={saving} data-tour="close-save">{saving ? "Guardando..." : "Cerrar el día"}</Button>
-            </div>
+
+            {tracked.length > 0 && (
+              <div data-tour="close-units">
+                <p className="px-1.5 pb-1.5 text-sm text-[#4A4658]">Unidades que salieron en el día, para el stock</p>
+                <div className="rounded-[22px] bg-white/70 border border-white/80 px-3.5 divide-y divide-ink/[0.08]">
+                  {tracked.map(p => (
+                    <div key={p.id} className="flex items-center gap-3 py-2" data-testid="close-unit">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[15px] font-medium text-foreground truncate">{p.name}</p>
+                        {!!soldUnits[p.id] && (
+                          <p className="text-[13px] text-muted-foreground">En ventas: {soldUnits[p.id].toLocaleString("es-AR")}</p>
+                        )}
+                      </div>
+                      <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={`${FIELD} !mt-0 !w-24 shrink-0 text-right tabular-nums`}
+                        aria-label={`Unidades de ${p.name}`} placeholder="0"
+                        value={units[p.id] ?? ""} onChange={e => setUnits(u => ({ ...u, [p.id]: e.target.value }))} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {summary.close && (
+              <ConfirmDelete label="Borrar cierre" disabled={saving} onConfirm={remove}
+                question="¿Borrar el cierre? El día va a volver a sumar sólo las ventas cargadas." />
+            )}
           </div>
+
+          {error && <p role="alert" className="mx-3.5 mb-1 text-sm text-destructive">{error}</p>}
+          <FormSheetActions onCancel={onClose} saving={saving} data-tour="close-save"
+            label={summary.close ? "Guardar cierre" : "Cerrar el día"} />
         </form>
-      </Card>
-    </div>
+      </FormSheet>
+    </>
   );
 }

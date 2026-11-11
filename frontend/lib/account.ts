@@ -33,7 +33,7 @@ export function homeFor(user: MaybeUser): string {
 }
 
 /** Pantallas que sólo existen en un hogar: un negocio no las ve ni en la navegación. */
-export const HOUSEHOLD_ONLY_ROUTES = ["/income", "/divisas", "/shared", "/mortgage", "/macro"];
+export const HOUSEHOLD_ONLY_ROUTES = ["/income", "/divisas", "/shared", "/mortgage", "/creditos", "/ahorro", "/objetivos", "/inversiones", "/macro"];
 /** Y al revés. */
 export const BUSINESS_ONLY_ROUTES = ["/ventas", "/productos", "/proveedores"];
 

@@ -1,18 +1,34 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Space_Grotesk } from "next/font/google";
+import { DM_Mono, Figtree, Instrument_Serif, Urbanist } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 
-const inter = Inter({
+const urbanist = Urbanist({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-urbanist",
   display: "swap",
 });
 
-const spaceGrotesk = Space_Grotesk({
+// Urbanist no tiene cifras de ancho fijo (un 1 mide la mitad que un 8) y los
+// montos se comparan en columna. Figtree va sólo en `tabular-nums` (globals.css).
+const figtree = Figtree({
   subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  variable: "--font-space-grotesk",
+  variable: "--font-figtree",
+  display: "swap",
+});
+
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  style: "italic",
+  variable: "--font-instrument-serif",
+  display: "swap",
+});
+
+const dmMono = DM_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-dm-mono",
   display: "swap",
 });
 
@@ -38,7 +54,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={`${inter.variable} ${spaceGrotesk.variable}`}>
+    <html lang="es" className={`${urbanist.variable} ${figtree.variable} ${instrumentSerif.variable} ${dmMono.variable}`}>
       <body>
         <AuthProvider>{children}</AuthProvider>
       </body>

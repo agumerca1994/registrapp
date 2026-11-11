@@ -39,10 +39,13 @@ const config: Config = {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
         },
-        // Fixed (non-theme-able) ink color used only for the v3 hard-shadow/
-        // solid-border "hero" treatment — not a semantic slot like the ones
-        // above, just a literal brand constant.
-        ink: "#1E1A2E",
+        // La tinta de la acción principal: el + y los botones oscuros.
+        ink: "#1C1B25",
+      },
+      // `border-ink` era el borde grueso oscuro de la versión anterior, y lo usan
+      // más de 130 elementos. Ahora es el borde fino de toda la app, en un solo lugar.
+      borderColor: {
+        ink: "hsl(var(--border) / <alpha-value>)",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -50,15 +53,18 @@ const config: Config = {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ["var(--font-inter)", "system-ui", "sans-serif"],
-        display: ["var(--font-space-grotesk)", "var(--font-inter)", "system-ui", "sans-serif"],
+        sans: ["var(--font-urbanist)", "system-ui", "sans-serif"],
+        display: ["var(--font-urbanist)", "system-ui", "sans-serif"],
+        // Sólo las fechas de "Lo que viene": el gesto propio de la pantalla.
+        fecha: ["var(--font-instrument-serif)", "Georgia", "serif"],
+        marca: ["var(--font-dm-mono)", "ui-monospace", "monospace"],
       },
       boxShadow: {
-        // v3 hierarchy: exactly one "hero" card per screen gets this; small
-        // interactive elements (buttons/chips/nav) get "chip". Everything
-        // else stays flat (default Tailwind shadow-sm/border or none).
-        hero: "6px 6px 0 0 #5B4FE9",
-        chip: "3px 3px 0 0 #1E1A2E",
+        // Lo único que se eleva es lo que flota sobre el contenido. La sombra
+        // dura de los botones se fue: si todo sobresale, nada sobresale.
+        hero: "0 8px 20px rgba(60, 50, 120, 0.06)",
+        chip: "none",
+        flota: "0 12px 30px rgba(40, 34, 80, 0.14)",
       },
     },
   },

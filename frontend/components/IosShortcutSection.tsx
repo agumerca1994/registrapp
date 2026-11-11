@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { ChevronDown, Download, Smartphone, Zap } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Chip } from "@/components/ui/chip";
 import { CopyButton } from "@/components/ui/copy-button";
+import { FORM_SHEET_BODY, FormSheet } from "@/components/movimientos/FormSheet";
+import { SettingsRow, SHEET_BLOCK, SHEET_NOTICE, SHEET_TEXT } from "@/components/settings/SettingsParts";
 import { isIOS } from "@/lib/push";
 
 /**
@@ -40,6 +40,7 @@ export function IosShortcutSection() {
   // Sin esto, el HTML del servidor y el del cliente difieren y React tira un
   // error de hidratación. Es el mismo apaño que usan los gráficos.
   const [mounted, setMounted] = useState(false);
+  const [open, setOpen] = useState(false);
   const [manual, setManual] = useState(false);
   const [origin, setOrigin] = useState("");
 
@@ -53,16 +54,12 @@ export function IosShortcutSection() {
   const url = `${origin}/registrar?source=shortcut&text=`;
 
   return (
-    <Card className="p-6 space-y-4">
-      <div className="flex items-center gap-2">
-        <Smartphone className="w-4 h-4 text-primary shrink-0" />
-        <h3 className="font-semibold text-foreground text-sm md:text-base">
-          Compartir un comprobante desde el iPhone
-        </h3>
-        <Chip tone="violet" className="ml-auto shrink-0">iPhone</Chip>
-      </div>
-
-      <p className="text-sm text-muted-foreground">
+    <>
+    <SettingsRow icon={Smartphone} title="Compartir un comprobante desde el iPhone" hint="Con un atajo que armás una vez" onClick={() => setOpen(true)} />
+    {open && (
+    <FormSheet title="Compartir un comprobante desde el iPhone" onClose={() => setOpen(false)}>
+    <div className={`${FORM_SHEET_BODY} !pb-4`}>
+      <p className={`${SHEET_TEXT} px-1.5`}>
         En iPhone, tood no puede aparecer sola en el menú de compartir:
         Safari no lo permite. Con un atajo que armás una vez, vas a poder sacarle
         una captura al comprobante, tocar <strong>Compartir</strong> y abrir
@@ -76,12 +73,12 @@ export function IosShortcutSection() {
       <a
         href="/atajos/registrar-gasto.shortcut"
         download="Registrar gasto.shortcut"
-        className="flex items-center justify-center gap-2 w-full rounded-full border-2 border-ink bg-primary text-primary-foreground px-4 py-3 text-sm font-medium shadow-chip transition-transform active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+        className="flex items-center justify-center gap-2 w-full h-[52px] rounded-full bg-ink text-background font-semibold text-[15.5px] active:scale-[0.98] transition-transform duration-100"
       >
         <Download className="w-4 h-4" />
         Descargar el atajo
       </a>
-      <p className="text-[11px] text-muted-foreground -mt-1">
+      <p className="px-1.5 text-xs text-[#4A4658]">
         Se abre en la app <strong>Atajos</strong> y sólo tenés que tocar{" "}
         <strong>Añadir atajo</strong>. Si en vez de abrirse te lo guarda en{" "}
         <strong>Archivos</strong>, tocalo desde ahí.
@@ -90,27 +87,27 @@ export function IosShortcutSection() {
       <button
         type="button"
         onClick={() => setManual(v => !v)}
-        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+        className="min-h-[44px] flex items-center gap-1.5 px-1.5 text-sm font-medium text-foreground"
       >
         <ChevronDown className={`w-3.5 h-3.5 transition-transform ${manual ? "rotate-180" : ""}`} />
         {manual ? "Ocultar los pasos manuales" : "¿No te funcionó? Armalo a mano"}
       </button>
 
       {manual && (
-        <div className="space-y-4 border-l-2 border-border pl-4">
+        <div className="space-y-4 px-1.5">
       <div className="space-y-2">
-        <p className="text-xs font-medium text-muted-foreground">
+        <p className="text-sm font-medium text-[#4A4658]">
           1. Copiá esta dirección (la vas a necesitar en el paso 7)
         </p>
         <div className="flex gap-2 items-center">
-          <code className="flex-1 min-w-0 text-[11px] bg-accent rounded-lg px-3 py-2 overflow-x-auto whitespace-nowrap">
+          <code className="flex-1 min-w-0 font-marca text-[11px] bg-white/70 rounded-xl px-3 py-2 overflow-x-auto whitespace-nowrap">
             {url}
           </code>
           <CopyButton value={url} className="shrink-0" />
         </div>
       </div>
 
-      <ol className="text-sm text-foreground space-y-2.5 list-decimal pl-5 marker:text-muted-foreground marker:font-medium">
+      <ol className="text-sm text-foreground space-y-2.5 list-decimal pl-5 marker:text-[#4A4658] marker:font-medium">
         <li>Abrí la app <strong>Atajos</strong> (viene instalada en el iPhone).</li>
         <li>Tocá el <strong>+</strong> arriba a la derecha para crear un atajo nuevo.</li>
         <li>
@@ -155,16 +152,16 @@ export function IosShortcutSection() {
         </div>
       )}
 
-      <div className="rounded-lg bg-accent/60 px-3 py-2.5 space-y-1">
-        <p className="text-xs font-medium text-foreground">Cómo se usa</p>
-        <p className="text-xs text-muted-foreground">
+      <div className={SHEET_NOTICE}>
+        <p className="text-[15px] font-semibold text-foreground">Cómo se usa</p>
+        <p className={SHEET_TEXT}>
           Sacale una captura al comprobante → <strong>Compartir</strong> →
           <strong> Registrar gasto</strong>. Se abre tood en la pantalla para
           cargar el gasto, y lo completás a mano.
         </p>
       </div>
 
-      <p className="text-[11px] text-muted-foreground">
+      <p className="px-1.5 text-xs text-[#4A4658]">
         La primera vez te va a pedir iniciar sesión en Safari, aunque ya la tengas
         abierta en la app instalada: en iPhone son dos sesiones separadas y no hay
         forma de unirlas. Es una sola vez.
@@ -174,15 +171,15 @@ export function IosShortcutSection() {
           Lo que iOS deja y lo que no, dicho de frente. Prometer "detecta tus
           pagos" cuando en realidad se dispara al cerrar la app es la forma
           más rápida de que alguien desactive la automatización y no vuelva. */}
-      <div className="border-t border-border pt-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <Zap className="w-4 h-4 text-primary shrink-0" />
-          <h4 className="font-semibold text-foreground text-sm">
+      <div className="border-t border-ink/[0.08] pt-3.5 space-y-3">
+        <div className="flex items-center gap-2 px-1.5">
+          <Zap className="w-4 h-4 text-[#3B2FB3] shrink-0" />
+          <h4 className="font-semibold text-foreground text-[15px]">
             Que te lo recuerde solo, después de pagar
           </h4>
         </div>
 
-        <p className="text-sm text-muted-foreground">
+        <p className={`${SHEET_TEXT} px-1.5`}>
           Se puede, pero con un límite que conviene saber de antemano:{" "}
           <strong>iOS no le avisa a nadie que hiciste un pago</strong>, salvo
           que lo hayas hecho con una tarjeta guardada en Wallet. Para Naranja X,
@@ -193,34 +190,34 @@ export function IosShortcutSection() {
         <a
           href="/atajos/registrar-gasto-preguntar.shortcut"
           download="Registrar gasto - preguntar.shortcut"
-          className="flex items-center justify-center gap-2 w-full rounded-full border-2 border-ink bg-white text-foreground px-4 py-2.5 text-sm font-medium shadow-chip transition-transform active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+          className="flex items-center justify-center gap-2 w-full min-h-[48px] rounded-full border border-border bg-card text-foreground font-semibold text-sm active:scale-[0.98] transition-transform duration-100"
         >
           <Download className="w-4 h-4" />
           Descargar el atajo «preguntar»
         </a>
 
-        <p className="text-xs text-muted-foreground">
+        <p className={`${SHEET_TEXT} px-1.5`}>
           Después, en <strong>Atajos → Automatización → +</strong>, elegí un
           disparador y mandalo a ejecutar este atajo:
         </p>
 
         <div className="space-y-2.5">
-          <div className="rounded-lg border border-border px-3 py-2.5 space-y-1">
-            <p className="text-xs font-medium text-foreground">
+          <div className={`${SHEET_BLOCK} space-y-1`}>
+            <p className="text-sm font-semibold text-foreground">
               Pagos contactless con una tarjeta de Wallet
             </p>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs leading-snug text-[#4A4658]">
               Disparador <strong>Transacción → Cuando toco</strong> y elegís la
               tarjeta. Éste sí es el pago de verdad: se dispara al apoyar el
               teléfono, y nunca en otro momento.
             </p>
           </div>
 
-          <div className="rounded-lg border border-border px-3 py-2.5 space-y-1">
-            <p className="text-xs font-medium text-foreground">
+          <div className={`${SHEET_BLOCK} space-y-1`}>
+            <p className="text-sm font-semibold text-foreground">
               Naranja X, Personal Pay, el banco (QR y transferencias)
             </p>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs leading-snug text-[#4A4658]">
               Disparador <strong>App → Se cierra</strong> y elegís la app. Ojo:
               se dispara <strong>cada vez que salís</strong> de ella, hayas
               pagado o no. Por eso el atajo pregunta en lugar de abrirte el
@@ -229,12 +226,15 @@ export function IosShortcutSection() {
           </div>
         </div>
 
-        <p className="text-[11px] text-muted-foreground">
+        <p className="px-1.5 text-xs leading-snug text-[#4A4658]">
           En <strong>Atajos → Automatización</strong>, tocando la automatización
           podés apagar <strong>Preguntar antes de ejecutar</strong> para que
           salga sin confirmación extra.
         </p>
       </div>
-    </Card>
+    </div>
+    </FormSheet>
+    )}
+    </>
   );
 }

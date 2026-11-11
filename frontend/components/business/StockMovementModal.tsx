@@ -1,12 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
 import api from "@/lib/api";
 import { getErrorMessage, parseAmount } from "@/lib/utils";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { DateField, FIELD, FormGrid, SelectField } from "@/components/ui/form";
+import { DateField, FIELD, FieldLabel, FormGrid, SelectField } from "@/components/ui/form";
+import { FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions } from "@/components/movimientos/FormSheet";
 import { businessToday, type Product } from "@/lib/sales";
 
 export type StockAction = "produccion" | "conteo" | "merma" | "compra";
@@ -64,45 +62,37 @@ export function StockMovementModal({ action, products, productId, onSaved, onClo
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 space-y-4 max-h-[92vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-foreground">{copy.title}</h3>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
-        </div>
-        <p className="text-xs text-muted-foreground -mt-2">{copy.help}</p>
-        <form noValidate onSubmit={save} className="space-y-4">
+    <FormSheet title={copy.title} onClose={onClose}>
+      <form noValidate onSubmit={save} className={FORM_SHEET_FORM}>
+        <div className={FORM_SHEET_BODY}>
+          <p className="px-1.5 text-sm leading-snug text-[#4A4658]">{copy.help}</p>
           <div>
-            <label className="text-xs font-medium text-muted-foreground">Producto</label>
+            <FieldLabel>Producto</FieldLabel>
             <SelectField value={product} onChange={setProduct} placeholder="Elegí un producto"
               options={products.filter(p => p.is_active).map(p => ({ value: String(p.id), label: p.name }))} />
           </div>
           <FormGrid>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">{copy.qty}</label>
+              <FieldLabel>{copy.qty}</FieldLabel>
               <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD} aria-label={copy.qty}
                 autoFocus value={qty} onChange={e => setQty(e.target.value)} />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Fecha</label>
+              <FieldLabel>Fecha</FieldLabel>
               <DateField value={day} onChange={setDay} />
             </div>
           </FormGrid>
           {action !== "conteo" && (
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Nota (opcional)</label>
-              <input className={FIELD} maxLength={255} value={notes} onChange={e => setNotes(e.target.value)}
+              <FieldLabel hint="(opcional)">Nota</FieldLabel>
+              <input className={FIELD} maxLength={255} aria-label="Nota" value={notes} onChange={e => setNotes(e.target.value)}
                 placeholder={action === "merma" ? "Se quemaron en el horno" : ""} />
             </div>
           )}
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-            <Button type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar"}</Button>
-          </div>
-        </form>
-      </Card>
-    </div>
+        </div>
+        {error && <p role="alert" className="mx-3.5 mb-1 text-sm text-destructive">{error}</p>}
+        <FormSheetActions onCancel={onClose} saving={saving} label="Guardar" />
+      </form>
+    </FormSheet>
   );
 }

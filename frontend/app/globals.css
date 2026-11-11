@@ -4,29 +4,29 @@
 
 @layer base {
   :root {
-    /* tood (antes RegistrApp) brand v3: violet/indigo primary, warm off-white background.
+    /* tood: papel cálido, bordes finos y el violeta de la marca para lo importante.
        Emerald/amber accents (positive amounts, warnings) are applied directly
        via Tailwind's built-in emerald and amber color utilities per element,
        not through these semantic slots - keeps "brand accent color" separate
-       from "shadcn UI semantic color" (secondary/accent below stay neutral). */
-    --background: 240 33.3% 97.6%;
-    --foreground: 248.9 31.8% 16.7%;
-    --card: 0 0% 100%;
-    --card-foreground: 248.9 31.8% 16.7%;
+       from "shadcn UI semantic color". `accent` es el lila de lo pendiente y lo activo. */
+    --background: 42 31% 93.7%;
+    --foreground: 246 15.6% 12.5%;
+    --card: 43 46.7% 96.7%;
+    --card-foreground: 246 15.6% 12.5%;
     --primary: 244.7 77.8% 61.2%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 250.9 52.4% 95.9%;
-    --secondary-foreground: 248.9 31.8% 16.7%;
-    --muted: 250.9 52.4% 95.9%;
-    --muted-foreground: 255.6 11.9% 44.5%;
-    --accent: 247.1 73.9% 95.5%;
-    --accent-foreground: 248.9 31.8% 16.7%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 253.3 47.4% 92.5%;
-    --input: 253.3 47.4% 92.5%;
+    --secondary: 42 31% 91.2%;
+    --secondary-foreground: 246 15.6% 12.5%;
+    --muted: 42 31% 91.2%;
+    --muted-foreground: 257 7.5% 36.5%;
+    --accent: 255 35% 90.2%;
+    --accent-foreground: 246 15.6% 12.5%;
+    --destructive: 0 72% 47%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 41 25% 85%;
+    --input: 41 25% 85%;
     --ring: 244.7 77.8% 61.2%;
-    --radius: 0.5rem;
+    --radius: 0.875rem;
   }
 
   .dark {
@@ -65,6 +65,124 @@
      the row on first paint so the affordance isn't lost with the bar. */
   .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
+
+  /* Los montos: ver el comentario de Figtree en app/layout.tsx. */
+  .tabular-nums { font-family: var(--font-figtree), system-ui, sans-serif; }
+
+  /* Un modal o algo flotante adentro de un `space-y-*` recibía su margen y corría
+     el fondo oscuro: quedaba una franja clara arriba de toda la pantalla. */
+  [class*="space-y-"] > .fixed { margin-top: 0 !important; }
+
+  /* Todos los menús ⋮ de la app. Acá y no en cada uno: son 11 archivos, y un menú
+     que se quede con el estilo anterior se nota enseguida. */
+  [role="menu"][data-state] {
+    border-radius: 20px;
+    border-color: rgb(255 255 255 / 0.7);
+    padding: 6px;
+    width: auto;
+    min-width: 13rem;
+    background-color: hsl(var(--card) / 0.96);
+    box-shadow: 0 12px 30px rgb(40 34 80 / 0.16);
+    transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+    animation: menu-in 140ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @supports (backdrop-filter: blur(1px)) {
+    [role="menu"][data-state] {
+      background-color: hsl(var(--card) / 0.88);
+      backdrop-filter: blur(20px) saturate(1.5);
+    }
+  }
+  [role="menu"] [role="menuitem"] {
+    justify-content: flex-start;
+    min-height: 44px;
+    gap: 10px;
+    border-radius: 14px;
+    padding-inline: 12px;
+    font-weight: 500;
+    text-align: left;
+  }
+  [role="menu"] [role="menuitem"]:focus { background-color: hsl(var(--accent)); }
+
+  /* Todo botón responde al apretarlo. Lo que ya define el suyo gana, porque las utilidades van después. */
+  @media (prefers-reduced-motion: no-preference) {
+    button, [role="button"] { transition: transform 100ms ease-out; }
+    button:active:not(:disabled):not([data-no-press]),
+    [role="button"]:active:not([data-no-press]) { transform: scale(0.98); }
+  }
+}
+
+/* Lo que sube desde abajo sube; no aparece de golpe. */
+@keyframes sheet-in {
+  from { opacity: 0; transform: translateY(24px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes menu-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes sheet-out {
+  to { opacity: 0; transform: translateY(18px) scale(0.985); }
+}
+@keyframes fade-out {
+  to { opacity: 0; }
+}
+@keyframes menu-out {
+  to { opacity: 0; transform: scale(0.96); }
+}
+/* La tira de las pestañas de Movimientos: cada una es otra ruta, así que arranca desde la anterior. */
+@keyframes thumb-slide {
+  from { transform: translateX(var(--thumb-from)); }
+}
+/* `backwards` y no `both`: el final es el estado natural, y una animación de
+   opacidad que queda aplicada convierte al fondo oscuro en la raíz del
+   `backdrop-filter` de la hoja. La hoja dejaba de desenfocar y la página se leía
+   a través del vidrio. */
+.animate-sheet-in { animation: sheet-in 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.animate-fade-in { animation: fade-in 180ms ease-out backwards; }
+.animate-sheet-out { animation: sheet-out 180ms ease-in both; }
+.animate-fade-out { animation: fade-out 180ms ease-in both; }
+.animate-page-in { animation: fade-in 160ms ease-out backwards; }
+.animate-thumb-slide { animation: thumb-slide 220ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+
+/* La pantalla de carga: el contenido sube, y al terminar el violeta se levanta como un telón. */
+@keyframes splash-up {
+  from { opacity: 0; transform: translateY(12px); }
+}
+@keyframes splash-curtain {
+  from { clip-path: inset(0 0 0 0 round 0); }
+  to { clip-path: inset(0 0 100% 0 round 0 0 44px 44px); }
+}
+@keyframes splash-bar {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(260%); }
+}
+.animate-splash-up { animation: splash-up 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.animate-splash-curtain { animation: splash-curtain 560ms cubic-bezier(0.76, 0, 0.24, 1) both; }
+.animate-splash-bar { animation: splash-bar 1100ms cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-splash-up, .animate-splash-bar { animation: none; }
+  .animate-splash-curtain { animation: fade-out 180ms ease-out both; }
+}
+
+/* Quien pidió menos movimiento tampoco ve deslizarse tiras ni girar flechas. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.01ms !important; }
+}
+
+/* Las hojas de Radix esperan a que termine esto antes de irse. */
+.animate-sheet-in[data-state="closed"] { animation: sheet-out 180ms ease-in both; }
+.animate-fade-in[data-state="closed"] { animation: fade-out 180ms ease-in both; }
+[role="menu"][data-state="closed"] { animation: menu-out 110ms ease-in both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-sheet-in, .animate-fade-in, .animate-sheet-out, .animate-fade-out, .animate-page-in, .animate-thumb-slide,
+  .animate-sheet-in[data-state="closed"], .animate-fade-in[data-state="closed"], [role="menu"][data-state],
+  [role="menu"][data-state="closed"] { animation: none; }
 }
 
 /* Two short slides and back: enough to read as "this moves", short enough not

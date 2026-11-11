@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { format } from "date-fns";
-import { es } from "date-fns/locale";
 import api from "@/lib/api";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
-import { formatARS, formatUSD, formatDate, parseAmount, getErrorMessage } from "@/lib/utils";
-import { Trash2, Pencil, Upload, X, CheckCircle2, AlertCircle, ChevronRight, CalendarDays, ChevronLeft, Search, SlidersHorizontal, MoreVertical, Settings2, ListTree } from "lucide-react";
+import { formatARS, formatUSD, parseAmount, getErrorMessage } from "@/lib/utils";
+import { Upload, X, CheckCircle2, AlertCircle, ListChecks, Search, SlidersHorizontal, MoreVertical, Settings2, ListTree } from "lucide-react";
 import {
   FilterBar, FilterRow, FilterPanel, SortChip, FilterChip, PillSelect,
   PillDateRange, ClearFilters, CollapsibleSearch,
@@ -14,6 +14,13 @@ import {
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { PrivacyMenuItem } from "@/components/ui/privacy-toggle";
 import ProductTour from "@/components/ProductTour";
+import { MovimientosTabs } from "@/components/MovimientosTabs";
+import { BreakdownStrip } from "@/components/movimientos/BreakdownStrip";
+import { AmountField, FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions } from "@/components/movimientos/FormSheet";
+import { EntrySheet, SheetActions, SheetRow } from "@/components/movimientos/EntrySheet";
+import { LedgerRow, LedgerTotal, SelectionBar, ledgerAmount } from "@/components/movimientos/Ledger";
+import { useMovimientos } from "@/components/movimientos/MovimientosContext";
+import { useNuevo } from "@/lib/nuevo";
 import type { Step } from "react-joyride";
 import { Card } from "@/components/ui/card";
 import { Fab } from "@/components/ui/fab";
@@ -25,19 +32,22 @@ import {
 } from "@/components/income/types";
 import { SourceFormModal, SourcesListModal } from "@/components/income/SourceFormModal";
 import { useReaccion } from "@/components/brand/ToodReaccion";
+import { MotionList } from "@/components/ui/motion-list";
+import { useExitGhost } from "@/lib/motion";
+import { useOverlay } from "@/lib/overlay";
 import { LoadedByTag, useLoadedBy } from "@/components/LoadedBy";
 
 const INCOME_TOUR_STEPS: Step[] = [
   {
-    target: "[data-tour='income-add']",
-    content: "Con este botón registrás un nuevo ingreso: sueldo u otra entrada. Si la fuente tiene campos de detalle (bruto, ganancias, bonos…), el neto se calcula solo.",
-    placement: "bottom",
-    skipBeacon: true,
+    // En el celular es el + de la barra; en la compu, el botón flotante.
+    target: "[data-tour='nav-add'], [data-tour='income-add']",
+    title: "Cargá un ingreso",
+    content: "Sueldo u otra entrada. Si la fuente tiene campos de detalle (bruto, ganancias, bonos), el neto se calcula solo.",
   },
   {
     target: "[data-tour='income-import']",
-    content: "En este menú están Importar, para cargar varios ingresos de una desde un Excel o CSV, y Fuentes, para editar los campos de cada fuente.",
-    placement: "bottom",
+    title: "Fuentes e importar",
+    content: "En este menú editás los campos de cada fuente y cargás varios ingresos de una desde un Excel o CSV.",
   },
 ];
 
@@ -57,6 +67,10 @@ function fieldsForForm(source: IncomeSource | undefined, items: Record<string, s
 }
 
 const KIND_SIGN: Record<string, string> = { add: "+", subtract: "−", info: "·" };
+
+// Un monto en un campo se ve como se escribe acá: "4.069.000,00". El backend manda "4069000.00".
+const amountText = (n: number | string) =>
+  Number(n).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // A new entry defaults to today — the overwhelmingly common case, and it saves
 // the user a trip through the calendar to pick the date they're standing on.
@@ -89,69 +103,33 @@ function EntryDetailModal({
   const hasMath = items.some(i => i.kind !== "info");
   const gap = hasMath ? Math.round((Number(entry.amount) - detailNet(items)) * 100) / 100 : 0;
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-foreground">{entry.source.name}</h3>
-          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
-        </div>
-
-        <div className="divide-y text-sm">
-          <div className="flex justify-between py-2">
-            <span className="text-muted-foreground">Fecha</span>
-            <span className="font-medium">{formatDate(entry.period_date)}</span>
-          </div>
-          <div className="flex justify-between py-2">
-            <span className="text-muted-foreground">Tipo</span>
-            <span className="font-medium">{INCOME_TYPE_LABELS[entry.source.income_type]}</span>
-          </div>
-          {rows.map(i => (
-            <div key={i.field_id} className="flex justify-between gap-4 py-2">
-              <span className="text-muted-foreground truncate">
-                {i.name}
-                {!i.field_active && <span className="text-[11px] ml-1">(quitado de la fuente)</span>}
-              </span>
-              <span className={`font-medium shrink-0 ${
-                i.kind === "add" ? "text-emerald-600" : i.kind === "subtract" ? "text-rose-600" : ""
-              }`}>
-                {i.kind === "add" ? "+ " : i.kind === "subtract" ? "− " : ""}{fmt(i.amount)}
-              </span>
-            </div>
-          ))}
-          {gap !== 0 && (
-            <div className="flex justify-between py-2">
-              <span className="text-muted-foreground">Sin detallar</span>
-              <span className="font-medium text-amber-600">{gap < 0 ? "− " : ""}{fmt(Math.abs(gap))}</span>
-            </div>
-          )}
-          <div className="flex justify-between py-2">
-            <span className="font-medium text-foreground">Neto</span>
-            <span className="font-bold text-foreground text-base">{fmt(entry.amount)}</span>
-          </div>
-          {entry.notes && (
-            <div className="flex justify-between py-2 gap-4">
-              <span className="text-muted-foreground shrink-0">Notas</span>
-              <span className="font-medium text-right">{entry.notes}</span>
-            </div>
-          )}
-          {loadedBy && (
-            <div className="flex justify-between py-2 gap-4">
-              <span className="text-muted-foreground shrink-0">Lo cargó</span>
-              <span className="font-medium text-right">{loadedBy}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex gap-2 pt-1">
-          <Button variant="destructive" onClick={onDelete} className="flex-1">
-            <Trash2 className="w-4 h-4" /> Eliminar
-          </Button>
-          <Button onClick={onEdit} className="flex-1">
-            <Pencil className="w-4 h-4" /> Editar
-          </Button>
-        </div>
-      </Card>
-    </div>
+    <EntrySheet
+      date={entry.period_date}
+      title={entry.source.name}
+      badge={{ label: INCOME_TYPE_LABELS[entry.source.income_type] }}
+      amount={fmt(entry.amount)}
+      positive
+      onClose={onClose}
+      footer={<SheetActions noun="ingreso" onEdit={onEdit} onDelete={onDelete} />}
+    >
+      {rows.map(i => (
+        <SheetRow key={i.field_id}
+          label={<>{i.name}{!i.field_active && <span className="text-[11px] ml-1">(quitado de la fuente)</span>}</>}>
+          <span className={`tabular-nums ${i.kind === "add" ? "text-emerald-800" : i.kind === "subtract" ? "text-rose-700" : ""}`}>
+            {i.kind === "add" ? "+ " : i.kind === "subtract" ? "− " : ""}{fmt(i.amount)}
+          </span>
+        </SheetRow>
+      ))}
+      {gap !== 0 && (
+        <SheetRow label="Sin detallar">
+          <span className="tabular-nums text-amber-800">{gap < 0 ? "− " : ""}{fmt(Math.abs(gap))}</span>
+        </SheetRow>
+      )}
+      {/* El neto ya está arriba: acá sólo cierra la cuenta, si hay una. */}
+      {rows.length > 0 && <SheetRow strong label="Neto"><span className="tabular-nums">{fmt(entry.amount)}</span></SheetRow>}
+      {entry.notes && <SheetRow label="Notas">{entry.notes}</SheetRow>}
+      {loadedBy && <SheetRow label="Lo cargó">{loadedBy}</SheetRow>}
+    </EntrySheet>
   );
 }
 
@@ -162,6 +140,8 @@ interface ImportResult { imported: number; skipped: number; errors: string[]; }
 
 function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: () => void }) {
   type Step = "upload" | "map" | "importing" | "done";
+  const ghost = useExitGhost<HTMLDivElement>();
+  useOverlay();
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<PreviewData | null>(null);
@@ -227,15 +207,16 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
 
   const NO_COL = "Ninguna";
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <Card className="p-0 md:p-0 w-full max-w-2xl max-h-[90vh] flex flex-col">
+  // En un portal: adentro de #main-content, iOS la dibujaba debajo del encabezado fijo.
+  return createPortal(
+    <div ref={ghost} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-fade-in">
+      <Card className="p-0 md:p-0 w-full max-w-2xl max-h-[90vh] flex flex-col animate-sheet-in">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h3 className="font-semibold text-foreground">Importar ingresos</h3>
           <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <MotionList className="flex-1 overflow-y-auto p-6 space-y-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {(["Archivo", "Columnas", "Importando", "Resultado"]).map((label, i) => (
               <span key={label} className="flex items-center gap-1">
@@ -368,7 +349,7 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
               )}
             </div>
           )}
-        </div>
+        </MotionList>
 
         <div className="px-6 py-4 border-t flex justify-between items-center">
           {step === "upload" && <button onClick={onClose} className="text-sm text-muted-foreground hover:text-foreground">Cancelar</button>}
@@ -389,7 +370,8 @@ function ImportModal({ sources, onClose }: { sources: IncomeSource[]; onClose: (
           )}
         </div>
       </Card>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -417,12 +399,14 @@ export default function IncomePage() {
   const [detailEntry, setDetailEntry] = useState<IncomeEntry | null>(null);
   const netoManual = useRef(false);
 
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const prev = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
-  const next = () => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
-  const periodLabel = format(new Date(year, month - 1, 1), "MMMM yyyy", { locale: es });
+  const { year, month, periodLabel, summary, refresh: refreshMonth, setSearching } = useMovimientos();
+  // La fuente tocada en el desglose. Mira adentro del mes, a diferencia de los
+  // filtros de abajo, que salen a buscar en todo el historial.
+  const [pickedSource, setPickedSource] = useState<string | null>(null);
+  // Qué muestra la lista ya cargada: la de otro mes funde entera (ver Egresos).
+  const [listKey, setListKey] = useState("");
+  // Los casilleros aparecen recién cuando se quiere borrar varios: en cada fila, siempre, son ruido.
+  const [selecting, setSelecting] = useState(false);
 
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -448,6 +432,9 @@ export default function IncomePage() {
   // history: a search that only looks inside the month currently on screen
   // would miss what the user is looking for and give no hint that it did.
   const filtering = !!debouncedSearch || panelFilterActive;
+  useEffect(() => { setSearching(filtering); return () => setSearching(false); }, [filtering, setSearching]);
+  // Un mes nuevo tiene otras fuentes.
+  useEffect(() => { setPickedSource(null); }, [year, month]);
 
   const load = async () => {
     // No chip active → the endpoint's own default ordering.
@@ -467,8 +454,10 @@ export default function IncomePage() {
       api.get("/income/sources"),
     ]);
     setEntries(e.data);
+    setListKey(filtering ? "busqueda" : `${year}-${month}`);
     setSources(s.data);
     setSelected(new Set());
+    if (!filtering) refreshMonth();
   };
 
   useEffect(() => { load(); },
@@ -500,7 +489,7 @@ export default function IncomePage() {
       .filter(f => (items[f.id] ?? "").trim() !== "")
       .map(f => ({ kind: f.kind, amount: items[f.id] }));
     if (!rows.some(r => r.kind !== "info")) return "";
-    return Math.max(0, detailNet(rows)).toFixed(2);
+    return amountText(Math.max(0, detailNet(rows)));
   };
 
   const updateItem = (fieldId: number, value: string) => {
@@ -525,8 +514,8 @@ export default function IncomePage() {
     setFormError("");
     setForm({
       source_id: String(entry.source_id),
-      items: Object.fromEntries((entry.items ?? []).map(i => [String(i.field_id), String(i.amount)])),
-      amount: String(entry.amount),
+      items: Object.fromEntries((entry.items ?? []).map(i => [String(i.field_id), amountText(i.amount)])),
+      amount: amountText(entry.amount),
       period_date: entry.period_date,
       notes: entry.notes || "",
       currency: (entry.currency as "ARS" | "USD") || "ARS",
@@ -578,6 +567,7 @@ export default function IncomePage() {
   // siguen existiendo.
   const handleSourceSaved = async (src: IncomeSource) => {
     const ctx = sourceModal;
+    reaccionar("guardado", "Fuente guardada");
     setSourceModal(null);
     await load();
     if (ctx?.fromForm) {
@@ -597,8 +587,8 @@ export default function IncomePage() {
     sources.flatMap(s => (s.fields ?? []).map(f => [f.id, f.position] as [number, number])),
   );
 
+  // La confirmación la pide la ficha, ahí mismo (SheetActions).
   const handleDelete = async (id: number) => {
-    if (!confirm("¿Eliminar este ingreso?")) return;
     try {
       await api.delete(`/income/entries/${id}`);
     } catch {
@@ -631,33 +621,41 @@ export default function IncomePage() {
   };
 
   const allSelected = entries.length > 0 && selected.size === entries.length;
-  const someSelected = selected.size > 0 && !allSelected;
+
+  const openNewEntry = () => { setEditId(null); setForm(newEntryForm()); setFormError(""); netoManual.current = false; setShowForm(true); };
+  useNuevo(openNewEntry, "nuevo");
+
+  const sumOf = (rows: IncomeEntry[], usd: boolean) =>
+    rows.filter(e => (e.currency === "USD") === usd).reduce((s, e) => s + Number(e.amount), 0);
+  const shown = pickedSource ? entries.filter(e => e.source.name === pickedSource) : entries;
+  const usdRate = Number(summary?.usd_rate ?? 0);
+  const bySource = !filtering
+    ? [...new Set(entries.map(e => e.source.name))].map(name => {
+        const own = entries.filter(e => e.source.name === name);
+        const total = sumOf(own, false);
+        const total_usd = sumOf(own, true);
+        return { key: name, label: name, color: "#5B4FE9", total, total_usd, ars_equivalent: total + total_usd * usdRate };
+      }).sort((a, b) => b.ars_equivalent - a.ars_equivalent)
+    : [];
+  const pickSource = (name: string | null) => {
+    setPickedSource(name);
+    setSelected(new Set());
+  };
 
   return (
     <div className="space-y-4 md:space-y-6">
       <ProductTour tourId="income-intro" steps={INCOME_TOUR_STEPS} />
       {/* Header */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Ingresos</h2>
+        <MovimientosTabs title="Ingresos" />
         <div className="flex items-center gap-1 shrink-0">
-          {filtering ? (
-            <div className="inline-flex items-center gap-2 rounded-full border-2 border-ink bg-card shadow-chip px-3 py-1.5">
+          {filtering && (
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5">
               <Search className="w-4 h-4 text-primary shrink-0" />
               <span className="text-sm font-bold text-foreground">
                 {entries.length} resultado{entries.length !== 1 ? "s" : ""}
                 <span className="hidden sm:inline"> en todo el historial</span>
               </span>
-            </div>
-          ) : (
-            <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink bg-card shadow-chip pl-3 pr-1.5 py-1.5">
-              <CalendarDays className="w-4 h-4 text-primary shrink-0" />
-              <button onClick={prev} aria-label="Mes anterior" className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="text-sm font-bold text-foreground capitalize px-0.5 min-w-[100px] text-center">{periodLabel}</span>
-              <button onClick={next} aria-label="Mes siguiente" className="p-1 rounded-full hover:bg-accent text-muted-foreground transition-colors">
-                <ChevronRight className="w-4 h-4" />
-              </button>
             </div>
           )}
           {/* Importing is a once-in-a-while action; in the header it competed
@@ -672,9 +670,15 @@ export default function IncomePage() {
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
               <DropdownMenu.Content align="end" sideOffset={4}
-                className="bg-card border rounded-xl shadow-lg p-1 w-44 z-50">
+                className="rounded-[22px] border border-white/70 bg-card/90 backdrop-blur-2xl backdrop-saturate-150 shadow-flota p-1.5 animate-fade-in w-44 z-50">
                 <DropdownMenu.Item asChild>
                   <PrivacyMenuItem />
+                </DropdownMenu.Item>
+                <DropdownMenu.Item asChild>
+                  <button onClick={() => setSelecting(true)}
+                    className="flex items-center justify-center gap-2 px-2 py-2 rounded-lg text-sm text-foreground hover:bg-accent w-full outline-none cursor-pointer">
+                    <ListChecks className="w-4 h-4 text-muted-foreground" /> Seleccionar varios
+                  </button>
                 </DropdownMenu.Item>
                 <DropdownMenu.Separator className="h-px bg-border my-1" />
                 <DropdownMenu.Item asChild>
@@ -698,19 +702,31 @@ export default function IncomePage() {
       {/* Entry form — a modal, so registering doesn't push the list down the
           page and the form keeps the focus while it's open. */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={closeForm}>
-          <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg p-5 max-h-[92vh] overflow-y-auto"
-            onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-foreground">{editId ? "Editar ingreso" : "Nuevo ingreso"}</h3>
-            <button type="button" onClick={closeForm} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
-          </div>
-          <form onSubmit={handleSubmit} className="space-y-3">
-          {/* Same ARS/USD toggle position as the expense form. A USD income
-              also adds to the dollar holding, not just to the USD balance. */}
-          <CurrencyToggle className="mb-1"
-            value={form.currency}
-            onChange={cur => setForm(p => ({ ...p, currency: cur }))} />
+        <FormSheet title={editId ? "Editar ingreso" : "Nuevo ingreso"} onClose={closeForm}>
+          <form onSubmit={handleSubmit} className={FORM_SHEET_FORM}>
+          <div className={FORM_SHEET_BODY}>
+          {/* El neto arriba, igual que el monto de un egreso. Lo demás lo explica. */}
+          <AmountField
+            label="Neto"
+            hint={!netoManual.current && hasMath ? "(se calcula solo)" : undefined}
+            currency={form.currency}
+            toggle={<CurrencyToggle className="w-[132px]" value={form.currency}
+              onChange={cur => setForm(p => ({ ...p, currency: cur }))} />}
+            value={form.amount}
+            onFocus={() => { netoManual.current = true; }}
+            onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}
+            required
+            footer={netoManual.current && netGap !== 0 ? (
+              <p className="mt-1 text-xs text-amber-800" data-testid="net-gap">
+                El detalle da {fmtForm(computedNet)}; el neto difiere en {netGap < 0 ? "− " : ""}{fmtForm(Math.abs(netGap))}.{" "}
+                <button type="button" className="underline"
+                  onClick={() => { netoManual.current = false; setForm(p => ({ ...p, amount: amountText(Math.max(0, computedNet)) })); }}>
+                  Usar el del detalle
+                </button>
+              </p>
+            ) : undefined}
+          />
+          {/* A USD income also adds to the dollar holding, not just to the USD balance. */}
           {form.currency === "USD" && (
             <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
               Se suma a tu <strong>tenencia en dólares</strong> y al balance en USD, no al balance en pesos.
@@ -758,44 +774,21 @@ export default function IncomePage() {
               </div>
             ))}
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-muted-foreground">
-                Neto
-                {!netoManual.current && hasMath && (
-                  <span className="text-muted-foreground font-normal ml-1">(se calcula solo)</span>
-                )}
-              </label>
-              <input type="text" inputMode="decimal" pattern="[0-9.,]*" className={FIELD}
-                aria-label="Neto"
-                value={form.amount}
-                onFocus={() => { netoManual.current = true; }}
-                onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}
-                required />
-              {netoManual.current && netGap !== 0 && (
-                <p className="mt-1 text-xs text-amber-700" data-testid="net-gap">
-                  El detalle da {fmtForm(computedNet)}; el neto difiere en {netGap < 0 ? "− " : ""}{fmtForm(Math.abs(netGap))}.{" "}
-                  <button type="button" className="underline"
-                    onClick={() => { netoManual.current = false; setForm(p => ({ ...p, amount: Math.max(0, computedNet).toFixed(2) })); }}>
-                    Usar el del detalle
-                  </button>
-                </p>
-              )}
-            </div>
-            <div className="sm:col-span-2">
               <label className="text-xs font-medium text-muted-foreground">Notas (opcional)</label>
               <input className={FIELD} aria-label="Notas"
                 value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
             </div>
           </FormGrid>
-          {formError && <p className="text-sm text-destructive">{formError}</p>}
-          <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? "Guardando…" : "Guardar ingreso"}
-            </Button>
+          {formError && <p role="alert" className="text-sm text-destructive">{formError}</p>}
           </div>
+          <FormSheetActions onCancel={closeForm} saving={loading} label="Guardar ingreso" />
           </form>
-          </Card>
-        </div>
+        </FormSheet>
+      )}
+
+      {/* Con una sola fuente no hay nada que desglosar: la tabla ya lo dice. */}
+      {bySource.length > 1 && (
+        <BreakdownStrip title="¿De dónde entró?" rows={bySource} picked={pickedSource} onPick={pickSource} />
       )}
 
       {/* List */}
@@ -847,73 +840,46 @@ export default function IncomePage() {
         )}
       </FilterBar>
 
-      <Card className="p-0 md:p-0 divide-y">
-        {entries.length > 0 && (
-          <div className="flex items-center gap-3 px-3 md:px-5 py-2 bg-muted rounded-t-2xl">
-            <input
-              type="checkbox"
-              checked={allSelected}
-              ref={el => { if (el) el.indeterminate = someSelected; }}
-              onChange={toggleAll}
-              className="w-4 h-4 rounded cursor-pointer"
-            />
-            {selected.size > 0 ? (
-              <div className="flex items-center gap-3 flex-1">
-                <span className="text-sm text-muted-foreground">{selected.size} seleccionado{selected.size !== 1 ? "s" : ""}</span>
-                <button
-                  onClick={handleBulkDelete}
-                  disabled={bulkDeleting}
-                  className="flex items-center gap-1 text-sm text-destructive hover:opacity-80 disabled:opacity-50"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  {bulkDeleting ? "Eliminando..." : "Eliminar seleccionados"}
-                </button>
-              </div>
-            ) : (
-              <span className="text-xs text-muted-foreground">Seleccionar todos</span>
-            )}
-          </div>
+      <MotionList as="section" key={listKey} className="px-2 space-y-1 animate-page-in">
+        {selecting && (
+          <SelectionBar count={selected.size} allSelected={allSelected} deleting={bulkDeleting}
+            onToggleAll={toggleAll} onDelete={handleBulkDelete}
+            onCancel={() => { setSelecting(false); setSelected(new Set()); }} />
         )}
-
-        {entries.length === 0 ? (
-          <p className="p-6 text-muted-foreground text-sm">
+        {shown.length === 0 ? (
+          <p className="py-6 text-muted-foreground text-[15px]">
             {filtering
               ? "Ningún ingreso coincide con la búsqueda."
               : `No hay ingresos registrados en ${periodLabel}.`}
           </p>
-        ) : entries.map(entry => (
-          <div key={entry.id} className="flex items-center gap-2 px-3 md:px-4 py-3">
-            <input
-              type="checkbox"
-              checked={selected.has(entry.id)}
-              onChange={() => toggleSelect(entry.id)}
-              className="w-4 h-4 rounded cursor-pointer shrink-0"
-            />
-            <button
-              className="flex-1 flex items-center gap-2 min-w-0 text-left hover:opacity-80 active:opacity-60"
-              onClick={() => setDetailEntry(entry)}
-            >
-              <div className="flex-1 min-w-0">
-                <span className="block text-sm font-medium text-foreground truncate">{entry.source.name}</span>
-                {/* Only while searching: a hit on the notes is otherwise
-                    invisible in the row, so the result looks unrelated to
-                    what was typed. */}
-                {filtering && entry.notes && (
-                  <span className="block text-xs text-muted-foreground truncate">{entry.notes}</span>
-                )}
-                <LoadedByTag name={loadedBy.nameOf(entry.user_id)} />
-                <span className="block sm:hidden text-xs text-muted-foreground">{formatDate(entry.period_date)}</span>
-              </div>
-              <span className="hidden sm:block w-[10ch] shrink-0 text-xs text-muted-foreground text-right truncate">{formatDate(entry.period_date)}</span>
-              <span className="w-[16ch] shrink-0 text-sm font-semibold text-emerald-600 text-right truncate">{formatARS(entry.amount)}</span>
-              <ChevronRight className="w-4 h-4 text-muted-foreground/50 shrink-0" />
-            </button>
-          </div>
-        ))}
-      </Card>
+        ) : (
+          <MotionList>
+            {shown.map((entry, i) => (
+              <LedgerRow key={entry.id}
+                date={entry.period_date}
+                showDate={!(!sort || sort === "date") || i === 0 || shown[i - 1].period_date !== entry.period_date}
+                title={entry.source.name}
+                sub={(entry.notes || loadedBy.nameOf(entry.user_id)) ? <>
+                  {entry.notes && <span className="block truncate">{entry.notes}</span>}
+                  <LoadedByTag name={loadedBy.nameOf(entry.user_id)} />
+                </> : undefined}
+                amount={ledgerAmount(entry.amount, entry.currency)}
+                positive
+                onOpen={() => setDetailEntry(entry)}
+                selecting={selecting}
+                selected={selected.has(entry.id)}
+                onToggle={() => toggleSelect(entry.id)}
+              />
+            ))}
+          </MotionList>
+        )}
+        {shown.length > 0 && (
+          <LedgerTotal positive label={pickedSource ? `Total de ${pickedSource}` : "Total"}
+            ars={sumOf(shown, false)} usd={sumOf(shown, true)} />
+        )}
+      </MotionList>
 
-      <Fab label="Registrar ingreso" data-tour="income-add"
-        onClick={() => { setEditId(null); setForm(newEntryForm()); setFormError(""); netoManual.current = false; setShowForm(true); }} />
+      <Fab label="Registrar ingreso" data-tour="income-add" onClick={openNewEntry} />
 
       {detailEntry && (
         <EntryDetailModal

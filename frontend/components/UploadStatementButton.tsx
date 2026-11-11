@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FileSearch, Loader2, X } from "lucide-react";
+import { FileUp, Loader2, X } from "lucide-react";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -20,11 +20,11 @@ import { Button } from "@/components/ui/button";
  * para llevar a /tarjetas/resumenes, donde están el historial y la subida —
  * abrir el selector de archivos de una dejaba el historial inalcanzable).
  * `primary` es la variante de llamado principal: botón lleno y el texto
- * visible también en el teléfono.
+ * visible también en el teléfono. `onColor` es para el bloque violeta.
  */
 export function UploadStatementButton({
-  cardId, pulse = false, href, primary = false,
-}: { cardId?: number; pulse?: boolean; href?: string; primary?: boolean }) {
+  cardId, pulse = false, href, primary = false, onColor = false,
+}: { cardId?: number; pulse?: boolean; href?: string; primary?: boolean; onColor?: boolean }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -56,8 +56,11 @@ export function UploadStatementButton({
   };
 
   const icon = uploading
-    ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-    : <FileSearch className="w-4 h-4 shrink-0" />;
+    ? <Loader2 className="w-[18px] h-[18px] shrink-0 animate-spin" />
+    : <FileUp className="w-[18px] h-[18px] shrink-0" />;
+  // En el celular es sólo el ícono: un círculo de 44 px. En la compu lleva el texto.
+  const shape = primary ? "h-11" : "w-11 h-11 p-0 sm:w-auto sm:px-4";
+  const skin = onColor ? "bg-white/15 border border-white/25 text-white" : "";
   const label = <span className={primary ? undefined : "hidden sm:inline"}>
     {uploading ? "Leyendo el PDF..." : "Subir resumen"}
   </span>;
@@ -65,7 +68,7 @@ export function UploadStatementButton({
   return (
     <div className="relative shrink-0">
       {href ? (
-        <Button asChild variant={primary ? "primary" : "outline"}>
+        <Button asChild variant={primary ? "primary" : "outline"} className={`${shape} ${skin}`}>
           <Link href={href} title="Subir un resumen o ver los ya subidos" aria-label="Subir resumen">
             {icon}{label}
           </Link>
@@ -75,6 +78,7 @@ export function UploadStatementButton({
           <input ref={input} type="file" accept="application/pdf" className="hidden" onChange={onPick} />
           <Button
             variant={primary ? "primary" : "outline"}
+            className={`${shape} ${skin}`}
             onClick={() => input.current?.click()}
             disabled={uploading}
             title="Subir el PDF del resumen del banco"
@@ -94,9 +98,9 @@ export function UploadStatementButton({
           sola fila, y un error en el flujo los rompería. */}
       {error && (
         <div role="alert"
-          className="absolute right-0 top-full mt-2 z-20 w-64 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 shadow-lg">
+          className="absolute right-0 top-full mt-2 z-20 w-64 flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-sm text-rose-800 shadow-flota">
           <span className="flex-1 min-w-0">{error}</span>
-          <button onClick={() => setError(null)} aria-label="Cerrar" className="shrink-0 p-0.5 hover:text-rose-900">
+          <button onClick={() => setError(null)} aria-label="Cerrar" className="shrink-0 -m-1 p-1 hover:text-rose-900">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>

@@ -11,6 +11,22 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    // Las 15 tandas de la beta se resumen acá: quien viene de producción ve qué cambió, no cada prueba.
+    version: "1.1.0",
+    date: "2026-11-11",
+    notes: [
+      "tood tiene un diseño nuevo en todas las pantallas.",
+      "Inicio te cuenta cuánto te queda para gastar hasta fin de mes y cómo viene el día.",
+      "Ingresos y egresos ahora están juntos en Movimientos.",
+      "Hipoteca pasó a ser Créditos: además del hipotecario, préstamos personales, prendarios, planes de ahorro y plata que te prestó alguien.",
+      "Objetivos: ponele monto y fecha a algo que quieras, y te dice cuánto apartar por mes. Con una cuota fija, Inicio te avisa el día que toca.",
+      "Inversiones: plazos fijos, cuentas remuneradas, fondos, acciones, cripto o efectivo, con cuánto valen hoy y cuánto ganaste.",
+      "El + del centro ofrece primero lo que se agrega en la pantalla donde estás.",
+      "Las guías esperan a que cierres un formulario y aparecen una sola vez.",
+      "Cerrar sesión y la versión de la app están en Configuración.",
+    ],
+  },
+  {
     version: "1.0.7",
     date: "2026-11-06",
     notes: [

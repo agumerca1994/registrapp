@@ -7,18 +7,19 @@ import api from "@/lib/api";
 import { features } from "@/lib/features";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { usePendingStatements } from "@/contexts/PendingStatementsContext";
-import { formatDate, getErrorMessage } from "@/lib/utils";
-import { Check, ChevronLeft, CreditCard, Loader2, Plus, Undo2, X } from "lucide-react";
+import { getErrorMessage } from "@/lib/utils";
+import { Check, CreditCard, Loader2, Plus, Undo2, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
+import { useReaccion } from "@/components/brand/ToodReaccion";
+import { MotionList } from "@/components/ui/motion-list";
 import { FIELD, SelectField } from "@/components/ui/form";
+import { SummaryCard, SummaryHeader, ChainRow } from "@/components/ui/summary-card";
+import { ErrorNote, shortDate, StatusChip, SubHeader } from "@/components/tarjetas/parts";
+import { ledgerAmount } from "@/components/movimientos/Ledger";
 import {
-  SummaryCard, SummaryHeader, SummarySection, SummaryGrid, SummaryCell,
-  SummaryFigure, ChainRow,
-} from "@/components/ui/summary-card";
-import {
-  fmtAmount, GROUP_HINTS, GROUP_LABELS, GROUP_NOUNS, groupActionLabel, periodLabel, STATUS_CHIP,
+  fmtAmount, GROUP_HINTS, GROUP_LABELS, GROUP_NOUNS, groupActionLabel, periodLabel,
   type Action, type ApplyResult, type CurrencyTotals, type SessionDetail,
 } from "../shared";
 
@@ -32,15 +33,19 @@ const REASON_TEXTS: Record<string, string> = {
   no_items: "Se reconoció el banco, pero no apareció ningún consumo en el resumen, así que no se propone ningún cambio.",
 };
 
-/** La cadena de una moneda: diferencia, explicada, sin explicar. */
+/** La cadena de una moneda: diferencia, explicada, sin explicar. Lo que da cero no se muestra. */
 function TotalsChain({ currency, totals }: { currency: string; totals: CurrencyTotals }) {
+  const difference = Number(totals.difference);
   const unexplained = Number(totals.unexplained);
+  if (difference === 0 && unexplained === 0) {
+    return <p className="text-foreground">Coinciden al centavo.</p>;
+  }
   return (
     <>
       <ChainRow label="Diferencia" value={fmtAmount(currency, totals.difference)} />
-      <ChainRow label="Explicada" value={fmtAmount(currency, totals.explained)} />
+      {Number(totals.explained) !== 0 && <ChainRow label="Explicada" value={fmtAmount(currency, totals.explained)} />}
       {unexplained === 0 ? (
-        <p className="flex items-center gap-1 text-emerald-700 font-medium">
+        <p className="flex items-center gap-1 text-foreground font-medium">
           <Check className="w-4 h-4 shrink-0" /> Explicada al centavo
         </p>
       ) : (
@@ -50,7 +55,13 @@ function TotalsChain({ currency, totals }: { currency: string; totals: CurrencyT
   );
 }
 
+// Las opciones de la pregunta de tarjeta o de período: lila la elegida.
+const OPTION = "w-full min-h-[52px] flex items-center gap-3 px-3.5 py-2.5 rounded-2xl border text-left text-[15px] transition-colors active:scale-[0.99]";
+const OPTION_ON = "bg-accent border-[#CFC9E4]";
+const OPTION_OFF = "bg-card border-border";
+
 export default function ConciliarDetailPage() {
+  const reaccionar = useReaccion();
   useAmountsHidden(); // repinta la pantalla al ocultar/mostrar montos
   const params = useParams();
   const router = useRouter();
@@ -148,6 +159,7 @@ export default function ConciliarDetailPage() {
       if (otros) parts.push(`${otros} ${otros === 1 ? "salteado" : "salteados"}`);
       if (d.propagated_future_cuotas) parts.push(`${d.propagated_future_cuotas} cuotas siguientes cargadas en sus resúmenes`);
       setApplyMsg(prev => ({ ...prev, [klass]: parts.join(" · ") }));
+      if (d.applied > 0) reaccionar("guardado", "Resumen corregido");
       setError(null);
       await load();
       refreshPending();
@@ -177,6 +189,7 @@ export default function ConciliarDetailPage() {
     setUndoing(true);
     try {
       await api.post(`/reconcile/${id}/undo`);
+      reaccionar("borrado", "Lo último quedó deshecho");
       setApplyMsg({});
       setError(null);
       await load();
@@ -226,30 +239,34 @@ export default function ConciliarDetailPage() {
     }
   };
 
+  const back = { backLabel: "Volver a Resúmenes subidos", backHref: "/tarjetas/resumenes" };
+
   if (!features.reconcile) {
     return (
-      <div className="max-w-4xl">
-        <p className="text-sm text-muted-foreground">Subir resumen no está disponible por ahora.</p>
+      <div className="space-y-4">
+        <SubHeader title="Revisar resumen" {...back} />
+        <p className="px-2 text-[15px] text-muted-foreground">Subir resumen no está disponible por ahora.</p>
       </div>
     );
   }
 
   if (loading) {
     return (
-      <div className="max-w-4xl space-y-4">
-        <Card variant="hero" className="h-36 animate-pulse" />
+      <div className="space-y-4" aria-busy="true">
+        <SubHeader title="Revisar resumen" {...back} />
+        <div className="h-[136px] rounded-3xl bg-ink/[0.06] animate-pulse" />
+        <span className="sr-only">Cargando el resumen</span>
       </div>
     );
   }
 
   if (!session) {
     return (
-      <div className="max-w-4xl space-y-4">
-        {error && (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
-        )}
-        <Button variant="outline" onClick={() => router.push("/tarjetas/resumenes")}>
-          <ChevronLeft className="w-4 h-4" /> Volver a resúmenes
+      <div className="space-y-4">
+        <SubHeader title="Revisar resumen" {...back} />
+        {error && <ErrorNote>{error}</ErrorNote>}
+        <Button variant="outline" className="h-11" onClick={() => router.push("/tarjetas/resumenes")}>
+          Ver los resúmenes subidos
         </Button>
       </div>
     );
@@ -257,7 +274,6 @@ export default function ConciliarDetailPage() {
 
   const period = periodLabel(session.period_year, session.period_month);
   const title = [session.bank, period].filter(Boolean).join(" · ") || "Resumen sin identificar";
-  const chip = STATUS_CHIP[session.status] ?? { label: session.status, tone: "neutral" as const };
 
   const visibleActions = (klass: string): Action[] =>
     (session.groups[klass] ?? []).filter(a => a.status !== "discarded");
@@ -279,50 +295,38 @@ export default function ConciliarDetailPage() {
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <div className="flex items-center gap-3">
-        <button onClick={() => router.push("/tarjetas/resumenes")} aria-label="Volver"
-          className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground">
-          <ChevronLeft className="w-5 h-5" />
-        </button>
-        <div className="flex-1 min-w-0">
-          <h2 className="text-xl md:text-2xl font-display font-bold text-foreground truncate">Revisar resumen</h2>
-          <p className="text-sm text-muted-foreground truncate">
-            {title}
-            {session.card_label && <span> · {session.card_label}</span>}
-          </p>
-        </div>
-        <Chip tone={chip.tone} className="ml-auto shrink-0">{chip.label}</Chip>
-      </div>
+      <SubHeader title="Revisar resumen" {...back}
+        sub={<span className="first-letter:uppercase inline-block">{title}{session.card_label && ` · ${session.card_label}`}</span>}>
+        <StatusChip status={session.status} />
+      </SubHeader>
 
-      {error && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
-      )}
+      {error && <ErrorNote>{error}</ErrorNote>}
 
       {/* ─── No se pudo leer ─────────────────────────────────────────────── */}
       {session.status === "needs_ai" && (
         <Card className="space-y-3">
-          <p className="text-sm text-foreground">
+          <p className="text-[19px] font-medium leading-snug tracking-[-0.02em] text-foreground">
             {REASON_TEXTS[session.reason ?? ""] ?? "No se pudo leer el resumen."}
           </p>
           {session.plan === "free" && (
-            <div className="rounded-lg border border-border bg-accent/40 px-3 py-2.5 space-y-2">
-              <p className="text-xs text-muted-foreground">
+            <div className="rounded-2xl bg-accent border border-[#CFC9E4] px-3.5 py-3 space-y-2.5">
+              <p className="text-[15px] leading-snug text-[#3F3B4B]">
                 Analizarlo con IA va a ser parte del plan Pro (próximamente).
               </p>
               {interested ? (
-                <Button variant="outline" disabled>
+                <Button variant="outline" className="h-11" disabled>
                   <Check className="w-4 h-4" /> Anotamos tu interés
                 </Button>
               ) : (
-                <Button variant="outline" onClick={sendInterest} disabled={sendingInterest}>
+                <Button variant="outline" className="h-11" onClick={sendInterest} disabled={sendingInterest}>
                   {sendingInterest && <Loader2 className="w-4 h-4 animate-spin" />} Me interesa
                 </Button>
               )}
             </div>
           )}
-          <p className="text-sm text-muted-foreground">
+          <p className="text-[15px] text-muted-foreground">
             Mientras tanto podés{" "}
-            <Link href="/tarjetas" className="text-primary font-medium hover:underline">
+            <Link href="/tarjetas" className="font-semibold text-[#3B2FB3]">
               cargarlo a mano en Tarjetas
             </Link>.
           </p>
@@ -331,118 +335,114 @@ export default function ConciliarDetailPage() {
 
       {/* ─── Falta elegir tarjeta o período ─────────────────────────────── */}
       {session.status === "needs_choice" && (
-        <Card className="space-y-3">
+        <section className="space-y-3">
           {session.choices?.cards && (
             <>
-              <p className="text-sm font-medium text-foreground">¿De qué tarjeta es este resumen?</p>
+              <h3 className="px-2 text-[22px] font-medium tracking-[-0.03em] text-foreground">¿De qué tarjeta es este resumen?</h3>
               <div className="space-y-2">
                 {session.choices.cards.map(c => (
                   <button key={c.card_id} type="button" onClick={() => setSelCard(c.card_id)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border-2 text-left text-sm transition-colors ${
-                      selCard === c.card_id ? "border-ink bg-accent" : "border-border hover:bg-accent/50"
-                    }`}>
+                    aria-pressed={selCard === c.card_id}
+                    className={`${OPTION} ${selCard === c.card_id ? OPTION_ON : OPTION_OFF}`}>
                     <CreditCard className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <span className="flex-1 min-w-0 truncate font-medium text-foreground">{c.alias}</span>
-                    <span className="text-muted-foreground shrink-0">
-                      {c.bank}{c.last_4 && ` · ···· ${c.last_4}`}
+                    <span className="flex-1 min-w-0 truncate font-semibold text-foreground">{c.alias}</span>
+                    <span className="text-sm text-muted-foreground shrink-0">
+                      {c.bank}{c.last_4 && ` · •••• ${c.last_4}`}
                     </span>
                   </button>
                 ))}
+                <button type="button" aria-pressed={newCardOpen}
+                  onClick={() => { setNewCardOpen(v => !v); setSelCard(null); }}
+                  className={`${OPTION} border-dashed ${newCardOpen ? OPTION_ON : "border-border"}`}>
+                  <Plus className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="flex-1 font-semibold text-foreground">
+                    {session.choices.cards.length ? "Es otra tarjeta: crearla" : "Crear la tarjeta de este resumen"}
+                  </span>
+                </button>
               </div>
-              <button type="button"
-                onClick={() => { setNewCardOpen(v => !v); setSelCard(null); }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border-2 border-dashed text-left text-sm transition-colors ${
-                  newCardOpen ? "border-ink bg-accent" : "border-border hover:bg-accent/50"
-                }`}>
-                <Plus className="w-4 h-4 text-muted-foreground shrink-0" />
-                <span className="flex-1 font-medium text-foreground">
-                  {session.choices.cards.length ? "Es otra tarjeta: crearla" : "Crear la tarjeta de este resumen"}
-                </span>
-              </button>
               {newCardOpen && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <input value={newCardAlias} onChange={e => setNewCardAlias(e.target.value)}
+                    aria-label="Alias de la tarjeta"
                     placeholder={`Alias (ej: ${session.bank ?? "Visa"} nueva)`} className={FIELD} />
                   <input value={newCardLast4} onChange={e => setNewCardLast4(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    aria-label="Últimos 4 dígitos"
                     placeholder="Últimos 4 dígitos (opcional)" inputMode="numeric" pattern="[0-9]*" className={FIELD} />
                 </div>
               )}
-              <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+              <label className="flex items-center gap-2.5 min-h-[44px] px-2 text-[15px] text-[#3F3B4B] cursor-pointer">
                 <input type="checkbox" checked={saveCardRule} onChange={e => setSaveCardRule(e.target.checked)}
-                  className="w-4 h-4 accent-primary shrink-0" />
+                  className="w-[18px] h-[18px] accent-[#1C1B25] shrink-0" />
                 Recordar esta tarjeta para este resumen
               </label>
             </>
           )}
           {session.choices?.statements && (
             <>
-              <p className="text-sm font-medium text-foreground">¿A qué resumen corresponde?</p>
+              <h3 className="px-2 text-[22px] font-medium tracking-[-0.03em] text-foreground">¿A qué resumen corresponde?</h3>
               <div className="space-y-2">
                 {session.choices.statements.map(s => (
                   <button key={s.statement_id} type="button" onClick={() => setSelStmt(s.statement_id)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border-2 text-left text-sm transition-colors ${
-                      selStmt === s.statement_id ? "border-ink bg-accent" : "border-border hover:bg-accent/50"
-                    }`}>
-                    <span className="flex-1 min-w-0 truncate font-medium text-foreground first-letter:uppercase">
+                    aria-pressed={selStmt === s.statement_id}
+                    className={`${OPTION} ${selStmt === s.statement_id ? OPTION_ON : OPTION_OFF}`}>
+                    <span className="flex-1 min-w-0 truncate font-semibold text-foreground first-letter:uppercase">
                       {periodLabel(s.year, s.month)}
                     </span>
-                    <span className="text-muted-foreground shrink-0">
-                      {s.item_count === 1 ? "1 ítem" : `${s.item_count} ítems`}
-                      {s.closing_date && ` · cierre ${formatDate(s.closing_date)}`}
+                    <span className="text-sm text-muted-foreground shrink-0">
+                      {s.item_count === 1 ? "1 consumo" : `${s.item_count} consumos`}
+                      {s.closing_date && ` · cierre ${shortDate(s.closing_date)}`}
                     </span>
                   </button>
                 ))}
               </div>
             </>
           )}
-          <div className="flex justify-end pt-1">
-            <Button onClick={confirmChoice}
-              disabled={choosing || (selCard == null && selStmt == null && !(newCardOpen && newCardAlias.trim()))}>
-              {choosing && <Loader2 className="w-4 h-4 animate-spin" />} Comparar con lo cargado
-            </Button>
-          </div>
-        </Card>
+          <Button onClick={confirmChoice} className="w-full sm:w-auto h-[52px] px-6"
+            disabled={choosing || (selCard == null && selStmt == null && !(newCardOpen && newCardAlias.trim()))}>
+            {choosing && <Loader2 className="w-4 h-4 animate-spin" />} Comparar con lo cargado
+          </Button>
+        </section>
       )}
 
-      {/* ─── Revisión: hero + grupos ────────────────────────────────────── */}
+      {/* ─── Revisión: las cifras + grupos ──────────────────────────────── */}
       {inReview && (
         <>
           {session.totals && (
             <SummaryCard>
-              <SummaryHeader title={`Revisar resumen · ${title}`}
+              <SummaryHeader title="El banco y lo que cargaste"
                 open={showDetail} onToggle={() => setShowDetail(v => !v)} />
               {(["ARS", "USD"] as const).map(cur => {
                 const totals = session.totals?.[cur];
-                if (!totals) return null;
+                // Una moneda en cero en los dos lados no dice nada.
+                if (!totals || (Number(totals.bank_total) === 0 && Number(totals.app_total) === 0)) return null;
                 return (
                   // Cada moneda cierra por su lado — los totales nunca se suman.
-                  <div key={cur}>
-                    <SummarySection label={cur === "ARS" ? "En pesos" : "En dólares"} />
-                    <SummaryGrid cols={2}>
-                      <SummaryCell figure>
-                        <SummaryFigure value={fmtAmount(cur, totals.bank_total)} sub="Banco" />
-                      </SummaryCell>
-                      <SummaryCell figure className="border-t sm:border-t-0 sm:border-l border-border/60">
-                        <SummaryFigure value={fmtAmount(cur, totals.app_total)} sub="tood" />
-                      </SummaryCell>
-                      {showDetail && (
-                        <SummaryCell className="border-t border-border/60 sm:col-span-2">
-                          <TotalsChain currency={cur} totals={totals} />
-                        </SummaryCell>
-                      )}
-                    </SummaryGrid>
-                  </div>
+                  <MotionList key={cur} className="border-t border-border/60">
+                    <div className="grid grid-cols-2">
+                      <div className="pl-4 md:pl-6 pr-2 pt-2.5 pb-3 min-w-0">
+                        <p className="text-sm text-muted-foreground">Banco{cur === "USD" && ", en dólares"}</p>
+                        <p className="text-xl md:text-3xl font-medium tracking-[-0.03em] tabular-nums text-foreground whitespace-nowrap">{ledgerAmount(totals.bank_total, cur)}</p>
+                      </div>
+                      <div className="pl-3 md:pl-6 pr-3 pt-2.5 pb-3 min-w-0 border-l border-border/60">
+                        <p className="text-sm text-muted-foreground">Cargado{cur === "USD" && ", en dólares"}</p>
+                        <p className="text-xl md:text-3xl font-medium tracking-[-0.03em] tabular-nums text-foreground whitespace-nowrap">{ledgerAmount(totals.app_total, cur)}</p>
+                      </div>
+                    </div>
+                    {showDetail && (
+                      <div className="px-4 md:px-6 py-3 space-y-1 text-sm border-t border-border/60">
+                        <TotalsChain currency={cur} totals={totals} />
+                      </div>
+                    )}
+                  </MotionList>
                 );
               })}
             </SummaryCard>
           )}
 
           {session.status === "unexplained" && (
-            <Card className="border-amber-200 bg-amber-50">
-              <p className="text-sm text-amber-900 font-medium">
-                La diferencia no queda explicada al centavo. Revisá cada cambio con cuidado antes de confirmarlo.
-              </p>
-            </Card>
+            <p className="rounded-3xl bg-accent border border-[#CFC9E4] px-4 py-3 text-[15px] leading-snug font-medium text-foreground">
+              La diferencia no queda explicada al centavo. Revisá cada cambio con cuidado antes de confirmarlo.
+            </p>
           )}
 
           {session.group_order.map(klass => {
@@ -450,21 +450,19 @@ export default function ConciliarDetailPage() {
             if (actions.length === 0) return null;
             const pending = proposedCount(klass);
             return (
-              <Card key={klass} className="p-0 md:p-0">
-                <div className="px-4 md:px-5 pt-4">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-foreground text-sm md:text-base">
-                      {GROUP_LABELS[klass] ?? klass}
-                    </h3>
-                    <span className="text-xs text-muted-foreground">
-                      {actions.length === 1 ? "1 ítem" : `${actions.length} ítems`}
-                    </span>
-                  </div>
-                  {GROUP_HINTS[klass] && (
-                    <p className="text-xs text-muted-foreground mt-0.5">{GROUP_HINTS[klass]}</p>
-                  )}
+              <section key={klass} className="px-2">
+                <div className="flex items-baseline justify-between gap-3">
+                  <h3 className="text-[22px] font-medium leading-tight tracking-[-0.03em] text-foreground min-w-0">
+                    {GROUP_LABELS[klass] ?? klass}
+                  </h3>
+                  <span className="font-marca text-xs text-muted-foreground shrink-0">
+                    {actions.length}
+                  </span>
                 </div>
-                <div className="divide-y mt-2">
+                {GROUP_HINTS[klass] && (
+                  <p className="mt-0.5 text-sm text-muted-foreground">{GROUP_HINTS[klass]}</p>
+                )}
+                <MotionList className="mt-1 divide-y divide-border border-b border-border">
                   {actions.map(a => (
                     <ActionRow key={a.id} klass={klass} action={a} categories={categories}
                       fixHref={session.card_id && session.statement_id && a.item_id != null
@@ -474,35 +472,35 @@ export default function ConciliarDetailPage() {
                       userPicked={userPicked} setUserPicked={setUserPicked}
                       patchAction={patchAction} />
                   ))}
-                </div>
-                <div className="px-4 md:px-5 py-3 border-t bg-muted/40 rounded-b-2xl flex items-center gap-3 flex-wrap">
+                </MotionList>
+                <div className="pt-2.5 flex items-center gap-2 flex-wrap">
                   {pending > 0 ? (
                     <>
-                      <Button onClick={() => applyGroup(klass)} disabled={applying !== null}>
+                      <Button className="h-11" onClick={() => applyGroup(klass)} disabled={applying !== null}>
                         {applying === klass && <Loader2 className="w-4 h-4 animate-spin" />}
                         {groupActionLabel(klass, pending)}
                       </Button>
-                      <Button variant="outline" onClick={() => discardGroup(klass)} disabled={applying !== null}>
+                      <Button variant="outline" className="h-11" onClick={() => discardGroup(klass)} disabled={applying !== null}>
                         Descartar
                       </Button>
                     </>
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-sm text-emerald-700 font-medium">
+                    <span className="inline-flex items-center gap-1 text-sm text-foreground font-medium">
                       <Check className="w-4 h-4" /> Hecho
                     </span>
                   )}
                   {applyMsg[klass] && (
-                    <p className="text-xs text-muted-foreground">{applyMsg[klass]}</p>
+                    <p className="w-full text-sm text-muted-foreground">{applyMsg[klass]}</p>
                   )}
                 </div>
-              </Card>
+              </section>
             );
           })}
 
           {(anyApplied || pendingParts.length > 0) && (
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="px-2 flex items-center gap-3 flex-wrap">
               {anyApplied && (
-                <Button variant="outline" onClick={undoLast} disabled={undoing}>
+                <Button variant="outline" className="h-11" onClick={undoLast} disabled={undoing}>
                   {undoing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4" />}
                   Deshacer lo último
                 </Button>
@@ -537,28 +535,16 @@ function ActionRow({ klass, action, categories, fixHref, descDraft, setDescDraft
   // Apagado = ya resuelto. Lo que se corrige en la app sigue esperando algo.
   const muted = !proposed && action.status !== "needs_app";
 
-  // Lo que la API no toca (compartidos, cuotas 2..N) lleva al ítem en su
-  // resumen, y se puede dejar así: si no, queda en pantalla sin salida.
-  const stateBadge = action.status === "needs_app" ? (
-    <span className="flex items-center gap-1 shrink-0">
-      {fixHref ? (
-        <Link href={fixHref} title="Abrir este ítem en el resumen">
-          {/* En el celular, "en la app" no entra al lado del monto. */}
-          <Chip locked className="hover:bg-accent transition-colors">
-            Corregir<span className="hidden sm:inline">&nbsp;en la app</span> →
-          </Chip>
-        </Link>
-      ) : (
-        <Chip locked>Corregir<span className="hidden sm:inline">&nbsp;en la app</span></Chip>
-      )}
-      <button onClick={() => patchAction(action.id, { discard: true })}
-        aria-label="Dejarlo así" title="Dejarlo así"
-        className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-rose-600 transition-colors">
-        <X className="w-4 h-4" />
-      </button>
-    </span>
-  ) : action.status === "applied" ? (
-    <span className="inline-flex items-center gap-1 text-xs text-emerald-700 font-medium shrink-0">
+  const dismissApp = (
+    <button onClick={() => patchAction(action.id, { discard: true })}
+      aria-label="Dejarlo así" title="Dejarlo así"
+      className="w-11 h-11 -mr-2 rounded-full flex items-center justify-center text-muted-foreground hover:bg-ink/[0.06] transition-colors shrink-0">
+      <X className="w-4 h-4" />
+    </button>
+  );
+
+  const stateBadge = action.status === "needs_app" ? dismissApp : action.status === "applied" ? (
+    <span className="inline-flex items-center gap-1 text-xs text-foreground font-medium shrink-0">
       <Check className="w-3.5 h-3.5" /> Aplicado
     </span>
   ) : proposed ? (
@@ -566,37 +552,49 @@ function ActionRow({ klass, action, categories, fixHref, descDraft, setDescDraft
     // una equivocada era aceptarla con el resto del grupo.
     <button onClick={() => patchAction(action.id, { discard: true })}
       aria-label="Descartar" title="Descartar este cambio"
-      className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-rose-600 transition-colors shrink-0">
+      className="w-11 h-11 -mr-2 rounded-full flex items-center justify-center text-muted-foreground hover:bg-ink/[0.06] transition-colors shrink-0">
       <X className="w-4 h-4" />
     </button>
   ) : null;
 
+  // Lo que la API no toca (compartidos, cuotas 2..N) lleva al ítem en su
+  // resumen, y se puede dejar así (la X de arriba): si no, queda en pantalla sin
+  // salida. Va en su propio renglón: al lado del monto no entra en un celular.
   const needsAppNote = action.status === "needs_app" ? (
-    <p className="text-xs text-muted-foreground mt-0.5">
-      {p.why_app === "shared"
-        ? "Es un gasto compartido: se corrige desde el resumen."
-        : p.why_app === "child"
-          ? "Es una cuota de un plan: se corrige desde la cuota 1."
-          : "Es compartido o una cuota de un plan: se corrige desde el resumen."}
-    </p>
+    <div className="mt-0.5 space-y-1.5">
+      <p className="text-sm text-muted-foreground">
+        {p.why_app === "shared"
+          ? "Es un gasto compartido: se corrige desde el resumen."
+          : p.why_app === "child"
+            ? "Es una cuota de un plan: se corrige desde la cuota 1."
+            : "Es compartido o una cuota de un plan: se corrige desde el resumen."}
+      </p>
+      {fixHref ? (
+        <Link href={fixHref} title="Abrir este consumo en el resumen" className="inline-flex min-h-[44px] items-center">
+          <Chip locked className="hover:bg-accent transition-colors">Corregir en la app →</Chip>
+        </Link>
+      ) : (
+        <Chip locked>Corregir en la app</Chip>
+      )}
+    </div>
   ) : null;
 
   // ── Fechas del resumen ──
   if (klass === "dates") {
     return (
-      <div className={`px-4 md:px-5 py-3 text-sm space-y-1 ${muted ? "opacity-60" : ""}`}>
+      <div className={`py-3 text-sm space-y-1 ${muted ? "opacity-60" : ""}`}>
         <div className="flex items-center gap-2">
           <div className="flex-1 min-w-0 space-y-0.5">
             {p.next && (
-              <p className="text-xs font-medium text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Próximo resumen ({periodLabel(p.year ?? null, p.month ?? null)})
               </p>
             )}
             {p.closing_date && (
-              <p className="text-foreground">Fecha de cierre → <span className="font-medium">{formatDate(p.closing_date)}</span></p>
+              <p className="text-foreground">Cierre: <span className="font-medium">{shortDate(p.closing_date)}</span></p>
             )}
             {p.due_date && (
-              <p className="text-foreground">Vencimiento → <span className="font-medium">{formatDate(p.due_date)}</span></p>
+              <p className="text-foreground">Vencimiento: <span className="font-medium">{shortDate(p.due_date)}</span></p>
             )}
           </div>
           {stateBadge}
@@ -614,7 +612,7 @@ function ActionRow({ klass, action, categories, fixHref, descDraft, setDescDraft
     const cuota = p.installment_number && p.installment_count
       ? ` · cuota ${p.installment_number}/${p.installment_count}` : "";
     return (
-      <div className={`px-4 md:px-5 py-3 space-y-2 ${muted ? "opacity-60" : ""}`}>
+      <div className={`py-3 space-y-2 ${muted ? "opacity-60" : ""}`}>
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">
             {proposed ? (
@@ -630,15 +628,15 @@ function ActionRow({ klass, action, categories, fixHref, descDraft, setDescDraft
                 aria-label="Descripción"
               />
             ) : (
-              <p className="text-sm font-medium text-foreground truncate">{p.description}</p>
+              <p className="font-semibold text-[15.5px] text-foreground truncate">{p.description}</p>
             )}
-            <p className="text-xs text-muted-foreground mt-1 truncate">
-              {p.date && formatDate(p.date)}
+            <p className="text-sm text-muted-foreground mt-1 truncate">
+              {p.date && shortDate(p.date)}
               {p.bank_description && p.bank_description !== p.description && ` · ${p.bank_description}`}
               {cuota}
             </p>
           </div>
-          <p className="text-sm font-bold tabular-nums shrink-0 pt-1.5">{fmtAmount(p.currency, p.amount ?? 0)}</p>
+          <p className="font-medium text-base tabular-nums shrink-0 pt-1.5">{ledgerAmount(p.amount ?? 0, p.currency)}</p>
           {stateBadge}
         </div>
         {proposed && isARS && (
@@ -653,14 +651,14 @@ function ActionRow({ klass, action, categories, fixHref, descDraft, setDescDraft
               }}
             />
             {suggested && !picked && (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="px-1 text-xs text-muted-foreground">
                 {p.category_source === "suggest:ai" ? "sugerida por IA" : "sugerida"}
               </p>
             )}
             {picked && p.category_id != null && (
-              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+              <label className="flex items-center gap-2.5 min-h-[44px] px-1 text-sm text-[#3F3B4B] cursor-pointer">
                 <input type="checkbox" checked={!!ruleChecked[action.id]}
-                  className="w-4 h-4 accent-primary shrink-0"
+                  className="w-[18px] h-[18px] accent-[#1C1B25] shrink-0"
                   onChange={e => {
                     const checked = e.target.checked;
                     setRuleChecked(prev => ({ ...prev, [action.id]: checked }));
@@ -682,13 +680,13 @@ function ActionRow({ klass, action, categories, fixHref, descDraft, setDescDraft
   // ── Sobrantes: ítems cargados que el banco no muestra ──
   if (klass === "surplus") {
     return (
-      <div className={`px-4 md:px-5 py-3 flex items-center gap-3 ${muted ? "opacity-60" : ""}`}>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-foreground truncate">{p.description}</p>
-          {needsAppNote}
+      <div className={`py-3 ${muted ? "opacity-60" : ""}`}>
+        <div className="flex items-center gap-3 min-h-[44px]">
+          <p className="flex-1 min-w-0 font-semibold text-[15.5px] text-foreground truncate">{p.description}</p>
+          <p className="font-medium text-base tabular-nums shrink-0">{ledgerAmount(p.amount ?? 0, p.currency)}</p>
+          {stateBadge}
         </div>
-        <p className="text-sm font-bold tabular-nums shrink-0">{fmtAmount(p.currency, p.amount ?? 0)}</p>
-        {stateBadge}
+        {needsAppNote}
       </div>
     );
   }
@@ -697,27 +695,29 @@ function ActionRow({ klass, action, categories, fixHref, descDraft, setDescDraft
   const newAmount = p.updates?.amount;
   const newDesc = p.updates?.description;
   return (
-    <div className={`px-4 md:px-5 py-3 flex items-start gap-3 ${muted ? "opacity-60" : ""}`}>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-foreground truncate">
-          {p.app_description}
-          {newDesc && <span className="text-muted-foreground"> → {newDesc}</span>}
-        </p>
-        <p className="text-xs text-muted-foreground truncate">
-          {p.bank_description}
-          {p.bank_coupon && ` · cupón ${p.bank_coupon}`}
-        </p>
-        {needsAppNote}
+    <div className={`py-3 ${muted ? "opacity-60" : ""}`}>
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-[15.5px] text-foreground truncate">
+            {p.app_description}
+            {newDesc && <span className="font-normal text-muted-foreground"> → {newDesc}</span>}
+          </p>
+          <p className="text-sm text-muted-foreground truncate">
+            {p.bank_description}
+            {p.bank_coupon && ` · cupón ${p.bank_coupon}`}
+          </p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="font-medium text-base tabular-nums">
+            {ledgerAmount(newAmount ?? p.app_amount ?? 0, p.currency)}
+          </p>
+          {newAmount != null && p.app_amount != null && (
+            <p className="text-sm text-muted-foreground tabular-nums">antes {ledgerAmount(p.app_amount, p.currency)}</p>
+          )}
+        </div>
+        {stateBadge}
       </div>
-      <div className="text-right shrink-0">
-        <p className="text-sm font-bold tabular-nums">
-          {fmtAmount(p.currency, newAmount ?? p.app_amount ?? 0)}
-        </p>
-        {newAmount != null && p.app_amount != null && (
-          <p className="text-xs text-muted-foreground tabular-nums">antes {fmtAmount(p.currency, p.app_amount)}</p>
-        )}
-      </div>
-      {stateBadge}
+      {needsAppNote}
     </div>
   );
 }

@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { format, parseISO } from "date-fns";
+import { es } from "date-fns/locale";
+import { Loader2, Settings2 } from "lucide-react";
 import api from "@/lib/api";
-import { formatARS, formatPct, formatDate, getErrorMessage } from "@/lib/utils";
-import { X, Settings2, ChevronRight, Loader2 } from "lucide-react";
+import { formatPct, getErrorMessage } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
+import { ChoiceChips } from "@/components/ui/choice-chips";
 import { MonthField } from "@/components/ui/form";
-import { Chip } from "@/components/ui/chip";
-import { Button } from "@/components/ui/button";
+import { EntrySheet, SheetRow } from "@/components/movimientos/EntrySheet";
+import { FormSheet } from "@/components/movimientos/FormSheet";
+import { LedgerRow } from "@/components/movimientos/Ledger";
 
 const MACRO_VAR_DEFS = [
   { key: "uva_value",                label: "UVA" },
@@ -37,11 +41,21 @@ interface MacroVar {
   ripte?: number; smvm?: number; canasta_basica_total?: number;
 }
 
-function fmt(key: MacroVarKey, value?: number): string {
-  if (value == null) return "—";
+const number = (v: number) =>
+  new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+
+// Dato público, no de la cuenta: por eso no pasa por formatARS, que lo taparía con
+// "Ocultar montos".
+function fmt(key: MacroVarKey, value: number): string {
   if (PCT_KEYS.has(key)) return formatPct(value);
-  if (IDX_KEYS.has(key)) return new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
-  return formatARS(value);
+  if (IDX_KEYS.has(key)) return number(value);
+  return `$ ${number(value)}`;
+}
+
+/** El valor de una variable en un día. Sin dato (null) no se muestra: un guion no dice nada. */
+function valueOf(record: MacroVar, key: MacroVarKey): number | null {
+  const v = record[key];
+  return v == null ? null : Number(v);
 }
 
 const THIS_YEAR = new Date().getFullYear();
@@ -71,39 +85,92 @@ function rangeToFromDate(range: string): string | null {
   return null;
 }
 
-// ── Detail modal ───────────────────────────────────────────────────────────────
+// En cada fila del historial va el dato que más se mira, de los que están prendidos.
+const ROW_PRIORITY: MacroVarKey[] = [
+  "usd_blue", "usd_official", "uva_value", "usd_mep", "usd_ccl", "usd_mayorista",
+  "inflation_monthly_pct", "inflation_interanual_pct", "uvi", "icl", "ripte", "smvm", "canasta_basica_total",
+];
+const labelOf = (key: MacroVarKey) => MACRO_VAR_DEFS.find(v => v.key === key)!.label;
+
+function rowVars(record: MacroVar, visible: Record<string, boolean>): MacroVarKey[] {
+  return ROW_PRIORITY.filter(k => visible[k] !== false && valueOf(record, k) !== null);
+}
+
+// ── La ficha de un día ─────────────────────────────────────────────────────────
 
 function MacroDetailModal({ record, visibleVars, onClose }: {
   record: MacroVar; visibleVars: Record<string, boolean>; onClose: () => void;
 }) {
+  const [main, ...others] = rowVars(record, visibleVars);
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
-        <div className="flex items-start justify-between">
-          <div>
-            <h3 className="font-semibold text-foreground">{formatDate(record.period_date)}</h3>
-            <Chip tone="emerald" className="mt-1.5">
-              Automático
-            </Chip>
-          </div>
-          <button onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="divide-y text-sm">
-          {MACRO_VAR_DEFS.filter(v => visibleVars[v.key] !== false).map(({ key, label }) => (
-            <div key={key} className="flex justify-between py-2">
-              <span className="text-muted-foreground">{label}</span>
-              <span className="font-medium">{fmt(key, record[key as keyof MacroVar] as number | undefined)}</span>
-            </div>
-          ))}
-        </div>
-      </Card>
-    </div>
+    <EntrySheet
+      date={record.period_date}
+      title={main ? labelOf(main) : "Sin datos ese día"}
+      badge={{ label: "Automático" }}
+      amount={main ? fmt(main, valueOf(record, main)!) : "Sin dato"}
+      onClose={onClose}
+      footer={null}
+    >
+      {others.map(key => (
+        <SheetRow key={key} label={labelOf(key)}>
+          <span className="tabular-nums">{fmt(key, valueOf(record, key)!)}</span>
+        </SheetRow>
+      ))}
+    </EntrySheet>
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────────
+// ── Qué mostrar e historial ────────────────────────────────────────────────────
+
+function ConfigSheet({ visibleVars, onToggle, backfillFrom, setBackfillFrom, backfilling, backfillError, onBackfill, onClose }: {
+  visibleVars: Record<string, boolean>;
+  onToggle: (key: string) => void;
+  backfillFrom: string;
+  setBackfillFrom: (v: string) => void;
+  backfilling: boolean;
+  backfillError: string;
+  onBackfill: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <FormSheet title="Configurar variables" onClose={onClose}>
+      <div className="flex-1 min-h-0 overflow-y-auto px-3.5 pb-4 space-y-4">
+        <div>
+          <p className="px-1.5 mb-2 text-sm text-[#4A4658]">Variables a mostrar</p>
+          <div className="flex flex-wrap gap-2">
+            {MACRO_VAR_DEFS.map(({ key, label }) => {
+              const on = visibleVars[key] !== false;
+              return (
+                <button key={key} type="button" aria-pressed={on} onClick={() => onToggle(key)}
+                  className={`min-h-[40px] px-3.5 rounded-full border text-sm font-medium transition-colors active:scale-[0.97] ${
+                    on ? "border-[#CFC9E4] bg-accent text-[#3B2FB3]" : "border-border bg-white/70 text-muted-foreground"
+                  }`}>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="rounded-[22px] bg-white/70 border border-white/80 p-3.5">
+          <p className="text-[15.5px] font-semibold text-foreground">Cargar datos históricos</p>
+          <p className="mt-0.5 text-sm leading-snug text-[#4A4658]">
+            Trae un registro por día desde el mes elegido hasta hoy y lo suma a lo que ya está cargado.
+          </p>
+          <MonthField className="mt-2"
+            value={backfillFrom} onChange={setBackfillFrom}
+            min="2016-01" max={TODAY_MONTH} disabled={backfilling} />
+          <button type="button" onClick={onBackfill} disabled={backfilling || !backfillFrom}
+            className="mt-2.5 w-full h-[52px] rounded-full bg-ink text-background font-semibold text-[15.5px] inline-flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform duration-100">
+            {backfilling ? <><Loader2 className="w-4 h-4 animate-spin" /> Cargando…</> : "Cargar historial"}
+          </button>
+          {backfillError && <p role="alert" className="mt-2 text-sm text-destructive">{backfillError}</p>}
+        </div>
+      </div>
+    </FormSheet>
+  );
+}
+
+// ── Pantalla ───────────────────────────────────────────────────────────────────
 
 const DEFAULT_VISIBLE: Record<string, boolean> = {
   uva_value: true, uvi: true, icl: false,
@@ -115,6 +182,7 @@ const DEFAULT_VISIBLE: Record<string, boolean> = {
 export default function MacroPage() {
   const [records, setRecords] = useState<MacroVar[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
   const [backfillError, setBackfillError] = useState("");
   const [detailRecord, setDetailRecord] = useState<MacroVar | null>(null);
@@ -126,8 +194,13 @@ export default function MacroPage() {
   const loadDisplay = async (r: string) => {
     const from = rangeToFromDate(r);
     const url = from ? `/macro?from_date=${from}` : "/macro";
-    const res = await api.get(url);
-    setRecords(res.data);
+    try {
+      const res = await api.get(url);
+      setRecords(res.data);
+      setFailed(false);
+    } catch {
+      setFailed(true);
+    }
   };
 
   useEffect(() => {
@@ -147,15 +220,15 @@ export default function MacroPage() {
 
   const toggleVar = (key: string) => {
     setVisibleVars(prev => {
-      const next = { ...prev, [key]: !prev[key] };
-      localStorage.setItem("macro_visible_vars", JSON.stringify(next));
+      const next = { ...prev, [key]: prev[key] === false };
+      try { localStorage.setItem("macro_visible_vars", JSON.stringify(next)); } catch {}
       return next;
     });
   };
 
   const changeRange = (r: string) => {
     setRange(r);
-    localStorage.setItem("macro_range", r);
+    try { localStorage.setItem("macro_range", r); } catch {}
     setLoading(true);
     loadDisplay(r).finally(() => setLoading(false));
   };
@@ -168,6 +241,7 @@ export default function MacroPage() {
     try {
       await api.post(`/macro/backfill?from_year=${year}&from_month=${month}`, {}, { timeout: 120000 });
       await loadDisplay(range);
+      setShowConfig(false);
     } catch (e) {
       setBackfillError(getErrorMessage(e, "No se pudo traer el historial. Probá de nuevo en un rato."));
     } finally {
@@ -175,113 +249,89 @@ export default function MacroPage() {
     }
   };
 
+  // Lo que se viene a mirar: los valores de hoy, sin tocar nada.
+  const latest = records[0];
+  const latestVars = latest ? MACRO_VAR_DEFS.filter(v => visibleVars[v.key] !== false && valueOf(latest, v.key) !== null) : [];
+
   return (
     <div className="space-y-4 md:space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl md:text-2xl font-display font-bold text-foreground">Variables macro</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Se actualizan solas todos los días</p>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h1 className="text-[26px] md:text-3xl font-display font-medium tracking-[-0.035em] text-foreground">Variables macro</h1>
+          <p className="text-sm text-muted-foreground">Se actualizan solas todos los días</p>
         </div>
-        <button
-          onClick={() => setShowConfig(v => !v)}
-          className={`p-1.5 rounded-full transition-colors ${showConfig ? "bg-accent text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
-          title="Configurar variables"
-          aria-label="Configurar variables"
-        >
-          <Settings2 className="w-4 h-4 text-muted-foreground" />
+        <button onClick={() => setShowConfig(true)} title="Configurar variables" aria-label="Configurar variables"
+          className="w-11 h-11 -mr-2 shrink-0 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+          <Settings2 className="w-5 h-5" />
         </button>
       </div>
 
-      {showConfig && (
-        <Card className="p-4 space-y-4">
-          {/* Variable visibility */}
-          <div>
-            <p className="text-xs font-medium text-muted-foreground mb-3">Variables a mostrar</p>
-            <div className="grid grid-cols-2 gap-2">
-              {MACRO_VAR_DEFS.map(({ key, label }) => (
-                <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={visibleVars[key] !== false}
-                    onChange={() => toggleVar(key)}
-                    className="w-4 h-4 rounded accent-primary"
-                  />
-                  <span className="text-sm text-foreground">{label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Backfill by date */}
-          <div className="border-t pt-3 space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Cargar datos históricos</p>
-            <p className="text-xs text-muted-foreground/70">
-              Trae un registro por día desde el mes elegido hasta hoy y lo suma a lo que ya está cargado.
-            </p>
-            <div className="flex items-center gap-2">
-              <MonthField className="flex-1"
-                value={backfillFrom} onChange={setBackfillFrom}
-                min="2016-01" max={TODAY_MONTH} disabled={backfilling} />
-              <Button
-                onClick={runBackfill}
-                disabled={backfilling || !backfillFrom}
-                className="whitespace-nowrap"
-              >
-                {backfilling ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando…</> : "Cargar historial"}
-              </Button>
-            </div>
-            {backfillError && <p className="text-xs text-destructive">{backfillError}</p>}
+      {latestVars.length > 0 && (
+        <Card className="p-4 md:p-5">
+          <p className="font-marca text-xs text-muted-foreground">
+            {format(parseISO(latest.period_date), "EEE d MMM", { locale: es }).replace(/\./g, "")}
+          </p>
+          <div className="mt-2 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-2.5">
+            {latestVars.map(({ key, label }) => (
+              <div key={key} className="min-w-0">
+                <p className="text-sm text-muted-foreground truncate">{label}</p>
+                <p className="text-lg font-medium tracking-[-0.02em] tabular-nums text-foreground truncate">
+                  {fmt(key, valueOf(latest, key)!).replace(/,00$/, "")}
+                </p>
+              </div>
+            ))}
           </div>
         </Card>
       )}
 
-      {/* Display range chips */}
-      <div className="flex gap-1.5 flex-wrap">
-        {RANGE_OPTIONS.map(opt => (
-          <button
-            key={opt.value}
-            onClick={() => changeRange(opt.value)}
-            className={`text-xs px-3 py-1 rounded-full border-2 font-medium transition-colors ${
-              range === opt.value
-                ? "border-ink bg-primary text-primary-foreground"
-                : "border-transparent text-muted-foreground hover:bg-accent"
-            }`}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
+      <ChoiceChips ariaLabel="Período" value={range} onChange={changeRange}
+        options={RANGE_OPTIONS.map(o => ({ value: o.value, label: o.label }))} />
 
-      <Card className="p-0 md:p-0 divide-y">
-        {backfilling ? (
-          <div className="p-6 flex items-center gap-2 text-muted-foreground text-sm">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Cargando datos históricos día a día...
+      <section className="px-2">
+        {failed ? (
+          <div role="alert" className="py-4 text-[15px] text-muted-foreground">
+            <p>No pudimos traer las variables.</p>
+            <button onClick={() => changeRange(range)} className="mt-1 font-semibold text-foreground underline">Probar de nuevo</button>
           </div>
+        ) : backfilling ? (
+          <p className="py-4 flex items-center gap-2 text-[15px] text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" /> Cargando datos históricos día a día…
+          </p>
         ) : loading ? (
-          <p className="p-6 text-muted-foreground text-sm">Cargando...</p>
+          <p className="py-4 text-[15px] text-muted-foreground">Cargando…</p>
         ) : records.length === 0 ? (
-          <div className="p-6 text-sm text-muted-foreground space-y-1">
+          <div className="py-4 text-[15px] text-muted-foreground">
             <p>Sin datos para el período seleccionado.</p>
-            <p className="text-xs">Para traer el historial, tocá Configurar variables, arriba a la derecha.</p>
+            <button onClick={() => setShowConfig(true)} className="mt-1 font-semibold text-foreground underline">Traer el historial</button>
           </div>
-        ) : records.map(r => (
-          <button
-            key={r.id}
-            className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-accent active:bg-accent/80 transition-colors"
-            onClick={() => setDetailRecord(r)}
-          >
-            <span className="text-sm font-medium text-foreground">{formatDate(r.period_date)}</span>
-            <ChevronRight className="w-4 h-4 text-muted-foreground/50" />
-          </button>
-        ))}
-      </Card>
+        ) : (
+          <div>
+            {records.map(r => {
+              const [main, second] = rowVars(r, visibleVars);
+              return (
+                <LedgerRow key={r.id}
+                  date={r.period_date}
+                  title={main ? labelOf(main) : "Sin datos"}
+                  sub={second ? `${labelOf(second)} ${fmt(second, valueOf(r, second)!).replace(/,00$/, "")}` : undefined}
+                  amount={main ? fmt(main, valueOf(r, main)!).replace(/,00$/, "") : ""}
+                  onOpen={() => setDetailRecord(r)}
+                />
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       {detailRecord && (
-        <MacroDetailModal
-          record={detailRecord}
-          visibleVars={visibleVars}
-          onClose={() => setDetailRecord(null)}
+        <MacroDetailModal record={detailRecord} visibleVars={visibleVars} onClose={() => setDetailRecord(null)} />
+      )}
+
+      {showConfig && (
+        <ConfigSheet
+          visibleVars={visibleVars} onToggle={toggleVar}
+          backfillFrom={backfillFrom} setBackfillFrom={setBackfillFrom}
+          backfilling={backfilling} backfillError={backfillError}
+          onBackfill={runBackfill} onClose={() => setShowConfig(false)}
         />
       )}
     </div>

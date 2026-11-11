@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import pkg from "./package.json";
 
 // El token de Firebase vive en el browser (IndexedDB, por diseño del SDK: no hay
 // opción HttpOnly), así que un XSS en cualquier parte de la app se lleva una
@@ -62,11 +63,12 @@ const FIREBASE_HOSTING = `https://${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID 
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  // Baked in at build time so the user-menu popover can show "last updated"
+  // Baked in at build time so Settings can show the version and "last updated"
   // — for this app a new build IS a new deploy (pushing to main triggers a
   // full rebuild in Easypanel), so build time is an honest proxy for it.
   env: {
     NEXT_PUBLIC_BUILD_DATE: new Date().toISOString(),
+    NEXT_PUBLIC_APP_VERSION: pkg.version,
   },
   // Next's dev-only route indicator defaults to bottom-left, which collides
   // with the sidebar's user-menu avatar (also bottom-left). Dev-only, no

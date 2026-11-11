@@ -1,0 +1,46 @@
+# Una copia del frontend en beta.tood.com.ar, para probar un cambio grande antes de
+# pasarlo a todos. Usa el backend y la base de producción: los datos son los reales.
+# No lo levanta Easypanel: corre aparte en el servidor, desde ~/tood-beta, con
+#   git pull && docker compose -f docker-compose.beta.yml up -d --build
+# El .env de esa carpeta trae los NEXT_PUBLIC_FIREBASE_* de producción.
+name: tood-beta
+
+services:
+  beta-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_URL: https://api.tood.com.ar
+        NEXT_PUBLIC_MCP_URL: https://mcp.tood.com.ar/mcp
+        NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY}
+        # El login corre en el mismo dominio, como en app.tood.com.ar (ver next.config.ts).
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: beta.tood.com.ar
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}
+        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
+        NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID}
+        NEXT_PUBLIC_FIREBASE_VAPID_KEY: ${NEXT_PUBLIC_FIREBASE_VAPID_KEY}
+        NEXT_PUBLIC_FEATURE_IOS_SHORTCUT: ${NEXT_PUBLIC_FEATURE_IOS_SHORTCUT:-false}
+        NEXT_PUBLIC_FEATURE_RECONCILE: ${NEXT_PUBLIC_FEATURE_RECONCILE:-false}
+        NEXT_PUBLIC_FEATURE_BUSINESS_SIGNUP: ${NEXT_PUBLIC_FEATURE_BUSINESS_SIGNUP:-false}
+        NEXT_PUBLIC_SITE_URL: https://tood.com.ar
+        NEXT_PUBLIC_APP_URL: https://beta.tood.com.ar
+        NEXT_PUBLIC_APP_ALIASES: ""
+    restart: unless-stopped
+    mem_limit: 1g
+    networks:
+      - default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tood-beta.rule=Host(`beta.tood.com.ar`)"
+      - "traefik.http.routers.tood-beta.tls=true"
+      - "traefik.http.routers.tood-beta.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.tood-beta.middlewares=tood-beta-noindex"
+      - "traefik.http.middlewares.tood-beta-noindex.headers.customresponseheaders.X-Robots-Tag=noindex, nofollow"
+      - "traefik.http.services.tood-beta.loadbalancer.server.port=3000"
+
+networks:
+  default:
+    external: true
+    name: easypanel

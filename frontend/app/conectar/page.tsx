@@ -33,7 +33,7 @@ const PILL = "inline-flex items-center gap-2 rounded-full border-2 border-ink px
 
 const BENEFITS = [
   { icon: Brain, title: "Con tus números",
-    text: "Contesta con los ingresos, gastos, tarjetas y cuotas que cargaste en tood." },
+    text: "Contesta con los ingresos, gastos, tarjetas, cuotas, créditos, objetivos e inversiones que cargaste en tood." },
   { icon: MessageSquareText, title: "Como hablás",
     text: "«¿Me alcanza para la tele?», «anotá 12 lucas de verdulería». Le escribís como a una persona." },
   { icon: ShieldCheck, title: "Tu contraseña queda afuera",
@@ -46,7 +46,7 @@ const FAQ = [
   { q: "¿Puede modificar mis datos?", a: <>
     <p>
       Sí, si se lo pedís. En un hogar puede cargar, editar y borrar gastos, ingresos, tarjetas y gastos compartidos; en un negocio,
-      ventas, el cierre del día, stock, productos, gastos y tarjetas. Lo demás es sólo lectura.
+      ventas, el cierre del día, stock, productos, gastos y tarjetas. Lo demás (dólares, créditos, objetivos e inversiones) lo puede leer pero no cambiar.
     </p>
     <p>
       Cada cambio arranca como una vista previa que no guarda nada: el asistente te la muestra y sólo la guarda si confirmás.

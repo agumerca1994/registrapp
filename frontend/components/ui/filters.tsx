@@ -4,22 +4,22 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { startOfMonth, isAfter, isBefore, format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { Search, X, ArrowUp, ArrowDown, CalendarDays } from "lucide-react";
+import { Search, X, ArrowUp, CalendarDays } from "lucide-react";
+import { useListMotion } from "@/lib/motion";
 import { CalendarPanel, isoDate } from "@/components/ui/calendar";
 import {
   Listbox, useAnchoredPanel, useDismiss, type SelectOption,
 } from "@/components/ui/listbox";
 
 /**
- * The app's one filter/search bar. Extracted verbatim from `/tarjetas`, which
- * was the only screen that had it — every other list either had nothing or
- * (income, briefly) grew its own shape.
+ * The app's one filter/search bar. Every list with searching, sorting or
+ * filtering renders this one.
  *
  * The layout, in order:
  *
  *   <FilterBar>
  *     <FilterRow>
- *       <CollapsibleSearch />            // magnifier that expands in place
+ *       <CollapsibleSearch />            // circle that opens into a search pill
  *       {!searchOpen && <>               // chips hide while the box is open
  *         <SortChip … /> …
  *         <FilterChip label="Personalizado" icon={SlidersHorizontal} … />
@@ -33,57 +33,64 @@ import {
  *     )}
  *   </FilterBar>
  *
- * Three rules that are easy to lose:
- * - It is NOT wrapped in a `<Card>`. It sits bare above the list; boxing it
- *   turns a control strip into a second panel competing with the content.
+ * Four rules that are easy to lose:
+ * - The strip is NOT wrapped in a `<Card>`. It sits bare above the list; boxing it
+ *   turns a control strip into a second panel competing with the content. Only
+ *   the panel, which opens on demand, is a block.
  * - Sorting is tri-state: inactive → asc → desc → inactive, where inactive
  *   means the list's own default order.
  * - A period is ONE control (`PillDateRange`), not a "desde" input next to a
  *   "hasta" input.
+ * - What's on is dark, like every other selection in the app (`ChoiceChips`). The
+ *   chips measure 40 px and touch 44.
  */
 
 export function FilterBar({ children }: { children: React.ReactNode }) {
-  return <div className="space-y-2">{children}</div>;
+  const motion = useListMotion<HTMLDivElement>();
+  return <div ref={motion} className="space-y-2">{children}</div>;
 }
 
-// `min-h` so toggling the search box open doesn't shift the list underneath.
 export function FilterRow({ children }: { children: React.ReactNode }) {
-  return <div className="flex items-center gap-1.5 flex-wrap min-h-[30px]">{children}</div>;
+  const motion = useListMotion<HTMLDivElement>();
+  return <div ref={motion} className="flex items-center gap-1.5 flex-wrap min-h-10">{children}</div>;
 }
 
 export function FilterPanel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2 rounded-[24px] border border-border bg-card p-2 [&>*]:flex-1 [&>*]:min-w-[calc(50%-0.25rem)] sm:[&>*]:min-w-[180px]">
       {children}
     </div>
   );
 }
 
-const CHIP_BASE = "inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border-2 transition-colors";
-const CHIP_ON = "border-ink bg-accent text-primary font-medium";
-const CHIP_OFF = "border-transparent text-muted-foreground/60 hover:bg-accent";
+const CHIP_BASE = "relative inline-flex items-center justify-center gap-1.5 h-10 shrink-0 text-[13px] font-medium rounded-full border transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] before:absolute before:inset-x-0 before:-inset-y-0.5 before:content-['']";
+const CHIP_ON = "border-transparent bg-ink text-background";
+const CHIP_OFF = "border-border bg-card text-foreground hover:bg-accent";
 
 export function SortChip({ label, active, dir, onClick }: {
   label: string; active: boolean; dir: "asc" | "desc"; onClick: () => void;
 }) {
   return (
-    <button type="button" onClick={onClick}
-      className={`${CHIP_BASE} ${active ? CHIP_ON : CHIP_OFF}`}>
+    <button type="button" onClick={onClick} aria-pressed={active}
+      className={`${CHIP_BASE} px-3.5 ${active ? CHIP_ON : CHIP_OFF}`}>
       {label}
-      {active && (dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}
+      {active && <ArrowUp className={`w-3.5 h-3.5 transition-transform duration-200 ${dir === "desc" ? "rotate-180" : ""}`} />}
     </button>
   );
 }
 
-/** Same chip, for a toggle that opens a panel (e.g. "Personalizado"). */
+/**
+ * The toggle that opens the panel. With an icon it's a circle at the end of the
+ * row and the label goes to `aria-label`: "Personalizado" in text pushed the row
+ * past the width of a phone.
+ */
 export function FilterChip({ label, icon: Icon, active, onClick }: {
   label: string; icon?: React.ElementType; active: boolean; onClick: () => void;
 }) {
   return (
-    <button type="button" onClick={onClick}
-      className={`${CHIP_BASE} ${active ? CHIP_ON : CHIP_OFF}`}>
-      {Icon && <Icon className="w-3 h-3" />}
-      {label}
+    <button type="button" onClick={onClick} aria-pressed={active} aria-label={label} title={label}
+      className={`${CHIP_BASE} ${Icon ? "w-10 ml-auto" : "px-3.5"} ${active ? CHIP_ON : CHIP_OFF}`}>
+      {Icon ? <Icon className="w-[18px] h-[18px]" /> : label}
     </button>
   );
 }
@@ -91,7 +98,7 @@ export function FilterChip({ label, icon: Icon, active, onClick }: {
 // Text colour is applied by each control rather than baked in: an unset
 // filter shows the field's name and has to read as a placeholder, not as a
 // value the user chose.
-const PILL = "w-full rounded-full border-2 border-ink bg-card py-1.5 text-xs font-medium";
+const PILL = "w-full h-10 rounded-full border border-border bg-background text-[13px] font-medium";
 
 /**
  * The filter bar's select. Same `Listbox` as the form's — an OS option list
@@ -216,8 +223,8 @@ export function PillDateRange({ from, to, onChange, placeholder = "Rango de fech
 export function ClearFilters({ onClick, label = "Limpiar" }: { onClick: () => void; label?: string }) {
   return (
     <button type="button" onClick={onClick}
-      className="text-xs text-muted-foreground hover:text-foreground px-2 shrink-0 self-center">
-      {label}
+      className="!flex-none !min-w-0 ml-auto h-10 px-3 inline-flex items-center gap-1 rounded-full text-[13px] font-medium text-foreground hover:bg-accent transition-colors">
+      <X className="w-3.5 h-3.5" /> {label}
     </button>
   );
 }
@@ -232,24 +239,24 @@ export function CollapsibleSearch({ open, onOpen, onClose, value, onChange, plac
 }) {
   if (!open) {
     return (
-      <button type="button" onClick={onOpen} title="Buscar"
-        className="p-1.5 -ml-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0">
-        <Search className="w-4 h-4" />
+      <button type="button" onClick={onOpen} title="Buscar" aria-label="Buscar"
+        className={`${CHIP_BASE} ${CHIP_OFF} w-10`}>
+        <Search className="w-[18px] h-[18px]" />
       </button>
     );
   }
   return (
-    <div className="flex items-center gap-1.5 flex-1 min-w-[160px] border-b-2 border-ink pb-0.5">
-      <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+    <div className="flex items-center gap-2 flex-1 min-w-[160px] h-10 rounded-full border border-border bg-card pl-3.5 pr-1 focus-within:border-primary/50 transition-colors">
+      <Search className="w-[18px] h-[18px] text-muted-foreground shrink-0" />
       <input
         autoFocus
-        className="flex-1 min-w-0 bg-transparent border-none outline-none text-sm text-foreground placeholder:text-muted-foreground/50"
+        className="flex-1 min-w-0 bg-transparent border-none outline-none text-sm text-foreground placeholder:text-muted-foreground"
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
-      <button type="button" onClick={onClose}
-        className="p-0.5 rounded-full text-muted-foreground hover:text-foreground transition-colors shrink-0">
+      <button type="button" onClick={onClose} aria-label="Cerrar la búsqueda"
+        className="w-8 h-8 rounded-full bg-ink/[0.07] text-foreground flex items-center justify-center shrink-0">
         <X className="w-3.5 h-3.5" />
       </button>
     </div>

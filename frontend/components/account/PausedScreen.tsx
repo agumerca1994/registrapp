@@ -35,7 +35,7 @@ export function PausedScreen() {
         {/* Centrados por lo que se dibuja, como en el login. */}
         <div style={{ transform: "translateX(-3%)" }}><ToodLogo className="h-9 w-auto text-white" title="tood" /></div>
         <ToodAvatar size={150} className="mt-6 translate-x-[5.5%]" ink="#ffffff" holeColor={BRAND_FIELD} asleep />
-        <h1 className="mt-6 font-display text-2xl font-semibold">Tu cuenta está en pausa</h1>
+        <h1 className="mt-6 font-display text-[28px] font-medium tracking-[-0.03em]">Tu cuenta está en pausa</h1>
         {/* `text-balance` y el espacio fijo: que "bot" no quede solo en la última línea. */}
         <p className="mt-2 text-[15px] text-white/85 leading-relaxed text-balance">
           Tus datos están como los dejaste. Reactivala para volver a cargar, recibir avisos y usar el{"\u00a0"}bot.
@@ -45,7 +45,7 @@ export function PausedScreen() {
           className="mt-10 w-full h-14 text-base font-semibold">
           {busy ? "Reactivando…" : "Reactivar mi cuenta"}
         </Button>
-        <button onClick={() => logout()} className="mt-4 text-sm text-white/80 hover:text-white underline-offset-4 hover:underline">
+        <button onClick={() => logout()} className="mt-2 min-h-[44px] px-3 text-sm text-white/85 hover:text-white underline-offset-4 hover:underline">
           Cerrar sesión
         </button>
       </main>

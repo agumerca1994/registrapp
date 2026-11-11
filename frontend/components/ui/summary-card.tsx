@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useListMotion } from "@/lib/motion";
 import { ChevronDown, TrendingUp, TrendingDown } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { useCountUp } from "@/components/ui/count-up";
@@ -8,7 +9,9 @@ import { useCountUp } from "@/components/ui/count-up";
 /**
  * The app's summary hero — the one `variant="hero"` card at the top of a
  * screen, answering "where do I stand" before anything else on the page.
- * Established on the dashboard, reused on `/divisas`.
+ * Since the 1.1.0 redesign the top of a screen is the violet block
+ * (`components/ui/glass.tsx`); this card is the month-closing view inside a
+ * screen (`MonthCard` in Movimientos, the business month, `/conciliar/[id]`).
  *
  * Read top to bottom it's always the same three bands:
  *
@@ -25,9 +28,10 @@ import { useCountUp } from "@/components/ui/count-up";
  *   </SummaryCard>
  *
  * The rules behind the shape, each of which was a correction at some point:
- * - **Columns are equal, not content-sized.** A peso figure is three times as
- *   wide as a dollar one; a grid that sizes to content turns two equally
- *   important numbers into a headline and a footnote.
+ * - **Columns are never content-sized.** A peso figure is three times as wide
+ *   as a dollar one; a grid that sizes to content turns two equally important
+ *   numbers into a headline and a footnote. A caller may weight them on
+ *   purpose (`MonthCard` uses 1.35fr / 1fr), but never by content.
  * - **Rows are not forced to match each other.** `auto-rows-fr` across the
  *   whole grid stretched the figures row to the height of the taller chain
  *   row and left a band of dead space under the numbers.
@@ -44,9 +48,10 @@ import { useCountUp } from "@/components/ui/count-up";
  */
 
 export function SummaryCard({ children }: { children: React.ReactNode }) {
+  const motion = useListMotion<HTMLDivElement>();
   return (
-    <Card variant="hero" className="p-0 overflow-hidden">
-      {children}
+    <Card variant="hero" className="p-0 md:p-0 overflow-hidden">
+      <div ref={motion}>{children}</div>
     </Card>
   );
 }
@@ -60,7 +65,7 @@ export function SummaryHeader({ title, open, onToggle, openLabel = "Ver detalle"
 }) {
   return (
     <div className="flex items-center justify-between gap-3 px-4 md:px-6 py-3">
-      <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+      <p className="text-sm font-semibold text-muted-foreground first-letter:uppercase">
         {title}
       </p>
       {onToggle && (
@@ -79,7 +84,7 @@ export function SummaryHeader({ title, open, onToggle, openLabel = "Ver detalle"
 /** Small band naming the row of figures under it. Sits tight against them. */
 export function SummarySection({ label }: { label: string }) {
   return (
-    <p className="px-4 md:px-6 pt-3 pb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase border-t border-border/60">
+    <p className="px-4 md:px-6 pt-3 pb-1 text-sm font-semibold text-muted-foreground border-t border-border/60">
       {label}
     </p>
   );
@@ -88,8 +93,9 @@ export function SummarySection({ label }: { label: string }) {
 export function SummaryGrid({ cols = 1, children }: { cols?: 1 | 2; children: React.ReactNode }) {
   // One column below `sm`: two cells of ~170px wrap a peso figure onto a
   // second line and squash the chain labels.
+  const motion = useListMotion<HTMLDivElement>();
   return (
-    <div className={`grid ${cols === 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
+    <div ref={motion} className={`grid ${cols === 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
       {children}
     </div>
   );
@@ -128,7 +134,7 @@ export function SummaryFigure({ value, amount, format, sub, trend }: {
   const text = amount !== undefined && format ? format(counted) : value;
   return (
     <>
-      <p className="text-2xl md:text-4xl font-display font-bold text-foreground break-words tabular-nums">
+      <p className="text-3xl md:text-4xl font-display font-medium tracking-[-0.03em] text-foreground break-words tabular-nums">
         {text}
       </p>
       {sub && <p className="text-sm text-muted-foreground mt-0.5">{sub}</p>}

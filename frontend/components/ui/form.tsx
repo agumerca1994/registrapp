@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { startOfMonth, format, parseISO } from "date-fns";
+import { startOfMonth, format, parseISO, subDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { CalendarPanel, isoDate } from "@/components/ui/calendar";
@@ -17,9 +17,9 @@ export type { SelectOption };
 /**
  * Form fields, in the app's own clothes rather than the browser's.
  *
- * The house style is a 2px ink border — it's what buttons, chips and the hero
- * card are built from — so inputs use it too instead of the hairline default
- * that makes a form look like an unstyled page. Two native controls have to go
+ * Fields carry the same hairline border and radius as the rest of the paper
+ * (`FIELD`), so a form reads as part of the app and not as an unstyled page.
+ * Two native controls have to go
  * entirely, because the part of them that looks generic is the part CSS can't
  * reach:
  *
@@ -44,7 +44,7 @@ export type { SelectOption };
 // and stretches the field — and its whole column with it. With the floor at 0
 // the field keeps its share and the label truncates instead.
 export const FIELD =
-  "mt-1 w-full min-w-0 border-2 border-ink rounded-lg px-3 py-2 text-sm bg-card text-foreground";
+  "mt-1 w-full min-w-0 border border-border rounded-lg px-3.5 py-2.5 text-sm bg-card text-foreground";
 
 /**
  * The two-column layout a form modal uses. `[&>*]:min-w-0` applies the same
@@ -112,8 +112,8 @@ export interface SegmentedOption<T extends string> {
  * Es la forma de `CurrencyToggle` generalizada, porque la misma tira de botones
  * ya estaba copiada a mano en varios lados (el tipo de ítem en tarjetas, la
  * división en compartidos) y el formulario unificado de egresos suma más. Las
- * clases son exactamente las de `CurrencyToggle`, que ahora lo envuelve: así no
- * cambia ni un píxel de las pantallas que ya lo usan.
+ * clases son las de `CurrencyToggle`, que ahora lo envuelve. Cada píldora mide 36 px
+ * y su zona de toque 44: se extiende por el relleno de la tira.
  *
  * Una opción deshabilitada se muestra igual pero apagada, en vez de
  * desaparecer: "En cuotas" que se esconde al elegir dólares deja a la persona
@@ -126,16 +126,19 @@ export function SegmentedToggle<T extends string>({ value, onChange, options, ar
   ariaLabel: string;
   className?: string;
 }) {
+  const index = options.findIndex(o => o.value === value);
   return (
-    <div className={`flex gap-2 ${className}`} role="group" aria-label={ariaLabel}>
+    <div className={`relative flex p-1 rounded-full bg-ink/[0.06] ${className}`} role="group" aria-label={ariaLabel}>
+      {index >= 0 && (
+        <span aria-hidden="true" className="absolute top-1 bottom-1 left-1 rounded-full bg-white shadow-sm transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]"
+          style={{ width: `calc((100% - 0.5rem) / ${options.length})`, transform: `translateX(${index * 100}%)` }} />
+      )}
       {options.map(opt => (
         <button key={opt.value} type="button" aria-pressed={value === opt.value}
           disabled={opt.disabled}
           onClick={() => onChange(opt.value)}
-          className={`flex-1 py-1.5 text-xs rounded-full border-2 font-medium transition-colors ${
-            value === opt.value
-              ? "border-ink bg-primary text-primary-foreground"
-              : "border-transparent text-muted-foreground hover:bg-accent"
+          className={`relative flex-1 basis-0 min-h-[36px] px-2 text-xs rounded-full font-semibold transition-colors duration-200 before:absolute before:inset-x-0 before:-inset-y-1 before:content-[''] ${
+            value === opt.value ? "text-foreground" : "text-muted-foreground hover:text-foreground"
           }${opt.disabled ? " opacity-40 pointer-events-none" : ""}`}>
           {opt.label}
         </button>
@@ -227,7 +230,7 @@ export function MonthField({ value, onChange, min, max, required, disabled, clas
               return (
                 <button key={m} type="button" disabled={!!off}
                   onClick={() => { onChange(v); setOpen(false); }}
-                  className={`py-1.5 text-xs rounded-lg capitalize transition-colors disabled:opacity-30 ${
+                  className={`min-h-[40px] text-sm rounded-xl capitalize transition-colors disabled:opacity-30 ${
                     selected ? "bg-primary text-primary-foreground font-semibold" : "hover:bg-accent"
                   }`}>
                   {m}
@@ -283,6 +286,17 @@ export function DateField({ value, onChange, placeholder = "Elegí una fecha", r
             from={selected}
             to={selected}
             onPick={day => { onChange(isoDate(day)); setOpen(false); }}
+            footer={
+              <>
+                {/* Casi siempre es una de estas dos. */}
+                {[{ label: "Hoy", day: new Date() }, { label: "Ayer", day: subDays(new Date(), 1) }].map(({ label, day }) => (
+                  <button key={label} type="button" onClick={() => { onChange(isoDate(day)); setMonth(startOfMonth(day)); setOpen(false); }}
+                    className="flex-1 min-h-[40px] rounded-full bg-ink/[0.06] text-sm font-semibold text-foreground active:scale-[0.97] transition-transform duration-100">
+                    {label}
+                  </button>
+                ))}
+              </>
+            }
           />
         </div>,
         document.body,

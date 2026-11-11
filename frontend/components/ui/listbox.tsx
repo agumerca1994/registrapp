@@ -17,7 +17,7 @@ import { Check, ChevronDown } from "lucide-react";
  * in as `triggerClassName`.
  */
 
-export const PANEL = "rounded-2xl border-2 border-ink bg-card shadow-hero";
+export const PANEL = "rounded-[22px] border border-white/70 bg-card/95 backdrop-blur-xl shadow-flota animate-fade-in";
 
 /**
  * Anchors a portalled panel to a trigger. Measured after render rather than
@@ -107,7 +107,10 @@ export function Listbox({
   const { trigger, panel, pos, reset } = useAnchoredPanel(open, [options.length], "left");
   useDismiss(open, () => setOpen(false), [trigger, panel]);
 
-  const all: SelectOption[] = placeholder !== undefined
+  // En un campo obligatorio "nada" no es una respuesta: el placeholder queda sólo
+  // como texto del botón, no como una opción tildada en la lista. En un filtro
+  // (no obligatorio) la opción vacía es "sin filtro" y se ofrece.
+  const all: SelectOption[] = placeholder !== undefined && !required
     ? [{ value: "", label: placeholder }, ...options]
     : options;
   const current = all.find(o => o.value === value);

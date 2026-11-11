@@ -2,13 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { format } from "date-fns";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import api from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { getErrorMessage, pickCategoryColor } from "@/lib/utils";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions } from "@/components/movimientos/FormSheet";
 import { FIELD, FieldLabel, SegmentedToggle, SelectField } from "@/components/ui/form";
 import { isBusiness } from "@/lib/account";
 import type { Payee } from "@/components/business/types";
@@ -21,6 +20,7 @@ import BaseFields, { type CategoryOption } from "./BaseFields";
 import CardPaymentSection, { type CardsState } from "./CardPaymentSection";
 import SplitSection from "./SplitSection";
 import { useReaccion } from "@/components/brand/ToodReaccion";
+import { MotionList } from "@/components/ui/motion-list";
 import {
   buildRequest, isCard, isInstallment, newDraft, periodLabel, validateDraft,
   type CreditCardLite, type ExpenseDraft, type SplitRow,
@@ -213,17 +213,9 @@ export default function ExpenseFormModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-        <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg p-5 max-h-[92vh] overflow-y-auto"
-          onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-foreground">{create ? "Nuevo egreso" : "Editar egreso"}</h3>
-            <button type="button" onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <form noValidate onSubmit={handleSubmit} className="space-y-3">
+      <FormSheet title={create ? "Nuevo egreso" : "Editar egreso"} onClose={onClose}>
+          <form noValidate onSubmit={handleSubmit} className={FORM_SHEET_FORM}>
+            <div className={FORM_SHEET_BODY}>
             {business && create && <ProductTour tourId="expense-business" steps={EXPENSE_BUSINESS_STEPS} />}
             <BaseFields
               draft={draft}
@@ -249,7 +241,7 @@ export default function ExpenseFormModal({
 
             {create && (
               <>
-                <div className="space-y-2 pt-1">
+                <MotionList className="space-y-2 pt-1">
                   <FieldLabel>Pago</FieldLabel>
                   <SegmentedToggle
                     ariaLabel="Pago"
@@ -263,12 +255,12 @@ export default function ExpenseFormModal({
                   {isCard(draft) && cardsState && (
                     <CardPaymentSection draft={draft} set={set} cardsState={cardsState} onRetry={loadCards} />
                   )}
-                </div>
+                </MotionList>
 
                 {/* Una compra de mercadería que entra al stock ("12 Coca-Cola"):
                     sólo un negocio y sólo con pago simple (ver submit.ts). */}
                 {business && !isCard(draft) && (
-                  <div className="space-y-2" data-tour="expense-stock">
+                  <MotionList className="space-y-2" data-tour="expense-stock">
                     <FieldLabel>¿Entra al stock?</FieldLabel>
                     <SegmentedToggle
                       ariaLabel="¿Entra al stock?"
@@ -280,7 +272,7 @@ export default function ExpenseFormModal({
                       ]}
                     />
                     {draft.stock_lines.length > 0 && (
-                      <div className="space-y-2">
+                      <MotionList className="space-y-2">
                         {products.length === 0 && (
                           <p className="text-xs text-muted-foreground">
                             Todavía no hay productos: cargalos en Productos.
@@ -306,13 +298,13 @@ export default function ExpenseFormModal({
                           className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
                           <Plus className="w-3.5 h-3.5" /> Otro producto
                         </button>
-                      </div>
+                      </MotionList>
                     )}
-                  </div>
+                  </MotionList>
                 )}
 
                 {!business && (
-                <div className="space-y-2">
+                <MotionList className="space-y-2">
                   <FieldLabel>¿Lo compartís?</FieldLabel>
                   <SegmentedToggle
                     ariaLabel="¿Lo compartís?"
@@ -326,7 +318,7 @@ export default function ExpenseFormModal({
                   {draft.shared && (
                     <SplitSection draft={draft} set={set} onPick={idx => setPicker({ open: true, idx })} />
                   )}
-                </div>
+                </MotionList>
                 )}
               </>
             )}
@@ -335,24 +327,21 @@ export default function ExpenseFormModal({
               <p role="alert" className="text-xs text-rose-700 bg-rose-50 rounded-lg px-3 py-2">{error}</p>
             )}
 
-            <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-              <Button type="submit" disabled={saving || blockedByCards} data-tour="expense-save">
-                {saving ? "Guardando…" : "Guardar egreso"}
-              </Button>
             </div>
+            <FormSheetActions onCancel={onClose} saving={saving} disabled={blockedByCards}
+              label="Guardar egreso" data-tour="expense-save" />
           </form>
+      </FormSheet>
 
-          {/* Fuera del <form>: el buscador del picker no frena el Enter, y
-              adentro del form guardaría el egreso a mitad de elegir. */}
-          <ParticipantPicker
-            open={picker.open}
-            onClose={() => setPicker({ open: false, idx: null })}
-            onPick={p => applyPick(picker.idx, p)}
-            excludeUserIds={draft.rows.map(r => r.user_id).filter((id): id is number => id !== null)}
-          />
-        </Card>
-      </div>
+      {/* Fuera del <form>: el buscador del picker no frena el Enter, y adentro
+          del form guardaría el egreso a mitad de elegir. Y fuera de la hoja, para
+          ubicarse contra la pantalla (ver FormSheet). */}
+      <ParticipantPicker
+        open={picker.open}
+        onClose={() => setPicker({ open: false, idx: null })}
+        onPick={p => applyPick(picker.idx, p)}
+        excludeUserIds={draft.rows.map(r => r.user_id).filter((id): id is number => id !== null)}
+      />
 
       {/* Fuera del fondo del modal: si quedara adentro, tocar el fondo de este
           sub-modal subiría hasta el fondo del formulario y lo cerraría entero. */}

@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { X, ArrowUp, ArrowDown, Trash2, Plus, RotateCcw, ChevronRight } from "lucide-react";
+import { ArrowUp, ArrowDown, Trash2, Plus, RotateCcw } from "lucide-react";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/utils";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions } from "@/components/movimientos/FormSheet";
 import { FIELD, FormGrid, SelectField, SegmentedToggle } from "@/components/ui/form";
+import { MotionList } from "@/components/ui/motion-list";
 import {
   INCOME_TYPE_LABELS, KIND_LABELS, type FieldKind, type IncomeSource, type SourceField,
 } from "./types";
@@ -68,6 +68,7 @@ export function SourceFormModal({ source, onSaved, onClose }: {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     if (rows.some(r => !r.name.trim())) { setError("Cada campo necesita un nombre."); return; }
     const names = rows.map(r => r.name.trim().toLowerCase());
     if (new Set(names).size !== names.length) { setError("Hay dos campos con el mismo nombre."); return; }
@@ -89,19 +90,16 @@ export function SourceFormModal({ source, onSaved, onClose }: {
     }
   };
 
+  const ICON_BTN = "w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-[#4A4658] disabled:opacity-30 active:scale-[0.95] transition-transform duration-100";
+
   return (
-    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 space-y-4 max-h-[92vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-foreground">{editing ? "Editar fuente" : "Nueva fuente"}</h3>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
-        </div>
-        <form onSubmit={submit} className="space-y-4">
+    <FormSheet stacked title={editing ? "Editar fuente" : "Nueva fuente"} onClose={onClose}>
+      <form onSubmit={submit} className={FORM_SHEET_FORM}>
+        <div className={FORM_SHEET_BODY}>
           <FormGrid>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Nombre</label>
-              <input className={FIELD} placeholder="Sueldo" autoFocus={!editing}
+              <label htmlFor="source-name" className="text-xs font-medium text-muted-foreground">Nombre</label>
+              <input id="source-name" className={FIELD} placeholder="Sueldo" autoFocus={!editing}
                 value={name} onChange={e => setName(e.target.value)} required />
             </div>
             <div>
@@ -114,22 +112,28 @@ export function SourceFormModal({ source, onSaved, onClose }: {
           </FormGrid>
 
           <div className="space-y-2">
+            <div className="px-1.5">
+              <p className="text-[15px] font-medium text-foreground">Detalle del recibo</p>
+              <p className="text-sm leading-snug text-[#4A4658]">
+                {rows.length === 0
+                  ? "Opcional. Sin campos, cada ingreso de esta fuente guarda sólo el neto."
+                  : "Cada ingreso de esta fuente pide estos montos, y el neto sale de ellos."}
+              </p>
+            </div>
+            <MotionList className="space-y-2 empty:hidden">
             {rows.map((r, i) => (
-              <div key={r.key} className="rounded-xl border p-2.5 space-y-2" data-testid="source-field-row">
-                <div className="flex items-center gap-1.5">
-                  <input className={`${FIELD} mt-0 flex-1`} placeholder="Ej: Impuesto a las ganancias"
+              <div key={r.key} className="rounded-[22px] bg-white/70 border border-white/80 p-2.5 space-y-2" data-testid="source-field-row">
+                <div className="flex items-center gap-0.5">
+                  <input className={`${FIELD} !mt-0 flex-1 mr-1`} placeholder="Ej: Ganancias"
                     aria-label="Nombre del campo"
                     value={r.name} onChange={e => update(r.key, { name: e.target.value })} />
-                  <button type="button" onClick={() => move(i, -1)} disabled={i === 0} title="Subir"
-                    className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent disabled:opacity-30">
+                  <button type="button" onClick={() => move(i, -1)} disabled={i === 0} title="Subir" aria-label="Subir" className={ICON_BTN}>
                     <ArrowUp className="w-4 h-4" />
                   </button>
-                  <button type="button" onClick={() => move(i, 1)} disabled={i === rows.length - 1} title="Bajar"
-                    className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent disabled:opacity-30">
+                  <button type="button" onClick={() => move(i, 1)} disabled={i === rows.length - 1} title="Bajar" aria-label="Bajar" className={ICON_BTN}>
                     <ArrowDown className="w-4 h-4" />
                   </button>
-                  <button type="button" onClick={() => remove(r)} title="Quitar campo"
-                    className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-accent">
+                  <button type="button" onClick={() => remove(r)} title="Quitar campo" aria-label="Quitar campo" className={`${ICON_BTN} text-destructive`}>
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -141,40 +145,44 @@ export function SourceFormModal({ source, onSaved, onClose }: {
                     value: k, label: KIND_LABELS[k],
                     disabled: r.has_items && k !== r.kind,
                   }))} />
+                {/* Cambiarlo reinterpretaría en silencio la cuenta de meses cerrados. */}
+                {r.has_items && (
+                  <p className="px-1.5 text-xs text-[#4A4658]">Ya tiene montos cargados: si suma o resta no se puede cambiar.</p>
+                )}
               </div>
             ))}
+            </MotionList>
 
             <button type="button"
               onClick={() => setRows(rs => [...rs, { key: newKey(), name: "", kind: "add", has_items: false }])}
-              className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border-2 border-dashed text-sm text-muted-foreground hover:bg-accent">
+              className="w-full h-12 flex items-center justify-center gap-1.5 rounded-[22px] border border-dashed border-muted-foreground/50 text-[15px] font-semibold text-foreground active:scale-[0.98] transition-transform duration-100">
               <Plus className="w-4 h-4" /> Agregar campo
             </button>
 
             {archived.length > 0 && (
-              <div className="pt-1 space-y-1">
-                <p className="text-xs text-muted-foreground">Quitados</p>
-                {archived.map(r => (
-                  <div key={r.key} className="flex items-center justify-between gap-2 text-sm px-2.5 py-1.5 rounded-lg bg-muted">
-                    <span className="truncate text-muted-foreground">{r.name} <span className="text-xs">({KIND_LABELS[r.kind]})</span></span>
-                    <button type="button" onClick={() => restore(r)}
-                      className="flex items-center gap-1 text-xs text-primary hover:underline shrink-0">
-                      <RotateCcw className="w-3.5 h-3.5" /> Restaurar
-                    </button>
-                  </div>
-                ))}
+              <div className="pt-1">
+                <p className="px-1.5 text-[15px] font-medium text-foreground">Quitados</p>
+                <p className="px-1.5 text-sm leading-snug text-[#4A4658]">Los ingresos ya cargados conservan sus montos.</p>
+                <div className="mt-1 divide-y divide-ink/[0.08]">
+                  {archived.map(r => (
+                    <div key={r.key} className="flex items-center justify-between gap-2 px-1.5 min-h-[44px]">
+                      <span className="truncate text-[15px] text-foreground">{r.name} <span className="text-sm text-[#4A4658]">({KIND_LABELS[r.kind]})</span></span>
+                      <button type="button" onClick={() => restore(r)}
+                        className="min-h-[44px] flex items-center gap-1 text-sm font-semibold text-[#3B2FB3] shrink-0">
+                        <RotateCcw className="w-3.5 h-3.5" /> Restaurar
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
-
-          <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-            <Button type="submit" disabled={saving}>{saving ? "Guardando…" : editing ? "Guardar fuente" : "Crear fuente"}</Button>
-          </div>
-        </form>
-      </Card>
-    </div>
+          {error && <p role="alert" className="text-sm text-rose-800 bg-rose-50 rounded-xl px-3 py-2">{error}</p>}
+        </div>
+        <FormSheetActions onCancel={onClose} saving={saving} label={editing ? "Guardar fuente" : "Crear fuente"} />
+      </form>
+    </FormSheet>
   );
 }
 
@@ -187,40 +195,36 @@ export function SourcesListModal({ sources, onEdit, onNew, onClose }: {
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
-      <Card className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 space-y-4 max-h-[92vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-foreground">Fuentes de ingreso</h3>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground p-1"><X className="w-5 h-5" /></button>
-        </div>
+    <FormSheet title="Fuentes de ingreso" onClose={onClose}>
+      <div className={FORM_SHEET_BODY}>
         {sources.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Todavía no hay fuentes.</p>
+          <p className="px-1.5 py-2 text-sm text-[#4A4658]">Todavía no hay fuentes. Creá la primera, por ejemplo tu sueldo.</p>
         ) : (
-          <div className="divide-y rounded-xl border">
+          <div className="divide-y divide-ink/[0.08]">
             {sources.map(s => {
               const active = (s.fields ?? []).filter(f => f.is_active);
+              const type = INCOME_TYPE_LABELS[s.income_type];
+              const detail = active.length === 0 ? "sólo neto" : active.map(f => f.name).join(", ");
               return (
                 <button key={s.id} type="button" onClick={() => onEdit(s)}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-accent first:rounded-t-xl last:rounded-b-xl">
-                  <div className="flex-1 min-w-0">
-                    <span className="block text-sm font-medium text-foreground truncate">{s.name}</span>
-                    <span className="block text-xs text-muted-foreground truncate">
-                      {INCOME_TYPE_LABELS[s.income_type]} · {active.length === 0
-                        ? "sólo neto"
-                        : active.map(f => f.name).join(", ")}
-                    </span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+                  className="w-full min-h-[56px] px-1.5 py-2 text-left active:scale-[0.99] transition-transform duration-100">
+                  <span className="block text-[15.5px] font-semibold text-foreground truncate">{s.name}</span>
+                  {/* "Sueldo" de tipo "Sueldo" no se dice dos veces. */}
+                  <span className="block text-sm text-[#4A4658] truncate">
+                    {type && type !== s.name ? `${type} · ${detail}` : detail}
+                  </span>
                 </button>
               );
             })}
           </div>
         )}
-        <Button type="button" variant="outline" className="w-full" onClick={onNew}>
+      </div>
+      <div className="shrink-0 px-3.5 pt-2.5 pb-3.5 border-t border-ink/[0.08]">
+        <button type="button" onClick={onNew}
+          className="w-full h-[52px] rounded-full bg-ink text-background font-semibold text-[15.5px] inline-flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform duration-100">
           <Plus className="w-4 h-4" /> Nueva fuente
-        </Button>
-      </Card>
-    </div>
+        </button>
+      </div>
+    </FormSheet>
   );
 }

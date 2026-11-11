@@ -66,7 +66,7 @@ export default function PrivacidadPage() {
           "Tu cuenta de Google: nombre y dirección de correo. No recibimos ni guardamos tu contraseña de Google.",
           "Tu perfil: nombre, apellido, alias y el nombre de tu hogar o negocio.",
           "Tu número de WhatsApp, si lo vinculás.",
-          "Lo que cargás en la app: ingresos y su detalle, gastos, categorías, tarjetas y sus resúmenes, cuotas, operaciones en dólares, hipoteca, recordatorios, gastos compartidos, contactos de tu agenda, y en un negocio: ventas, cierres de caja, productos, stock, proveedores y empleados.",
+          "Lo que cargás en la app: ingresos y su detalle, gastos, categorías, tarjetas y sus resúmenes, cuotas, operaciones en dólares, créditos y sus cuotas, objetivos de ahorro y sus aportes, inversiones y sus valores, recordatorios, gastos compartidos, contactos de tu agenda, y en un negocio: ventas, cierres de caja, productos, stock, proveedores y empleados.",
           "Los mensajes que le mandás al bot de WhatsApp, y los archivos que le mandás para cargar (comprobantes, fotos, resúmenes en PDF).",
           "Los resúmenes de tarjeta que subís para compararlos con lo cargado.",
         ]} />

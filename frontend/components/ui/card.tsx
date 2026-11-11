@@ -2,15 +2,14 @@ import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
-// v3 design hierarchy: exactly ONE "hero" card per screen (the single most
-// important summary — e.g. the Balance card on Dashboard, the loan summary
-// on Hipoteca). Everything else uses "flat". Screens with no obvious hero
-// (Gastos compartidos, Tarjetas, Configuración, Variables macro) should use
-// "flat" everywhere and simply have no hero card at all.
-const cardVariants = cva("rounded-2xl bg-card text-card-foreground p-4 md:p-5", {
+// At most ONE "hero" card per screen, and only where there is no violet block
+// on top (`components/ui/glass.tsx`). Everything else uses "flat". Screens with no
+// obvious hero (Gastos compartidos, Tarjetas, Configuración, Variables macro)
+// should use "flat" everywhere and simply have no hero card at all.
+const cardVariants = cva("rounded-3xl bg-card text-card-foreground p-4 md:p-5", {
   variants: {
     variant: {
-      hero: "border-[2.5px] border-ink shadow-hero",
+      hero: "border border-border shadow-hero",
       flat: "border border-border",
     },
   },

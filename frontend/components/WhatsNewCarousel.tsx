@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { usePendingShared } from "@/contexts/PendingSharedContext";
 import { useTourRunning } from "@/components/ProductTour";
 import { features } from "@/lib/features";
+import { useOverlay } from "@/lib/overlay";
 import { cn } from "@/lib/utils";
 
 /**
@@ -145,6 +146,8 @@ export function WhatsNewCarousel() {
     const i = Math.round(el.scrollLeft / el.clientWidth);
     if (i !== active) setActive(i);
   };
+
+  useOverlay(visible);
 
   if (!visible) return null;
 

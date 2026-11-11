@@ -86,7 +86,7 @@ test("detalle por fuente: neto automático y quitar un campo no toca lo cargado"
     await form.getByLabel("Bruto", { exact: true }).fill("1.000.000");
     await form.getByLabel("Bono", { exact: true }).fill("200.000");
     await form.getByLabel("Ganancias", { exact: true }).fill("150.000,50");
-    await expect(form.getByLabel("Neto")).toHaveValue("1049999.50");
+    await expect(form.getByLabel("Neto")).toHaveValue("1.049.999,50");
     await form.getByLabel("Notas").fill(note);
     await page.getByRole("button", { name: "Guardar" }).click();
     await expect(page.getByRole("heading", { name: "Nuevo ingreso" })).toBeHidden();
@@ -119,7 +119,8 @@ test("detalle por fuente: neto automático y quitar un campo no toca lo cargado"
 
     // 3. El ingreso viejo conserva su Bono…
     await page.goto("/income");
-    await page.getByRole("button", { name: new RegExp(SOURCE) }).first().click();
+    // La fila de la tabla, que empieza con su fecha: el desglose del mes también tiene un botón con la fuente.
+    await page.getByRole("button", { name: new RegExp(`^\\d+ \\S+( \\d+)? ${SOURCE}`) }).first().click();
     await expect(page.getByText("(quitado de la fuente)")).toBeVisible();
     await expect(page.getByText("Bono")).toBeVisible();
 

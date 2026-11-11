@@ -91,7 +91,7 @@ async function authenticate(page: import("@playwright/test").Page, opts: {
   // Joyride overlay — this file is the one place new tourIds need adding.
   await page.evaluate(() => {
     for (const tourId of [
-      "dashboard-intro", "income-intro", "expenses-intro",
+      "dashboard-intro", "income-intro", "expenses-intro", "shared-intro", "creditos-intro", "ahorro-intro", "inversiones-intro", "inversion-form", "objetivo-form",
       "sales-intro", "sale-form", "close-form", "products-intro", "product-form", "payees-intro", "expense-business",
       "home-intro", "cards-intro", "calendar-intro", "expenses-business-intro",
     ]) {
