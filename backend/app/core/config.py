@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     ESTADISTICAS_BCRA_TOKEN: str = ""
     ENVIRONMENT: str = "development"
     EVOLUTION_API_URL: str = ""
+    # Evolution por la red interna de Docker (`http://evolution-api-evolution-api:8080`).
+    # Con valor, reemplaza a EVOLUTION_API_URL en todas las llamadas: la dirección
+    # pública depende del DNS de afuera, y un corte de unos segundos (2026-11-13)
+    # dejó al bot sin bajar una foto. La interna la resuelve el DNS de Docker.
+    EVOLUTION_INTERNAL_URL: str = ""
     EVOLUTION_API_KEY: str = ""
     EVOLUTION_INSTANCE: str = ""
     WHATSAPP_WEBHOOK_SECRET: str = ""
@@ -70,6 +75,9 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def derive_urls(self) -> "Settings":
+        if self.EVOLUTION_INTERNAL_URL:
+            self.EVOLUTION_API_URL = self.EVOLUTION_INTERNAL_URL.rstrip("/")
+
         if self.APP_DOMAIN and self.FRONTEND_URL == "http://localhost:3000":
             self.FRONTEND_URL = f"https://{self.APP_DOMAIN}"
 

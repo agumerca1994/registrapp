@@ -28,6 +28,10 @@
       # Easypanel) y app.tood.com.ar. Se suman acá para no depender de editar la variable a mano.
       ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:3000},https://app.tood.com.ar,https://tood.com.ar,https://beta.tood.com.ar"
       EVOLUTION_API_URL: ${EVOLUTION_API_URL:-}
+      # Evolution por la red interna (los dos están en `easypanel`): no pasa por el DNS público, que
+      # el 2026-11-13 se cortó unos segundos y el bot no pudo bajar una foto. Para volver a la
+      # dirección pública, cargarla vacía en Easypanel (`-` y no `:-`: vacía la apaga).
+      EVOLUTION_INTERNAL_URL: ${EVOLUTION_INTERNAL_URL-http://evolution-api-evolution-api:8080}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-}
       WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET:-}
