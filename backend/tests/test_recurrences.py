@@ -246,3 +246,24 @@ async def test_usd_installments_still_rejected():
             description="X", item_date=date(2026, 11, 1), item_type="installment",
             amount=Decimal("10"), currency="USD", installment_count=3,
         )
+
+
+async def test_direct_pending_shows_in_upcoming_and_card_pending_does_not(db):
+    """Lo que viene en Inicio: el recurrente directo aparece; el de tarjeta ya
+    está en el total de su resumen y no se suma de nuevo."""
+    from app.services.analytics import _upcoming_items
+
+    cat = await _cat(db)
+    await _direct(db, cat, when=date(2026, 11, 11))
+    card = CreditCard(tenant_id=1, user_id=1, bank="BBVA", alias="Visa", last_4_digits="4919")
+    db.add(card)
+    await db.flush()
+    stmt = await find_or_create_statement(card, 2026, 11, 1, db)
+    await create_item_in_statement(stmt, card, CreditCardItemCreate(
+        description="SPOTIFY", category_id=cat.id, item_date=date(2026, 11, 3),
+        item_type="recurring", amount=Decimal("4500"),
+    ), USER, db)
+
+    items = await _upcoming_items(db, 1, date(2026, 11, 20), date(2027, 1, 4))
+    recurring = [i for i in items if i.kind == "recurring"]
+    assert [(i.title, i.date, i.amount) for i in recurring] == [("Gimnasio", date(2026, 12, 11), Decimal("10000"))]

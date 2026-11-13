@@ -932,7 +932,7 @@ def mortgage_payment_date(year: int, month: int, payment_day: int | None) -> dat
 
 
 class UpcomingItem(BaseModel):
-    kind: str  # card | mortgage | reminder
+    kind: str  # card | mortgage | reminder | recurring
     title: str
     date: date
     amount: Decimal | None = None  # None en un recordatorio: no tiene monto
@@ -1006,6 +1006,34 @@ async def _upcoming_items(
         for rows in reminders.values()
         for r in rows
     ]
+
+    # Los recurrentes directos a confirmar (alquiler, gimnasio). Los de tarjeta
+    # no: ya están dentro del total de su resumen, y sumarlos acá los contaría
+    # dos veces.
+    from app.models.recurrence import ENTRY_PENDING
+
+    pending = await db.execute(
+        select(ExpenseEntry.description, ExpenseEntry.expense_date, ExpenseEntry.amount, ExpenseEntry.currency)
+        .outerjoin(CreditCardItem, CreditCardItem.expense_entry_id == ExpenseEntry.id)
+        .where(
+            ExpenseEntry.tenant_id == tenant_id,
+            ExpenseEntry.recurrence_status == ENTRY_PENDING,
+            CreditCardItem.id.is_(None),
+            ExpenseEntry.expense_date >= today,
+            ExpenseEntry.expense_date < until,
+        )
+    )
+    for description, when, amount, currency in pending.all():
+        usd = currency == "USD"
+        items.append(UpcomingItem(
+            kind="recurring",
+            title=description or "Gasto recurrente",
+            date=when,
+            amount=Decimal(0) if usd else amount,
+            amount_usd=amount if usd else Decimal(0),
+            estimated=True,
+            detail="Recurrente, a confirmar",
+        ))
 
     for loan in await credits.active_loans(db, tenant_id):
         # La cuota del mes si todavía no se registró; si ya está, la que sigue.

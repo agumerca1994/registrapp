@@ -59,7 +59,7 @@ const tourSteps = (hasPeriods: boolean): Step[] => [
 ];
 
 interface Upcoming {
-  kind: "card" | "mortgage" | "reminder";
+  kind: "card" | "mortgage" | "reminder" | "recurring";
   title: string;
   date: string;
   amount: string | null;
@@ -231,9 +231,26 @@ function SpendPanel({ t }: { t: Today }) {
   );
 }
 
+interface OverdueRecurrence {
+  entry_id: number; description: string | null; amount: string; currency: string; date: string;
+  card_id: number | null; statement_id: number | null; item_id: number | null; overdue: boolean;
+}
+
+/** Los recurrentes cuya fecha ya pasó sin confirmar. No vencen: se piden acá hasta resolverlos. */
+function useOverdueRecurrences(): OverdueRecurrence[] {
+  const [rows, setRows] = useState<OverdueRecurrence[]>([]);
+  useEffect(() => {
+    api.get<OverdueRecurrence[]>("/recurrences/pending")
+      .then(({ data }) => setRows(data.filter(r => r.overdue)))
+      .catch(() => setRows([]));
+  }, []);
+  return rows;
+}
+
 function ToResolve() {
   const { pending: shared } = usePendingShared();
   const { pending: statements } = usePendingStatements();
+  const recurring = useOverdueRecurrences();
   const rows = [
     ...shared.map(s => {
       const mine = s.splits.find(split => split.mine);
@@ -253,6 +270,15 @@ function ToResolve() {
       sub: s.pending_count > 0
         ? `${s.pending_count} ${s.pending_count === 1 ? "diferencia" : "diferencias"} con lo cargado`
         : "Falta elegir la tarjeta",
+    })),
+    ...recurring.map(r => ({
+      key: `c${r.entry_id}`,
+      // Se confirma en su ficha: el resumen si es de tarjeta, Egresos si no.
+      href: r.card_id && r.statement_id
+        ? `/tarjetas/${r.card_id}/${r.statement_id}?item=${r.item_id}`
+        : `/expenses?mes=${r.date.slice(0, 7)}&abrir=${r.entry_id}`,
+      title: `Confirmá ${r.description || "un gasto recurrente"}`,
+      sub: `Era el ${format(parseISO(r.date), "d 'de' MMMM", { locale: es })}: ${r.currency === "USD" ? formatUSD(r.amount) : formatARSRound(r.amount)}`,
     })),
   ];
   if (rows.length === 0) return null;
@@ -290,7 +316,7 @@ function upcomingDetail(item: Upcoming, today: string): string {
   return `Vence en ${days} días`;
 }
 
-const UPCOMING_HREF = { card: "/tarjetas", mortgage: "/creditos", reminder: "/calendario" };
+const UPCOMING_HREF = { card: "/tarjetas", mortgage: "/creditos", reminder: "/calendario", recurring: "/expenses" };
 
 function WhatsNext({ t }: { t: Today }) {
   return (

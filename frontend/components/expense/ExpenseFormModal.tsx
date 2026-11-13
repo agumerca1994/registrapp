@@ -7,7 +7,7 @@ import api from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAmountsHidden } from "@/contexts/PrivacyContext";
 import { getErrorMessage, pickCategoryColor } from "@/lib/utils";
-import { FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions } from "@/components/movimientos/FormSheet";
+import { FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions, SheetSwitch } from "@/components/movimientos/FormSheet";
 import { FIELD, FieldLabel, SegmentedToggle, SelectField } from "@/components/ui/form";
 import { isBusiness } from "@/lib/account";
 import type { Payee } from "@/components/business/types";
@@ -97,6 +97,8 @@ export default function ExpenseFormModal({
       }
       // En dólares no hay cuotas: vuelve solo a un pago.
       if (next.currency === "USD" && next.plan === "installment") next.plan = "single";
+      // Cuotas o compartido y recurrente no van juntos: el interruptor se apaga.
+      if (next.recurring && ((next.pay === "card" && next.plan === "installment") || next.shared)) next.recurring = false;
       // Con tarjeta no hay stock (ver submit.ts): no puede quedar colgado.
       if (next.pay === "card" && next.stock_lines.length) next.stock_lines = [];
       return next;
@@ -224,7 +226,7 @@ export default function ExpenseFormModal({
               onNewCategory={() => setShowCatForm(true)}
               hideCategory={create && isCard(draft) && draft.currency === "USD"}
               amountLabel={create && isInstallment(draft) ? "Monto por cuota" : "Monto"}
-              descriptionRequired={create && (isCard(draft) || draft.shared)}
+              descriptionRequired={create && (isCard(draft) || draft.shared || draft.recurring)}
               leading={business ? (
                 <div data-tour="expense-payee">
                   <label className="text-xs font-medium text-muted-foreground">
@@ -256,6 +258,25 @@ export default function ExpenseFormModal({
                     <CardPaymentSection draft={draft} set={set} cardsState={cardsState} onRetry={loadCards} />
                   )}
                 </MotionList>
+
+                {/* Recurrente: nace confirmado y el mes siguiente queda a confirmar
+                    con este monto. Con cuotas o compartido no se puede (todavía). */}
+                <SheetSwitch
+                  checked={draft.recurring}
+                  disabled={isInstallment(draft) || draft.shared}
+                  onChange={() => set({ recurring: !draft.recurring })}
+                  title="Se repite todos los meses"
+                >
+                  <span className="block text-[13px] leading-snug text-muted-foreground">
+                    {isInstallment(draft)
+                      ? "En cuotas no se puede: las cuotas ya se repiten solas."
+                      : draft.shared
+                        ? "Compartido todavía no se puede hacer recurrente."
+                        : draft.recurring
+                          ? "El mes que viene aparece con este monto para que lo confirmes o lo cambies."
+                          : "Una suscripción, el alquiler, el gimnasio."}
+                  </span>
+                </SheetSwitch>
 
                 {/* Una compra de mercadería que entra al stock ("12 Coca-Cola"):
                     sólo un negocio y sólo con pago simple (ver submit.ts). */}

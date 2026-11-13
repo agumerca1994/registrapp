@@ -53,6 +53,8 @@ export interface ExpenseDraft {
 
   shared: boolean;
   splitType: SplitType;
+  /** "Se repite todos los meses": nace la serie y el mes siguiente queda a confirmar. */
+  recurring: boolean;
   rows: SplitRow[];
 
   /** Proveedor o empleado de un negocio; "" = ninguno. Un hogar no lo usa. */
@@ -87,6 +89,7 @@ export function newDraft(today: string, self: SplitRow | null): ExpenseDraft {
     installments: "",
     shared: false,
     splitType: "equal",
+    recurring: false,
     rows: self ? [self] : [],
     payee_id: "",
     stock_lines: [],
@@ -176,11 +179,15 @@ export function validateDraft(d: ExpenseDraft, ctx: ValidateCtx): string | null 
 
   if (ctx.mode === "edit") return null;
 
-  if ((isCard(d) || d.shared) && !d.description.trim()) {
+  if ((isCard(d) || d.shared || d.recurring) && !d.description.trim()) {
     return isCard(d)
       ? "Poné una descripción: es el nombre con el que aparece en el resumen."
-      : "Poné una descripción: es lo que ven las personas con las que lo compartís.";
+      : d.shared
+        ? "Poné una descripción: es lo que ven las personas con las que lo compartís."
+        : "Poné una descripción: es el nombre con el que vuelve cada mes.";
   }
+  if (d.recurring && isInstallment(d)) return "Un gasto en cuotas no puede ser recurrente.";
+  if (d.recurring && d.shared) return "Un gasto recurrente todavía no se puede compartir.";
 
   if (isCard(d)) {
     if (ctx.cards && ctx.cards.length === 0) return "Todavía no cargaste ninguna tarjeta.";
@@ -188,7 +195,7 @@ export function validateDraft(d: ExpenseDraft, ctx: ValidateCtx): string | null 
     if (!d.card_id) return "Elegí la tarjeta.";
     if (!/^\d{4}-\d{2}$/.test(d.period)) return "Elegí el mes del resumen.";
     if (d.plan === "installment") {
-      if (d.currency === "USD") return "En dólares sólo se puede cargar en un pago.";
+      if (d.currency === "USD") return "En dólares no se puede cargar en cuotas.";
       const n = installmentCount(d);
       if (n < MIN_INSTALLMENTS || n > MAX_INSTALLMENTS) {
         return `La cantidad de cuotas tiene que estar entre ${MIN_INSTALLMENTS} y ${MAX_INSTALLMENTS}.`;
@@ -257,7 +264,7 @@ export function buildRequest(
         year, month,
         description: d.description.trim(),
         item_date: d.expense_date,
-        item_type: installment ? "installment" : "single",
+        item_type: installment ? "installment" : d.recurring ? "recurring" : "single",
         amount,
         currency: d.currency,
         // En dólares la categoría la pone el backend ("Consumo en dólares").
@@ -292,6 +299,9 @@ export function buildRequest(
     : {};
   return {
     kind: "simple", method: "post", url: "/expenses/entries",
-    body: { amount, description: d.description, expense_date: d.expense_date, notes: d.notes, currency: d.currency, ...category, ...payee, ...stock },
+    body: {
+      amount, description: d.description, expense_date: d.expense_date, notes: d.notes, currency: d.currency,
+      ...category, ...payee, ...stock, ...(d.recurring ? { recurring: true } : {}),
+    },
   };
 }

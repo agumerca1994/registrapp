@@ -20,6 +20,7 @@ import { MovimientosTabs } from "@/components/MovimientosTabs";
 import { BreakdownStrip } from "@/components/movimientos/BreakdownStrip";
 import { EntrySheet, SheetActions, SheetLink, SheetRow } from "@/components/movimientos/EntrySheet";
 import { LedgerRow, LedgerTotal, SelectionBar, ledgerAmount } from "@/components/movimientos/Ledger";
+import { PendingChip, RecurrencePanel, type RecurrenceStatus } from "@/components/recurrences/RecurrencePanel";
 import { useMovimientos } from "@/components/movimientos/MovimientosContext";
 import { useNuevo } from "@/lib/nuevo";
 import type { Step } from "react-joyride";
@@ -67,11 +68,22 @@ interface ExpenseEntry {
   payment_method?: string; entity?: string; currency?: string;
   payee_id?: number | null;
   user_id?: number | null; source?: string | null;
+  recurrence_id?: number | null; recurrence_status?: RecurrenceStatus | null;
   category: Category;
 }
 
 // La cuota de un crédito la genera la sincronización: nadie la cargó.
 const loaderId = (entry: ExpenseEntry) => (entry.source === "mortgage" ? null : entry.user_id);
+
+/** "Incluye $ 9.500 a confirmar": lo recurrente que todavía no se confirmó ya suma en el total. */
+function pendingNote(rows: ExpenseEntry[]): string | undefined {
+  const pending = rows.filter(e => e.recurrence_status === "pending");
+  if (!pending.length) return undefined;
+  const ars = pending.filter(e => e.currency !== "USD").reduce((s, e) => s + Number(e.amount), 0);
+  const usd = pending.filter(e => e.currency === "USD").reduce((s, e) => s + Number(e.amount), 0);
+  const parts = [ars > 0 ? ledgerAmount(ars) : null, usd > 0 ? ledgerAmount(usd, "USD") : null].filter(Boolean);
+  return `Incluye ${parts.join(" y ")} a confirmar`;
+}
 
 type SortKey = "date" | "category" | "amount";
 const SORT_LABELS: Record<SortKey, string> = {
@@ -83,7 +95,7 @@ const SORT_LABELS: Record<SortKey, string> = {
 // creating what you're missing shouldn't cost you the form you already began.
 
 function EntryDetailModal({
-  entry, payeeName, loadedBy, onEdit, onDelete, onViewStatement, onViewMortgage, onClose,
+  entry, payeeName, loadedBy, onEdit, onDelete, onViewStatement, onViewMortgage, onRecurrenceChanged, onClose,
 }: {
   entry: ExpenseEntry;
   payeeName?: string;
@@ -92,9 +104,19 @@ function EntryDetailModal({
   onDelete: () => void;
   onViewStatement: () => void;
   onViewMortgage: () => void;
+  onRecurrenceChanged: () => void;
   onClose: () => void;
 }) {
   const isCreditCard = entry.payment_method === "tarjeta_credito";
+  const actions = isCreditCard ? (
+    <SheetLink note="Es de tarjeta: se edita o se elimina desde su resumen." label="Ver en resumen" onClick={onViewStatement} />
+  ) : entry.source === "mortgage" ? (
+    <SheetLink note="Es la cuota de un crédito: la registra la app y se maneja desde Créditos." label="Ver créditos" onClick={onViewMortgage} />
+  ) : (
+    // Un mes a confirmar no se elimina suelto: cortaría la cadena sin decidir el
+    // siguiente. Para eso está "Este mes no", que pregunta.
+    <SheetActions noun="egreso" onEdit={onEdit} onDelete={entry.recurrence_status === "pending" ? undefined : onDelete} />
+  );
   return (
     <EntrySheet
       date={entry.expense_date}
@@ -102,13 +124,14 @@ function EntryDetailModal({
       badge={{ label: entry.category.name, color: entry.category.color || "#6366f1" }}
       amount={entry.currency === "USD" ? formatUSD(entry.amount) : formatARS(entry.amount)}
       onClose={onClose}
-      footer={isCreditCard ? (
-        <SheetLink note="Es de tarjeta: se edita o se elimina desde su resumen." label="Ver en resumen" onClick={onViewStatement} />
-      ) : entry.source === "mortgage" ? (
-        <SheetLink note="Es la cuota de un crédito: la registra la app y se maneja desde Créditos." label="Ver créditos" onClick={onViewMortgage} />
-      ) : (
-        <SheetActions noun="egreso" onEdit={onEdit} onDelete={onDelete} />
-      )}
+      footer={entry.recurrence_id && entry.recurrence_status ? (
+        // Confirmar también un recurrente de tarjeta desde acá: es el mismo mes.
+        <div className="space-y-2.5">
+          <RecurrencePanel entryId={entry.id} recurrenceId={entry.recurrence_id} status={entry.recurrence_status}
+            amount={entry.amount} currency={entry.currency} date={entry.expense_date} onChanged={onRecurrenceChanged} />
+          {actions}
+        </div>
+      ) : actions}
     >
       {isCreditCard && <SheetRow label="Tarjeta">{entry.entity}</SheetRow>}
       {payeeName && <SheetRow label="Pagado a">{payeeName}</SheetRow>}
@@ -138,7 +161,10 @@ export default function ExpensesPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [detailEntry, setDetailEntry] = useState<ExpenseEntry | null>(null);
 
-  const { year, month, prev, next, periodLabel, summary, refresh: refreshMonth, setSearching } = useMovimientos();
+  const { year, month, prev, next, goTo, periodLabel, summary, refresh: refreshMonth, setSearching } = useMovimientos();
+  // `?abrir=<id>` (un recurrente a confirmar, desde Inicio o el calendario):
+  // se abre su ficha apenas el gasto aparece en la lista de su mes.
+  const [openId, setOpenId] = useState<number | null>(null);
   // Lo comprado este mes que todavía no salió: la tabla cuenta por fecha de pago,
   // y sin esto una compra con tarjeta recién cargada no se ve por ningún lado.
   const [later, setLater] = useState<ExpenseEntry[]>([]);
@@ -235,6 +261,14 @@ export default function ExpensesPage() {
     const params = new URLSearchParams(window.location.search);
     // `?payee_id=` viene de Proveedores y empleados ("ver sus gastos"): entra
     // con el filtro puesto y el panel abierto, así se ve por qué la lista es esa.
+    const mes = params.get("mes");
+    const abrir = Number(params.get("abrir"));
+    if (mes && /^\d{4}-\d{2}$/.test(mes)) {
+      const [y, m] = mes.split("-").map(Number);
+      goTo(y, m);
+    }
+    if (abrir > 0) setOpenId(abrir);
+    if (mes || abrir) router.replace("/expenses");
     const payee = params.get("payee_id");
     if (payee) {
       setPayeeFilter(payee);
@@ -300,6 +334,12 @@ export default function ExpensesPage() {
   };
 
   const shown = pickedCategory ? entries.filter(e => e.category.name === pickedCategory) : entries;
+
+  useEffect(() => {
+    if (openId === null) return;
+    const hit = entries.find(e => e.id === openId) ?? later.find(e => e.id === openId);
+    if (hit) { setDetailEntry(hit); setOpenId(null); }
+  }, [openId, entries, later]);
   const selectableEntries = shown.filter(e => e.payment_method !== "tarjeta_credito" && e.source !== "mortgage");
 
   const pickCategory = (name: string | null) => {
@@ -346,6 +386,7 @@ export default function ExpensesPage() {
         title={entry.description || entry.category.name}
         sub={<>
           <span className="flex items-center gap-1.5 min-w-0">
+            {entry.recurrence_status === "pending" && <PendingChip />}
             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.category.color || "#6366f1" }} />
             <span className="truncate">{detail || entry.category.name}</span>
           </span>
@@ -553,6 +594,7 @@ export default function ExpensesPage() {
             label={pickedCategory ? `Total de ${pickedCategory}` : "Total"}
             ars={shown.filter(e => e.currency !== "USD").reduce((s, e) => s + Number(e.amount), 0)}
             usd={shown.filter(e => e.currency === "USD").reduce((s, e) => s + Number(e.amount), 0)}
+            note={pendingNote(shown)}
           />
         )}
       </MotionList>
@@ -588,6 +630,7 @@ export default function ExpensesPage() {
           onDelete={() => handleDelete(detailEntry.id)}
           onViewStatement={() => handleViewStatement(detailEntry.id)}
           onViewMortgage={() => router.push("/creditos")}
+          onRecurrenceChanged={() => { setDetailEntry(null); load(); }}
           onClose={() => setDetailEntry(null)}
         />
       )}

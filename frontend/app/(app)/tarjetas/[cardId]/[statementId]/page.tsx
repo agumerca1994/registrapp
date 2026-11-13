@@ -28,6 +28,7 @@ import { EntrySheet, SheetActions, SheetLink, SheetRow } from "@/components/movi
 import { AmountField, FORM_SHEET_BODY, FORM_SHEET_FORM, FormSheet, FormSheetActions } from "@/components/movimientos/FormSheet";
 import { LedgerRow, ledgerAmount } from "@/components/movimientos/Ledger";
 import { ErrorNote, shortDate, SubHeader, totalsByCurrency } from "@/components/tarjetas/parts";
+import { PendingChip, RecurrencePanel, type RecurrenceStatus } from "@/components/recurrences/RecurrencePanel";
 
 const MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -36,6 +37,7 @@ interface CardItem {
   id: number; description: string; category_id: number; item_date: string; item_type: string;
   amount: number; installment_count?: number; installment_number?: number;
   purchase_total?: number; installment_group_id?: number; installment_root_statement_id?: number; shared_expense_id?: number; expense_entry_id?: number; currency?: string; user_id?: number | null;
+  recurrence_id?: number | null; recurrence_status?: RecurrenceStatus | null;
   category: { id: number; name: string; color?: string };
 }
 interface Statement {
@@ -69,7 +71,8 @@ const asTyped = (n: number) => n.toLocaleString("es-AR", { minimumFractionDigits
 // normal sólo llena la fila de ruido.
 function itemMarks(item: CardItem): string[] {
   const marks: string[] = [];
-  if (item.item_type === "recurring") marks.push("Recurrente");
+  // A confirmar lo dice el chip de la fila; "Recurrente" sólo cuando ya está confirmado.
+  if (item.item_type === "recurring" && item.recurrence_status !== "pending") marks.push("Recurrente");
   else if (item.item_type === "installment") marks.push(`Cuota ${item.installment_number}/${item.installment_count}`);
   if (item.shared_expense_id) marks.push("Compartido");
   return marks;
@@ -80,7 +83,7 @@ function itemMarks(item: CardItem): string[] {
  * acá (el backend responde 400: "ve al resumen de la cuota 1"), así que en vez de
  * las acciones lleva hasta la original.
  */
-function ItemSheet({ item, loadedBy, onEdit, onDelete, onShare, onOriginal, onShared, onClose }: {
+function ItemSheet({ item, loadedBy, onEdit, onDelete, onShare, onOriginal, onShared, onRecurrenceChanged, onClose }: {
   item: CardItem;
   loadedBy?: string;
   onEdit: () => void;
@@ -88,9 +91,11 @@ function ItemSheet({ item, loadedBy, onEdit, onDelete, onShare, onOriginal, onSh
   onShare: () => void;
   onOriginal: () => void;
   onShared: () => void;
+  onRecurrenceChanged: () => void;
   onClose: () => void;
 }) {
   const isChild = !!item.installment_group_id;
+  const pending = item.recurrence_status === "pending";
   const isPlan = item.item_type === "installment";
   // Un plan puede haber entrado a mitad de camino (cuota 8/12): se borran las que hay.
   const planCuotas = (item.installment_count ?? 1) - (item.installment_number ?? 1) + 1;
@@ -105,7 +110,13 @@ function ItemSheet({ item, loadedBy, onEdit, onDelete, onShare, onOriginal, onSh
         <SheetLink note="Es una cuota de un plan: se edita o se elimina desde la cuota 1." label="Ver original" onClick={onOriginal} />
       ) : (
         <div className="space-y-2">
-          {!item.shared_expense_id && (
+          {item.recurrence_id && item.recurrence_status && item.expense_entry_id && (
+            <RecurrencePanel entryId={item.expense_entry_id} recurrenceId={item.recurrence_id}
+              status={item.recurrence_status} amount={item.amount} currency={item.currency}
+              date={item.item_date} onChanged={onRecurrenceChanged} />
+          )}
+          {/* Un mes a confirmar no se comparte: primero se confirma. */}
+          {!item.shared_expense_id && !pending && (
             <button type="button" onClick={onShare}
               className="w-full h-[52px] rounded-full bg-white/70 border border-white/80 font-semibold text-[15px] text-foreground inline-flex items-center justify-center gap-2 active:scale-[0.98] transition-transform duration-100">
               <Users2 className="w-4 h-4" /> Compartir gasto
@@ -115,13 +126,13 @@ function ItemSheet({ item, loadedBy, onEdit, onDelete, onShare, onOriginal, onSh
             <p className="px-1.5 text-sm leading-snug text-[#4A4658]">Está compartido: se elimina desde Gastos compartidos.</p>
           )}
           <SheetActions noun={isPlan ? `plan y sus ${planCuotas} cuotas` : "gasto"} onEdit={onEdit}
-            onDelete={item.shared_expense_id ? undefined : onDelete} />
+            onDelete={item.shared_expense_id || pending ? undefined : onDelete} />
         </div>
       )}
     >
       {isPlan && <SheetRow label="Cuota">{item.installment_number} de {item.installment_count}</SheetRow>}
       {isPlan && Number(item.purchase_total) > 0 && <SheetRow label="Total de la compra">{money(item.purchase_total!, item.currency)}</SheetRow>}
-      {item.item_type === "recurring" && <SheetRow label="Tipo">Recurrente</SheetRow>}
+      {item.item_type === "recurring" && !item.recurrence_id && <SheetRow label="Tipo">Recurrente</SheetRow>}
       {item.shared_expense_id && (
         <SheetRow label="Compartido">
           <button type="button" onClick={onShared} className="font-semibold text-[#3B2FB3] min-h-[28px]">Ver en Compartidos</button>
@@ -505,7 +516,7 @@ function AddItemSheet({ statementId, categories, onCategoriesChanged, onSaved, o
               required
               toggle={
                 <CurrencyToggle className="w-[132px]" value={form.currency}
-                  onChange={cur => setForm(p => ({ ...p, currency: cur, category_id: cur === "USD" ? "" : p.category_id, item_type: cur === "USD" ? "single" : p.item_type }))} />
+                  onChange={cur => setForm(p => ({ ...p, currency: cur, category_id: cur === "USD" ? "" : p.category_id, item_type: cur === "USD" && p.item_type === "installment" ? "single" : p.item_type }))} />
               }
               value={form.amount}
               onChange={(e) => handleAmountChange("amount", e.target.value)} />
@@ -540,7 +551,7 @@ function AddItemSheet({ statementId, categories, onCategoriesChanged, onSaved, o
               </div>
             </FormGrid>
 
-            {/* En dólares no hay cuotas ni recurrentes: se ven apagados, y se dice por qué. */}
+            {/* En dólares no hay cuotas: se ven apagadas, y se dice por qué. Recurrente sí. */}
             <div>
               <FieldLabel>Tipo</FieldLabel>
               <SegmentedToggle
@@ -549,11 +560,16 @@ function AddItemSheet({ statementId, categories, onCategoriesChanged, onSaved, o
                 value={form.item_type}
                 onChange={t => setForm((p) => ({ ...p, item_type: t }))}
                 options={(Object.keys(ITEM_TYPE_LABELS) as ItemType[]).map(t => ({
-                  value: t, label: ITEM_TYPE_LABELS[t], disabled: isUsd && t !== "single",
+                  value: t, label: ITEM_TYPE_LABELS[t], disabled: isUsd && t === "installment",
                 }))} />
               {isUsd && (
                 <p className="mt-1.5 px-1 text-xs leading-snug text-muted-foreground">
-                  En dólares va en un solo pago, y queda en la categoría Consumo en dólares.
+                  En dólares no va en cuotas, y queda en la categoría Consumo en dólares.
+                </p>
+              )}
+              {form.item_type === "recurring" && (
+                <p className="mt-1.5 px-1 text-xs leading-snug text-muted-foreground">
+                  El mes que viene aparece en el resumen siguiente con este monto, para que lo confirmes o lo cambies.
                 </p>
               )}
             </div>
@@ -794,6 +810,8 @@ export default function StatementDetailPage() {
 
   // Lo que debita el banco: siempre el resumen entero, con filtros o sin ellos.
   const full = totalsByCurrency(statement.items);
+  // Lo recurrente a confirmar ya suma en el total: se aclara cuánto.
+  const pendingTotals = totalsByCurrency(statement.items.filter(i => i.recurrence_status === "pending"));
   const shown = totalsByCurrency(visibleItems);
   const filtering = visibleItems.length !== statement.items.length;
   const due = statement.due_date || statement.due_date_effective;
@@ -824,6 +842,12 @@ export default function StatementDetailPage() {
             {full.ars > 0 && <span className="block text-[32px] leading-tight">{ledgerAmount(full.ars)}</span>}
             {full.usd > 0 && <span className={`block leading-tight ${full.ars > 0 ? "text-lg tracking-[-0.01em]" : "text-[32px]"}`}>{ledgerAmount(full.usd, "USD")}</span>}
           </p>
+          {(pendingTotals.ars > 0 || pendingTotals.usd > 0) && (
+            <p className="mt-0.5 text-sm text-muted-foreground tabular-nums">
+              Incluye {[pendingTotals.ars > 0 ? ledgerAmount(pendingTotals.ars) : null,
+                pendingTotals.usd > 0 ? ledgerAmount(pendingTotals.usd, "USD") : null].filter(Boolean).join(" y ")} a confirmar
+            </p>
+          )}
           {(due || statement.closing_date) && (
             <p className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-muted-foreground">
               {due && <span>Vence el {shortDate(due)}</span>}
@@ -918,6 +942,7 @@ export default function StatementDetailPage() {
                   title={item.description}
                   sub={<>
                     <span className="flex items-center gap-1.5 min-w-0">
+                      {item.recurrence_status === "pending" && <PendingChip />}
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.category.color || "#6366f1" }} />
                       <span className="truncate">{[item.category.name, ...marks].join(" · ")}</span>
                     </span>
@@ -962,6 +987,7 @@ export default function StatementDetailPage() {
           onShare={() => { setShareItem(detailItem); setDetailItem(null); }}
           onOriginal={() => openOriginal(detailItem)}
           onShared={() => { setDetailItem(null); router.push("/shared"); }}
+          onRecurrenceChanged={() => { setDetailItem(null); load(); }}
           onClose={() => setDetailItem(null)}
         />
       )}

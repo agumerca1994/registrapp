@@ -67,10 +67,17 @@ export function LedgerRow({ date, showDate = true, title, sub, amount, positive 
   );
 }
 
-export function LedgerTotal({ label, ars, usd, positive = false }: { label: string; ars: number; usd: number; positive?: boolean }) {
+export function LedgerTotal({ label, ars, usd, positive = false, note }: {
+  label: string; ars: number; usd: number; positive?: boolean;
+  /** Una aclaración del total, abajo de la etiqueta ("Incluye $ 9.500 a confirmar"). */
+  note?: string;
+}) {
   return (
     <div className="flex items-baseline justify-between gap-3 pt-3 mt-1 border-t-2 border-foreground/80">
-      <span className="text-[15.5px] font-semibold text-foreground">{label}</span>
+      <span className="min-w-0">
+        <span className="block text-[15.5px] font-semibold text-foreground">{label}</span>
+        {note && <span className="block text-sm text-muted-foreground tabular-nums">{note}</span>}
+      </span>
       <span className={`text-right font-semibold tabular-nums ${positive ? "text-emerald-800" : "text-foreground"}`}>
         {ars > 0 && <span className="block text-lg">{ledgerAmount(ars)}</span>}
         {usd > 0 && <span className="block text-sm">{ledgerAmount(usd, "USD")}</span>}

@@ -30,7 +30,7 @@ const CALENDAR_TOUR_STEPS: Step[] = [
   {
     target: "[data-tour='cal-grid']",
     title: "Tu mes de un vistazo",
-    content: "Cada día marca lo que pasa: un círculo vacío es el cierre de un resumen, uno negro el vencimiento y uno violeta un recordatorio.",
+    content: "Cada día marca lo que pasa: un círculo vacío es el cierre de un resumen, uno negro el vencimiento, uno violeta un recordatorio y uno violeta vacío un recurrente a confirmar.",
   },
   {
     target: "[data-tour='cal-day']",
@@ -66,13 +66,27 @@ interface Reminder {
   created_at: string;
 }
 
+interface PendingRecurrence {
+  entry_id: number;
+  description: string | null;
+  amount: number;
+  currency: string;
+  date: string;
+  card_alias: string | null;
+  card_id: number | null;
+  statement_id: number | null;
+  item_id: number | null;
+  overdue: boolean;
+}
+
 interface DayEvent {
-  kind: "closing" | "due" | "reminder";
+  kind: "closing" | "due" | "reminder" | "recurring";
   label: string;
   amount?: number;
   amountUsd?: number;
   href?: string;
   reminder?: Reminder;
+  sub?: string;
 }
 
 /** La misma marca en la grilla, en la leyenda y en el detalle del día. Sin rojo: rojo es error. */
@@ -84,6 +98,8 @@ function EventDot({ kind, inverted = false }: { kind: DayEvent["kind"]; inverted
       kind === "closing" && (inverted ? "text-background" : "text-foreground") + " shadow-[inset_0_0_0_1.25px_currentColor]",
       kind === "due" && (inverted ? "bg-background" : "bg-ink"),
       kind === "reminder" && (inverted ? "bg-[#B9B2FF]" : "bg-primary"),
+      // Vacío y violeta: un gasto recurrente que ya suma pero falta confirmar.
+      kind === "recurring" && (inverted ? "text-[#B9B2FF]" : "text-primary") + " shadow-[inset_0_0_0_1.25px_currentColor]",
     )} />
   );
 }
@@ -217,7 +233,9 @@ function DayDetail({
               <EventDot kind={ev.kind} />
               <span className="flex-1 min-w-0">
                 <span className="block font-semibold text-[15.5px] text-foreground truncate">{ev.label}</span>
-                <span className="block text-sm text-muted-foreground">{ev.kind === "due" ? "Vencimiento" : "Cierre"}</span>
+                <span className="block text-sm text-muted-foreground truncate">
+                  {ev.kind === "due" ? "Vencimiento" : ev.kind === "closing" ? "Cierre" : ev.sub}
+                </span>
               </span>
               {(Number(ev.amount) > 0 || Number(ev.amountUsd) > 0) && (
                 <span className="font-medium text-base tabular-nums text-foreground shrink-0 text-right">
@@ -248,6 +266,7 @@ export default function CalendarioPage() {
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [statements, setStatements] = useState<StatementCal[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [recurring, setRecurring] = useState<PendingRecurrence[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   // Starts on today: the day the user is standing on is the one they came to
@@ -259,13 +278,15 @@ export default function CalendarioPage() {
     setLoading(true);
     const year = month.getFullYear();
     const m = month.getMonth() + 1;
-    const [stRes, remRes] = await Promise.allSettled([
+    const [stRes, remRes, recRes] = await Promise.allSettled([
       api.get("/credit-cards/statements/calendar", { params: { year, month: m } }),
       api.get("/reminders", { params: { year, month: m } }),
+      api.get("/recurrences/pending", { params: { year, month: m } }),
     ]);
     setStatements(stRes.status === "fulfilled" ? stRes.value.data : []);
     setReminders(remRes.status === "fulfilled" ? remRes.value.data : []);
-    setFailed(stRes.status === "rejected" || remRes.status === "rejected");
+    setRecurring(recRes.status === "fulfilled" ? recRes.value.data : []);
+    setFailed(stRes.status === "rejected" || remRes.status === "rejected" || recRes.status === "rejected");
     setLoading(false);
   }, [month]);
 
@@ -302,6 +323,21 @@ export default function CalendarioPage() {
     for (const r of reminders) {
       if (isSameDay(parseISO(r.remind_date), day)) {
         events.push({ kind: "reminder", label: r.title, reminder: r });
+      }
+    }
+    for (const p of recurring) {
+      if (isSameDay(parseISO(p.date), day)) {
+        events.push({
+          kind: "recurring",
+          label: p.description || "Gasto recurrente",
+          sub: p.card_alias ? `A confirmar · ${p.card_alias}` : "A confirmar",
+          amount: p.currency === "USD" ? undefined : p.amount,
+          amountUsd: p.currency === "USD" ? p.amount : undefined,
+          // Se confirma desde su ficha: en el resumen si es de tarjeta, en Egresos si no.
+          href: p.card_id && p.statement_id
+            ? `/tarjetas/${p.card_id}/${p.statement_id}?item=${p.item_id}`
+            : `/expenses?mes=${p.date.slice(0, 7)}&abrir=${p.entry_id}`,
+        });
       }
     }
     return events;
@@ -394,10 +430,11 @@ export default function CalendarioPage() {
           })}
         </div>
 
-        <div className="flex items-center gap-4 mt-2.5 pt-2.5 px-1.5 border-t border-border text-[13px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5 pt-2.5 px-1.5 border-t border-border text-[13px] text-muted-foreground">
           <span className="flex items-center gap-1.5"><EventDot kind="closing" /> Cierre</span>
           <span className="flex items-center gap-1.5"><EventDot kind="due" /> Vencimiento</span>
           <span className="flex items-center gap-1.5"><EventDot kind="reminder" /> Recordatorio</span>
+          {recurring.length > 0 && <span className="flex items-center gap-1.5"><EventDot kind="recurring" /> A confirmar</span>}
         </div>
       </Card>
 
