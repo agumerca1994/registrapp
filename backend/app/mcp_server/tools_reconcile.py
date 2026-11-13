@@ -216,8 +216,12 @@ async def apply_reconcile_group(
 
     Args:
         session_id: La sesión de `reconcile_statement`.
-        klass: Uno de "dates", "missing", "double_count", "amount_diff",
-            "usd_fix", "rounding", "surplus".
+        klass: Uno de "dates", "missing", "recurring", "double_count",
+            "amount_diff", "usd_fix", "rounding", "recurring_absent", "surplus".
+            "recurring" confirma los gastos recurrentes a confirmar que el
+            banco trajo (con su monto), y eso genera el mes siguiente.
+            "recurring_absent" saltea los que no vinieron y la serie sigue;
+            para darlos de baja, que la persona lo haga en la app.
         dry_run: true = sólo vista previa.
     """
     async with tool_session() as db:

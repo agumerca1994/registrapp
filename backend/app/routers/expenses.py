@@ -267,7 +267,7 @@ async def create_entry(
     db: AsyncSession = Depends(get_db),
 ):
     user = await _get_db_user(firebase_user, db)
-    data = body.model_dump(exclude={"stock_lines"})
+    data = body.model_dump(exclude={"stock_lines", "recurring"})
     # USD expenses can be categorised like any other now — a trip paid in
     # dollars belongs in "Viajes", not in a currency bucket. "Consumo en
     # dólares" stays as the fallback when the user doesn't pick one (that
@@ -289,6 +289,7 @@ async def create_entry(
         notes=data.get("notes"),
         payee_id=data.get("payee_id"),
         source=data.get("source") or EXPENSE_SOURCE_MANUAL,
+        recurring=body.recurring,
     )
     if body.stock_lines:
         # Sólo un negocio tiene productos: en un hogar esto no tiene a dónde ir.

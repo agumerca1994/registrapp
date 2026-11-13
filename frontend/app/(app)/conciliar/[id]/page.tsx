@@ -14,7 +14,7 @@ import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
 import { useReaccion } from "@/components/brand/ToodReaccion";
 import { MotionList } from "@/components/ui/motion-list";
-import { FIELD, SelectField } from "@/components/ui/form";
+import { FIELD, SegmentedToggle, SelectField } from "@/components/ui/form";
 import { SummaryCard, SummaryHeader, ChainRow } from "@/components/ui/summary-card";
 import { ErrorNote, shortDate, StatusChip, SubHeader } from "@/components/tarjetas/parts";
 import { ledgerAmount } from "@/components/movimientos/Ledger";
@@ -635,6 +635,9 @@ function ActionRow({ klass, action, categories, fixHref, descDraft, setDescDraft
               {p.bank_description && p.bank_description !== p.description && ` · ${p.bank_description}`}
               {cuota}
             </p>
+            {p.recurrence_id && (
+              <p className="text-sm text-[#3B2FB3] mt-0.5">Es recurrente: vuelve a su serie y el mes que viene queda a confirmar.</p>
+            )}
           </div>
           <p className="font-medium text-base tabular-nums shrink-0 pt-1.5">{ledgerAmount(p.amount ?? 0, p.currency)}</p>
           {stateBadge}
@@ -672,6 +675,58 @@ function ActionRow({ klass, action, categories, fixHref, descDraft, setDescDraft
               </label>
             )}
           </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Recurrentes que vinieron: confirmar con el monto del banco ──
+  if (klass === "recurring") {
+    const changed = p.amount != null && p.app_amount != null && Number(p.amount) !== Number(p.app_amount);
+    return (
+      <div className={`py-3 ${muted ? "opacity-60" : ""}`}>
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-[15.5px] text-foreground truncate">{p.app_description}</p>
+            <p className="text-sm text-muted-foreground truncate">{p.bank_description}</p>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="font-medium text-base tabular-nums">{ledgerAmount(p.amount ?? 0, p.currency)}</p>
+            {changed && (
+              <p className="text-sm text-muted-foreground tabular-nums">antes {ledgerAmount(p.app_amount!, p.currency)}</p>
+            )}
+          </div>
+          {stateBadge}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Recurrentes que no vinieron: ¿el mes que viene sigue? ──
+  if (klass === "recurring_absent") {
+    const keep = p.keep_going !== false;
+    return (
+      <div className={`py-3 ${muted ? "opacity-60" : ""}`}>
+        <div className="flex items-center gap-3 min-h-[44px]">
+          <p className="flex-1 min-w-0 font-semibold text-[15.5px] text-foreground truncate">{p.description}</p>
+          <p className="font-medium text-base tabular-nums shrink-0">{ledgerAmount(p.amount ?? 0, p.currency)}</p>
+          {stateBadge}
+        </div>
+        {proposed ? (
+          <div className="mt-1 space-y-1.5 sm:max-w-sm">
+            <p className="text-sm text-muted-foreground">Este mes no vino. ¿Y el mes que viene?</p>
+            <SegmentedToggle
+              ariaLabel={`El mes que viene, ${p.description}`}
+              value={keep ? "keep" : "end"}
+              onChange={v => patchAction(action.id, { keep_going: v === "keep" })}
+              options={[
+                { value: "keep", label: "Sigue" },
+                { value: "end", label: "Darlo de baja" },
+              ]}
+            />
+          </div>
+        ) : action.status === "applied" && (
+          <p className="text-sm text-muted-foreground">{keep ? "Salteado: sigue el mes que viene." : "Dado de baja."}</p>
         )}
       </div>
     );

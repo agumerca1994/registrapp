@@ -43,14 +43,23 @@ from app.services.reconcile import matching, period, rules
 from app.services.reconcile.matching import AppItem, BankItem
 from app.services.statement_parsers import ParseResult, detect_and_parse, detect_and_parse_text
 
+# Recurrentes (services/recurrences.py). Un mes "a confirmar" que el banco
+# trajo no se corrige ni se recrea: se confirma, con el monto del banco, y eso
+# genera el mes siguiente. Uno que el banco no trajo no es un "sobra" para
+# borrar: es "no vino este mes", y hay que decir si la serie sigue.
+RECURRING = "recurring"
+RECURRING_ABSENT = "recurring_absent"
+
 # Orden de presentación de los grupos (el reporte y el apply lo siguen).
 GROUP_ORDER = [
     "dates",
     "missing",
+    RECURRING,
     "double_count",
     "amount_diff",
     "usd_fix",
     "rounding",
+    RECURRING_ABSENT,
     "surplus",
 ]
 
@@ -337,7 +346,7 @@ async def refresh_session(db: AsyncSession, session: ReconciliationSession, user
     discarded = {_action_key(a) for a in before if a.status == ACTION_DISCARDED}
     edits = {
         _action_key(a): a.payload for a in before
-        if a.status == ACTION_PROPOSED and a.klass == matching.MISSING
+        if a.status == ACTION_PROPOSED and a.klass in (matching.MISSING, RECURRING_ABSENT)
     }
 
     await resolve_session(db, session, user, explicit_statement_id=session.statement_id)
@@ -355,6 +364,8 @@ async def refresh_session(db: AsyncSession, session: ReconciliationSession, user
             await db.delete(a)
             continue
         old = edits.get(key)
+        if old and a.klass == RECURRING_ABSENT and "keep_going" in old:
+            a.payload = {**(a.payload or {}), "keep_going": old["keep_going"]}
         if old and a.klass == matching.MISSING:
             payload = dict(a.payload or {})
             for field in ("category_id", "category_source", "description"):
@@ -486,6 +497,8 @@ async def resolve_session(
             is_root=r.installment_group_id is None,
             shared=r.shared_expense is not None,
             category_id=r.category_id,
+            recurrence_id=r.recurrence_id,
+            recurrence_status=r.recurrence_status,
         )
         for r in app_rows
     ]
@@ -527,6 +540,46 @@ async def resolve_session(
     }
     await db.flush()
     return session
+
+
+async def _series_for_missing(
+    db: AsyncSession, stmt: CreditCardStatement, missing: list[BankItem],
+) -> dict[int, "Recurrence"]:
+    """Faltantes del banco que son de una serie activa de esta tarjeta sin
+    ningún mes en este resumen. Por el comercio, como el matching de
+    recurrentes; cada serie se usa una sola vez."""
+    from app.models.expense import ExpenseEntry
+    from app.models.recurrence import STATUS_ACTIVE, Recurrence
+
+    candidates = [b for b in missing if b.cuota is None]
+    if not candidates:
+        return {}
+    series = (await db.scalars(
+        select(Recurrence).where(Recurrence.card_id == stmt.card_id, Recurrence.status == STATUS_ACTIVE)
+    )).all()
+    if not series:
+        return {}
+    present = set((await db.scalars(
+        select(ExpenseEntry.recurrence_id)
+        .join(CreditCardItem, CreditCardItem.expense_entry_id == ExpenseEntry.id)
+        .where(CreditCardItem.statement_id == stmt.id, ExpenseEntry.recurrence_id.is_not(None))
+    )).all())
+    free = [s for s in series if s.id not in present]
+    out: dict[int, Recurrence] = {}
+    for b in candidates:
+        best, best_score = None, 0
+        for s in free:
+            if s.currency != b.currency or s in out.values():
+                continue
+            toks = category_suggest.normalize(s.description or "")
+            if s.bank_description:
+                toks |= category_suggest.normalize(s.bank_description)
+            score = matching._merchant_overlap(toks, b.tokens)
+            if score > best_score:
+                best, best_score = s, score
+        if best is not None:
+            out[b.idx] = best
+    return out
 
 
 async def _build_actions(
@@ -583,7 +636,34 @@ async def _build_actions(
     ) if ars_missing else []
     suggestion_by_idx = {b.idx: s for b, s in zip(ars_missing, suggestions)}
 
+    series_for = await _series_for_missing(db, stmt, report.missing)
+
     for b in report.missing:
+        series = series_for.get(b.idx)
+        if series is not None:
+            # Un recurrente cuya cadena se cortó (nadie confirmó el mes
+            # anterior): se carga enganchado a su serie, con su nombre y su
+            # categoría, en vez de como un gasto suelto.
+            db.add(ReconciliationAction(
+                session_id=session.id,
+                klass=matching.MISSING,
+                op="create_item",
+                payload={
+                    "description": series.description or b.description,
+                    "bank_description": b.description,
+                    "bank_coupon": b.cupon,
+                    "date": b.item_date.isoformat(),
+                    "amount": str(b.amount),
+                    "currency": b.currency,
+                    "item_type": "single",
+                    "installment_number": None,
+                    "installment_count": None,
+                    "category_id": series.category_id if b.currency == "ARS" else None,
+                    "category_source": "recurrence",
+                    "recurrence_id": series.id,
+                },
+            ))
+            continue
         rule = merchant_rules.get(rules.merchant_key(b.description))
         suggestion = suggestion_by_idx.get(b.idx)
         category_id = None
@@ -616,6 +696,30 @@ async def _build_actions(
             },
         ))
 
+    # Recurrentes a confirmar que el banco trajo: confirmar, con su monto.
+    confirmed_ids: set[int] = set()
+    for p in report.pairs:
+        if p.app.recurrence_status != "pending" or p.klass not in (
+            matching.MATCHED, matching.ROUNDING, matching.AMOUNT_DIFF
+        ):
+            continue
+        confirmed_ids.add(p.app.id)
+        db.add(ReconciliationAction(
+            session_id=session.id,
+            klass=RECURRING,
+            op="confirm_recurrence",
+            item_id=p.app.id,
+            payload={
+                "item_id": p.app.id,
+                "amount": str(p.bank.amount),
+                "app_amount": str(p.app.amount),
+                "currency": p.app.currency,
+                "app_description": p.app.description,
+                "bank_description": p.bank.description,
+                "bank_coupon": p.bank.cupon,
+            },
+        ))
+
     # Correcciones sobre ítems existentes.
     for klass, updates_of in (
         (matching.DOUBLE_COUNT, lambda p: {"amount": str(p.bank.amount)}),
@@ -624,6 +728,8 @@ async def _build_actions(
         (matching.USD_FIX, lambda p: {"description": p.bank.description, "amount": str(p.bank.amount)}),
     ):
         for p in report.pairs_of(klass):
+            if p.app.id in confirmed_ids:
+                continue
             db.add(ReconciliationAction(
                 session_id=session.id,
                 klass=klass,
@@ -646,6 +752,23 @@ async def _build_actions(
     # Sobrantes: borrar (el usuario decide). Compartidos y cuotas hijas van
     # como needs_app — la API no los toca (misma regla que el MCP).
     for a in report.surplus:
+        if a.recurrence_status == "pending":
+            # "No vino este mes": se saltea, y la persona dice si sigue
+            # (por defecto sí: una suscripción que un mes no cobra suele seguir).
+            db.add(ReconciliationAction(
+                session_id=session.id,
+                klass=RECURRING_ABSENT,
+                op="skip_recurrence",
+                item_id=a.id,
+                payload={
+                    "item_id": a.id,
+                    "description": a.description,
+                    "amount": str(a.amount),
+                    "currency": a.currency,
+                    "keep_going": True,
+                },
+            ))
+            continue
         db.add(ReconciliationAction(
             session_id=session.id,
             klass=matching.SURPLUS,

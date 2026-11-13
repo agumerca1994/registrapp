@@ -100,7 +100,9 @@ test("egreso simple", async ({ page, request }) => {
 });
 
 test("con tarjeta en cuotas", async ({ page, request }) => {
-  const stamp = Date.now();
+  // Con un sufijo al azar: dos tests en paralelo pueden arrancar en el mismo milisegundo
+  // y sus tarjetas se llamarían igual (el selector elegiría la del otro).
+  const stamp = `${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
   const desc = `E2E-cuotas-${stamp}`;
   await page.goto("/expenses");
   const a = api(request, await tokenOf(page));
@@ -166,7 +168,9 @@ test("compartido en dólares", async ({ page, request }) => {
 });
 
 test("con tarjeta y compartido", async ({ page, request }) => {
-  const stamp = Date.now();
+  // Con un sufijo al azar: dos tests en paralelo pueden arrancar en el mismo milisegundo
+  // y sus tarjetas se llamarían igual (el selector elegiría la del otro).
+  const stamp = `${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
   const desc = `E2E-tarjeta-compartida-${stamp}`;
   await page.goto("/expenses");
   const a = api(request, await tokenOf(page));

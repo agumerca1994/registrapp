@@ -633,6 +633,8 @@ _GROUP_FOUND = {
     "amount_diff": ("monto distinto", "montos distintos"),
     "usd_fix": ("consumo en dólares mal marcado", "consumos en dólares mal marcados"),
     "rounding": ("diferencia de centavos", "diferencias de centavos"),
+    "recurring": ("recurrente para confirmar", "recurrentes para confirmar"),
+    "recurring_absent": ("recurrente que no vino este mes", "recurrentes que no vinieron este mes"),
     "surplus": ("consumo que no está en el resumen", "consumos que no están en el resumen"),
 }
 _GROUP_DONE = {
@@ -642,6 +644,8 @@ _GROUP_DONE = {
     "amount_diff": ("monto corregido", "montos corregidos"),
     "usd_fix": ("consumo en dólares corregido", "consumos en dólares corregidos"),
     "rounding": ("redondeo corregido", "redondeos corregidos"),
+    "recurring": ("recurrente confirmado", "recurrentes confirmados"),
+    "recurring_absent": ("recurrente salteado", "recurrentes salteados"),
     "surplus": ("consumo de más borrado", "consumos de más borrados"),
 }
 
@@ -3315,6 +3319,10 @@ async def _apply_all_groups(db: AsyncSession, user: User, session_id: int) -> li
     applied_by_klass: dict[str, int] = {}
     skipped_total = 0
     for klass in reconcile_service.GROUP_ORDER:
+        # Un recurrente que no vino pide decidir si la serie sigue: eso no se
+        # elige por la persona en un "corregir todo", queda para la app.
+        if klass == reconcile_service.RECURRING_ABSENT:
+            continue
         counts = await _pending_group_counts(db, session.id)
         if klass not in counts:
             continue

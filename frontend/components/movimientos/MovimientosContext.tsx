@@ -38,6 +38,7 @@ interface Ctx {
   periodLabel: string;
   prev: () => void;
   next: () => void;
+  goTo: (year: number, month: number) => void;
   summary: MonthSummary | null;
   failed: boolean;
   /** Vuelve a pedir el resumen. Lo llama la tabla cada vez que recarga, así las dos se mueven juntas. */
@@ -69,6 +70,9 @@ export function MovimientosProvider({ children }: { children: React.ReactNode })
     if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1);
   }, [month]);
 
+  /** Ir directo a un mes: lo usan los links que abren un gasto puntual (`?mes=`). */
+  const goTo = useCallback((y: number, m: number) => { setYear(y); setMonth(m); }, []);
+
   const refresh = useCallback(() => {
     api.get<MonthSummary>(`/dashboard/summary/${year}/${month}`)
       .then(({ data }) => { setSummary(data); setFailed(false); })
@@ -77,7 +81,7 @@ export function MovimientosProvider({ children }: { children: React.ReactNode })
 
   return (
     <Context.Provider value={{
-      year, month, prev, next, summary, failed, refresh, searching, setSearching,
+      year, month, prev, next, goTo, summary, failed, refresh, searching, setSearching,
       periodLabel: format(new Date(year, month - 1, 1), "MMMM yyyy", { locale: es }),
     }}>
       {children}

@@ -139,6 +139,13 @@ async def create_item_in_statement(
     db.add(item)
     await db.flush()  # need item.id for installment_group_id
 
+    # "Se repite todos los meses": la serie nace confirmada en este resumen y
+    # genera el mes siguiente a confirmar (services/recurrences.py).
+    if body.item_type == "recurring":
+        from app.services import recurrences
+
+        await recurrences.start_series(db, entry, item=item, card=card, stmt=stmt)
+
     # Un plan puede entrar empezado (`installment_number > 1`): el resumen del
     # banco trae "cuota 8/12" y las cuotas 1..7 vivieron en resúmenes que no
     # están cargados. La cuota que entra es la raíz del grupo y se propagan
@@ -195,6 +202,7 @@ async def _apply_updates_to_item(item: CreditCardItem, updates: dict, db: AsyncS
     if item.expense_entry_id:
         entry = await db.get(ExpenseEntry, item.expense_entry_id)
         if entry:
+            before = {f: getattr(entry, f) for f in ("amount", "description", "category_id")}
             if "description" in updates:
                 entry.description = updates["description"]
             if "category_id" in updates:
@@ -203,6 +211,10 @@ async def _apply_updates_to_item(item: CreditCardItem, updates: dict, db: AsyncS
                 entry.expense_date = updates["item_date"]
             if "amount" in updates:
                 entry.amount = updates["amount"]
+            if entry.recurrence_id is not None:
+                from app.services import recurrences
+
+                await recurrences.on_edited(db, entry, before)
 
 
 async def apply_item_update(

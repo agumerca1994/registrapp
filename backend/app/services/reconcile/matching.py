@@ -17,6 +17,10 @@ conciliación y de la práctica manual que lo originó:
   Comparar fechas ahí rompería todos los planes — van por (n/N, monto).
 - **En USD también se mira el comercio**: los montos chicos se repiten
   (7,99 / 9,99) y el monto solo empareja cualquier cosa con cualquier cosa.
+- **Un recurrente se busca por el comercio, no por el monto**: una
+  suscripción cambia de precio (inflación, dólar) y por monto quedaba como
+  "sobra" + "falta", que rompía la cadena de la serie. Va después del cupón y
+  sólo pide algo del comercio en común; el monto decide la clase.
 """
 from __future__ import annotations
 
@@ -69,6 +73,10 @@ class AppItem:
     is_root: bool = True
     shared: bool = False
     category_id: int | None = None
+    # Gasto recurrente (services/recurrences.py): la serie y si este mes está
+    # "pending" (a confirmar) o "confirmed".
+    recurrence_id: int | None = None
+    recurrence_status: str | None = None
 
     @property
     def tokens(self) -> frozenset[str]:
@@ -107,6 +115,20 @@ class MatchReport:
 
 def _overlap(a: frozenset[str], b: frozenset[str]) -> int:
     return len(a & b)
+
+
+# Intermediarios de pago: aparecen delante de comercios que no tienen nada que
+# ver ("GOOGLE *YouTube" y "GOOGLE *Drive", "MERPAGO*GIMNASIO" y
+# "MERPAGO*KIOSCO"). Para atar un cargo a un recurrente sin mirar el monto,
+# compartir sólo uno de estos no alcanza.
+_INTERMEDIARIES = frozenset({
+    "merpago", "mercadopago", "mercado", "paypal", "dlocal", "google", "apple",
+    "itunes", "payu", "stripe", "ebanx", "todopago", "modo", "naranja",
+})
+
+
+def _merchant_overlap(a: frozenset[str], b: frozenset[str]) -> int:
+    return len((a & b) - _INTERMEDIARIES)
 
 
 def _within_tolerance(bank_amount: Decimal, app_amount: Decimal) -> bool:
@@ -149,6 +171,28 @@ def _match_currency(
         a = next((x for x in app_left if x.bank_coupon == b.cupon), None)
         if a is None:
             continue
+        if a.amount == b.amount:
+            klass = MATCHED
+        elif _within_tolerance(b.amount, a.amount):
+            klass = ROUNDING
+        else:
+            klass = AMOUNT_DIFF
+        take(Pair(b, a, klass))
+
+    # 1b. Recurrentes: por el comercio, con cualquier monto (ver arriba). El
+    #     que tiene el mismo monto gana; si no, el de más palabras en común.
+    for b in list(bank_left):
+        if b.cuota is not None:
+            continue
+        candidates = [
+            a for a in app_left
+            if a.recurrence_id is not None and a.cuota is None and _merchant_overlap(a.tokens, b.tokens) > 0
+        ]
+        if not candidates:
+            continue
+        candidates.sort(key=lambda a: (a.amount != b.amount, -_merchant_overlap(a.tokens, b.tokens),
+                                       _date_dist(a.item_date, b.item_date)))
+        a = candidates[0]
         if a.amount == b.amount:
             klass = MATCHED
         elif _within_tolerance(b.amount, a.amount):
