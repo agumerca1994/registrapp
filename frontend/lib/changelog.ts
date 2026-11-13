@@ -11,6 +11,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.2.2",
+    date: "2026-11-13",
+    notes: [
+      "Un recibo de sueldo que mandás por WhatsApp toma la fecha de pago, no la del depósito de aportes.",
+      "Si un ingreso que cargás por WhatsApp queda en otro mes, el bot te dice en cuál y cómo cambiarlo.",
+    ],
+  },
+  {
     version: "1.2.1",
     date: "2026-11-13",
     notes: [

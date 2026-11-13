@@ -105,7 +105,10 @@ ninguna de esas cosas o no se lee.
 es 15000.50). En un ticket es el total final, no un subtotal ni una línea. En un \
 recibo de sueldo es el NETO a cobrar. 0 si no hay.
 - currency: "USD" sólo si el monto está en dólares (U$S, USD, US$); si no, "ARS".
-- date: la fecha del pago en formato AAAA-MM-DD, o "" si no figura.
+- date: la fecha del pago en formato AAAA-MM-DD, o "" si no figura. En un recibo de \
+sueldo es la FECHA DE PAGO (o "lugar y fecha de pago"); si no figura, el último día del \
+período liquidado. Nunca la del último depósito de aportes (es del mes anterior), ni la \
+de ingreso a la empresa, ni la de impresión.
 - merchant: a quién se le pagó: el comercio, la empresa o la persona destinataria, \
 corto y como se lo conoce ("Carrefour", "Juan Pérez", "Edenor"). En una transferencia \
 recibida, quién la mandó; en un recibo de sueldo, el empleador. "" si no figura.

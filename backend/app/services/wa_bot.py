@@ -1658,8 +1658,19 @@ async def _save_income(
               ref_type="income", ref_id=entry.id)
     await db.commit()
 
-    when = "" if entry.period_date == ar_today() else f", del {entry.period_date.strftime('%d/%m')}"
+    today = ar_today()
+    when = "" if entry.period_date == today else f", del {entry.period_date.strftime('%d/%m')}"
     lines = [f"✅ Ingreso de {_fmt_amount(draft)} en {source.name}{when}."]
+    if (entry.period_date.year, entry.period_date.month) != (today.year, today.month):
+        # Un ", del 29/09" al final pasaba de largo, y el ingreso quedaba en un mes que nadie
+        # estaba mirando (recibo de sueldo leído con la fecha del depósito de aportes, 2026-11-13).
+        from app.services import bill_capture
+
+        lines.append(
+            f"Ojo: lo puse en {bill_capture.period_label(entry.period_date.year, entry.period_date.month, today)}, "
+            "por la fecha del comprobante. "
+            "Si lo cobraste hoy, decime *cambiar fecha hoy*."
+        )
     if filled:
         lines.append(f"Del recibo completé {_join_names(filled)}.")
     elif has_fields:

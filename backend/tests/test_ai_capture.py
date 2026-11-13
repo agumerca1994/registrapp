@@ -1,6 +1,6 @@
 """Lectura de comprobantes con IA en el bot: la API está stubbeada; lo que se
 prueba es qué hace el bot con cada lectura (y que la IA nunca escribe sola)."""
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -149,6 +149,26 @@ async def test_payslip_becomes_income(db, ai):
     replies = await wa_bot.handle(db, USER, InboundMessage(phone="549383", wa_id="T1", kind="text", text="1"))
     entry = await db.scalar(select(IncomeEntry))
     assert entry.amount == Decimal("850000")
+
+
+async def test_an_income_dated_in_another_month_says_which(db, ai):
+    """Caso real (2026-11-13): el recibo entró con la fecha del depósito de aportes, en
+    septiembre, y la persona lo buscaba en noviembre. La respuesta tiene que nombrar el mes."""
+    from app.models.income import IncomeSource, IncomeType
+    from app.services.clock import ar_today
+
+    db.add(IncomeSource(tenant_id=1, name="Sueldo", income_type=IncomeType.salary))
+    await db.flush()
+    old = ar_today().replace(day=1) - timedelta(days=40)
+    ai.reading = _reading(kind="recibo_sueldo", merchant="Acme SA", amount=Decimal("850000"), receipt_date=old)
+    await wa_bot.handle(db, USER, _img("I1"))
+    replies = await wa_bot.handle(db, USER, InboundMessage(phone="549383", wa_id="T1", kind="text", text="1"))
+    assert "Ojo: lo puse en" in replies[0] and "*cambiar fecha hoy*" in replies[0]
+
+    ai.reading = _reading(kind="recibo_sueldo", merchant="Acme SA", amount=Decimal("900000"), receipt_date=ar_today())
+    await wa_bot.handle(db, USER, _img("I2"))
+    replies = await wa_bot.handle(db, USER, InboundMessage(phone="549383", wa_id="T2", kind="text", text="1"))
+    assert "Ojo" not in replies[0]
 
 
 async def test_unreadable_image_and_statement_photo(db, ai):
