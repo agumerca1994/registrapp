@@ -58,6 +58,8 @@ class ExpenseEntryCreate(BaseModel):
     # Lo que entra al stock con esta compra (sólo negocios, sólo gastos
     # simples). Ver services/business/stock.add_purchase_lines.
     stock_lines: list[StockLineIn] | None = None
+    # "Se repite todos los meses": nace la serie y el mes siguiente a confirmar.
+    recurring: bool = False
     # De qué pantalla vino. El cliente puede declarar **cuál de sus propias
     # superficies** es —el formulario de /expenses, /registrar, la hoja de
     # compartir, el Atajo— porque eso es lo único que sabe él y las cuatro
@@ -109,5 +111,8 @@ class ExpenseEntryOut(BaseModel):
     payee_id: int | None = None
     # Quién lo cargó. La pantalla lo cruza con /auth/people.
     user_id: int | None = None
+    # Serie recurrente y si este mes está "pending" (a confirmar) o "confirmed".
+    recurrence_id: int | None = None
+    recurrence_status: str | None = None
     created_at: datetime
     category: ExpenseCategoryOut

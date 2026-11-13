@@ -352,26 +352,8 @@ async def finalize_statement(
                 )
                 db.add(future_item)
 
-        elif item.item_type == "recurring":
-            future_date = next_month_date(date(stmt.year, stmt.month, 1), 1)
-            future_stmt = await find_or_create_statement(
-                card, future_date.year, future_date.month, user.tenant_id, db
-            )
-            future_item_date = next_month_date(item.item_date, 1)
-            future_entry = await create_expense_entry(
-                card, future_item_date, item.amount,
-                item.description, item.category_id, user.tenant_id, user.id, db,
-            )
-            future_item = CreditCardItem(
-                statement_id=future_stmt.id,
-                description=item.description,
-                category_id=item.category_id,
-                item_date=future_item_date,
-                item_type="recurring",
-                amount=item.amount,
-                expense_entry_id=future_entry.id,
-            )
-            db.add(future_item)
+        # Los recurrentes ya no se copian acá: los genera su serie al
+        # confirmar cada mes (services/recurrences.py).
 
     stmt.status = "closed"
     await db.commit()
@@ -723,11 +705,10 @@ async def create_item_for_card(
     if not card or card.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Tarjeta no encontrada")
 
-    # "Recurrente" no se ofrece desde acá: hoy sólo `finalize_statement` la
-    # copia al mes siguiente y el frontend nunca lo llama, así que prometería
-    # una repetición que no pasa.
-    if body.item_type not in ("single", "installment"):
-        raise HTTPException(status_code=400, detail="Sólo se pueden cargar gastos en un pago o en cuotas")
+    # Un recurrente compartido necesitaría compartir cada mes que genera la
+    # serie, y avisarle a la otra persona cada vez: todavía no.
+    if body.item_type == "recurring" and body.share is not None:
+        raise HTTPException(status_code=400, detail="Un gasto recurrente todavía no se puede compartir")
 
     # Validar lo compartido ANTES de escribir nada, así un error de la división
     # no deja resúmenes creados de más.

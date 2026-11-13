@@ -93,8 +93,10 @@ async def create_expense(
     payment_method: str | None = None,
     payee_id: int | None = None,
     source: str,
+    recurring: bool = False,
 ) -> ExpenseEntry:
-    """Crea un gasto simple. **Sólo flush.**"""
+    """Crea un gasto simple. **Sólo flush.** Con `recurring`, además nace su
+    serie y el mes siguiente a confirmar (services/recurrences.py)."""
     if payee_id is not None:
         await _assert_owns_payee(db, tenant_id, payee_id)
     entry = ExpenseEntry(
@@ -112,6 +114,10 @@ async def create_expense(
     )
     db.add(entry)
     await db.flush()
+    if recurring:
+        from app.services import recurrences
+
+        await recurrences.start_series(db, entry)
     # El corpus de sugerencias cambió. Best-effort: si esto faltara, el gasto
     # nuevo tardaría hasta CACHE_TTL en poder ser sugerido, nunca un dato malo.
     category_suggest.invalidate(tenant_id)
@@ -128,9 +134,14 @@ async def update_expense(
         await assert_owns_category(updates["category_id"], tenant_id, db)
     if updates.get("payee_id") is not None:
         await _assert_owns_payee(db, tenant_id, updates["payee_id"])
+    before = {f: getattr(entry, f) for f in ("amount", "description", "category_id")}
     for field, value in updates.items():
         setattr(entry, field, value)
     await db.flush()
+    if entry.recurrence_id is not None:
+        from app.services import recurrences
+
+        await recurrences.on_edited(db, entry, before)
     category_suggest.invalidate(tenant_id)
 
 

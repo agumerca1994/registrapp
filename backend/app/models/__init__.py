@@ -11,6 +11,7 @@ from app.models.savings import SavingsContribution, SavingsGoal
 from app.models.investment import Investment, InvestmentMovement
 from app.models.shared_expense import SharedExpense, SharedExpenseSplit
 from app.models.credit_card import CreditCard, CreditCardStatement, CreditCardItem
+from app.models.recurrence import Recurrence
 from app.models.contact import TenantContact, SharedContact
 from app.models.app_log import AppLog
 from app.models.payment_reminder import PaymentReminder
@@ -34,6 +35,7 @@ __all__ = [
     "MacroVariable", "MortgageRecord", "SavingsGoal", "SavingsContribution", "Investment", "InvestmentMovement",
     "SharedExpense", "SharedExpenseSplit",
     "CreditCard", "CreditCardStatement", "CreditCardItem",
+    "Recurrence",
     "TenantContact",
     "SharedContact",
     "AppLog",

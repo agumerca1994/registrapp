@@ -64,8 +64,12 @@ class CreditCardItemCreate(BaseModel):
 
     @model_validator(mode="after")
     def compute_installment_amounts(self) -> "CreditCardItemCreate":
-        if self.currency == "USD" and self.item_type != "single":
-            raise ValueError("Los gastos en dólares van en un solo pago")
+        if self.item_type not in ("single", "installment", "recurring"):
+            raise ValueError("El tipo tiene que ser un pago, cuotas o recurrente")
+        # Un recurrente en dólares sí: las suscripciones se cobran así. Lo que
+        # no se puede en USD son las cuotas.
+        if self.currency == "USD" and self.item_type == "installment":
+            raise ValueError("Los gastos en dólares no van en cuotas")
         if self.item_type == "installment":
             if not self.installment_count or self.installment_count < 2:
                 raise ValueError("Un gasto en cuotas necesita al menos 2 cuotas")
@@ -131,6 +135,9 @@ class CreditCardItemOut(BaseModel):
     currency: str = "ARS"
     # Quién lo cargó: el dueño de su gasto espejo. La pantalla lo cruza con /auth/people.
     user_id: int | None = None
+    # Serie recurrente y si este mes está "pending" (a confirmar) o "confirmed".
+    recurrence_id: int | None = None
+    recurrence_status: str | None = None
     category: CategoryOut
 
 

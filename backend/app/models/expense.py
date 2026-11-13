@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy import String, Date, DateTime, ForeignKey, Numeric, func, Boolean
+from sqlalchemy import String, Date, DateTime, ForeignKey, Index, Numeric, func, Boolean, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
@@ -33,6 +33,7 @@ EXPENSE_SOURCE_SHARED_SPLIT = "shared_split"  # parte de un gasto compartido
 EXPENSE_SOURCE_IMPORT = "import"            # scripts/import_<banco>_*.py
 EXPENSE_SOURCE_MORTGAGE = "mortgage"        # cuota de hipoteca sincronizada
 EXPENSE_SOURCE_MCP = "mcp"                  # conector MCP (una IA, a pedido del usuario)
+EXPENSE_SOURCE_RECURRENCE = "recurrence"    # mes a confirmar que generó una serie recurrente
 
 EXPENSE_SOURCES = frozenset({
     EXPENSE_SOURCE_MANUAL,
@@ -45,6 +46,7 @@ EXPENSE_SOURCES = frozenset({
     EXPENSE_SOURCE_IMPORT,
     EXPENSE_SOURCE_MORTGAGE,
     EXPENSE_SOURCE_MCP,
+    EXPENSE_SOURCE_RECURRENCE,
 })
 
 # Los canales por los que un humano carga un gasto de su bolsillo, en el momento.
@@ -73,6 +75,15 @@ class ExpenseCategory(Base):
 
 class ExpenseEntry(Base):
     __tablename__ = "expense_entries"
+    # Un solo mes "a confirmar" por serie recurrente: confirmar dos veces (doble
+    # toque, reintento) no puede generar dos meses siguientes.
+    __table_args__ = (
+        Index(
+            "uq_expense_recurrence_pending", "recurrence_id", unique=True,
+            postgresql_where=text("recurrence_status = 'pending'"),
+            sqlite_where=text("recurrence_status = 'pending'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
@@ -93,6 +104,12 @@ class ExpenseEntry(Base):
     payee_id: Mapped[int | None] = mapped_column(
         ForeignKey("payees.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # Gasto recurrente (models/recurrence.py): la serie y si este mes está
+    # confirmado o "a confirmar". Un pendiente suma igual que cualquier gasto.
+    recurrence_id: Mapped[int | None] = mapped_column(
+        ForeignKey("recurrences.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    recurrence_status: Mapped[str | None] = mapped_column(String(10), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     category: Mapped["ExpenseCategory"] = relationship(back_populates="entries")

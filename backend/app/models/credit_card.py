@@ -99,6 +99,15 @@ class CreditCardItem(Base):
         select(ExpenseEntry.user_id).where(ExpenseEntry.id == expense_entry_id).scalar_subquery()
     )
 
+    # La serie recurrente y el estado del mes viven en el gasto espejo, igual
+    # que `user_id`: un ítem de tarjeta y un gasto directo son la misma serie.
+    recurrence_id: Mapped[int | None] = column_property(
+        select(ExpenseEntry.recurrence_id).where(ExpenseEntry.id == expense_entry_id).scalar_subquery()
+    )
+    recurrence_status: Mapped[str | None] = column_property(
+        select(ExpenseEntry.recurrence_status).where(ExpenseEntry.id == expense_entry_id).scalar_subquery()
+    )
+
     statement: Mapped["CreditCardStatement"] = relationship(back_populates="items")
     category: Mapped["ExpenseCategory"] = relationship()
     expense_entry: Mapped["ExpenseEntry | None"] = relationship(foreign_keys=[expense_entry_id])
