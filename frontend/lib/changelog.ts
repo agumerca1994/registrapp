@@ -11,6 +11,18 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.2.0",
+    date: "2026-11-13",
+    notes: [
+      "Gastos recurrentes: marcá una suscripción, el alquiler o el gimnasio con \"Se repite todos los meses\" y el mes siguiente aparece solo, para que lo confirmes o le cambies el monto.",
+      "Un recurrente a confirmar ya suma en el mes. Lo ves en el calendario, y si se pasó la fecha, Inicio te lo pide.",
+      "Si un mes no vino, elegís si sigue el mes que viene o lo das de baja.",
+      "Al subir el resumen de la tarjeta, los recurrentes que vinieron se confirman con el monto del banco.",
+      "Lo que tenías marcado como Recurrente en tus tarjetas de octubre o noviembre ya tiene el mes siguiente a confirmar.",
+      "Los recurrentes en dólares también se pueden cargar en la tarjeta.",
+    ],
+  },
+  {
     version: "1.1.1",
     date: "2026-11-13",
     notes: [
