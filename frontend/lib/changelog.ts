@@ -11,6 +11,13 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.1.1",
+    date: "2026-11-13",
+    notes: [
+      "Una compra con tarjeta que mandás por WhatsApp va al resumen del mes, aunque un resumen futuro ya tenga fecha de cierre.",
+    ],
+  },
+  {
     // Las 15 tandas de la beta se resumen acá: quien viene de producción ve qué cambió, no cada prueba.
     version: "1.1.0",
     date: "2026-11-11",

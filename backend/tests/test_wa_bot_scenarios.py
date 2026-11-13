@@ -249,6 +249,26 @@ async def test_el_cierre_conocido_decide_el_resumen(db):
     assert stmt.closing_date == closing
 
 
+async def test_un_cierre_a_meses_no_se_lleva_la_compra(db):
+    """Caso real (2026-11-13): los resúmenes de los meses siguientes no tenían
+    fecha y uno de dentro de 8 meses sí. La compra tiene que ir al del mes."""
+    await _cat(db, "Hogar")
+    card = await _card(db, alias="Visa", last4="4919")
+    today = ar_today()
+    last = today - timedelta(days=28)
+    far = today + timedelta(days=245)
+    db.add(CreditCardStatement(tenant_id=1, card_id=card.id, year=last.year, month=last.month,
+                               closing_date=last, status="open"))
+    db.add(CreditCardStatement(tenant_id=1, card_id=card.id, year=far.year, month=far.month,
+                               closing_date=far, status="open"))
+    await db.flush()
+    await _say(db, "5 lucas carnicería categoría Hogar con la visa")
+    item = await db.scalar(select(CreditCardItem))
+    stmt = await db.get(CreditCardStatement, item.statement_id)
+    assert (stmt.year * 12 + stmt.month) - (today.year * 12 + today.month) in (0, 1)
+    assert stmt.closing_date != far
+
+
 # ----------------------------------------------------- comprobante a tu nombre ---
 
 async def test_un_comprobante_a_tu_nombre_no_es_un_gasto(db, pdf):

@@ -2569,10 +2569,19 @@ def _match_cards(cards: list, hint: str | None) -> list:
     return [c for c in cards if has(c)]
 
 
+NEXT_CLOSING_DAYS = 40
+
+
 async def _card_period(db: AsyncSession, card, when) -> tuple[int, int]:
-    """A qué resumen va una compra. El primero que cierre después de la fecha, si
-    ya se conoce; si no, con el día de cierre del último resumen. Sin ningún dato,
-    el mes de la compra: la respuesta dice cuál eligió y se puede corregir."""
+    """A qué resumen va una compra. El que cierre después de la fecha, si ya se
+    conoce y es el próximo; si no, con el día de cierre del último resumen ya
+    cerrado. Sin ningún dato, el mes de la compra: la respuesta dice cuál eligió y
+    se puede corregir.
+
+    "El próximo" quiere decir a menos de `NEXT_CLOSING_DAYS`: los resúmenes futuros
+    nacen sin fecha (los crean las cuotas), y uno con fecha a meses de distancia no
+    es el que sigue. Tomar el primero con fecha mandó una compra del 13/11/2026 al
+    resumen de julio de 2027, que tenía cargado un cierre de más."""
     from datetime import date as _date
 
     from app.models.credit_card import CreditCardStatement
@@ -2585,10 +2594,13 @@ async def _card_period(db: AsyncSession, card, when) -> tuple[int, int]:
     )).all()
     for closing, year, month in closings:
         if closing >= when:
-            return year, month
-    if not closings:
+            if (closing - when).days <= NEXT_CLOSING_DAYS:
+                return year, month
+            break
+    past = [c for c in closings if c[0] < when] or closings
+    if not past:
         return when.year, when.month
-    day = min(closings[-1][0].day, 28)
+    day = min(past[-1][0].day, 28)
     closing = _date(when.year, when.month, day)
     if when > closing:
         closing = _date(when.year + (when.month == 12), when.month % 12 + 1, day)
