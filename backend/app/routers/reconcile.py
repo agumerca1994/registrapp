@@ -304,6 +304,8 @@ class ActionPatch(BaseModel):
     category_id: int | None = None
     description: str | None = None
     discard: bool = False
+    # Un recurrente que no vino este mes: ¿la serie sigue (True) o se da de baja?
+    keep_going: bool | None = None
     # Al elegir categoría, ofrecer guardar la regla comercio→categoría.
     save_merchant_rule: bool = False
 
@@ -342,6 +344,8 @@ async def patch_action(
             payload["category_source"] = "user"
         if body.description is not None:
             payload["description"] = body.description[:255]
+        if body.keep_going is not None and action.op == "skip_recurrence":
+            payload["keep_going"] = body.keep_going
         action.payload = payload
         if body.save_merchant_rule and body.category_id is not None and payload.get("bank_description"):
             await reconcile_rules.save_rule(

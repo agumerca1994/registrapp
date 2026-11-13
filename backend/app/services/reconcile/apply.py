@@ -43,6 +43,7 @@ from app.services.credit_cards import (
     delete_item_tree,
     find_or_create_statement,
 )
+from app.services import recurrences
 from app.services.reconcile.period import is_latest_statement
 
 CAPTURE_SOURCE = "reconcile"
@@ -71,6 +72,8 @@ def _item_snapshot(item: CreditCardItem, entry: ExpenseEntry | None) -> dict:
             "amount": str(entry.amount),
             "expense_date": entry.expense_date.isoformat(),
             "category_id": entry.category_id,
+            "recurrence_id": entry.recurrence_id,
+            "recurrence_status": entry.recurrence_status,
         } if entry else None,
     }
 
@@ -184,6 +187,18 @@ async def apply_group(
             item.capture_source = CAPTURE_SOURCE
             action.item_id = item.id
             action.before = {"created_item_id": item.id, "propagated": propagate}
+            series = (
+                await db.get(recurrences.Recurrence, payload["recurrence_id"])
+                if payload.get("recurrence_id") else None
+            )
+            if series is not None and series.tenant_id == session.tenant_id:
+                entry = await db.get(ExpenseEntry, item.expense_entry_id)
+                series_amount = str(series.amount)
+                nxt = await recurrences.attach(db, series, entry, item, stmt)
+                # Se reasigna entero: un cambio adentro del JSON ya asignado no
+                # lo ve SQLAlchemy y no se guardaría.
+                action.before = {**action.before, "series_amount": series_amount,
+                                 "next_entry_id": nxt.id if nxt else None}
 
         elif action.op == "update_item":
             item = await db.get(CreditCardItem, payload["item_id"])
@@ -191,7 +206,20 @@ async def apply_group(
                 skipped.append({"action_id": action.id, "reason": "item_inexistente"})
                 continue
             entry = await db.get(ExpenseEntry, item.expense_entry_id) if item.expense_entry_id else None
-            action.before = _item_snapshot(item, entry)
+            before = _item_snapshot(item, entry)
+            if entry is not None and entry.recurrence_id:
+                # Corregir el monto de un recurrente confirmado arrastra a la
+                # serie y a su mes a confirmar (recurrences.on_edited): deshacer
+                # tiene que poder volverlos atrás.
+                series = await db.get(recurrences.Recurrence, entry.recurrence_id)
+                pend = await recurrences.pending_of(db, entry.recurrence_id)
+                before["recurrence"] = {
+                    "series_id": entry.recurrence_id,
+                    "series_amount": str(series.amount) if series else None,
+                    "pending_id": pend.id if pend else None,
+                    "pending_amount": str(pend.amount) if pend else None,
+                }
+            action.before = before
             updates = dict(payload.get("updates") or {})
             if "amount" in updates:
                 updates["amount"] = Decimal(updates["amount"])
@@ -200,6 +228,45 @@ async def apply_group(
                 item.bank_description = payload["bank_description"][:255]
             if payload.get("bank_coupon") and not item.bank_coupon:
                 item.bank_coupon = payload["bank_coupon"][:20]
+
+        elif action.op == "confirm_recurrence":
+            item = await db.get(CreditCardItem, payload["item_id"])
+            entry = await db.get(ExpenseEntry, item.expense_entry_id) if item and item.expense_entry_id else None
+            if entry is None or entry.recurrence_status != "pending":
+                skipped.append({"action_id": action.id, "reason": "ya_confirmado"})
+                continue
+            series = await db.get(recurrences.Recurrence, entry.recurrence_id)
+            before = {
+                "entry_id": entry.id,
+                "amount": str(entry.amount),
+                "series_amount": str(series.amount),
+                "series_bank_description": series.bank_description,
+                "bank_description": item.bank_description,
+                "bank_coupon": item.bank_coupon,
+            }
+            result = await recurrences.confirm(db, entry, Decimal(payload["amount"]))
+            action.before = {**before, "next_entry_id": result.next_entry.id if result.next_entry else None}
+            if payload.get("bank_description"):
+                item.bank_description = item.bank_description or payload["bank_description"][:255]
+                series.bank_description = series.bank_description or payload["bank_description"][:255]
+            if payload.get("bank_coupon") and not item.bank_coupon:
+                item.bank_coupon = payload["bank_coupon"][:20]
+
+        elif action.op == "skip_recurrence":
+            item = await db.get(CreditCardItem, payload["item_id"])
+            entry = await db.get(ExpenseEntry, item.expense_entry_id) if item and item.expense_entry_id else None
+            if entry is None or entry.recurrence_status != "pending":
+                skipped.append({"action_id": action.id, "reason": "ya_confirmado"})
+                continue
+            series = await db.get(recurrences.Recurrence, entry.recurrence_id)
+            before = {
+                **_item_snapshot(item, entry),
+                "series_id": series.id,
+                "series_status": series.status,
+            }
+            result = await recurrences.skip(db, entry, bool(payload.get("keep_going", True)))
+            action.before = {**before, "next_entry_id": result.next_entry.id if result.next_entry else None}
+            action.item_id = None
 
         elif action.op == "delete_item":
             item = await db.get(CreditCardItem, payload["item_id"])
@@ -304,10 +371,59 @@ async def undo_last_group(db: AsyncSession, session: ReconciliationSession, user
                     await db.delete(target)
 
         elif action.op == "create_item":
+            # Lo que la serie generó al engancharlo se va con él.
+            await recurrences.drop_pending(db, before.get("next_entry_id"))
             item = await db.get(CreditCardItem, before.get("created_item_id"))
             if item is not None:
+                entry = await db.get(ExpenseEntry, item.expense_entry_id) if item.expense_entry_id else None
+                if entry is not None and entry.recurrence_id and before.get("series_amount"):
+                    series = await db.get(recurrences.Recurrence, entry.recurrence_id)
+                    if series is not None:
+                        series.amount = Decimal(before["series_amount"])
                 await delete_item_tree(item, db)
             action.item_id = None
+
+        elif action.op == "confirm_recurrence":
+            await recurrences.drop_pending(db, before.get("next_entry_id"))
+            entry = await db.get(ExpenseEntry, before.get("entry_id")) if before.get("entry_id") else None
+            if entry is not None:
+                item = await recurrences.card_item_of(db, entry.id)
+                entry.amount = Decimal(before["amount"])
+                entry.recurrence_status = "pending"
+                if item is not None:
+                    item.amount = entry.amount
+                    item.bank_description = before.get("bank_description")
+                    item.bank_coupon = before.get("bank_coupon")
+                series = await db.get(recurrences.Recurrence, entry.recurrence_id)
+                if series is not None:
+                    series.amount = Decimal(before["series_amount"])
+                    series.bank_description = before.get("series_bank_description")
+                await db.flush()
+
+        elif action.op == "skip_recurrence":
+            await recurrences.drop_pending(db, before.get("next_entry_id"))
+            series = await db.get(recurrences.Recurrence, before.get("series_id"))
+            snap, entry_snap = before.get("item") or {}, before.get("entry") or {}
+            if series is not None and snap and entry_snap and card is not None:
+                if before.get("series_status") == "active":
+                    await recurrences.reactivate(db, series)
+                entry = await create_expense_entry(
+                    card, date.fromisoformat(entry_snap["expense_date"]), Decimal(entry_snap["amount"]),
+                    entry_snap["description"], entry_snap["category_id"], session.tenant_id,
+                    series.user_id, db, currency=snap["currency"],
+                )
+                entry.recurrence_id = series.id
+                entry.recurrence_status = "pending"
+                restored = CreditCardItem(
+                    statement_id=snap["statement_id"], description=snap["description"],
+                    category_id=snap["category_id"], item_date=date.fromisoformat(snap["item_date"]),
+                    item_type=snap["item_type"], amount=Decimal(snap["amount"]), currency=snap["currency"],
+                    bank_description=snap.get("bank_description"), bank_coupon=snap.get("bank_coupon"),
+                    capture_source=snap.get("capture_source"), expense_entry_id=entry.id,
+                )
+                db.add(restored)
+                await db.flush()
+                action.item_id = restored.id
 
         elif action.op == "update_item":
             item = await db.get(CreditCardItem, action.item_id) if action.item_id else None
@@ -327,6 +443,17 @@ async def undo_last_group(db: AsyncSession, session: ReconciliationSession, user
                         entry.amount = Decimal(entry_snap["amount"])
                         entry.expense_date = date.fromisoformat(entry_snap["expense_date"])
                         entry.category_id = entry_snap["category_id"]
+            rec = before.get("recurrence")
+            if rec:
+                series = await db.get(recurrences.Recurrence, rec["series_id"])
+                if series is not None and rec.get("series_amount"):
+                    series.amount = Decimal(rec["series_amount"])
+                pend = await db.get(ExpenseEntry, rec["pending_id"]) if rec.get("pending_id") else None
+                if pend is not None and pend.recurrence_status == "pending" and rec.get("pending_amount"):
+                    pend.amount = Decimal(rec["pending_amount"])
+                    p_item = await recurrences.card_item_of(db, pend.id)
+                    if p_item is not None:
+                        p_item.amount = pend.amount
 
         elif action.op == "delete_item":
             snap = before.get("item") or {}
@@ -361,6 +488,10 @@ async def undo_last_group(db: AsyncSession, session: ReconciliationSession, user
                     capture_source=snap.get("capture_source"),
                     expense_entry_id=entry.id if entry else None,
                 )
+                if entry is not None and entry_snap.get("recurrence_id"):
+                    # Un recurrente confirmado que se borró como sobrante vuelve a su serie.
+                    entry.recurrence_id = entry_snap["recurrence_id"]
+                    entry.recurrence_status = entry_snap.get("recurrence_status")
                 db.add(restored)
                 await db.flush()
                 action.item_id = restored.id

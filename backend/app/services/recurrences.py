@@ -382,3 +382,48 @@ async def list_pending(
             overdue=entry.expense_date < today,
         ))
     return rows
+
+
+# --- Lo que usa la conciliación (services/reconcile/apply.py) ---------------
+
+async def attach(
+    db: AsyncSession,
+    series: Recurrence,
+    entry: ExpenseEntry,
+    item: CreditCardItem,
+    stmt: CreditCardStatement,
+) -> ExpenseEntry | None:
+    """Engancha a su serie un ítem que el resumen del banco trajo y la app no
+    tenía (la cadena se había cortado): queda confirmado, la serie toma su
+    monto y, si la serie sigue activa, genera el mes siguiente.
+
+    Devuelve el pendiente **nuevo**, o None si no se creó ninguno (la serie ya
+    tenía uno, o está dada de baja): deshacer sólo borra lo que esto creó.
+    """
+    had_pending = await pending_of(db, series.id)
+    entry.recurrence_id = series.id
+    entry.recurrence_status = ENTRY_CONFIRMED
+    item.item_type = "recurring"
+    series.amount = entry.amount
+    if item.bank_description and not series.bank_description:
+        series.bank_description = item.bank_description
+    await db.flush()
+    nxt = await _generate_next(db, series, item.item_date, (stmt.year, stmt.month))
+    return nxt if had_pending is None else None
+
+
+async def drop_pending(db: AsyncSession, entry_id: int | None) -> None:
+    """Borra un mes a confirmar (con su ítem), si sigue a confirmar. Deshacer
+    no toca uno que la persona ya confirmó a mano después."""
+    if entry_id is None:
+        return
+    entry = await db.get(ExpenseEntry, entry_id)
+    if entry is None or entry.recurrence_status != ENTRY_PENDING:
+        return
+    await _drop_month(db, entry, await card_item_of(db, entry.id))
+
+
+async def reactivate(db: AsyncSession, series: Recurrence) -> None:
+    series.status = STATUS_ACTIVE
+    series.ended_at = None
+    await db.flush()

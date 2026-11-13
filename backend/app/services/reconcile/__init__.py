@@ -10,6 +10,8 @@ from app.services.reconcile.apply import apply_group, undo_last_group  # noqa: F
 from app.services.reconcile.engine import (  # noqa: F401
     discard_group,
     GROUP_ORDER,
+    RECURRING,
+    RECURRING_ABSENT,
     record_event,
     refresh_session,
     resolve_session,

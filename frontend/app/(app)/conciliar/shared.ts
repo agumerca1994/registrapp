@@ -40,6 +40,10 @@ export interface ActionPayload {
   updates?: { amount?: string; description?: string };
   app_description?: string;
   app_amount?: string;
+  // recurring_absent: si la serie sigue el mes que viene (false = dar de baja)
+  keep_going?: boolean;
+  // missing de una serie recurrente cuya cadena se cortó
+  recurrence_id?: number | null;
   // needs_app: por qué no se corrige desde acá
   why_app?: "shared" | "child" | null;
   // dates
@@ -148,6 +152,8 @@ export const GROUP_LABELS: Record<string, string> = {
   amount_diff: "Montos distintos",
   usd_fix: "Dólares que no coinciden",
   rounding: "Centavos de diferencia en cuotas",
+  recurring: "Recurrentes para confirmar",
+  recurring_absent: "Recurrentes que no vinieron",
   surplus: "No están en el resumen",
 };
 
@@ -160,6 +166,8 @@ export const GROUP_HINTS: Record<string, string> = {
   amount_diff: "Están en los dos lados, pero con otro monto en la app.",
   usd_fix: "Consumos en dólares que no coinciden con los del banco.",
   rounding: "El banco cobró unos centavos distinto en estas cuotas.",
+  recurring: "Vinieron en el resumen. Se confirman con el monto del banco, y el mes que viene aparecen con ese monto.",
+  recurring_absent: "Estaban a confirmar y el banco no los cobró. Elegí si el mes que viene siguen o los das de baja.",
   surplus: "Están en la app, pero el banco no los cobró en este resumen.",
 };
 
@@ -173,6 +181,8 @@ export function groupActionLabel(klass: string, n: number): string {
     case "amount_diff": return `Corregir ${n} ${pl("monto", "montos")}`;
     case "usd_fix": return `Corregir ${n} en dólares`;
     case "rounding": return `Ajustar ${n} ${pl("cuota", "cuotas")}`;
+    case "recurring": return `Confirmar ${n} ${pl("recurrente", "recurrentes")}`;
+    case "recurring_absent": return n === 1 ? "Guardar lo elegido" : `Guardar lo elegido (${n})`;
     case "surplus": return `Borrar ${n} ${pl("consumo", "consumos")}`;
     default: return `Aplicar ${n}`;
   }
@@ -186,6 +196,8 @@ export const GROUP_NOUNS: Record<string, [string, string]> = {
   amount_diff: ["monto distinto", "montos distintos"],
   usd_fix: ["USD por corregir", "USD por corregir"],
   rounding: ["cuota por ajustar", "cuotas por ajustar"],
+  recurring: ["recurrente por confirmar", "recurrentes por confirmar"],
+  recurring_absent: ["recurrente que no vino", "recurrentes que no vinieron"],
   surplus: ["consumo de más", "consumos de más"],
 };
 
